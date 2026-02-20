@@ -1,0 +1,11 @@
+{
+  "name": "claudius",
+  "version": "0.1.0",
+  "description": "Collection of specialized development agents and skills for Claude Code",
+  "author": {
+    "name": "lklimek",
+    "url": "https://github.com/lklimek"
+  },
+  "repository": "https://github.com/lklimek/claudius",
+  "license": "GPL-3.0"
+}

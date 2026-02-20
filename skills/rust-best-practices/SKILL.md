@@ -1,0 +1,186 @@
+---
+name: rust-best-practices
+description: >
+  Rust programming best practices checklists from Microsoft Pragmatic Rust Guidelines and official
+  Rust API Guidelines. Use this skill whenever writing, reviewing, or discussing Rust code quality,
+  API design, library design, error handling, naming conventions, type safety, documentation, safety,
+  performance, or FFI. Also use when someone asks about Rust idioms, patterns, or conventions, or
+  when reviewing a Rust crate for compliance with community standards. This skill provides actionable
+  checklists and detailed reference material covering all aspects of professional Rust development.
+---
+
+# Rust Best Practices
+
+Two authoritative sources of Rust best practices, presented as checklists for quick reference.
+When you need detailed guidance on a specific item, read the corresponding reference file.
+
+## How to Use
+
+1. **During code writing/review**: Scan the relevant checklist sections below
+2. **For detailed guidance**: Read the reference file linked in each section header
+3. **For API design**: Focus on the Rust API Guidelines checklist (C-prefixed items)
+4. **For production systems**: Focus on the Microsoft Guidelines checklist (M-prefixed items)
+
+### Sources
+
+- Microsoft Pragmatic Rust Guidelines: https://microsoft.github.io/rust-guidelines/
+  - AI-friendly condensed version: https://microsoft.github.io/rust-guidelines/agents/all.txt
+- Rust API Guidelines: https://rust-lang.github.io/api-guidelines/
+
+---
+
+## Microsoft Pragmatic Rust Guidelines Checklist
+
+For detailed descriptions of any M-prefixed item, read `references/microsoft-guidelines.md`.
+
+### Universal
+- [ ] **M-UPSTREAM-GUIDELINES** — Follow the upstream Rust API Guidelines, Style Guide, and Design Patterns
+- [ ] **M-STATIC-VERIFICATION** — Use clippy, rustfmt, cargo-audit, cargo-hack, cargo-udeps, miri
+- [ ] **M-LINT-OVERRIDE-EXPECT** — Use `#[expect]` instead of `#[allow]` for lint overrides
+- [ ] **M-PUBLIC-DEBUG** — All public types implement `Debug`
+- [ ] **M-PUBLIC-DISPLAY** — Public types meant to be read implement `Display`
+- [ ] **M-SMALLER-CRATES** — If in doubt, split the crate into smaller ones
+- [ ] **M-CONCISE-NAMES** — Names are free of weasel words (Service, Manager, Factory)
+- [ ] **M-REGULAR-FN** — Prefer regular functions over associated functions for non-receiver logic
+- [ ] **M-PANIC-IS-STOP** — Panic means "stop the program", never for error communication
+- [ ] **M-PANIC-ON-BUG** — Detected programming bugs are panics, not errors
+- [ ] **M-DOCUMENTED-MAGIC** — All magic values and behaviors are documented
+- [ ] **M-LOG-STRUCTURED** — Use structured logging with message templates
+
+### Library / Interoperability
+- [ ] **M-TYPES-SEND** — Types are `Send` for Tokio/runtime compatibility
+- [ ] **M-ESCAPE-HATCHES** — Native types provide `unsafe` escape hatches for FFI
+- [ ] **M-DONT-LEAK-TYPES** — Don't leak external crate types in public APIs
+
+### Library / UX
+- [ ] **M-SIMPLE-ABSTRACTIONS** — Abstractions don't visibly nest (no `Foo<Bar<Baz>>`)
+- [ ] **M-AVOID-WRAPPERS** — Avoid smart pointers and wrappers in public APIs
+- [ ] **M-DI-HIERARCHY** — Prefer types > generics > dyn traits for dependency injection
+- [ ] **M-ERRORS-CANONICAL-STRUCTS** — Errors are canonical structs with backtrace and cause
+- [ ] **M-INIT-BUILDER** — Complex type construction uses builders (4+ permutations)
+- [ ] **M-INIT-CASCADED** — Complex initialization hierarchies use semantic grouping
+- [ ] **M-SERVICES-CLONE** — Service types implement `Clone` via `Arc<Inner>`
+- [ ] **M-IMPL-ASREF** — Accept `impl AsRef<>` where feasible (str, Path, [u8])
+- [ ] **M-IMPL-RANGEBOUNDS** — Accept `impl RangeBounds<>` where feasible
+- [ ] **M-IMPL-IO** — Accept `impl Read`/`impl Write` where feasible (Sans IO)
+- [ ] **M-ESSENTIAL-FN-INHERENT** — Essential functionality is inherent, not trait-only
+
+### Library / Resilience
+- [ ] **M-MOCKABLE-SYSCALLS** — I/O and system calls are mockable
+- [ ] **M-TEST-UTIL** — Test utilities are feature-gated behind `test-util`
+- [ ] **M-STRONG-TYPES** — Use the strongest type available (PathBuf over String)
+- [ ] **M-NO-GLOB-REEXPORTS** — Don't glob re-export items
+- [ ] **M-AVOID-STATICS** — Avoid statics when consistency matters for correctness
+
+### Library / Building
+- [ ] **M-OOBE** — Libraries work out of the box on all Tier 1 platforms
+- [ ] **M-SYS-CRATES** — Native `-sys` crates compile without external dependencies
+- [ ] **M-FEATURES-ADDITIVE** — Features are additive; any combination works
+
+### Applications
+- [ ] **M-MIMALLOC-APP** — Use mimalloc as global allocator for applications
+- [ ] **M-APP-ERROR** — Applications may use anyhow/eyre for error handling
+
+### FFI
+- [ ] **M-ISOLATE-DLL-STATE** — Isolate DLL state between FFI libraries; share only `#[repr(C)]` data
+
+### Safety
+- [ ] **M-UNSAFE** — Unsafe needs a documented reason and should be avoided
+- [ ] **M-UNSAFE-IMPLIES-UB** — Mark functions `unsafe` only when misuse causes UB
+- [ ] **M-UNSOUND** — All code must be sound; no exceptions
+
+### Performance
+- [ ] **M-THROUGHPUT** — Optimize for throughput (items per CPU cycle), avoid empty cycles
+- [ ] **M-HOTPATH** — Identify, profile, and optimize the hot path early
+- [ ] **M-YIELD-POINTS** — Long-running tasks have yield points (10-100us between yields)
+
+### Documentation
+- [ ] **M-FIRST-DOC-SENTENCE** — First doc sentence is one line, ~15 words
+- [ ] **M-MODULE-DOCS** — All public modules have `//!` documentation
+- [ ] **M-CANONICAL-DOCS** — Documentation has canonical sections (Examples, Errors, Panics, Safety)
+- [ ] **M-DOC-INLINE** — Mark `pub use` items with `#[doc(inline)]`
+
+### AI
+- [ ] **M-DESIGN-FOR-AI** — Design with AI use in mind (strong types, thorough docs, testable APIs)
+
+---
+
+## Rust API Guidelines Checklist
+
+For detailed descriptions of any C-prefixed item, read `references/api-guidelines.md`.
+
+### Naming (C-*)
+- [ ] **C-CASE** — Casing conforms to RFC 430 (CamelCase types, snake_case functions)
+- [ ] **C-CONV** — Conversions follow `as_` (free, borrowed), `to_` (expensive), `into_` (owned)
+- [ ] **C-GETTER** — Getters omit `get_` prefix; use field name directly
+- [ ] **C-ITER** — Collection iterators use `iter`, `iter_mut`, `into_iter`
+- [ ] **C-ITER-TY** — Iterator type names match producing methods
+- [ ] **C-FEATURE** — Feature names are free of placeholder words (no `use-`, `with-`, `no-`)
+- [ ] **C-WORD-ORDER** — Names use consistent word order (verb-object-error)
+
+### Interoperability (C-*)
+- [ ] **C-COMMON-TRAITS** — Types eagerly implement Copy, Clone, Eq, PartialEq, Ord, Hash, Debug, Display, Default
+- [ ] **C-CONV-TRAITS** — Conversions use `From`, `TryFrom`, `AsRef`, `AsMut`
+- [ ] **C-COLLECT** — Collections implement `FromIterator` and `Extend`
+- [ ] **C-SERDE** — Data structures implement Serde (optionally feature-gated)
+- [ ] **C-SEND-SYNC** — Types are `Send` and `Sync` where possible
+- [ ] **C-GOOD-ERR** — Error types implement `Error + Send + Sync` with meaningful `Display`
+- [ ] **C-NUM-FMT** — Binary number types provide Hex, Octal, Binary formatting
+- [ ] **C-RW-VALUE** — Generic reader/writer functions take `R: Read` and `W: Write` by value
+
+### Macros (C-*)
+- [ ] **C-EVOCATIVE** — Input syntax mirrors the output it produces
+- [ ] **C-MACRO-ATTR** — Item macros compose well with attributes
+- [ ] **C-ANYWHERE** — Item macros work anywhere items are allowed
+- [ ] **C-MACRO-VIS** — Item macros support visibility specifiers
+- [ ] **C-MACRO-TY** — Type fragments are flexible (primitives, paths, generics)
+
+### Documentation (C-*)
+- [ ] **C-CRATE-DOC** — Crate-level docs are thorough and include examples
+- [ ] **C-EXAMPLE** — All public items have a rustdoc example
+- [ ] **C-QUESTION-MARK** — Examples use `?`, not `try!`, not `unwrap`
+- [ ] **C-FAILURE** — Function docs include Error, Panic, and Safety sections
+- [ ] **C-LINK** — Prose contains hyperlinks to relevant things
+- [ ] **C-METADATA** — Cargo.toml includes all common metadata
+- [ ] **C-RELNOTES** — Release notes document all significant changes
+- [ ] **C-HIDDEN** — Rustdoc does not show unhelpful implementation details
+
+### Predictability (C-*)
+- [ ] **C-SMART-PTR** — Smart pointers do not add inherent methods
+- [ ] **C-CONV-SPECIFIC** — Conversions live on the most specific type
+- [ ] **C-METHOD** — Functions with a clear receiver are methods
+- [ ] **C-NO-OUT** — Functions do not take out-parameters
+- [ ] **C-OVERLOAD** — Operator overloads are unsurprising
+- [ ] **C-DEREF** — Only smart pointers implement `Deref`/`DerefMut`
+- [ ] **C-CTOR** — Constructors are static, inherent methods (`new()`)
+
+### Flexibility (C-*)
+- [ ] **C-INTERMEDIATE** — Functions expose intermediate results to avoid duplicate work
+- [ ] **C-CALLER-CONTROL** — Caller decides where to copy and place data
+- [ ] **C-GENERIC** — Functions minimize assumptions using generics
+- [ ] **C-OBJECT** — Traits are object-safe if useful as trait objects
+
+### Type Safety (C-*)
+- [ ] **C-NEWTYPE** — Newtypes provide static distinctions (Miles vs Kilometers)
+- [ ] **C-CUSTOM-TYPE** — Arguments convey meaning through types, not `bool` or `Option`
+- [ ] **C-BITFLAG** — Flag sets use `bitflags`, not enums
+- [ ] **C-BUILDER** — Builders enable construction of complex values
+
+### Dependability (C-*)
+- [ ] **C-VALIDATE** — Functions validate their arguments (prefer static > dynamic)
+- [ ] **C-DTOR-FAIL** — Destructors never fail
+- [ ] **C-DTOR-BLOCK** — Destructors that may block have alternatives
+
+### Debuggability (C-*)
+- [ ] **C-DEBUG** — All public types implement `Debug`
+- [ ] **C-DEBUG-NONEMPTY** — `Debug` representation is never empty
+
+### Future Proofing (C-*)
+- [ ] **C-SEALED** — Sealed traits protect against downstream implementations
+- [ ] **C-STRUCT-PRIVATE** — Structs have private fields with accessor methods
+- [ ] **C-NEWTYPE-HIDE** — Newtypes encapsulate implementation details
+- [ ] **C-STRUCT-BOUNDS** — Data structures do not duplicate derived trait bounds
+
+### Necessities (C-*)
+- [ ] **C-STABLE** — Public dependencies of a stable crate are stable
+- [ ] **C-PERMISSIVE** — Crate and dependencies have a permissive license (MIT/Apache-2.0)
