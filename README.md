@@ -4,13 +4,16 @@ A [Claude Code](https://claude.ai/code) plugin that provides a collection of reu
 
 ## Installation
 
-Install from the plugin marketplace:
+Add the marketplace and install the plugin:
 
 ```
 /plugin marketplace add lklimek/claudius
+/plugin install claudius@claudius
 ```
 
-Alternatively, clone the repository and point Claude Code at it directly:
+### Local development
+
+To test the plugin from a local clone without installing:
 
 ```bash
 git clone https://github.com/lklimek/claudius.git
