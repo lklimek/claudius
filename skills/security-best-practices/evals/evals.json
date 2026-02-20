@@ -1,0 +1,50 @@
+{
+  "skill_name": "security-best-practices",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Review this Node.js Express endpoint for security issues:\n\n```javascript\napp.post('/api/register', (req, res) => {\n  const { username, password, role } = req.body;\n  const query = `INSERT INTO users (username, password, role) VALUES ('${username}', '${password}', '${role}')`;\n  db.run(query);\n  const token = jwt.sign({ username, role }, 'myapp-secret-key-2024');\n  res.json({ token });\n});\n```",
+      "expected_output": "A thorough security review identifying SQL injection, plaintext password storage, mass assignment (role), hardcoded JWT secret, missing input validation, missing rate limiting, no logging, and missing CSRF protection. Each finding should reference the relevant OWASP category.",
+      "files": [],
+      "expectations": [
+        "Identifies SQL injection from string interpolation and recommends parameterized queries",
+        "Identifies plaintext password storage and recommends Argon2id, bcrypt, or scrypt",
+        "Identifies mass assignment vulnerability where user can set their own role",
+        "Identifies the hardcoded JWT secret and recommends secrets management",
+        "Identifies missing input validation on username, password, and role fields",
+        "References at least 3 distinct OWASP Top 10 categories (e.g., A02, A03, A07, A08)",
+        "Provides specific remediation guidance, not just identification of issues"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I'm building a REST API with Django REST Framework that accepts file uploads from authenticated users and stores them in S3. What security measures should I implement?",
+      "expected_output": "Comprehensive security guidance covering file upload validation, authentication, authorization, S3 storage security, input validation, CSRF, rate limiting, logging, and relevant framework-specific guidance from the Django cheat sheets.",
+      "files": [],
+      "expectations": [
+        "Covers file upload validation: type checking via magic bytes, size limits, content validation",
+        "Recommends storing files with random names, not user-supplied filenames",
+        "Addresses authentication and authorization for the upload endpoint",
+        "Mentions Django-specific or DRF-specific security considerations",
+        "Covers at least one of: CSRF protection, rate limiting, or logging for upload events",
+        "References OWASP cheat sheet links for deeper reading",
+        "Warns about dangerous file types (e.g., SVG with embedded scripts, executable files)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review this Go HTTP handler that proxies requests to internal services:\n\n```go\nfunc proxyHandler(w http.ResponseWriter, r *http.Request) {\n    targetURL := r.URL.Query().Get(\"url\")\n    resp, err := http.Get(targetURL)\n    if err != nil {\n        http.Error(w, err.Error(), 500)\n        return\n    }\n    defer resp.Body.Close()\n    body, _ := io.ReadAll(resp.Body)\n    w.Header().Set(\"Content-Type\", resp.Header.Get(\"Content-Type\"))\n    w.Write(body)\n}\n```",
+      "expected_output": "Identifies SSRF as the primary vulnerability, plus error message information leakage, missing authentication, unbounded response body reading, and content-type passthrough risks. Each finding maps to OWASP categories.",
+      "files": [],
+      "expectations": [
+        "Identifies SSRF as the primary/critical vulnerability and references A10",
+        "Recommends URL allowlisting (domains and/or protocols) to prevent SSRF",
+        "Recommends blocking private/internal IP ranges (127.0.0.0/8, 10.0.0.0/8, etc.)",
+        "Identifies error message information leakage (raw error returned to client)",
+        "Identifies missing authentication or authorization on the proxy endpoint",
+        "Identifies unbounded io.ReadAll as a potential denial-of-service vector",
+        "Provides specific code-level fixes, not just abstract guidance"
+      ]
+    }
+  ]
+}

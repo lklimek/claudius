@@ -48,6 +48,25 @@ claude --plugin-dir /path/to/claudius
 | `rust-best-practices` | Rust programming checklists and reference material |
 | `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series |
 
+## Skill: `security-best-practices`
+
+Actionable security checklists organized by OWASP Top 10 (2021) categories. Each checklist item links to the relevant OWASP Cheat Sheet. The skill instructs the model to fetch the full cheat sheet for every item that could be relevant, ensuring detailed and up-to-date guidance.
+
+**Evaluation.** The skill was evaluated on 3 security review scenarios (Node.js auth endpoint, Django file upload API, Go HTTP proxy) across 7 expectations each. Results compare using the skill vs. relying on the model's built-in knowledge alone.
+
+| Configuration | Findings | Pass Rate |
+|---------------|----------|-----------|
+| Opus + skill | 33 | **21/21 (100%)** |
+| Opus (no skill) | 26 | 19/21 (90%) |
+| Sonnet + skill | 24 | **21/21 (100%)** |
+| Sonnet (no skill) | 29 | 18/21 (86%) |
+
+**What the skill adds:**
+
+- **Consistent OWASP references**: Without the skill, both models omit cheat sheet links from their output. The skill ensures every finding includes a link to the relevant OWASP cheat sheet for follow-up reading.
+- **Targeted vulnerability coverage**: Without the skill, models occasionally miss key expectations (e.g., dangerous file type warnings, missing auth on a proxy endpoint). The skill's structured checklist guides systematic review across all OWASP Top 10 categories.
+- **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 90% and 86% respectively without it.
+
 ## Sources
 
 | Skill | Source |
