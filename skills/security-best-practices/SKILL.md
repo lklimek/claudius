@@ -23,8 +23,12 @@ When you need more detail on a specific topic, fetch the linked cheat sheet URL.
 
 1. Identify which categories are relevant to the code being written or reviewed
 2. Walk through the checklist items for those categories
-3. If a checklist item needs clarification, read the linked OWASP cheat sheet
-4. For framework-specific guidance, see the [Framework-Specific Security](#framework-specific-security) section
+3. **Fetch the linked OWASP cheat sheet for every checklist item that could be relevant** —
+   do not rely solely on the checklist summaries here; load the full cheat sheet to get
+   detailed, up-to-date guidance. When in doubt about relevance, fetch it.
+4. For framework-specific guidance, see the [Framework-Specific Security](#framework-specific-security)
+   section and fetch the corresponding cheat sheet
+5. Always include OWASP cheat sheet URLs in your output so the reader can follow up
 
 Base URL for all cheat sheets: `https://cheatsheetseries.owasp.org/cheatsheets/`
 
@@ -146,7 +150,10 @@ Base URL for all cheat sheets: `https://cheatsheetseries.owasp.org/cheatsheets/`
   ([Deserialization](https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html))
 - [ ] Protect against mass assignment: explicitly allowlist assignable fields
   ([Mass Assignment](https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html))
-- [ ] Validate file uploads: type, size, content; store outside webroot with random names
+- [ ] Validate file uploads: check type via magic bytes (not just extension or Content-Type header),
+  enforce size limits, and re-encode/re-process content to strip metadata and neutralize polyglots.
+  Store outside webroot with random names. **Explicitly reject dangerous types**: SVG (can contain
+  embedded JavaScript), HTML, executable files (.exe, .sh, .bat), and server-side scripts (.php, .jsp).
   ([File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html))
 - [ ] Verify integrity of software artifacts with checksums and signatures
 
