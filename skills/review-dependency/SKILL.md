@@ -33,10 +33,12 @@ Run these steps in parallel:
 - Summarize: what changed, how many commits, which files, nature of changes
 
 ### 2b. Clone the Library
-Clone the new version to `/tmp/claude/<package-name>` for deep source inspection:
+Clone the new version to `/tmp/claude/<package-name>` for deep source inspection.
+
+**Input validation**: Before using the package name in any shell command, validate that it contains only alphanumeric characters, hyphens, underscores, dots, forward slashes, and `@` symbols. Reject any input containing shell metacharacters (`;`, `|`, `&`, `$`, `` ` ``, `(`, `)`, `<`, `>`, `!`, `#`, `~`, `{`, `}`).
 
 ```bash
-git clone --depth=100 <upstream-repo-url> /tmp/claude/<package-name>
+git clone --depth=100 --config core.hooksPath=/dev/null -- <upstream-repo-url> "/tmp/claude/<package-name>"
 ```
 
 ### 2c. Known Vulnerability Scan
@@ -128,5 +130,5 @@ Numbered actionable items for our codebase, plus long-term considerations (e.g.,
 ## 7. Cleanup
 
 ```bash
-rm -rf /tmp/claude/<package-name>
+rm -rf "/tmp/claude/<package-name>"
 ```

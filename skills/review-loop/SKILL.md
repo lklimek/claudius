@@ -1,12 +1,16 @@
 ---
 name: review-loop
 description: Autonomous peer review feedback loop — request review, wait for completion, read comments, fix issues, push, and re-request until no new actionable comments remain.
-user_invocable: false
+user-invocable: true
 ---
 
 # Peer Review Loop
 
 Autonomous loop for addressing peer review feedback on a pull request. Repeats until the reviewer has no new actionable comments.
+
+## User Confirmation
+
+**Before starting the loop**, present the user with a summary of what this skill will do (request review, wait for feedback, apply fixes, commit, push, and re-request — potentially multiple iterations) and ask for explicit permission to proceed. Do not begin the loop until the user confirms.
 
 ## Prerequisites
 

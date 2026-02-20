@@ -1,12 +1,16 @@
 ---
 name: ci-loop
 description: Autonomous CI monitoring and fix loop — wait for workflow run to complete, read failure logs, fix issues, push, and repeat until CI is green.
-user_invocable: false
+user-invocable: true
 ---
 
 # CI Monitoring and Fix Loop
 
 Autonomous loop for monitoring GitHub Actions CI and fixing failures. Repeats until the workflow passes.
+
+## User Confirmation
+
+**Before starting the loop**, present the user with a summary of what this skill will do (monitor CI, read failure logs, apply fixes, commit, and push — potentially multiple iterations) and ask for explicit permission to proceed. Do not begin monitoring or making changes until the user confirms.
 
 ## Prerequisites
 

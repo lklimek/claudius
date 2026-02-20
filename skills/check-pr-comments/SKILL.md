@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Verify whether existing PR review comments have been addressed in code. Checks out the branch, verifies each comment against current code, resolves addressed threads, and produces a structured report. Use when asked to check, triage, or verify PR review feedback.
-allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(git pull *), Bash(git fetch *), Bash(~/.claude/skills/check-pr-comments/scripts/diff-anchors.py *)
+allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(git pull *), Bash(git fetch *), Bash(*diff-anchors.py *)
 ---
 
 # Check PR Comments Workflow
@@ -52,7 +52,7 @@ Items are numbered globally across both sections (e.g. if resolved has 1-6, unre
 Compute SHA256 of each file path to construct links into the PR diff view using the bundled helper script:
 
 ```bash
-~/.claude/skills/check-pr-comments/scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
+scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
 ```
 
 Link format:

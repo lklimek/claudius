@@ -54,6 +54,15 @@ Additional frontmatter fields: `argument-hint`, `disable-model-invocation`, `use
 
 String substitutions in skill body: `$ARGUMENTS`, `$0`/`$1`/etc., `${CLAUDE_SESSION_ID}`, `` !`command` `` (dynamic injection).
 
+### Referencing Bundled Files from Skills
+
+Skills can bundle scripts and reference files in subdirectories (e.g., `scripts/`, `references/`). When a skill is invoked, Claude receives the skill's base directory as context and resolves relative paths from there.
+
+- **In instructions**: Use relative paths from the skill directory (e.g., `scripts/my-script.py arg1 arg2`). This works regardless of where the plugin is installed (local dev, marketplace cache, etc.).
+- **In `allowed-tools`**: Use path-agnostic glob patterns since the absolute install path is unknown at authoring time (e.g., `Bash(*my-script.py *)` instead of `Bash(~/.claude/skills/my-skill/scripts/my-script.py *)`).
+- **For reference docs**: Use relative markdown links (e.g., `see [reference.md](references/reference.md)`). Claude will use the Read tool to load them.
+- **No `$SKILL_DIR` variable exists** in skill body content. The `${CLAUDE_PLUGIN_ROOT}` variable is only available in hooks and MCP server configs, not in SKILL.md.
+
 ## Conventions
 
 - Agent names use lowercase kebab-case (e.g., `security-engineer.md`)
