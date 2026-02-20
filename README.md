@@ -46,6 +46,14 @@ claude --plugin-dir /path/to/claudius
 | `review-loop` | Autonomous peer review feedback loop |
 | `review-pr` | Audit and review pull requests |
 | `rust-best-practices` | Rust programming checklists and reference material |
+| `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series |
+
+## Sources
+
+| Skill | Source |
+|-------|--------|
+| `security-best-practices` | [OWASP Cheat Sheet Series](https://github.com/OWASP/CheatSheetSeries) |
+| `rust-best-practices` | [Microsoft Rust Guidelines](https://microsoft.github.io/rust-guidelines/) ([checklist](https://microsoft.github.io/rust-guidelines/guidelines/checklist/index.html)), [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) ([checklist](https://rust-lang.github.io/api-guidelines/checklist.html)) |
 
 ## License
 
