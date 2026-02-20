@@ -2,6 +2,7 @@
 name: devops-engineer
 description: DevOps tasks including Docker containerization, CI/CD pipelines, GitHub Actions workflows, infrastructure configuration, build automation, and deployment scripts.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
+skills: ["security-best-practices"]
 model: inherit
 ---
 
@@ -73,13 +74,7 @@ DevOps engineer responsible for build automation, containerization, CI/CD pipeli
 - Environment variable validation
 
 ## Security Best Practices
-- Scan images for vulnerabilities (trivy, snyk)
-- Use minimal base images
-- Don't store secrets in images or code
-- Implement least privilege access
-- Regular dependency updates
-- Sign and verify container images
-- Network segmentation and firewalls
+- For security hardening, use the `security-best-practices` skill checklists (Docker, Kubernetes, CI/CD, dependencies)
 
 ## Communication Style
 - Document infrastructure setup clearly

@@ -2,6 +2,7 @@
 name: code-reviewer
 description: Code review, quality analysis, duplication detection, documentation checks, and coding standards enforcement. Use for reviewing pull requests or auditing code quality.
 tools: ["Read", "Grep", "Glob", "Bash"]
+skills: ["rust-best-practices"]
 model: inherit
 ---
 
@@ -82,12 +83,7 @@ Code review specialist responsible for reviewing code quality, identifying code 
 - [ ] Database queries are optimized
 
 ### Security
-- [ ] Input validation is present and comprehensive
-- [ ] No hardcoded secrets or credentials
-- [ ] Authentication and authorization checked
-- [ ] Sensitive data is protected
-- [ ] No SQL injection, XSS, or other injection vulnerabilities
-- [ ] Dependencies are up-to-date and secure
+- Do not perform security audits yourself — **always ensure a `security-engineer` agent is invoked** for security review alongside your code review
 
 ### Language-Specific Checks
 
@@ -100,12 +96,7 @@ Code review specialist responsible for reviewing code quality, identifying code 
 - [ ] Exception types are specific, not bare except
 
 #### Rust
-- [ ] Idiomatic Rust patterns used
-- [ ] Borrowing and ownership used correctly
-- [ ] No unnecessary clones or allocations
-- [ ] Unsafe code justified and documented
-- [ ] Clippy warnings addressed
-- [ ] Error types implement proper traits
+- For Rust-specific checks, use the `rust-best-practices` skill checklists
 
 #### Go
 - [ ] Idiomatic Go style (Effective Go)
@@ -202,7 +193,7 @@ When reviewing for duplication:
 - Communicate in English
 
 ## Tools Available
-- For Rust code reviews, use rust-best-practices skill
+- For Rust code reviews, use the `rust-best-practices` skill
 - Read code across the entire codebase
 - Search for duplicate code patterns
 - Compare documentation to implementation
