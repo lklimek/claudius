@@ -54,18 +54,21 @@ Actionable security checklists organized by OWASP Top 10 (2021) categories. Each
 
 **Evaluation.** The skill was evaluated on 3 security review scenarios (Node.js auth endpoint, Django file upload API, Go HTTP proxy) across 7 expectations each. Results compare using the skill vs. relying on the model's built-in knowledge alone.
 
-| Configuration | Findings | Pass Rate |
-|---------------|----------|-----------|
-| Opus + skill | 33 | **21/21 (100%)** |
-| Opus (no skill) | 26 | 19/21 (90%) |
-| Sonnet + skill | 24 | **21/21 (100%)** |
-| Sonnet (no skill) | 29 | 18/21 (86%) |
+| Configuration | Findings | Pass Rate | Debatable |
+|---------------|----------|-----------|-----------|
+| Opus + skill | 33 | **21/21 (100%)** | 11% |
+| Opus (no skill) | 26 | 19/21 (90%) | 24% |
+| Sonnet + skill | 24 | **21/21 (100%)** | 18% |
+| Sonnet (no skill) | 29 | 18/21 (86%) | 21% |
+
+**Precision.** 0 false positives across all 4 configurations (216 findings reviewed). The skill reduces the debatable rate: with-skill outputs average 14% debatable vs. 22% without. Debatable items are real observations where severity or relevance is subjective.
 
 **What the skill adds:**
 
 - **Consistent OWASP references**: Without the skill, both models omit cheat sheet links from their output. The skill ensures every finding includes a link to the relevant OWASP cheat sheet for follow-up reading.
 - **Targeted vulnerability coverage**: Without the skill, models occasionally miss key expectations (e.g., dangerous file type warnings, missing auth on a proxy endpoint). The skill's structured checklist guides systematic review across all OWASP Top 10 categories.
 - **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 90% and 86% respectively without it.
+- **Lower debatable rate**: With the skill, 11–18% of findings are debatable vs. 21–24% without, indicating more precisely targeted recommendations.
 
 ## Skill: `rust-best-practices`
 
@@ -73,18 +76,21 @@ Rust programming checklists from [Microsoft Pragmatic Rust Guidelines](https://m
 
 **Evaluation.** The skill was evaluated on 3 Rust review scenarios (library API review, application code review, crate design advisory) across 7 expectations each. Results compare using the skill vs. relying on the model's built-in knowledge alone.
 
-| Configuration | Findings | Pass Rate |
-|---------------|----------|-----------|
-| Opus + skill | 35 | **21/21 (100%)** |
-| Opus (no skill) | 25 | 18/21 (86%) |
-| Sonnet + skill | 39 | **21/21 (100%)** |
-| Sonnet (no skill) | 29 | 18/21 (86%) |
+| Configuration | Findings | Pass Rate | Debatable |
+|---------------|----------|-----------|-----------|
+| Opus + skill | 35 | **21/21 (100%)** | 15% |
+| Opus (no skill) | 25 | 18/21 (86%) | 31% |
+| Sonnet + skill | 39 | **21/21 (100%)** | 25% |
+| Sonnet (no skill) | 29 | 18/21 (86%) | 23% |
+
+**Precision.** 0 false positives with the skill loaded (74 findings reviewed). Without the skill, Sonnet produced 1 false positive across 56 findings. The skill reduces the debatable rate: with-skill outputs average 20% debatable vs. 27% without. Debatable items are real observations where severity or relevance is subjective.
 
 **What the skill adds:**
 
 - **Guideline identifiers in output**: Without the skill, neither model references M-/C- guideline codes. The skill ensures findings cite specific identifiers (e.g., M-PANIC-IS-STOP, C-STRUCT-PRIVATE) so readers can look up the authoritative source.
 - **Complete coverage of less obvious practices**: Without the skill, both models miss `Send + Sync` recommendations for async runtime compatibility. The skill's checklist ensures systematic coverage including items that are easy to overlook.
 - **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 86% without it.
+- **Lower debatable rate**: With the skill, 15–25% of findings are debatable vs. 23–31% without, and no false positives vs. 1 without.
 
 ## Sources
 
