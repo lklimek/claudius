@@ -67,6 +67,25 @@ Actionable security checklists organized by OWASP Top 10 (2021) categories. Each
 - **Targeted vulnerability coverage**: Without the skill, models occasionally miss key expectations (e.g., dangerous file type warnings, missing auth on a proxy endpoint). The skill's structured checklist guides systematic review across all OWASP Top 10 categories.
 - **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 90% and 86% respectively without it.
 
+## Skill: `rust-best-practices`
+
+Rust programming checklists from [Microsoft Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines/) and [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Each checklist item is tagged with a guideline identifier (M-prefixed for Microsoft, C-prefixed for API Guidelines) and links to detailed reference material bundled with the skill.
+
+**Evaluation.** The skill was evaluated on 3 Rust review scenarios (library API review, application code review, crate design advisory) across 7 expectations each. Results compare using the skill vs. relying on the model's built-in knowledge alone.
+
+| Configuration | Findings | Pass Rate |
+|---------------|----------|-----------|
+| Opus + skill | 35 | **21/21 (100%)** |
+| Opus (no skill) | 25 | 18/21 (86%) |
+| Sonnet + skill | 39 | **21/21 (100%)** |
+| Sonnet (no skill) | 29 | 18/21 (86%) |
+
+**What the skill adds:**
+
+- **Guideline identifiers in output**: Without the skill, neither model references M-/C- guideline codes. The skill ensures findings cite specific identifiers (e.g., M-PANIC-IS-STOP, C-STRUCT-PRIVATE) so readers can look up the authoritative source.
+- **Complete coverage of less obvious practices**: Without the skill, both models miss `Send + Sync` recommendations for async runtime compatibility. The skill's checklist ensures systematic coverage including items that are easy to overlook.
+- **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 86% without it.
+
 ## Sources
 
 | Skill | Source |

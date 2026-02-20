@@ -75,3 +75,7 @@ Validate the plugin manifest:
 ```bash
 claude plugin validate .
 ```
+
+## Temporary Files
+
+Use the `tmp/` directory (gitignored) for eval workspaces and other transient artifacts.

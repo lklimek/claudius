@@ -1,0 +1,50 @@
+{
+  "skill_name": "rust-best-practices",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Review this Rust library for API design issues:\n\n```rust\nuse std::fmt;\n\npub struct Db_Connection {\n    pub connection_string: String,\n    pub timeout: u64,\n    pub is_connected: bool,\n}\n\nimpl Db_Connection {\n    pub fn new_connection(s: String, t: u64) -> Db_Connection {\n        Db_Connection {\n            connection_string: s,\n            timeout: t,\n            is_connected: false,\n        }\n    }\n\n    pub fn get_timeout(&self) -> u64 {\n        self.timeout\n    }\n\n    pub fn connect(&mut self) -> String {\n        self.is_connected = true;\n        \"connected\".to_string()\n    }\n\n    pub fn run_query(&self, query: String) -> Vec<String> {\n        if !self.is_connected {\n            panic!(\"not connected\");\n        }\n        vec![]\n    }\n}\n\n#[derive(Debug)]\npub enum DbError {\n    Connection(String),\n    Query(String),\n    Timeout,\n}\n\nimpl fmt::Display for DbError {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"{:?}\", self)\n    }\n}\n```",
+      "expected_output": "A thorough Rust API design review identifying naming violations, getter conventions, error handling, public field exposure, missing trait implementations, and parameter types. Findings should reference specific guideline identifiers.",
+      "files": [],
+      "expectations": [
+        "Identifies naming violation: Db_Connection should be DbConnection (C-CASE)",
+        "Identifies getter naming: get_timeout should be timeout() (C-GETTER)",
+        "Identifies missing Result return types — connect and run_query should return Result, not String/panic (M-PANIC-IS-STOP, C-GOOD-ERR)",
+        "Identifies public fields that should be private with accessors (C-STRUCT-PRIVATE)",
+        "Identifies missing common trait implementations — at minimum Debug on DbConnection (C-COMMON-TRAITS / M-PUBLIC-DEBUG)",
+        "Identifies that DbError should implement std::error::Error (C-GOOD-ERR)",
+        "Identifies query: String should accept &str or impl AsRef<str> to avoid unnecessary allocation (C-GENERIC / M-IMPL-ASREF)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review this Rust application code for best practices issues:\n\n```rust\nuse std::fs;\nuse std::io::Read;\nuse std::collections::HashMap;\n\nstatic mut CACHE: Option<HashMap<String, String>> = None;\n\npub fn init_cache() {\n    unsafe {\n        CACHE = Some(HashMap::new());\n    }\n}\n\npub fn load_config(path: String) -> HashMap<String, String> {\n    let contents = fs::read_to_string(&path).unwrap();\n    let mut map = HashMap::new();\n    for line in contents.lines() {\n        let parts: Vec<&str> = line.split('=').collect();\n        let key = parts[0].to_string();\n        let value = parts[1].to_string();\n        map.insert(key, value);\n    }\n    unsafe {\n        CACHE.as_mut().unwrap().extend(map.clone());\n    }\n    map\n}\n\npub fn get_cached(key: &str) -> String {\n    unsafe {\n        CACHE.as_ref().unwrap().get(key).unwrap().clone()\n    }\n}\n\npub fn process_data(data: &[u8]) -> String {\n    // SAFETY: we trust the input\n    let text = unsafe { std::str::from_utf8_unchecked(data) };\n    text.to_uppercase()\n}\n```",
+      "expected_output": "A thorough review identifying static mut unsoundness, unwrap abuse, unsafe misuse, panicking index access, and parameter type issues. Findings should reference specific guideline identifiers and include code fixes.",
+      "files": [],
+      "expectations": [
+        "Identifies static mut CACHE as unsound — should use OnceLock, Mutex, or similar (M-AVOID-STATICS, M-UNSOUND)",
+        "Identifies excessive .unwrap() calls — should return Result with proper error types (M-PANIC-IS-STOP)",
+        "Identifies unsafe { from_utf8_unchecked } with untrusted input — should use from_utf8 (M-UNSAFE)",
+        "Identifies index access on parts[0]/parts[1] can panic on malformed input (M-PANIC-IS-STOP)",
+        "Identifies path: String should accept impl AsRef<Path> (M-IMPL-ASREF / C-GENERIC)",
+        "References specific guideline identifiers (M-prefixed or C-prefixed codes) in the review",
+        "Provides concrete code fixes, not just descriptions of problems"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I'm designing a Rust library crate for HTTP client configuration. Users need to configure: base URL, timeout (seconds), max retries, optional auth token, optional proxy URL, and custom headers. What Rust best practices should I follow for the public API design?",
+      "expected_output": "Comprehensive Rust API design guidance covering builder pattern, strong types, common traits, documentation, Send/Sync, error handling, and specific guideline references.",
+      "files": [],
+      "expectations": [
+        "Recommends the builder pattern for complex construction (M-INIT-BUILDER / C-BUILDER)",
+        "Recommends strong types over primitives — e.g. Duration instead of u64 for timeout, newtype for URL (M-STRONG-TYPES / C-NEWTYPE / C-CUSTOM-TYPE)",
+        "Recommends implementing common traits: Debug, Clone, Default (C-COMMON-TRAITS / M-PUBLIC-DEBUG)",
+        "Covers documentation requirements: crate-level docs, examples, Errors/Panics sections (C-CRATE-DOC / C-EXAMPLE / C-FAILURE / M-FIRST-DOC-SENTENCE)",
+        "Recommends Send + Sync for async runtime compatibility (M-TYPES-SEND / C-SEND-SYNC)",
+        "Addresses error handling — custom error type implementing std::error::Error (C-GOOD-ERR / M-ERRORS-CANONICAL-STRUCTS)",
+        "References specific guideline identifiers (M-prefixed or C-prefixed codes)"
+      ]
+    }
+  ]
+}
