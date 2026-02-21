@@ -43,7 +43,9 @@ gh run list --branch "$(git branch --show-current)" --limit 10
 
 Identify all runs triggered by the latest push. Order them by expected duration (shortest first) based on historical data. Start watching the fastest workflow first.
 
-### 2. Wait for each run to complete
+### 2. Wait for a run to complete
+
+Select the shortest run that was not yet checked and monitor it.
 
 ```bash
 # Watch the run until it finishes (exits non-zero on failure)
@@ -52,7 +54,7 @@ gh run watch {run_id} --exit-status
 
 - If the run **succeeds** → move to the next workflow run in the sequence.
 - If the run **fails** → proceed to Step 3 immediately (no need to wait for remaining runs).
-- If **all runs succeed** → exit the loop successfully.
+- If **all runs succeed** → exit the loop successfully. Proceed to **Step 7**.
 
 ### 3. Read failure logs
 
@@ -78,17 +80,30 @@ Common CI failure categories:
 - **Dependency issues** — update requirements, lock files, or install commands
 - **Environment issues** — missing env vars, wrong Python/Node version, missing system deps
 
-### 5. Push the fix
+### 5. Commit changes
+
+Create individual commit for each fixed issue.
 
 ```bash
 git add <changed-files>
-git commit -m "<type>: fix CI failure
+git commit -m "<type>: <what was fixed>
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+```
+
+### 6. Check remaining runs
+
+Go to **Step 2** to monitor next run.
+
+### 7. Push the fixes
+
+Push all fixes in a bulk
+
+```bash
 git push
 ```
 
-### 6. Monitor the new run
+### 8. Monitor the new run
 
 Go back to **Step 1** — a new run will be triggered by the push.
 
