@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git branch *)",
+      "Bash(git status *)",
+      "Bash(git clone *)",
+      "Bash(git rev-parse *)",
+      "Bash(git show *)",
+      "Bash(gh pr *)",
+      "Bash(gh api *)",
+      "Bash(gh run *)",
+
+      "Bash(govulncheck *)",
+      "Bash(cargo audit *)",
+      "Bash(npm audit *)",
+      "Bash(pip-audit *)",
+
+      "Bash(rm -rf /tmp/claude/*)"
+    ]
+  }
+}

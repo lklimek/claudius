@@ -10,6 +10,7 @@ description: >
   consulted proactively during code review and security audit tasks, even if the user does not
   explicitly mention security.
 model: opus
+allowed-tools: WebFetch, WebSearch
 ---
 
 # Secure Programming Best Practices

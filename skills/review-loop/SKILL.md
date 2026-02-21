@@ -2,6 +2,7 @@
 name: review-loop
 description: Autonomous peer review feedback loop — request review, wait for completion, read comments, fix issues, push, and re-request until no new actionable comments remain.
 user-invocable: true
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh api *), Bash(git add *), Bash(git commit *), Bash(git push *), Bash(git diff *), Bash(git log *), Bash(git status *)
 ---
 
 # Peer Review Loop

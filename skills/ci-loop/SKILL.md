@@ -2,6 +2,7 @@
 name: ci-loop
 description: Autonomous CI monitoring and fix loop — wait for workflow run to complete, read failure logs, fix issues, push, and repeat until CI is green.
 user-invocable: true
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh run *), Bash(git add *), Bash(git commit *), Bash(git push *), Bash(git branch *), Bash(git diff *), Bash(git log *), Bash(git status *)
 ---
 
 # CI Monitoring and Fix Loop

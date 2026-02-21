@@ -6,6 +6,7 @@ description: >
   or validate that technical solutions align with real business needs. Engage at the start of
   projects, during requirement gathering, when prioritizing backlogs, when validating
   implementations against business goals, or when there's ambiguity about what to build and why.
+tools: ["Read", "Grep", "Glob", "WebSearch", "WebFetch"]
 model: inherit
 memory: user
 ---
