@@ -53,38 +53,11 @@ claude --plugin-dir /path/to/claudius
 | `rust-best-practices` | Rust programming checklists and reference material | Read, WebFetch |
 | `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series | WebFetch, WebSearch |
 
-### Required permissions
+### Recommended permissions
 
-The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`) issue git and GitHub CLI commands. To use them, grant the following permissions in your project's `.claude/settings.json` (see `settings.example.json` for a complete example):
+The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively — which defeats the purpose of autonomous operation.
 
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git push *)",
-      "Bash(git diff *)",
-      "Bash(git log *)",
-      "Bash(git fetch *)",
-      "Bash(git pull *)",
-      "Bash(git branch *)",
-      "Bash(git status *)",
-      "Bash(git rev-parse *)",
-      "Bash(git show *)",
-      "Bash(git clone --depth=* --config core.hooksPath=/dev/null -- *)",
-      "Bash(gh pr view *)",
-      "Bash(gh pr comment *)",
-      "Bash(gh pr checkout *)",
-      "Bash(gh api repos/*/pulls/*)",
-      "Bash(gh api /advisories*)",
-      "Bash(gh run list *)",
-      "Bash(gh run view *)",
-      "Bash(gh run watch *)"
-    ]
-  }
-}
-```
+Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
 
 ## Skill: `security-best-practices`
 
