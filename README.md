@@ -43,13 +43,13 @@ claude --plugin-dir /path/to/claudius
 
 | Name | Description | Allowed Tools |
 |------|-------------|---------------|
-| `check-pr-comments` | Verify that PR review comments have been addressed | Read, Grep, Glob, Bash(gh pr \*), Bash(gh api \*), Bash(git pull \*), Bash(git fetch \*) |
-| `ci-loop` | Autonomous CI monitoring and fix loop | Read, Grep, Glob, Edit, Write, Bash(gh run \*), Bash(git add \*), Bash(git commit \*), Bash(git push \*), Bash(git diff \*) |
+| `check-pr-comments` | Verify that PR review comments have been addressed | Read, Grep, Glob, Bash(gh pr view \*), Bash(gh pr checkout \*), Bash(gh api repos/\*/pulls/\*/comments \*), Bash(git pull \*), Bash(git fetch \*) |
+| `ci-loop` | Autonomous CI monitoring and fix loop | Read, Grep, Glob, Edit, Write, Bash(gh run list \*), Bash(gh run view \*), Bash(gh run watch \*), Bash(git \*) |
 | `github` | GitHub workflow guidelines covering git and gh usage | _(inherited)_ |
 | `personality` | Claudius personality overlay for agents | _(inherited)_ |
-| `review-dependency` | Security-focused dependency update review | Read, Grep, Glob, WebFetch, WebSearch, Bash(git diff \*), Bash(git clone \*), Bash(gh api \*) |
-| `review-loop` | Autonomous peer review feedback loop | Read, Grep, Glob, Edit, Write, Bash(gh api \*), Bash(git add \*), Bash(git commit \*), Bash(git push \*) |
-| `review-pr` | Audit and review pull requests | Read, Grep, Glob, Write, Bash(gh pr \*), Bash(gh api \*), Bash(git log \*), Bash(git diff \*) |
+| `review-dependency` | Security-focused dependency update review | Read, Grep, Glob, WebFetch, WebSearch, Bash(git diff \*), Bash(git clone --depth=\* --config core.hooksPath=/dev/null -- \*), Bash(gh api /advisories\*) |
+| `review-loop` | Autonomous peer review feedback loop | Read, Grep, Glob, Edit, Write, Bash(gh api repos/\*/pulls/\*/requested\_reviewers \*), Bash(gh api repos/\*/pulls/\*/reviews \*), Bash(gh api repos/\*/pulls/\*/comments \*), Bash(git \*) |
+| `review-pr` | Audit and review pull requests | Read, Grep, Glob, Write, Bash(gh pr view \*), Bash(gh pr comment \*), Bash(gh api repos/\*/pulls/\*/reviews \*), Bash(gh api repos/\*/pulls/\*/comments \*), Bash(gh api repos/\*/pulls/\* --jq \*), Bash(git \*) |
 | `rust-best-practices` | Rust programming checklists and reference material | Read, WebFetch |
 | `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series | WebFetch, WebSearch |
 
@@ -70,12 +70,17 @@ The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr
       "Bash(git pull *)",
       "Bash(git branch *)",
       "Bash(git status *)",
-      "Bash(git clone *)",
       "Bash(git rev-parse *)",
       "Bash(git show *)",
-      "Bash(gh pr *)",
-      "Bash(gh api *)",
-      "Bash(gh run *)"
+      "Bash(git clone --depth=* --config core.hooksPath=/dev/null -- *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr checkout *)",
+      "Bash(gh api repos/*/pulls/*)",
+      "Bash(gh api /advisories*)",
+      "Bash(gh run list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run watch *)"
     ]
   }
 }
