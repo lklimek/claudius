@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# List review threads for a pull request via GraphQL.
+#
+# Usage: gh-list-review-threads.sh <owner> <repo> <pr_number>
+#
+# Output: JSON with thread id, isResolved, and first comment's databaseId, path, body
+set -euo pipefail
+
+if [[ $# -ne 3 ]]; then
+  echo "Usage: $0 <owner> <repo> <pr_number>" >&2
+  exit 1
+fi
+
+owner="$1"
+repo="$2"
+pr_number="$3"
+
+if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+  echo "Error: pr_number must be a positive integer" >&2
+  exit 1
+fi
+
+gh api graphql -f query="
+{
+  repository(owner: \"${owner}\", name: \"${repo}\") {
+    pullRequest(number: ${pr_number}) {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          comments(first: 1) {
+            nodes { databaseId path body }
+          }
+        }
+      }
+    }
+  }
+}"

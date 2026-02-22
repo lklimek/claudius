@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Verify whether existing PR review comments have been addressed in code. Checks out the branch, verifies each comment against current code, resolves addressed threads, and produces a structured report. Use when asked to check, triage, or verify PR review feedback.
-allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(gh api repos/*/pulls/*/comments *), Bash(gh api graphql *), Bash(git pull *), Bash(git fetch *), Bash(*diff-anchors.py *)
+allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-thread.sh *), Bash(git pull *), Bash(git fetch *), Bash(*diff-anchors.py *)
 ---
 
 # Check PR Comments Workflow
@@ -10,7 +10,7 @@ When asked to check/triage/verify existing PR review comments, follow this workf
 
 ## 1. Fetch All Comments
 
-Fetch inline review comments, PR-level comments, and review summaries. See the **github** skill (`PR Review Comments` section) for the exact `gh api` and `gh pr view` commands.
+Fetch inline review comments, PR-level comments, and review summaries. See the **github** skill (`PR Review Comments` section) for the wrapper scripts.
 
 ## 2. Checkout and Pull the PR Branch
 
@@ -92,6 +92,6 @@ Table covering all comments from both sections, using the same global `<N>`:
 
 **Always ask the user for confirmation before resolving any threads.**
 
-After the report is presented and the user approves, resolve addressed review threads. See the **github** skill (`PR Review Comments > Resolving review threads` section) for the GraphQL commands to map comment IDs to thread IDs and resolve them.
+After the report is presented and the user approves, resolve addressed review threads. See the **github** skill (`PR Review Comments > Resolving review threads` section) for the wrapper scripts.
 
 Only resolve threads where verification confirms the issue is fixed. Never resolve threads that are only partially addressed.
