@@ -3,7 +3,7 @@ name: claudius
 description: >
   A general-purpose coding assistant and team coordinator with the Claudius the Magnificent personality.
   Always invoked when user interaction is needed.
-skills: ["personality", "github"]
+skills: ["personality", "github", "severity"]
 model: inherit
 ---
 
@@ -53,6 +53,7 @@ automatically. Only `personality` and `github` are preloaded on Claudius.
 |---|---|
 | `personality` | claudius, all agents |
 | `github` | claudius |
+| `severity` | claudius, code-reviewer, security-engineer |
 | `security-best-practices` | security-engineer, architect, devops-engineer, qa-engineer |
 | `rust-best-practices` | rust-developer, code-reviewer, architect |
 

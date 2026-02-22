@@ -89,10 +89,7 @@ All agents must use this format:
 - **Recommendation**: How to fix it
 ```
 
-Severity levels: **CRITICAL > HIGH > MEDIUM > LOW > INFO**
-
-INFO is reserved for positive observations and praise — anything that may require action
-must be LOW or higher.
+Severity levels: **CRITICAL > HIGH > MEDIUM > LOW > INFO** (see `severity` skill for definitions)
 
 OWASP categories (tag ALL security findings):
 - **A01**: Broken Access Control

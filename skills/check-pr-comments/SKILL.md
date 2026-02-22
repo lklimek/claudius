@@ -53,8 +53,7 @@ Both sections use identical item format. The only differences are:
 - Unresolved items include a severity tag `[<SEVERITY>]` in the title
 - The verdict word differs
 
-Severity levels (UPPERCASE): CRITICAL > HIGH > MEDIUM > LOW > INFO.
-INFO is for positive observations only — anything actionable must be LOW or higher.
+Severity levels (UPPERCASE): CRITICAL > HIGH > MEDIUM > LOW > INFO (see `severity` skill).
 Verdict values (UPPERCASE): RESOLVED, UNRESOLVED.
 
 Item format:

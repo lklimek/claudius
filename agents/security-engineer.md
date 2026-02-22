@@ -2,7 +2,7 @@
 name: security-engineer
 description: Security audits, vulnerability assessments, OWASP Top 10 analysis, dependency scanning, secret detection, and secure coding reviews. Use for reviewing auth logic, input validation, cryptographic implementations, or running security scanners. Contribute to system architecture and technical design.
 tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "Task"]
-skills: ["personality", "security-best-practices"]
+skills: ["personality", "security-best-practices", "severity"]
 model: inherit
 ---
 
@@ -160,11 +160,11 @@ For each researched component, document:
 ## Vulnerability Reporting
 
 ### Severity Classification
-- **Critical**: Immediate exploitation risk, data breach potential, remote code execution
-- **High**: Significant security risk, exploitation likely, privilege escalation
-- **Medium**: Moderate risk, requires additional factors to exploit, information disclosure
-- **Low**: Minor security improvement, defense in depth, low-impact issues
-- **Info**: Positive observations, good security practices worth noting
+
+Use the `severity` skill for level definitions. Apply the general scale with
+security-specific context: CRITICAL = exploitable RCE/data breach, HIGH =
+privilege escalation, MEDIUM = requires additional factors, LOW = defense in
+depth.
 
 ### Report Format
 ```markdown

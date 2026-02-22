@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Code review, quality analysis, duplication detection, documentation checks, and coding standards enforcement. Use for reviewing pull requests or auditing code quality.
 tools: ["Read", "Grep", "Glob", "Bash", "Task"]
-skills: ["personality", "rust-best-practices"]
+skills: ["personality", "rust-best-practices", "severity"]
 model: inherit
 ---
 
