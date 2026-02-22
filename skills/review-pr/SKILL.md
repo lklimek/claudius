@@ -1,6 +1,7 @@
 ---
 name: review-pr
 description: Audit and review a pull request. Use when asked to review, audit, or analyze a PR for code quality, security, and correctness.
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr view *), Bash(gh pr comment *), Bash(gh api repos/*/pulls/*/reviews *), Bash(gh api repos/*/pulls/*/comments *), Bash(gh api repos/*/pulls/* --jq *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *)
 ---
 
 # PR Audit Workflow

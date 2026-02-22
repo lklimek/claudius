@@ -7,6 +7,7 @@ description: >
   performance, or FFI. Also use when someone asks about Rust idioms, patterns, or conventions, or
   when reviewing a Rust crate for compliance with community standards. This skill provides actionable
   checklists and detailed reference material covering all aspects of professional Rust development.
+allowed-tools: Read, WebFetch
 ---
 
 # Rust Best Practices

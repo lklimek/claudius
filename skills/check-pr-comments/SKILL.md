@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Verify whether existing PR review comments have been addressed in code. Checks out the branch, verifies each comment against current code, resolves addressed threads, and produces a structured report. Use when asked to check, triage, or verify PR review feedback.
-allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(git pull *), Bash(git fetch *), Bash(*diff-anchors.py *)
+allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(gh api repos/*/pulls/*/comments *), Bash(git pull *), Bash(git fetch *), Bash(*diff-anchors.py *)
 ---
 
 # Check PR Comments Workflow
