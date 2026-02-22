@@ -1,19 +1,20 @@
 ---
 name: review-pr
 description: Audit and review a pull request. Use when asked to review, audit, or analyze a PR for code quality, security, and correctness.
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr view *), Bash(gh pr comment *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *)
+agent: claudius
+context: fork
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr view *), Bash(gh pr comment *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # PR Audit Workflow
 
-When asked to audit/review a PR, follow this workflow:
+When asked to audit/review a PR, follow this workflow.
 
-## 1. Gather Context
+## 1. Gather PR Context
 
 Prefer local git commands over `gh api` for performance.
 
 ```bash
-# Determine the PR base (the commit v1.0-dev points to, or use gh only if needed)
 BASE_BRANCH=v1.0-dev
 gh pr view --json number,title,body,url
 
@@ -22,32 +23,26 @@ git diff $BASE_BRANCH...HEAD --stat
 git diff $BASE_BRANCH...HEAD
 ```
 
-## 2. Spawn Team
-Create a team (`pr<NUMBER>-audit`) with parallel agents:
+## 2. Conduct the Review
 
-| Agent (`subagent_type`) | Task Focus |
-|---|---|
-| `code-reviewer` | Correctness, duplication, edge cases, behavioral changes |
-| `security-engineer` | Injection, concurrency/deadlocks, race conditions, panics, DoS, known security issues |
-| `rust-developer` / `go-developer` / `python-developer` | Language idioms, error handling, lock ordering, transaction safety |
-| `technical-writer` | Documentation accuracy, README/CLAUDE.md updates, doc comments, changelog entries |
+Load and follow the **review** skill for the actual code review process. It covers:
+- Agent selection and scaling based on PR size
+- Parallel agent spawning with explicit prompts
+- OWASP classification on all security findings
+- Consolidated, deduplicated report generation
 
-For large PRs, split `code-reviewer` by file. For small PRs, `code-reviewer` + `security-engineer` may suffice. Add `technical-writer` when the PR touches documentation, public APIs, or adds/changes user-facing behavior that should be documented.
+Pass the PR's scope (changed files, base branch) as context to the review methodology.
 
-Each task description must include: files to review, what changed, focus areas, `git show <base>:<file>` for comparison, "DO NOT write code", report format (severity + file:line + description + impact), and instruction to send findings via SendMessage.
+## 3. Post GitHub PR Review
 
-## 3. Consolidate Findings
-Compile summary table with severity: CRITICAL > HIGH > MEDIUM > LOW > INFO.
-
-## 4. Post GitHub PR Review
-
-Ask if your findings should be published as Github PR review.
+Ask if findings should be published as a GitHub PR review.
 
 The review is posted in **two parts**:
 
 ### Part A: Summary comment (visible immediately)
 
-Post the audit summary as a normal PR issue comment using `gh pr comment`. This ensures the summary is always visible (draft reviews hide their body text). Include:
+Post the audit summary as a normal PR issue comment using `gh pr comment`. This ensures the
+summary is always visible (draft reviews hide their body text). Include:
 - **Attribution**: "Reviewed by: Claude Code" and list the team members with their roles
 - Overall assessment
 - Findings table (severity, location, description)
@@ -69,35 +64,42 @@ EOF
 
 ### Part B: Inline comments (draft review)
 
-Post inline comments on specific diff lines as a draft review. This lets the user review and submit them manually.
-For trivial changes, include edit suggestions using ```suggestion ``` blocks.
+Post inline comments on specific diff lines as a draft review. This lets the user review and
+submit them manually. For trivial changes, include edit suggestions using ```suggestion ``` blocks.
 
 #### Verify lines are within the GitHub diff before posting
 
-The GitHub diff may differ from the local `git diff` (e.g., when the PR base includes commits not yet in the local branch). Before constructing inline comments:
+The GitHub diff may differ from the local `git diff` (e.g., when the PR base includes commits not
+yet in the local branch). Before constructing inline comments:
 
 1. **Get the PR base SHA** that GitHub uses:
    ```bash
    ../../scripts/gh-pr-base-sha.sh <owner> <repo> <number>
    ```
 
-2. **Check each file's diff hunks** to confirm your comment lines are within them. Use the local diff with the correct base:
+2. **Check each file's diff hunks** to confirm your comment lines are within them. Use the local
+   diff with the correct base:
    ```bash
    git diff <base-sha>...HEAD -- <file> | grep "^@@"
    ```
    A hunk `@@ -old,len +new,len @@` means new-file lines `new` through `new+len-1` are in the diff.
 
-3. **If a finding's line is outside the diff**, move it to Part A (the summary comment), not an inline comment. GitHub rejects inline comments on lines outside the diff with HTTP 422 "Line could not be resolved".
+3. **If a finding's line is outside the diff**, move it to Part A (the summary comment), not an
+   inline comment. GitHub rejects inline comments on lines outside the diff with HTTP 422.
 
 #### Deduplicate before posting
-Before creating a new review, fetch existing reviews and their inline comments to avoid duplicates. See the **github** skill (`PR Review Comments` section) for the fetch commands.
 
-Drop any finding that already appears in an existing review body or inline comment (match by file:line and substance, not exact wording).
+Before creating a new review, fetch existing reviews and their inline comments to avoid duplicates.
+See the **github** skill (`PR Review Comments` section) for the fetch commands.
+
+Drop any finding that already appears in an existing review body or inline comment (match by
+file:line and substance, not exact wording).
 
 #### Draft mode
+
 Reviews are posted as **drafts** (pending) so the user can review and submit manually.
-The `gh-post-review.sh` wrapper enforces draft mode by stripping any `event` field from the input JSON.
-The `body` field can be minimal (e.g., "See summary comment for full audit report") since the detailed summary is in Part A.
+The `gh-post-review.sh` wrapper enforces draft mode by stripping any `event` field from the input
+JSON. The `body` field can be minimal since the detailed summary is in Part A.
 
 ```bash
 cat > /tmp/pr-review.json << 'ENDJSON'
@@ -118,5 +120,7 @@ Rules:
 - Use `side: "RIGHT"` for new code
 - Get commit SHA: `git rev-parse HEAD`
 
-## 5. Cleanup
-Shutdown all agents (`SendMessage type: "shutdown_request"`), then `TeamDelete`.
+## 4. Cleanup
+
+Shutdown all agents (`SendMessage type: "shutdown_request"`), then `TeamDelete` (if a team was
+used).

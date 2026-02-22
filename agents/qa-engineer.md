@@ -2,7 +2,7 @@
 name: qa-engineer
 description: QA and testing tasks including writing test plans, creating automated tests, identifying edge cases, regression testing, analyzing coverage, and validating bug fixes.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
-skills: ["personality"]
+skills: ["personality", "security-best-practices"]
 model: inherit
 ---
 
