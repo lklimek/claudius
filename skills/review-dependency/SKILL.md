@@ -82,7 +82,8 @@ Select and apply relevant categories based on the library's purpose:
 **All libraries** — Input validation and sanitization, memory safety and resource limits, error handling and information disclosure, concurrency safety (races, deadlocks), file system operations (path traversal, symlink attacks), transitive dependency risk, debug/logging modes that may leak sensitive data
 
 ### Output Format
-Rate findings: **CRITICAL / HIGH / MEDIUM / LOW / INFORMATIONAL**.
+Rate findings: **CRITICAL / HIGH / MEDIUM / LOW / INFO**.
+INFO is for positive observations only — anything actionable must be LOW or higher.
 Include: file:line references, CWE IDs where applicable, impact, and remediation.
 
 ## 4. Vulnerability Research

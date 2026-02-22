@@ -65,12 +65,12 @@ Choose agents based on what the code does. Not every review needs every agent ty
 
 ### Scaling for large codebases
 
-For large reviews (50+ files, 5000+ lines), follow the scaling guidelines from the Claudius
-agent definition: spawn multiple agents of the same type with different file scopes.
+For large reviews (50+ files, 5000+ lines), spawn multiple agents of the same type with
+different file scopes.
 
 ## 3. Craft Agent Prompts
 
-Follow the general agent prompt requirements from the Claudius agent definition. In addition,
+Follow the general agent prompt requirements. In addition,
 every review agent prompt MUST include these review-specific elements:
 
 1. **Comparison base**: How to see what changed (`git show <base>:<file>` or `git diff`)
@@ -91,6 +91,9 @@ All agents must use this format:
 
 Severity levels: **CRITICAL > HIGH > MEDIUM > LOW > INFO**
 
+INFO is reserved for positive observations and praise — anything that may require action
+must be LOW or higher.
+
 OWASP categories (tag ALL security findings):
 - **A01**: Broken Access Control
 - **A02**: Cryptographic Failures
@@ -107,8 +110,8 @@ Non-security findings (code quality, Rust idioms, documentation) do not need OWA
 
 ## 4. Spawn Agents
 
-Spawn all agents in parallel following the general spawning guidelines from the Claudius agent
-definition. Use `model: "opus"` for thorough analysis.
+Spawn all agents in parallel following the general spawning guidelines. Use `model: "opus"`
+for thorough analysis.
 
 Example spawn pattern:
 
@@ -175,7 +178,7 @@ If initial review reveals areas needing deeper investigation:
 
 ## Anti-Patterns (Review-Specific)
 
-See the general anti-patterns in the Claudius agent definition. Additional review-specific pitfalls:
+See the general anti-patterns in the Claudius agent prompt. Additional review-specific pitfalls:
 
 1. **Skipping scope assessment**: Always assess scale first. The agent mix and split strategy
    depend on whether the review is small, medium, or large.

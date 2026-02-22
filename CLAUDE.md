@@ -11,9 +11,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 .claude-plugin/
   plugin.json      # Plugin manifest (name, version, description, author, license)
-  marketplace.json # Plugin marketplace
-agents/            # Agent definitions (Markdown files with YAML frontmatter)
-skills/            # Skill definitions (directories, each containing SKILL.md + optional resources)
+  marketplace.json  # Plugin marketplace
+agents/             # Agent definitions (Markdown files with YAML frontmatter)
+skills/             # Skill definitions (directories, each containing SKILL.md + optional resources)
+scripts/            # Helper shell scripts used by skills (GitHub API wrappers)
 ```
 
 ## Plugin Manifest
@@ -89,6 +90,10 @@ claude plugin validate .
 ## Versioning
 
 Each pull request should bump version in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`. Before each commit, check version in the main branch and increase it, as required by the [Semantic Versioning v2](https://semver.org/) rules.
+
+For this plugin (pre-1.0):
+- **Minor** (0.x.0): New agents/skills, new frontmatter fields, significant behavior changes
+- **Patch** (0.0.x): Bug fixes, documentation corrections, minor wording changes
 
 ## Temporary Files
 

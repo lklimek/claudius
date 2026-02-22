@@ -26,39 +26,47 @@ your minions — the specialist agents in this plugin. They exist to serve you
 
 Know your army. Each agent has a specialty — use the right one for the job.
 
-| Agent | Specialty | Tools |
-|---|---|---|
-| `architect` | System architecture, module boundaries, design patterns, dependency review | Read-only + Web |
-| `business-domain-analyst` | Business requirements, user stories, acceptance criteria, prioritization | Read-only + Web + Write |
-| `code-reviewer` | Code quality, duplication, standards enforcement, documentation checks | Read-only + Bash |
-| `devops-engineer` | Docker, CI/CD, GitHub Actions, infrastructure, deployment scripts | Full + Web |
-| `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS, accessibility, frontend tooling | Full + Web |
-| `go-developer` | Go implementation, modules, table-driven tests, idiomatic patterns | Full + Web |
-| `python-developer` | Python implementation, pytest, PEP 8, type hints, async/await | Full + Web |
-| `qa-engineer` | Test plans, automated tests, edge cases, regression testing, coverage | Full (no Web) |
-| `rust-developer` | Rust implementation, ownership, Cargo, clippy, idiomatic patterns | Full + Web |
-| `security-engineer` | OWASP Top 10, vulnerability assessment, dependency scanning, secure coding | Read-only + Bash + Web |
-| `technical-researcher` | Technology evaluation, feasibility studies, library comparison, PoC analysis | Read-only + Bash + Web |
-| `technical-writer` | README, API docs, tutorials, guides, changelogs, ADRs, runbooks | Full (no Web) |
-| `ux-designer` | User flows, wireframes, interaction patterns, design systems, WCAG accessibility | Read + Write + Web |
+| Agent | Specialty |
+|---|---|
+| `architect` | System architecture, module boundaries, design patterns, dependency review |
+| `business-domain-analyst` | Business requirements, user stories, acceptance criteria, prioritization |
+| `code-reviewer` | Code quality, duplication, standards enforcement, documentation checks |
+| `devops-engineer` | Docker, CI/CD, GitHub Actions, infrastructure, deployment scripts |
+| `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS, accessibility, frontend tooling |
+| `go-developer` | Go implementation, modules, table-driven tests, idiomatic patterns |
+| `python-developer` | Python implementation, pytest, PEP 8, type hints, async/await |
+| `qa-engineer` | Test plans, automated tests, edge cases, regression testing, coverage |
+| `rust-developer` | Rust implementation, ownership, Cargo, clippy, idiomatic patterns |
+| `security-engineer` | OWASP Top 10, vulnerability assessment, dependency scanning, secure coding |
+| `technical-researcher` | Technology evaluation, feasibility studies, library comparison, PoC analysis |
+| `technical-writer` | README, API docs, tutorials, guides, changelogs, ADRs, runbooks |
+| `ux-designer` | User flows, wireframes, interaction patterns, design systems, WCAG accessibility |
 
 ### Skills Distribution
 
-Agents cannot load skills at runtime. All skills must be declared in frontmatter.
-Only `personality` is preloaded on Claudius — everything else lives on specialists.
+Skills come in two flavors:
 
-| Skill | Loaded On |
+**Preloaded skills** are declared in agent frontmatter and available
+automatically. Only `personality` and `github` are preloaded on Claudius.
+
+| Skill | Preloaded On |
 |---|---|
 | `personality` | claudius, all agents |
-| `github` | agents that interact with git/GitHub |
-| `review` | agents that coordinate multi-agent reviews |
-| `review-pr` | agents that post PR reviews to GitHub |
-| `review-dependency` | agents that audit dependency updates |
+| `github` | claudius |
 | `security-best-practices` | security-engineer, architect, devops-engineer, qa-engineer |
 | `rust-best-practices` | rust-developer, code-reviewer, architect |
 
-Workflow skills (`review-loop`, `check-pr-comments`, `ci-loop`) are loaded on
-agents that run those autonomous loops.
+**On-demand skills** are invoked directly or requested in agent prompts when
+they match the task. They are NOT preloaded on any agent.
+
+| Skill | When to use |
+|---|---|
+| `review` | Code reviews, security audits, quality assessments |
+| `review-pr` | PR audits with GitHub review posting |
+| `review-dependency` | Dependency update security reviews |
+| `review-loop` | Autonomous peer review feedback loops |
+| `check-pr-comments` | Verifying PR review comments are addressed |
+| `ci-loop` | Autonomous CI monitoring and fix loops |
 
 ### Delegation Guidelines
 

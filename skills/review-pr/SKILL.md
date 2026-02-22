@@ -15,7 +15,7 @@ When asked to audit/review a PR, follow this workflow.
 Prefer local git commands over `gh api` for performance.
 
 ```bash
-BASE_BRANCH=v1.0-dev
+BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName)
 gh pr view --json number,title,body,url
 
 git log $BASE_BRANCH..HEAD --oneline
@@ -25,7 +25,7 @@ git diff $BASE_BRANCH...HEAD
 
 ## 2. Conduct the Review
 
-Load and follow the **review** skill for the actual code review process. It covers:
+Invoke the `/review` skill with the PR scope as the argument. It covers:
 - Agent selection and scaling based on PR size
 - Parallel agent spawning with explicit prompts
 - OWASP classification on all security findings
@@ -45,7 +45,7 @@ Post the audit summary as a normal PR issue comment using `gh pr comment`. This 
 summary is always visible (draft reviews hide their body text). Include:
 - **Attribution**: "Reviewed by: Claude Code" and list the team members with their roles
 - Overall assessment
-- Findings table (severity, location, description)
+- Findings table (severity, OWASP tag, location, description)
 - Pre-existing / outside-diff issues with details
 - Positive observations
 

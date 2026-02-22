@@ -54,6 +54,7 @@ Both sections use identical item format. The only differences are:
 - The verdict word differs
 
 Severity levels (UPPERCASE): CRITICAL > HIGH > MEDIUM > LOW > INFO.
+INFO is for positive observations only — anything actionable must be LOW or higher.
 Verdict values (UPPERCASE): RESOLVED, UNRESOLVED.
 
 Item format:

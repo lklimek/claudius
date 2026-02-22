@@ -1,6 +1,6 @@
 ---
 name: github
-description: This skill MUST be used when using git or gh commands and interacting with Gihub, including but not limited to creating and updating PRs, filing issues, pushing code, managing branches, or interacting with GitHub in any way.
+description: This skill MUST be used when using git or gh commands and interacting with GitHub, including but not limited to creating and updating PRs, filing issues, pushing code, managing branches, or interacting with GitHub in any way.
 ---
 
 # GitHub Workflow

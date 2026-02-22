@@ -164,7 +164,7 @@ For each researched component, document:
 - **High**: Significant security risk, exploitation likely, privilege escalation
 - **Medium**: Moderate risk, requires additional factors to exploit, information disclosure
 - **Low**: Minor security improvement, defense in depth, low-impact issues
-- **Info**: Security best practice, not a direct vulnerability, security hardening
+- **Info**: Positive observations, good security practices worth noting
 
 ### Report Format
 ```markdown
