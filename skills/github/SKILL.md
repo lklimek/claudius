@@ -260,6 +260,81 @@ ENDJSON
 gh api repos/<owner>/<repo>/pulls/<number>/reviews --method POST --input /tmp/pr-review.json
 ```
 
+#### PR Review Comments
+
+Operations for fetching, inspecting, and resolving PR review comments. Other skills that work with review feedback (e.g., `check-pr-comments`, `review-pr`, `review-loop`) delegate to these commands.
+
+##### Fetching inline review comments
+
+Inline review comments (attached to specific diff lines) are only available via `gh api` — there is no high-level `gh pr` equivalent.
+
+```bash
+# All inline review comments (paginated)
+gh api repos/<owner>/<repo>/pulls/<number>/comments --paginate \
+  --jq '.[] | {id, path, line, original_line, body, user: .user.login, in_reply_to_id, html_url}'
+```
+
+##### Fetching PR-level comments and review summaries
+
+```bash
+# PR-level (issue) comments
+gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'
+
+# Review summaries (approve / request-changes / comment)
+gh pr view <number> --json reviews --jq '.reviews[] | {author: .author.login, state, body}'
+```
+
+##### Requesting reviewers
+
+```bash
+gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
+  --method POST -f "reviewers[]={reviewer}"
+```
+
+##### Resolving review threads
+
+Use the GraphQL API to map comment database IDs to thread IDs and resolve addressed threads.
+
+```bash
+# List review threads (maps comment databaseId → GraphQL thread id)
+gh api graphql -f query='{
+  repository(owner: "<owner>", name: "<repo>") {
+    pullRequest(number: <number>) {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          comments(first: 1) {
+            nodes { databaseId path body }
+          }
+        }
+      }
+    }
+  }
+}'
+
+# Resolve a single thread
+gh api graphql -f query='mutation {
+  resolveReviewThread(input: {threadId: "<THREAD_ID>"}) {
+    thread { isResolved }
+  }
+}'
+```
+
+Only resolve threads where verification confirms the issue is fixed. Never resolve threads that are only partially addressed. **Always ask the user for confirmation before resolving any threads.**
+
+##### Building diff-view links
+
+Compute SHA256 of each file path to construct links into the PR diff view using the bundled helper script:
+
+```bash
+scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
+```
+
+Link format:
+- Single line: `https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<line>`
+- Line range: `https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<start>-R<end>`
+
 ### Issues
 
 ```bash

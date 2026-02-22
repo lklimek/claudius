@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Verify whether existing PR review comments have been addressed in code. Checks out the branch, verifies each comment against current code, resolves addressed threads, and produces a structured report. Use when asked to check, triage, or verify PR review feedback.
-allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(gh api repos/*/pulls/*/comments *), Bash(git pull *), Bash(git fetch *), Bash(*diff-anchors.py *)
+allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(gh api repos/*/pulls/*/comments *), Bash(gh api graphql *), Bash(git pull *), Bash(git fetch *), Bash(*diff-anchors.py *)
 ---
 
 # Check PR Comments Workflow
@@ -10,19 +10,7 @@ When asked to check/triage/verify existing PR review comments, follow this workf
 
 ## 1. Fetch All Comments
 
-Use `gh pr view --json` where possible; fall back to `gh api` for inline review comments (not exposed by the CLI).
-
-```bash
-# Inline review comments (primary focus) -- requires gh api, no CLI equivalent
-gh api repos/<owner>/<repo>/pulls/<number>/comments --paginate \
-  --jq '.[] | {id, path, line, original_line, body, user: .user.login, in_reply_to_id, html_url}'
-
-# PR-level (issue) comments -- CLI available
-gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'
-
-# Review summaries -- CLI available
-gh pr view <number> --json reviews --jq '.reviews[] | {author: .author.login, state, body}'
-```
+Fetch inline review comments, PR-level comments, and review summaries. See the **github** skill (`PR Review Comments` section) for the exact `gh api` and `gh pr view` commands.
 
 ## 2. Checkout and Pull the PR Branch
 
@@ -49,10 +37,10 @@ Items are numbered globally across both sections (e.g. if resolved has 1-6, unre
 
 ### Building diff-view links
 
-Compute SHA256 of each file path to construct links into the PR diff view using the bundled helper script:
+Compute SHA256 of each file path to construct links into the PR diff view using the `diff-anchors.py` helper script from the **github** skill:
 
 ```bash
-scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
+../github/scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
 ```
 
 Link format:
@@ -104,32 +92,6 @@ Table covering all comments from both sections, using the same global `<N>`:
 
 **Always ask the user for confirmation before resolving any threads.**
 
-After the report is presented and the user approves, resolve addressed review threads via GraphQL:
-
-```bash
-# Get thread IDs (map comment databaseId to GraphQL thread id)
-gh api graphql -f query='{
-  repository(owner: "<owner>", name: "<repo>") {
-    pullRequest(number: <number>) {
-      reviewThreads(first: 100) {
-        nodes {
-          id
-          isResolved
-          comments(first: 1) {
-            nodes { databaseId path body }
-          }
-        }
-      }
-    }
-  }
-}'
-
-# Resolve a single thread
-gh api graphql -f query='mutation {
-  resolveReviewThread(input: {threadId: "<THREAD_ID>"}) {
-    thread { isResolved }
-  }
-}'
-```
+After the report is presented and the user approves, resolve addressed review threads. See the **github** skill (`PR Review Comments > Resolving review threads` section) for the GraphQL commands to map comment IDs to thread IDs and resolve them.
 
 Only resolve threads where verification confirms the issue is fixed. Never resolve threads that are only partially addressed.

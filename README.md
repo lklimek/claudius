@@ -43,7 +43,7 @@ claude --plugin-dir /path/to/claudius
 
 | Name | Description | Allowed Tools |
 |------|-------------|---------------|
-| `check-pr-comments` | Verify that PR review comments have been addressed | Read, Grep, Glob, Bash(gh pr view \*), Bash(gh pr checkout \*), Bash(gh api repos/\*/pulls/\*/comments \*), Bash(git pull \*), Bash(git fetch \*) |
+| `check-pr-comments` | Verify that PR review comments have been addressed | Read, Grep, Glob, Bash(gh pr view \*), Bash(gh pr checkout \*), Bash(gh api repos/\*/pulls/\*/comments \*), Bash(gh api graphql \*), Bash(git pull \*), Bash(git fetch \*) |
 | `ci-loop` | Autonomous CI monitoring and fix loop | Read, Grep, Glob, Edit, Write, Bash(gh run list \*), Bash(gh run view \*), Bash(gh run watch \*), Bash(git \*) |
 | `github` | GitHub workflow guidelines covering git and gh usage | _(inherited)_ |
 | `personality` | Claudius personality overlay for agents | _(inherited)_ |

@@ -92,12 +92,7 @@ The GitHub diff may differ from the local `git diff` (e.g., when the PR base inc
 3. **If a finding's line is outside the diff**, move it to Part A (the summary comment), not an inline comment. GitHub rejects inline comments on lines outside the diff with HTTP 422 "Line could not be resolved".
 
 #### Deduplicate before posting
-Before creating a new review, fetch existing reviews and their comments to avoid duplicates:
-
-```bash
-gh api repos/<owner>/<repo>/pulls/<number>/reviews --jq '.[].body'
-gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | "\(.path):\(.line) \(.body)"'
-```
+Before creating a new review, fetch existing reviews and their inline comments to avoid duplicates. See the **github** skill (`PR Review Comments` section) for the fetch commands.
 
 Drop any finding that already appears in an existing review body or inline comment (match by file:line and substance, not exact wording).
 

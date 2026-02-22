@@ -23,34 +23,18 @@ Autonomous loop for addressing peer review feedback on a pull request. Repeats u
 
 ### 1. Request review
 
-```bash
-# Request review from the specified reviewer
-gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
-  --method POST -f "reviewers[]={reviewer}"
-```
+Request review from the specified reviewer. See the **github** skill (`PR Review Comments > Requesting reviewers` section) for the command.
 
 ### 2. Wait for review completion
 
-Poll until a new review appears. Reviews are ordered by `submitted_at`; compare against the last known review ID to detect new ones.
-
-```bash
-# Poll for new reviews (check every 30-60 seconds)
-gh api repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --jq '.[] | {id, state, submitted_at, body}'
-```
+Poll until a new review appears. Use the review summary fetch command from the **github** skill (`PR Review Comments` section). Reviews are ordered by `submitted_at`; compare against the last known review ID to detect new ones.
 
 - Track the latest review ID before requesting. A new review has a higher ID.
 - Timeout after ~10 minutes of polling — inform the user if no review arrives.
 
 ### 3. Read review comments
 
-Fetch inline comments associated with the latest review:
-
-```bash
-# Get all PR review comments
-gh api repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --jq '.[] | {id, path, line, body, pull_request_review_id, created_at}'
-```
+Fetch inline comments associated with the latest review. See the **github** skill (`PR Review Comments > Fetching inline review comments` section) for the command.
 
 - Filter comments by the new review's ID to avoid re-processing stale comments from earlier reviews.
 - Distinguish actionable comments (code suggestions, requested changes) from informational ones (praise, acknowledgments).

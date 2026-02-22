@@ -20,6 +20,7 @@
       "Bash(gh pr comment *)",
       "Bash(gh pr checkout *)",
       "Bash(gh api repos/*/pulls/*)",
+      "Bash(gh api graphql *)",
       "Bash(gh api /advisories*)",
       "Bash(gh run list *)",
       "Bash(gh run view *)",
