@@ -17,6 +17,16 @@ repo="$2"
 pr_number="$3"
 json_file="$4"
 
+if ! [[ "$owner" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: invalid owner format" >&2
+  exit 1
+fi
+
+if ! [[ "$repo" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: invalid repo format" >&2
+  exit 1
+fi
+
 if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   echo "Error: pr_number must be a positive integer" >&2
   exit 1

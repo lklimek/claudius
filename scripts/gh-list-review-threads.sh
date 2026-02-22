@@ -15,24 +15,38 @@ owner="$1"
 repo="$2"
 pr_number="$3"
 
+if ! [[ "$owner" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: invalid owner format" >&2
+  exit 1
+fi
+
+if ! [[ "$repo" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: invalid repo format" >&2
+  exit 1
+fi
+
 if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   echo "Error: pr_number must be a positive integer" >&2
   exit 1
 fi
 
-gh api graphql -f query="
-{
-  repository(owner: \"${owner}\", name: \"${repo}\") {
-    pullRequest(number: ${pr_number}) {
-      reviewThreads(first: 100) {
-        nodes {
-          id
-          isResolved
-          comments(first: 1) {
-            nodes { databaseId path body }
+gh api graphql \
+  -F owner="$owner" \
+  -F repo="$repo" \
+  -F pr_number="$pr_number" \
+  -f query='
+    query($owner: String!, $repo: String!, $pr_number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $pr_number) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              comments(first: 1) {
+                nodes { databaseId path body }
+              }
+            }
           }
         }
       }
-    }
-  }
-}"
+    }'
