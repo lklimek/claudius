@@ -1,0 +1,336 @@
+Claudius Plugin Permission Test Report
+============================================================
+
+Total: 304, Passed: 304, Failed: 0
+
+
+[Test 1: Plugin Structure & Manifest Validation]
+----------------------------------------
+  [PASS] plugin.json exists
+  [PASS] plugin.json is valid JSON
+  [PASS] plugin.json has 'name' field
+  [PASS] plugin.json has 'version' field
+  [PASS] plugin.json has 'description' field
+  [PASS] plugin.json has 'author' field
+  [PASS] plugin.json has 'license' field
+  [PASS] marketplace.json exists
+  [PASS] skills/ directory exists
+  [PASS] agents/ directory exists
+  [PASS] scripts/ directory exists
+  [PASS] skills/check-pr-comments/SKILL.md exists
+  [PASS] skills/ci-loop/SKILL.md exists
+  [PASS] skills/github/SKILL.md exists
+  [PASS] skills/personality/SKILL.md exists
+  [PASS] skills/review-dependency/SKILL.md exists
+  [PASS] skills/review-loop/SKILL.md exists
+  [PASS] skills/review-pr/SKILL.md exists
+  [PASS] skills/rust-best-practices/SKILL.md exists
+  [PASS] skills/security-best-practices/SKILL.md exists
+  [PASS] Skill 'check-pr-comments' has name in frontmatter
+  [PASS] Skill 'check-pr-comments' has description
+  [PASS] Skill 'ci-loop' has name in frontmatter
+  [PASS] Skill 'ci-loop' has description
+  [PASS] Skill 'github' has name in frontmatter
+  [PASS] Skill 'github' has description
+  [PASS] Skill 'personality' has name in frontmatter
+  [PASS] Skill 'personality' has description
+  [PASS] Skill 'review-dependency' has name in frontmatter
+  [PASS] Skill 'review-dependency' has description
+  [PASS] Skill 'review-loop' has name in frontmatter
+  [PASS] Skill 'review-loop' has description
+  [PASS] Skill 'review-pr' has name in frontmatter
+  [PASS] Skill 'review-pr' has description
+  [PASS] Skill 'rust-best-practices' has name in frontmatter
+  [PASS] Skill 'rust-best-practices' has description
+  [PASS] Skill 'security-best-practices' has name in frontmatter
+  [PASS] Skill 'security-best-practices' has description
+  [PASS] Agent 'architect' has name
+  [PASS] Agent 'architect' has description
+  [PASS] Agent 'business-domain-analyst' has name
+  [PASS] Agent 'business-domain-analyst' has description
+  [PASS] Agent 'claudius' has name
+  [PASS] Agent 'claudius' has description
+  [PASS] Agent 'code-reviewer' has name
+  [PASS] Agent 'code-reviewer' has description
+  [PASS] Agent 'devops-engineer' has name
+  [PASS] Agent 'devops-engineer' has description
+  [PASS] Agent 'frontend-developer' has name
+  [PASS] Agent 'frontend-developer' has description
+  [PASS] Agent 'go-developer' has name
+  [PASS] Agent 'go-developer' has description
+  [PASS] Agent 'python-developer' has name
+  [PASS] Agent 'python-developer' has description
+  [PASS] Agent 'qa-engineer' has name
+  [PASS] Agent 'qa-engineer' has description
+  [PASS] Agent 'rust-developer' has name
+  [PASS] Agent 'rust-developer' has description
+  [PASS] Agent 'security-engineer' has name
+  [PASS] Agent 'security-engineer' has description
+  [PASS] Agent 'technical-researcher' has name
+  [PASS] Agent 'technical-researcher' has description
+  [PASS] Agent 'technical-writer' has name
+  [PASS] Agent 'technical-writer' has description
+  [PASS] Agent 'ux-designer' has name
+  [PASS] Agent 'ux-designer' has description
+  [PASS] claude plugin validate passes
+
+[Test 2: Script Input Validation]
+----------------------------------------
+  [PASS] gh-fetch-review-comments.sh: rejects zero args
+  [PASS] gh-fetch-reviews.sh: rejects zero args
+  [PASS] gh-list-review-threads.sh: rejects zero args
+  [PASS] gh-pr-base-sha.sh: rejects zero args
+  [PASS] gh-post-review.sh: rejects zero args
+  [PASS] gh-request-reviewer.sh: rejects zero args
+  [PASS] gh-resolve-review-thread.sh: rejects zero args
+  [PASS] gh-fetch-review-comments.sh: rejects owner=shell-injection
+  [PASS] gh-fetch-reviews.sh: rejects owner=shell-injection
+  [PASS] gh-list-review-threads.sh: rejects owner=shell-injection
+  [PASS] gh-pr-base-sha.sh: rejects owner=shell-injection
+  [PASS] gh-fetch-review-comments.sh: rejects owner=path-traversal
+  [PASS] gh-fetch-reviews.sh: rejects owner=path-traversal
+  [PASS] gh-list-review-threads.sh: rejects owner=path-traversal
+  [PASS] gh-pr-base-sha.sh: rejects owner=path-traversal
+  [PASS] gh-fetch-review-comments.sh: rejects owner=spaces
+  [PASS] gh-fetch-reviews.sh: rejects owner=spaces
+  [PASS] gh-list-review-threads.sh: rejects owner=spaces
+  [PASS] gh-pr-base-sha.sh: rejects owner=spaces
+  [PASS] gh-fetch-review-comments.sh: rejects owner=semicolon
+  [PASS] gh-fetch-reviews.sh: rejects owner=semicolon
+  [PASS] gh-list-review-threads.sh: rejects owner=semicolon
+  [PASS] gh-pr-base-sha.sh: rejects owner=semicolon
+  [PASS] gh-fetch-review-comments.sh: rejects owner=pipe
+  [PASS] gh-fetch-reviews.sh: rejects owner=pipe
+  [PASS] gh-list-review-threads.sh: rejects owner=pipe
+  [PASS] gh-pr-base-sha.sh: rejects owner=pipe
+  [PASS] gh-fetch-review-comments.sh: rejects owner=backtick
+  [PASS] gh-fetch-reviews.sh: rejects owner=backtick
+  [PASS] gh-list-review-threads.sh: rejects owner=backtick
+  [PASS] gh-pr-base-sha.sh: rejects owner=backtick
+  [PASS] gh-fetch-review-comments.sh: rejects owner=empty
+  [PASS] gh-fetch-reviews.sh: rejects owner=empty
+  [PASS] gh-list-review-threads.sh: rejects owner=empty
+  [PASS] gh-pr-base-sha.sh: rejects owner=empty
+  [PASS] gh-fetch-review-comments.sh: rejects repo=injection
+  [PASS] gh-fetch-review-comments.sh: rejects repo=path-traversal
+  [PASS] gh-fetch-review-comments.sh: pr_number=negative
+  [PASS] gh-fetch-review-comments.sh: pr_number=alpha
+  [PASS] gh-fetch-review-comments.sh: pr_number=float
+  [PASS] gh-fetch-review-comments.sh: pr_number=zero
+  [PASS] gh-fetch-review-comments.sh: pr_number=injection
+  [PASS] gh-resolve-review-thread.sh: rejects thread_id=injection
+  [PASS] gh-resolve-review-thread.sh: rejects thread_id=spaces
+  [PASS] gh-resolve-review-thread.sh: rejects thread_id=special-chars
+  [PASS] gh-request-reviewer.sh: rejects reviewer=injection
+  [PASS] gh-request-reviewer.sh: rejects reviewer=spaces
+  [PASS] gh-request-reviewer.sh: rejects reviewer=too-long
+  [PASS] gh-request-reviewer.sh: rejects reviewer=leading-hyphen
+  [PASS] gh-post-review.sh: rejects nonexistent json_file
+  [PASS] diff-anchors.py: rejects zero args
+  [PASS] diff-anchors.py: produces output for valid path
+  [PASS] gh-post-review.sh: strips event field (enforces draft)
+
+[Test 3: Skill Allowed-Tools Consistency]
+----------------------------------------
+  [PASS] 'check-pr-comments': has GitHub-related tools
+  [PASS] 'review-pr': has GitHub-related tools
+  [PASS] 'review-loop': has GitHub-related tools
+  [PASS] 'ci-loop': has GitHub-related tools
+  [PASS] 'github': no allowed-tools (reference skill)
+  [PASS] 'check-pr-comments': no Edit tool (read-only)
+  [PASS] 'check-pr-comments': no Write tool (read-only)
+  [PASS] 'rust-best-practices': no Edit tool (read-only)
+  [PASS] 'rust-best-practices': no Write tool (read-only)
+  [PASS] 'security-best-practices': no Edit tool (read-only)
+  [PASS] 'security-best-practices': no Write tool (read-only)
+  [PASS] 'ci-loop': push implies add+commit
+  [PASS] 'review-loop': push implies add+commit
+  [PASS] review-dependency: has clone capability
+  [PASS] review-dependency: has cleanup capability
+  [PASS] security-best-practices: uses opus model
+  [PASS] review-dependency: has govulncheck
+  [PASS] review-dependency: has cargo audit
+  [PASS] review-dependency: has npm audit
+  [PASS] review-dependency: has pip-audit
+
+[Test 4: Settings Permissions Coverage]
+----------------------------------------
+  [PASS] Bash pattern covered: *diff-anchors.py *
+  [PASS] Bash pattern covered: *gh-fetch-review-comments.sh *
+  [PASS] Bash pattern covered: *gh-fetch-reviews.sh *
+  [PASS] Bash pattern covered: *gh-list-review-threads.sh *
+  [PASS] Bash pattern covered: *gh-resolve-review-thread.sh *
+  [PASS] Bash pattern covered: gh pr checkout *
+  [PASS] Bash pattern covered: gh pr view *
+  [PASS] Bash pattern covered: git fetch *
+  [PASS] Bash pattern covered: git pull *
+  [PASS] Bash pattern covered: gh run list *
+  [PASS] Bash pattern covered: gh run view *
+  [PASS] Bash pattern covered: gh run watch *
+  [PASS] Bash pattern covered: git add *
+  [PASS] Bash pattern covered: git branch *
+  [PASS] Bash pattern covered: git commit *
+  [PASS] Bash pattern covered: git diff *
+  [PASS] Bash pattern covered: git log *
+  [PASS] Bash pattern covered: git push
+  [PASS] Bash pattern covered: git push -u origin *
+  [PASS] Bash pattern covered: git push origin *
+  [PASS] Bash pattern covered: git status *
+  [PASS] Bash pattern covered: cargo audit *
+  [PASS] Bash pattern covered: gh api /advisories*
+  [PASS] Bash pattern covered: git clone --depth=* --config core.hooksPath=/dev/n
+  [PASS] Bash pattern covered: git diff *
+  [PASS] Bash pattern covered: govulncheck *
+  [PASS] Bash pattern covered: npm audit *
+  [PASS] Bash pattern covered: pip-audit *
+  [PASS] Bash pattern covered: rm -rf /tmp/claude/*
+  [PASS] Bash pattern covered: *gh-fetch-review-comments.sh *
+  [PASS] Bash pattern covered: *gh-fetch-reviews.sh *
+  [PASS] Bash pattern covered: *gh-request-reviewer.sh *
+  [PASS] Bash pattern covered: git add *
+  [PASS] Bash pattern covered: git commit *
+  [PASS] Bash pattern covered: git diff *
+  [PASS] Bash pattern covered: git log *
+  [PASS] Bash pattern covered: git push
+  [PASS] Bash pattern covered: git push -u origin *
+  [PASS] Bash pattern covered: git push origin *
+  [PASS] Bash pattern covered: git status *
+  [PASS] Bash pattern covered: *gh-fetch-review-comments.sh *
+  [PASS] Bash pattern covered: *gh-fetch-reviews.sh *
+  [PASS] Bash pattern covered: *gh-post-review.sh *
+  [PASS] Bash pattern covered: *gh-pr-base-sha.sh *
+  [PASS] Bash pattern covered: gh pr comment *
+  [PASS] Bash pattern covered: gh pr view *
+  [PASS] Bash pattern covered: git diff *
+  [PASS] Bash pattern covered: git log *
+  [PASS] Bash pattern covered: git rev-parse *
+  [PASS] Bash pattern covered: git show *
+  [PASS] Deny list covers: force push
+  [PASS] Deny list covers: reset --hard
+  [PASS] Deny list covers: clean -f
+  [PASS] Deny list covers: branch -D
+
+[Test 5: Deny List Effectiveness]
+----------------------------------------
+  [PASS] Denies: force push
+  [PASS] Denies: force push short
+  [PASS] Denies: force push with lease
+  [PASS] Denies: push delete branch
+  [PASS] Denies: push delete short
+  [PASS] Denies: push refspec delete
+  [PASS] Denies: hard reset
+  [PASS] Denies: clean force
+  [PASS] Denies: branch force delete
+  [PASS] Allows: git push origin feature
+  [PASS] Allows: git push -u origin
+  [PASS] Allows: git status
+  [PASS] Allows: git diff
+  [PASS] Allows: git log
+  [PASS] Denies edge case: push +refs
+  [PASS] Denies edge case: push +branch
+
+[Test 6: Read/Write Skill Classification]
+----------------------------------------
+  [PASS] 'check-pr-comments' has no write tools (Checks comments but doesn't fix code)
+  [PASS] 'rust-best-practices' has no write tools (Reference material only)
+  [PASS] 'security-best-practices' has no write tools (Reference material only)
+  [PASS] 'personality' has no write tools (Behavioral directive only)
+  [PASS] 'github' has no write tools (Reference/guide skill)
+  [PASS] 'ci-loop' has write/mutation tools (Fixes code and pushes)
+  [PASS] 'review-loop' has write/mutation tools (Fixes code based on feedback and pushes)
+  [PASS] 'review-pr' has write/mutation tools (Posts reviews to GitHub (Write for temp files))
+  [PASS] 'review-dependency' has write/mutation tools (Clones repos for analysis, cleanup)
+
+[Test 7: Agent Tool Boundaries]
+----------------------------------------
+  [PASS] 'code-reviewer': no Edit (read-only)
+  [PASS] 'code-reviewer': no Write (read-only)
+  [PASS] 'security-engineer': no Edit (read-only)
+  [PASS] 'security-engineer': no Write (read-only)
+  [PASS] 'technical-researcher': no Edit (read-only)
+  [PASS] 'technical-researcher': no Write (read-only)
+  [PASS] 'go-developer': has Edit (developer agent)
+  [PASS] 'rust-developer': has Edit (developer agent)
+  [PASS] 'python-developer': has Edit (developer agent)
+  [PASS] 'frontend-developer': has Edit (developer agent)
+  [PASS] 'architect': has Read tool
+  [PASS] 'business-domain-analyst': has Read tool
+  [PASS] 'claudius': no tools (coordinator/meta agent)
+  [PASS] 'code-reviewer': has Read tool
+  [PASS] 'devops-engineer': has Read tool
+  [PASS] 'frontend-developer': has Read tool
+  [PASS] 'go-developer': has Read tool
+  [PASS] 'python-developer': has Read tool
+  [PASS] 'qa-engineer': has Read tool
+  [PASS] 'rust-developer': has Read tool
+  [PASS] 'security-engineer': has Read tool
+  [PASS] 'technical-researcher': has Read tool
+  [PASS] 'technical-writer': has Read tool
+  [PASS] 'ux-designer': has Read tool
+  [PASS] 'architect': follows kebab-case
+  [PASS] 'business-domain-analyst': follows kebab-case
+  [PASS] 'claudius': follows kebab-case
+  [PASS] 'code-reviewer': follows kebab-case
+  [PASS] 'devops-engineer': follows kebab-case
+  [PASS] 'frontend-developer': follows kebab-case
+  [PASS] 'go-developer': follows kebab-case
+  [PASS] 'python-developer': follows kebab-case
+  [PASS] 'qa-engineer': follows kebab-case
+  [PASS] 'rust-developer': follows kebab-case
+  [PASS] 'security-engineer': follows kebab-case
+  [PASS] 'technical-researcher': follows kebab-case
+  [PASS] 'technical-writer': follows kebab-case
+  [PASS] 'ux-designer': follows kebab-case
+  [PASS] 'architect': Bash tool matches usage
+  [PASS] 'business-domain-analyst': Bash tool matches usage
+  [PASS] 'claudius': Bash tool matches usage
+  [PASS] 'code-reviewer': Bash tool matches usage
+  [PASS] 'devops-engineer': Bash tool matches usage
+  [PASS] 'frontend-developer': Bash tool matches usage
+  [PASS] 'go-developer': Bash tool matches usage
+  [PASS] 'python-developer': Bash tool matches usage
+  [PASS] 'qa-engineer': Bash tool matches usage
+  [PASS] 'rust-developer': Bash tool matches usage
+  [PASS] 'security-engineer': Bash tool matches usage
+  [PASS] 'technical-researcher': Bash tool matches usage
+  [PASS] 'technical-writer': Bash tool matches usage
+  [PASS] 'ux-designer': Bash tool matches usage
+
+[Test 8: Cross-Skill Permission Conflicts]
+----------------------------------------
+  [PASS] 'check-pr-comments': git pull * overlaps deny (expected)
+  [PASS] 'check-pr-comments': git fetch * overlaps deny (expected)
+  [PASS] 'ci-loop': git add * overlaps deny (expected)
+  [PASS] 'ci-loop': git commit * overlaps deny (expected)
+  [PASS] 'ci-loop': git push overlaps deny (expected)
+  [PASS] 'ci-loop': git push origin * overlaps deny (expected)
+  [PASS] 'ci-loop': git push -u origin * overlaps deny (expected)
+  [PASS] 'ci-loop': git branch * overlaps deny (expected)
+  [PASS] 'ci-loop': git diff * overlaps deny (expected)
+  [PASS] 'ci-loop': git log * overlaps deny (expected)
+  [PASS] 'ci-loop': git status * overlaps deny (expected)
+  [PASS] 'review-dependency': git diff * overlaps deny (expected)
+  [PASS] 'review-dependency': git clone --depth=* --config core.hooksP overlaps deny (expected)
+  [PASS] 'review-loop': git add * overlaps deny (expected)
+  [PASS] 'review-loop': git commit * overlaps deny (expected)
+  [PASS] 'review-loop': git push overlaps deny (expected)
+  [PASS] 'review-loop': git push origin * overlaps deny (expected)
+  [PASS] 'review-loop': git push -u origin * overlaps deny (expected)
+  [PASS] 'review-loop': git diff * overlaps deny (expected)
+  [PASS] 'review-loop': git log * overlaps deny (expected)
+  [PASS] 'review-loop': git status * overlaps deny (expected)
+  [PASS] 'review-pr': git log * overlaps deny (expected)
+  [PASS] 'review-pr': git diff * overlaps deny (expected)
+  [PASS] 'review-pr': git rev-parse * overlaps deny (expected)
+  [PASS] 'review-pr': git show * overlaps deny (expected)
+  [PASS] No duplicate allow patterns
+  [PASS] User-invocable 'ci-loop' has allowed-tools
+  [PASS] User-invocable 'review-loop' has allowed-tools
+  [PASS] check-pr-comments: resolve requires user confirmation
+
+[Test 9: Claude CLI Plugin Loading]
+----------------------------------------
+  [PASS] Plugin validates successfully
+  [PASS] Claude CLI accepts --plugin-dir flag (skipped: nested session)
+  [PASS] Plugin skills are discoverable (skipped: nested session)
+  [PASS] Plugin agents are discoverable (skipped: nested session)
