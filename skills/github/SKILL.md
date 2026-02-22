@@ -245,7 +245,7 @@ gh pr edit <number> --add-assignee "@me"
 
 **Never submit a final review (approve/request-changes). Always create draft reviews.** The user must publish the review themselves on GitHub.
 
-For inline file comments, use `gh api` to create a draft review (omit the `"event"` field):
+For inline file comments, create a draft review (omit the `"event"` field). The `gh-post-review.sh` wrapper enforces draft mode by stripping any `event` field from the input JSON:
 
 ```bash
 cat > /tmp/pr-review.json << 'ENDJSON'
@@ -257,8 +257,74 @@ cat > /tmp/pr-review.json << 'ENDJSON'
   ]
 }
 ENDJSON
-gh api repos/<owner>/<repo>/pulls/<number>/reviews --method POST --input /tmp/pr-review.json
+../../scripts/gh-post-review.sh <owner> <repo> <number> /tmp/pr-review.json
 ```
+
+#### PR Review Comments
+
+Operations for fetching, inspecting, and resolving PR review comments. All operations use wrapper scripts from the plugin's top-level `scripts/` directory, invoked via relative path `../../scripts/`. Other skills that work with review feedback (e.g., `check-pr-comments`, `review-pr`, `review-loop`) delegate to these scripts.
+
+##### Fetching inline review comments
+
+Inline review comments (attached to specific diff lines) are only available via `gh api` — there is no high-level `gh pr` equivalent.
+
+```bash
+../../scripts/gh-fetch-review-comments.sh <owner> <repo> <pr_number>
+```
+
+Output: JSON objects with `id`, `path`, `line`, `original_line`, `body`, `user`, `in_reply_to_id`, `html_url`.
+
+##### Fetching reviews
+
+```bash
+../../scripts/gh-fetch-reviews.sh <owner> <repo> <pr_number>
+```
+
+Output: JSON objects with `id`, `state`, `submitted_at`, `body`, `user`.
+
+For PR-level (issue) comments, use:
+
+```bash
+gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'
+```
+
+##### Requesting reviewers
+
+```bash
+../../scripts/gh-request-reviewer.sh <owner> <repo> <pr_number> <reviewer>
+```
+
+##### Resolving review threads
+
+First list review threads to map comment database IDs to GraphQL thread IDs, then resolve individual threads:
+
+```bash
+# List all review threads
+../../scripts/gh-list-review-threads.sh <owner> <repo> <pr_number>
+
+# Resolve a single thread by its GraphQL node ID
+../../scripts/gh-resolve-review-thread.sh <thread_id>
+```
+
+Only resolve threads where verification confirms the issue is fixed. Never resolve threads that are only partially addressed. **Always ask the user for confirmation before resolving any threads.**
+
+##### Getting PR base SHA
+
+```bash
+../../scripts/gh-pr-base-sha.sh <owner> <repo> <pr_number>
+```
+
+##### Building diff-view links
+
+Compute SHA256 of each file path to construct links into the PR diff view using the `diff-anchors.py` helper script (in the plugin's top-level `scripts/` directory):
+
+```bash
+../../scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
+```
+
+Link format:
+- Single line: `https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<line>`
+- Line range: `https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<start>-R<end>`
 
 ### Issues
 
@@ -279,18 +345,9 @@ gh issue create --title "<title>" --body "<body>"
 
 ### GitHub API
 
-Use `gh api` for operations not covered by high-level `gh` subcommands:
+Use wrapper scripts from `scripts/` for PR review operations (see `PR Review Comments` section above). For other `gh api` operations not covered by high-level `gh` subcommands:
 
 ```bash
-# Get PR base SHA
-gh api repos/<owner>/<repo>/pulls/<number> --jq '.base.sha'
-
-# Get PR review comments
-gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | "\(.path):\(.line) \(.body)"'
-
-# Get existing reviews
-gh api repos/<owner>/<repo>/pulls/<number>/reviews --jq '.[].body'
-
 # Query advisories
 gh api /advisories?ecosystem=<eco>&affects=<pkg>
 ```

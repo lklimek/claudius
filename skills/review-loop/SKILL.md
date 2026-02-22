@@ -2,7 +2,7 @@
 name: review-loop
 description: Autonomous peer review feedback loop — request review, wait for completion, read comments, fix issues, push, and re-request until no new actionable comments remain.
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh api repos/*/pulls/*/requested_reviewers *), Bash(gh api repos/*/pulls/*/reviews *), Bash(gh api repos/*/pulls/*/comments *), Bash(git add *), Bash(git commit *), Bash(git push), Bash(git push origin *), Bash(git push -u origin *), Bash(git diff *), Bash(git log *), Bash(git status *)
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(*gh-request-reviewer.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(git add *), Bash(git commit *), Bash(git push), Bash(git push origin *), Bash(git push -u origin *), Bash(git diff *), Bash(git log *), Bash(git status *)
 ---
 
 # Peer Review Loop
@@ -23,34 +23,18 @@ Autonomous loop for addressing peer review feedback on a pull request. Repeats u
 
 ### 1. Request review
 
-```bash
-# Request review from the specified reviewer
-gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
-  --method POST -f "reviewers[]={reviewer}"
-```
+Request review from the specified reviewer. See the **github** skill (`PR Review Comments > Requesting reviewers` section) for the wrapper script.
 
 ### 2. Wait for review completion
 
-Poll until a new review appears. Reviews are ordered by `submitted_at`; compare against the last known review ID to detect new ones.
-
-```bash
-# Poll for new reviews (check every 30-60 seconds)
-gh api repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --jq '.[] | {id, state, submitted_at, body}'
-```
+Poll until a new review appears. Use the `gh-fetch-reviews.sh` wrapper from the **github** skill (`PR Review Comments` section). Reviews are ordered by `submitted_at`; compare against the last known review ID to detect new ones.
 
 - Track the latest review ID before requesting. A new review has a higher ID.
 - Timeout after ~10 minutes of polling — inform the user if no review arrives.
 
 ### 3. Read review comments
 
-Fetch inline comments associated with the latest review:
-
-```bash
-# Get all PR review comments
-gh api repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --jq '.[] | {id, path, line, body, pull_request_review_id, created_at}'
-```
+Fetch inline comments associated with the latest review. See the **github** skill (`PR Review Comments > Fetching inline review comments` section) for the wrapper script.
 
 - Filter comments by the new review's ID to avoid re-processing stale comments from earlier reviews.
 - Distinguish actionable comments (code suggestions, requested changes) from informational ones (praise, acknowledgments).
