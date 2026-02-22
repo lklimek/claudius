@@ -37,10 +37,10 @@ Items are numbered globally across both sections (e.g. if resolved has 1-6, unre
 
 ### Building diff-view links
 
-Compute SHA256 of each file path to construct links into the PR diff view using the `diff-anchors.py` helper script from the **github** skill:
+Compute SHA256 of each file path to construct links into the PR diff view. See the **github** skill (`PR Review Comments > Building diff-view links`) for the `diff-anchors.py` helper script.
 
 ```bash
-../github/scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
+../../scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
 ```
 
 Link format:

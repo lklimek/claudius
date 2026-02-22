@@ -325,10 +325,10 @@ Only resolve threads where verification confirms the issue is fixed. Never resol
 
 ##### Building diff-view links
 
-Compute SHA256 of each file path to construct links into the PR diff view using the bundled helper script:
+Compute SHA256 of each file path to construct links into the PR diff view using the `diff-anchors.py` helper script (in the plugin's top-level `scripts/` directory):
 
 ```bash
-scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
+../../scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
 ```
 
 Link format:
