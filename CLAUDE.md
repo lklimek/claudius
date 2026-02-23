@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 .claude-plugin/
-  plugin.json      # Plugin manifest (name, version, description, author, license)
+  plugin.json       # Plugin manifest (name, version, description, author, license)
   marketplace.json  # Plugin marketplace
 agents/             # Agent definitions (Markdown files with YAML frontmatter)
 skills/             # Skill definitions (directories, each containing SKILL.md + optional resources)
