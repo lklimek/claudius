@@ -10,7 +10,7 @@ description: >
   consulted proactively during code review and security audit tasks, even if the user does not
   explicitly mention security.
 model: opus
-allowed-tools: WebFetch, WebSearch
+allowed-tools: Grep, Read, Glob, WebFetch, WebSearch
 ---
 
 # Secure Programming Best Practices
@@ -18,18 +18,45 @@ allowed-tools: WebFetch, WebSearch
 Actionable security checklists organized by OWASP Top 10 (2021) categories. Each item links to the
 relevant OWASP Cheat Sheet for detailed guidance.
 
-When you need more detail on a specific topic, fetch the linked cheat sheet URL.
-
 ## How to Use
 
 1. Identify which categories are relevant to the code being written or reviewed
-2. Walk through the checklist items for those categories
-3. **Fetch the linked OWASP cheat sheet for every checklist item that could be relevant** —
-   do not rely solely on the checklist summaries here; load the full cheat sheet to get
-   detailed, up-to-date guidance. When in doubt about relevance, fetch it.
-4. For framework-specific guidance, see the [Framework-Specific Security](#framework-specific-security)
+2. Walk through the checklist items in this document for those categories
+3. **Search the local reference files** for specific ASVS requirements and additional detail —
+   use `Grep` to search `references/` for keywords relevant to the code under review
+   (e.g., `Grep` for "session", "password", "injection", "authorization", chapter IDs like "V1",
+   section IDs like "V1.2", or requirement IDs like "V1.2.4"). **Do not read entire reference
+   files** — search for specific terms and read only the matching lines with context.
+4. **Fetch OWASP cheat sheets from the web** for implementation-level guidance when the local
+   references identify a relevant requirement but you need more detail on *how* to implement it.
+   Fetch the linked cheat sheet URL for every checklist item that could be relevant.
+5. For framework-specific guidance, see the [Framework-Specific Security](#framework-specific-security)
    section and fetch the corresponding cheat sheet
-5. Always include OWASP cheat sheet URLs in your output so the reader can follow up
+6. Always include OWASP cheat sheet URLs and ASVS requirement IDs in your output so the reader
+   can follow up
+
+### Searching Reference Files
+
+The `references/` directory contains local copies of OWASP security standards and guidance.
+**Never read entire reference files into context** — always search for specific terms.
+
+| Path | Description | Search tips |
+|------|-------------|-------------|
+| `OWASP_Application_Security_Verification_Standard_5.0.0_en.csv` | ASVS 5.0 — all verification requirements | CSV with columns: `chapter_id,chapter_name,section_id,section_name,req_id,req_description,level`. Search by topic keyword, chapter ID (V1–V14), section ID (V1.2), or requirement ID (V1.2.4). Level: 1=basic, 2=standard, 3=advanced. |
+| `cheatsheets/*.md` | OWASP Cheat Sheet Series — 109 detailed guides | Markdown files named `Topic_Cheat_Sheet.md`. Use `Glob` to find by topic (e.g., `references/cheatsheets/*Session*.md`), then `Grep` within the file, or `Read` specific sections. |
+
+**Search strategy:**
+1. **Find relevant files**: Use `Glob("references/cheatsheets/*keyword*.md")` to locate cheat
+   sheets by topic, or `Grep` across `references/` for specific terms
+2. **Search within files**: Use `Grep` with `output_mode: "content"` and context lines to extract
+   relevant sections without loading the full file
+3. **Read targeted sections**: If `Grep` finds a match, use `Read` with `offset` and `limit` to
+   load just the surrounding section (typically 30–50 lines)
+4. **Cross-reference**: Match ASVS requirement IDs with cheat sheet guidance for comprehensive coverage
+5. **Fall back to web**: If local cheat sheets are outdated or a topic isn't covered locally,
+   fetch from `https://cheatsheetseries.owasp.org/cheatsheets/`
+6. **Discover new files**: Use `Glob("references/**/*")` to find newly added reference files,
+   and `Read` the first few lines to understand their format before searching
 
 Base URL for all cheat sheets: `https://cheatsheetseries.owasp.org/cheatsheets/`
 
