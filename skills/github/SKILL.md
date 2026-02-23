@@ -233,7 +233,9 @@ EOF
 )"
 
 # Or read body from file
-gh pr edit <number> --body-file /tmp/pr-body.md
+SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/XXXXXX)
+# ... write body to $SESSION_DIR/pr-body.md ...
+gh pr edit <number> --body-file "$SESSION_DIR/pr-body.md"
 
 # Add/remove reviewers, labels, assignees, projects, milestone
 gh pr edit <number> --add-reviewer <login1>,<login2>
@@ -248,7 +250,7 @@ gh pr edit <number> --add-assignee "@me"
 For inline file comments, create a draft review (omit the `"event"` field). The `gh-post-review.sh` wrapper enforces draft mode by stripping any `event` field from the input JSON:
 
 ```bash
-cat > /tmp/pr-review.json << 'ENDJSON'
+cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
 {
   "commit_id": "<SHA>",
   "body": "Review summary.",
@@ -257,7 +259,7 @@ cat > /tmp/pr-review.json << 'ENDJSON'
   ]
 }
 ENDJSON
-../../scripts/gh-post-review.sh <owner> <repo> <number> /tmp/pr-review.json
+../../scripts/gh-post-review.sh <owner> <repo> <number> "$SESSION_DIR/pr-review.json"
 ```
 
 #### PR Review Comments

@@ -102,7 +102,8 @@ The `gh-post-review.sh` wrapper enforces draft mode by stripping any `event` fie
 JSON. The `body` field can be minimal since the detailed summary is in Part A.
 
 ```bash
-cat > /tmp/pr-review.json << 'ENDJSON'
+SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/XXXXXX)
+cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
 {
   "commit_id": "<SHA>",
   "body": "See summary comment for full audit report.",
@@ -111,7 +112,7 @@ cat > /tmp/pr-review.json << 'ENDJSON'
   ]
 }
 ENDJSON
-../../scripts/gh-post-review.sh <owner> <repo> <number> /tmp/pr-review.json
+../../scripts/gh-post-review.sh <owner> <repo> <number> "$SESSION_DIR/pr-review.json"
 ```
 
 Rules:

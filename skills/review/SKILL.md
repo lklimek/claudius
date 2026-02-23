@@ -123,7 +123,7 @@ Task(subagent_type="claudius:rust-developer", model="opus", prompt="...", name="
 After all agents complete:
 
 ### 5a. Collect reports
-Read all agent output files from `/tmp/claude-1000/`.
+Read all agent output files from the session temp directory created earlier.
 
 ### 5b. Deduplicate
 Many findings appear in multiple reports (e.g., `.unwrap()` panics found by both code-reviewer

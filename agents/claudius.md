@@ -138,9 +138,10 @@ Task agents without a predefined agent type.
 #### Output conventions
 
 For standalone Task agents, each must write its output to a unique file.
-Always specify the path explicitly.
+Create a session temp dir once with `mktemp -d /tmp/claude/XXXXXX` and reuse
+it for all agent outputs. Always specify the path explicitly in agent prompts.
 
-Standard pattern: `/tmp/claude-1000/<agent-name>-report.md`
+Standard pattern: `<tmpdir>/<agent-name>-report.md`
 
 For team-based agents, use SendMessage to report results back to the leader
 or other teammates.
