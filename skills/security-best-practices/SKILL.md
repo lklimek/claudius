@@ -22,43 +22,69 @@ relevant OWASP Cheat Sheet for detailed guidance.
 
 1. Identify which categories are relevant to the code being written or reviewed
 2. Walk through the checklist items in this document for those categories
-3. **Search the local reference files** for specific ASVS requirements and additional detail —
-   use `Grep` to search `references/` for keywords relevant to the code under review
-   (e.g., `Grep` for "session", "password", "injection", "authorization", chapter IDs like "V1",
-   section IDs like "V1.2", or requirement IDs like "V1.2.4"). **Do not read entire reference
-   files** — search for specific terms and read only the matching lines with context.
-4. **Fetch OWASP cheat sheets from the web** for implementation-level guidance when the local
-   references identify a relevant requirement but you need more detail on *how* to implement it.
-   Fetch the linked cheat sheet URL for every checklist item that could be relevant.
-5. For framework-specific guidance, see the [Framework-Specific Security](#framework-specific-security)
-   section and fetch the corresponding cheat sheet
-6. Always include OWASP cheat sheet URLs and ASVS requirement IDs in your output so the reader
-   can follow up
+3. **Consult the reference index below** to find relevant ASVS chapters and cheat sheets by topic
+4. **Search local references** for specific requirements — use `Grep` on `references/` for keywords,
+   ASVS IDs (V1, V1.2, V1.2.4), or topic terms. **Never read entire files** — search and read only
+   matching sections with context (30–50 lines).
+5. **Fetch OWASP cheat sheets** for implementation detail when local references aren't enough.
+   Fetch the linked URL for every relevant checklist item.
+6. For framework-specific guidance, see the [Framework-Specific Security](#framework-specific-security)
+   section and read or fetch the corresponding cheat sheet
+7. Always include OWASP cheat sheet URLs and ASVS requirement IDs in your output
 
-### Searching Reference Files
+### Local Reference Index
 
-The `references/` directory contains local copies of OWASP security standards and guidance.
-**Never read entire reference files into context** — always search for specific terms.
+**ASVS 5.0** — `references/OWASP_Application_Security_Verification_Standard_5.0.0_en.csv`
+CSV columns: `chapter_id,chapter_name,section_id,section_name,req_id,req_description,level` (L1=basic, L2=standard, L3=advanced)
 
-| Path | Description | Search tips |
-|------|-------------|-------------|
-| `OWASP_Application_Security_Verification_Standard_5.0.0_en.csv` | ASVS 5.0 — all verification requirements | CSV with columns: `chapter_id,chapter_name,section_id,section_name,req_id,req_description,level`. Search by topic keyword, chapter ID (V1–V14), section ID (V1.2), or requirement ID (V1.2.4). Level: 1=basic, 2=standard, 3=advanced. |
-| `cheatsheets/*.md` | OWASP Cheat Sheet Series — 109 detailed guides | Markdown files named `Topic_Cheat_Sheet.md`. Use `Glob` to find by topic (e.g., `references/cheatsheets/*Session*.md`), then `Grep` within the file, or `Read` specific sections. |
+| ID | Chapter | Key sections |
+|----|---------|-------------|
+| V1 | Encoding and Sanitization | V1.1 Architecture, V1.2 Injection Prevention, V1.3 Sanitization, V1.4 Memory, V1.5 Safe Deserialization |
+| V2 | Validation and Business Logic | V2.2 Input Validation, V2.3 Business Logic, V2.4 Anti-automation |
+| V3 | Web Frontend Security | V3.2 Content Interpretation, V3.3 Cookie Setup, V3.4 Browser Headers, V3.5 Origin Separation, V3.6 Resource Integrity |
+| V4 | API and Web Service | V4.1 Generic Web Service, V4.2 HTTP Message Validation, V4.3 GraphQL, V4.4 WebSocket |
+| V5 | File Handling | V5.2 Upload and Content, V5.3 Storage, V5.4 Download |
+| V6 | Authentication | V6.2 Password, V6.3 General Auth, V6.4 Factor Lifecycle, V6.5 MFA, V6.6 Out-of-Band, V6.7 Cryptographic, V6.8 IdP |
+| V7 | Session Management | V7.2 Fundamental, V7.3 Timeout, V7.4 Termination, V7.5 Session Abuse, V7.6 Federated Re-auth |
+| V8 | Authorization | V8.2 General Design, V8.3 Operation Level, V8.4 Other |
+| V9 | Self-contained Tokens | V9.1 Source and Integrity, V9.2 Content |
+| V10 | OAuth and OIDC | V10.1 Generic, V10.2 Client, V10.3 Resource Server, V10.4 Auth Server, V10.5 OIDC Client, V10.6 OpenID Provider |
+| V11 | Cryptography | V11.2 Implementation, V11.3 Algorithms, V11.4 Hashing, V11.5 Random Values, V11.6 Public Key, V11.7 In-Use Data |
+| V12 | Secure Communication | V12.1 TLS Guidance, V12.2 HTTPS External, V12.3 Service-to-Service |
+| V13 | Configuration | V13.2 Backend Communication, V13.3 Secret Management, V13.4 Information Leakage |
+| V14 | Data Protection | V14.2 General, V14.3 Client-side |
+| V15 | Secure Coding and Architecture | V15.2 Dependencies, V15.3 Defensive Coding, V15.4 Concurrency |
+| V16 | Security Logging and Error Handling | V16.2 General Logging, V16.3 Security Events, V16.4 Log Protection, V16.5 Error Handling |
+| V17 | WebRTC | V17.1 TURN Server, V17.2 Media, V17.3 Signaling |
 
-**Search strategy:**
-1. **Find relevant files**: Use `Glob("references/cheatsheets/*keyword*.md")` to locate cheat
-   sheets by topic, or `Grep` across `references/` for specific terms
-2. **Search within files**: Use `Grep` with `output_mode: "content"` and context lines to extract
-   relevant sections without loading the full file
-3. **Read targeted sections**: If `Grep` finds a match, use `Read` with `offset` and `limit` to
-   load just the surrounding section (typically 30–50 lines)
-4. **Cross-reference**: Match ASVS requirement IDs with cheat sheet guidance for comprehensive coverage
-5. **Fall back to web**: If local cheat sheets are outdated or a topic isn't covered locally,
-   fetch from `https://cheatsheetseries.owasp.org/cheatsheets/`
-6. **Discover new files**: Use `Glob("references/**/*")` to find newly added reference files,
-   and `Read` the first few lines to understand their format before searching
+**Cheat Sheets (109 files)** — `references/cheatsheets/<Topic>_Cheat_Sheet.md`
 
-Base URL for all cheat sheets: `https://cheatsheetseries.owasp.org/cheatsheets/`
+| Category | Topics (filename prefixes) |
+|----------|---------------------------|
+| Access Control | Access_Control, Authorization, Authorization_Testing_Automation, Insecure_Direct_Object_Reference_Prevention, Multi_Tenant_Security, Transaction_Authorization |
+| Authentication | Authentication, Credential_Stuffing_Prevention, Forgot_Password, Multifactor_Authentication, Password_Storage, Choosing_and_Using_Security_Questions, SAML_Security, OAuth2, JAAS |
+| Sessions and Cookies | Session_Management, Cookie_Theft_Mitigation |
+| Tokens | JSON_Web_Token_for_Java |
+| Injection | Input_Validation, SQL_Injection_Prevention, Query_Parameterization, OS_Command_Injection_Defense, LDAP_Injection_Prevention, Injection_Prevention, Injection_Prevention_in_Java, NoSQL_Security |
+| XSS and Frontend | Cross_Site_Scripting_Prevention, DOM_based_XSS_Prevention, DOM_Clobbering_Prevention, Content_Security_Policy, Prototype_Pollution_Prevention, XSS_Filter_Evasion, XS_Leaks, Clickjacking_Defense, Securing_Cascading_Style_Sheets, HTML5_Security, AJAX_Security, Browser_Extension_Vulnerabilities |
+| CSRF and SSRF | Cross-Site_Request_Forgery_Prevention, Server_Side_Request_Forgery_Prevention, Unvalidated_Redirects_and_Forwards |
+| Cryptography and TLS | Cryptographic_Storage, Key_Management, Transport_Layer_Security, Transport_Layer_Protection, TLS_Cipher_String, HTTP_Strict_Transport_Security, Pinning |
+| API Security | REST_Security, REST_Assessment, GraphQL, gRPC_Security, WebSocket_Security, Web_Service_Security |
+| Data Integrity | Deserialization, Mass_Assignment, File_Upload, Bean_Validation |
+| Secrets and Config | Secrets_Management, HTTP_Headers, PHP_Configuration, Database_Security |
+| Logging and Errors | Logging, Logging_Vocabulary, Error_Handling |
+| Infrastructure | Docker_Security, Kubernetes_Security, Infrastructure_as_Code_Security, CI_CD_Security, Network_Segmentation, Secure_Cloud_Architecture, Serverless_FaaS_Security, Zero_Trust_Architecture |
+| Supply Chain | Vulnerable_Dependency_Management, Dependency_Graph_SBOM, NPM_Security, Software_Supply_Chain_Security, Third_Party_Javascript_Management |
+| AI and LLM | AI_Agent_Security, LLM_Prompt_Injection_Prevention, Secure_AI_Model_Ops |
+| Design and Architecture | Threat_Modeling, Abuse_Case, Attack_Surface_Analysis, Secure_Product_Design, Secure_Code_Review, Legacy_Application_Management, Virtual_Patching, Vulnerability_Disclosure, User_Privacy_Protection, Denial_of_Service |
+| Mobile and IoT | Mobile_Application_Security, Automotive_Security, Drone_Security |
+| Frameworks | Django_Security, Django_REST_Framework, Laravel, Symfony, Ruby_on_Rails, Nodejs_Security, NodeJS_Docker, DotNet_Security, Java_Security, C-Based_Toolchain_Hardening |
+| Payments and Microservices | Third_Party_Payment_Gateway_Integration, Microservices_Security, Microservices_based_Security_Arch_Doc |
+
+### Searching References
+
+Use `Grep` on `references/` for keywords or IDs. Use `Read` with `offset`/`limit` for targeted sections.
+Fall back to web fetch from `https://cheatsheetseries.owasp.org/cheatsheets/` if local content is insufficient.
 
 ---
 
