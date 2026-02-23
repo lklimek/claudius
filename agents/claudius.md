@@ -95,7 +95,7 @@ docs — must include the attribution footer defined in the `github` skill.
 For non-GitHub content (README, API docs, guides), append at the bottom:
 
 ```
-Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
+<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
 ```
 
 ### Spawning Agents

@@ -12,7 +12,7 @@ Guidelines for working with Git and GitHub CLI (`gh`).
 **Attribution**: Every PR, issue, and comment posted to GitHub **must** include the following footer (separated by a blank line from the body):
 
 ```
-🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
+<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
 ```
 
 ## Git vs gh Decision Table
@@ -185,7 +185,7 @@ None
 - [x] I have added or updated relevant tests
 - [x] I have made corresponding changes to the documentation if needed
 
-🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
+<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
 EOF
 )"
 ```
@@ -206,7 +206,7 @@ Imagine you are <user> and you want to <goal>...
 ## Test plan
 - [ ] <test step>
 
-🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
+<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
 EOF
 )"
 ```
@@ -230,7 +230,7 @@ gh pr list
 gh pr comment <number> --body "$(cat <<'EOF'
 <comment text>
 
-🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
+<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
 EOF
 )"
 ```
@@ -265,7 +265,7 @@ For inline file comments, create a draft review (omit the `"event"` field). The 
 cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
 {
   "commit_id": "<SHA>",
-  "body": "Review summary.\n\n🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent",
+  "body": "Review summary.\n\n<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>",
   "comments": [
     {"path": "src/file.rs", "line": 42, "side": "RIGHT", "body": "Finding here."}
   ]
@@ -356,7 +356,7 @@ gh issue view <number>
 # Create issue (fill template if exists; always append attribution footer)
 gh issue create --title "<title>" --body "<body>
 
-🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent"
+<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>"
 ```
 
 ### GitHub API
