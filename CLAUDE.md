@@ -1,49 +1,40 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code working in this repository.
 
 ## Project Overview
 
-**Claudius** is a Claude Code plugin published at [github.com/lklimek/claudius](https://github.com/lklimek/claudius). It provides a collection of reusable agents and skills for software development workflows. Licensed under GPL-3.0.
+**Claudius** — a Claude Code plugin at [github.com/lklimek/claudius](https://github.com/lklimek/claudius). Reusable agents and skills for development workflows. GPL-3.0.
 
 ## Repository Structure
 
 ```
 .claude-plugin/
-  plugin.json       # Plugin manifest (name, version, description, author, license)
-  marketplace.json  # Plugin marketplace
-agents/             # Agent definitions (Markdown files with YAML frontmatter)
-skills/             # Skill definitions (directories, each containing SKILL.md + optional resources)
-scripts/            # Helper shell scripts used by skills (GitHub API wrappers)
+  plugin.json       # Plugin manifest (only `name` required; agents/ and skills/ auto-discovered)
+  marketplace.json  # Marketplace listing
+agents/             # Agent definitions (.md files with YAML frontmatter)
+skills/             # Skill definitions (directories with SKILL.md + optional resources)
+scripts/            # Helper shell scripts used by skills
 ```
-
-## Plugin Manifest
-
-`.claude-plugin/plugin.json` — only `name` is required. Component directories (`agents/`, `skills/`) are auto-discovered at the plugin root. Custom paths in manifest supplement (not replace) defaults.
 
 ## Agents
 
-Each agent is a single `.md` file with YAML frontmatter:
+Single `.md` file with YAML frontmatter. Body is the agent's system prompt.
 
 ```yaml
 ---
 name: agent-name
 description: "When to use this agent."
-tools: Read, Grep, Glob, Bash   # available tools (omit Edit/Write for read-only agents)
+tools: Read, Grep, Glob, Bash   # omit Edit/Write for read-only agents
 model: inherit                   # inherit | sonnet | opus | haiku
 ---
 ```
 
-The body contains the agent's system prompt: role definition, instructions, and behavioral rules.
-
-Additional frontmatter fields: `disallowedTools`, `permissionMode`, `maxTurns`, `skills` (preloaded), `mcpServers`, `hooks`, `memory` (user|project|local), `background`, `isolation` (worktree).
+Other fields: `disallowedTools`, `permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks`, `memory` (user|project|local), `background`, `isolation` (worktree).
 
 ## Skills
 
-Each skill is a directory containing:
-
-- `SKILL.md` — main skill definition with YAML frontmatter (`name`, `description`) and instructions
-- Optional subdirectories for supporting resources (e.g., `references/`, `scripts/`)
+Directory with `SKILL.md` (YAML frontmatter + instructions) and optional subdirs (`references/`, `scripts/`).
 
 ```yaml
 ---
@@ -52,49 +43,42 @@ description: When and how this skill should be invoked.
 ---
 ```
 
-Additional frontmatter fields: `argument-hint`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `context` (fork), `agent`, `hooks`.
+Other fields: `argument-hint`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `context` (fork), `agent`, `hooks`.
 
-String substitutions in skill body: `$ARGUMENTS`, `$0`/`$1`/etc., `${CLAUDE_SESSION_ID}`, `` !`command` `` (dynamic injection).
+Substitutions: `$ARGUMENTS`, `$0`/`$1`/etc., `${CLAUDE_SESSION_ID}`, `` !`command` ``.
 
-### Referencing Bundled Files from Skills
+### Bundled File References
 
-Skills can bundle scripts and reference files in subdirectories (e.g., `scripts/`, `references/`). When a skill is invoked, Claude receives the skill's base directory as context and resolves relative paths from there.
+Skills resolve relative paths from their base directory at invocation time.
 
-- **In instructions**: Use relative paths from the skill directory (e.g., `scripts/my-script.py arg1 arg2`). This works regardless of where the plugin is installed (local dev, marketplace cache, etc.).
-- **In `allowed-tools`**: Use path-agnostic glob patterns since the absolute install path is unknown at authoring time (e.g., `Bash(*my-script.py *)` instead of `Bash(~/.claude/skills/my-skill/scripts/my-script.py *)`).
-- **For reference docs**: Use relative markdown links (e.g., `see [reference.md](references/reference.md)`). Claude will use the Read tool to load them.
-- **No `$SKILL_DIR` variable exists** in skill body content. The `${CLAUDE_PLUGIN_ROOT}` variable is only available in hooks and MCP server configs, not in SKILL.md.
+- **Instructions**: relative paths (e.g., `scripts/my-script.py arg1`)
+- **`allowed-tools`**: path-agnostic globs (e.g., `Bash(*my-script.py *)`) — install path is unknown at authoring time
+- **Reference docs**: relative markdown links (e.g., `[ref](references/ref.md)`)
+- No `$SKILL_DIR` variable exists in SKILL.md. `${CLAUDE_PLUGIN_ROOT}` is only for hooks/MCP configs.
 
 ## Conventions
 
-- Agent names use lowercase kebab-case (e.g., `security-engineer.md`)
-- Skill directory names match the skill name in kebab-case
-- Agents and skills are self-contained — each file/directory should work independently
-- Descriptions in frontmatter must clearly state **when** the agent/skill should be used, not just what it does
-- Tools listed in agent frontmatter define the agent's capability boundary; prefer minimal tool sets (read-only agents should not have Edit/Write)
+- Names: lowercase kebab-case (`security-engineer.md`, `my-skill/`)
+- Self-contained: each agent/skill works independently
+- Frontmatter `description`: state **when** to use, not just what it does
+- Prefer minimal tool sets; read-only agents omit Edit/Write
+- Keep all descriptions and instructions concise — fewer tokens, same signal
 
 ## Development
 
-Test the plugin locally without installing:
-
 ```bash
-claude --plugin-dir /home/ubuntu/git/claudius
-```
-
-Validate the plugin manifest:
-
-```bash
-claude plugin validate .
+claude --plugin-dir /home/ubuntu/git/claudius   # local testing
+claude plugin validate .                         # validate manifest
 ```
 
 ## Versioning
 
-Each pull request should bump version in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`. Before each commit, check version in the main branch and increase it, as required by the [Semantic Versioning v2](https://semver.org/) rules.
+Bump version in `plugin.json` and `marketplace.json` before each commit. Follow [SemVer 2](https://semver.org/).
 
-For this plugin (pre-1.0):
-- **Minor** (0.x.0): New agents/skills, new frontmatter fields, significant behavior changes
-- **Patch** (0.0.x): Bug fixes, documentation corrections, minor wording changes
+Pre-1.0 rules:
+- **Minor** (0.x.0): new agents/skills, new frontmatter fields, significant behavior changes
+- **Patch** (0.0.x): bug fixes, doc corrections, minor wording changes
 
 ## Temporary Files
 
-Use the `tmp/` directory (gitignored) for eval workspaces and other transient artifacts.
+Use `tmp/` (gitignored) for eval workspaces and transient artifacts.
