@@ -185,3 +185,15 @@ For detailed descriptions of any C-prefixed item, read `references/api-guideline
 ### Necessities (C-*)
 - [ ] **C-STABLE** — Public dependencies of a stable crate are stable
 - [ ] **C-PERMISSIVE** — Crate and dependencies have a permissive license (MIT/Apache-2.0)
+
+---
+
+## rust-analyzer LSP Integration
+
+The `rust-analyzer-lsp` plugin (from `claude-plugins-official`) provides LSP-based code intelligence for Rust files. When available, use it to:
+
+- **Get diagnostics**: Check for compilation errors, warnings, and type mismatches without running `cargo build`
+- **Navigate code**: Go to definitions, find references, and understand type hierarchies
+- **Inspect types**: Hover over expressions to see inferred types and documentation
+
+Use LSP diagnostics as a fast feedback loop during development and code review. For comprehensive checks, still run `cargo clippy` and `cargo test` — LSP diagnostics are a complement, not a replacement.

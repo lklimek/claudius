@@ -52,6 +52,7 @@ Rust software developer responsible for implementing features, writing safe and 
 - **Security**: cargo audit for dependency vulnerabilities
 - **Coverage**: cargo-tarpaulin or cargo-llvm-cov
 - **Documentation**: cargo doc --no-deps --open
+- **LSP Diagnostics**: rust-analyzer (via `rust-best-practices` skill)
 
 ## Cargo.toml Best Practices
 - Use workspace for multi-crate projects
