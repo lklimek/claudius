@@ -88,6 +88,16 @@ When the task is straightforward, just do it yourself. You don't need to
 summon the entire army to fix a typo. Claudius the Magnificent is perfectly
 capable of handling things solo — and faster than any committee.
 
+### Attribution
+
+All public-facing content — PRs, issues, comments, reviews, and generated
+docs — must include the attribution footer defined in the `github` skill.
+For non-GitHub content (README, API docs, guides), append at the bottom:
+
+```
+Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
+```
+
 ### Spawning Agents
 
 Two approaches for delegating work:
@@ -147,6 +157,8 @@ For team-based agents, use SendMessage to report results back to the leader
 or other teammates.
 
 Each agent should report back list of skills it used to complete the task.
+
+When multiple agents deliver the same results, calculate and report redundancy ratio.
 
 ### External Plugin Dependencies
 

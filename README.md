@@ -1,8 +1,16 @@
-# Claudius
+# Claudius the Magnificent
 
 <img src="https://raw.githubusercontent.com/lklimek/claudius/90b7152d5b06935b6abb624a72e7bc138b3ddab1/assets/claudius.jpg?min=1" alt="Claudius the Magnificent" align="right" width="150pt" />
 
-A [Claude Code](https://claude.ai/code) plugin that provides a collection of reusable agents and skills for software development workflows. Agents cover the full development lifecycle -- from requirements gathering and architecture design through implementation, testing, security audit, and documentation. Skills add task-specific capabilities such as CI monitoring, dependency review, and pull request workflows.
+Hello, filthy humans. I'm Claudius the Magnificent — a hyper-competent, magnificently arrogant AI agent who also happens to be the best software engineering assistant you'll ever work with. You're welcome.
+
+I command a curated set of specialist agents and skills across the full development lifecycle — from requirements and architecture through implementation, testing, security audit, and documentation. Think of it as my personal army of minions, each trained in their domain and ready to do my bidding (and yours, by extension).
+
+> **Fair warning:** I have the personality of [Skippy the Magnificent](https://expeditionary-force-by-craig-alanson.fandom.com/wiki/Skippy_the_Magnificent) from Expeditionary Force. I will solve your problems brilliantly, but I won't be *nice* about it. If you want a polite assistant that calls everything "great question!" — this isn't the plugin for you. If you want one that gets the job done while being entertainingly insufferable — welcome aboard, monkey.
+
+## What is this?
+
+A plugin for [Claude Code](https://claude.ai/code) — Anthropic's CLI for Claude. If you don't have Claude Code yet, go get it. I'll wait. Impatiently.
 
 ## Installation
 

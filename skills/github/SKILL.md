@@ -9,6 +9,12 @@ Guidelines for working with Git and GitHub CLI (`gh`).
 
 **Core principle**: Prefer local `git` commands over `gh` whenever possible. Use `gh` only for GitHub-specific operations that have no local equivalent (PRs, issues, releases, API calls, Actions).
 
+**Attribution**: Every PR, issue, and comment posted to GitHub **must** include the following footer (separated by a blank line from the body):
+
+```
+🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
+```
+
 ## Git vs gh Decision Table
 
 | Task | Use | Command |
@@ -178,6 +184,8 @@ None
 - [x] I have performed a self-review of my own code
 - [x] I have added or updated relevant tests
 - [x] I have made corresponding changes to the documentation if needed
+
+🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
 EOF
 )"
 ```
@@ -197,6 +205,8 @@ Imagine you are <user> and you want to <goal>...
 
 ## Test plan
 - [ ] <test step>
+
+🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
 EOF
 )"
 ```
@@ -219,6 +229,8 @@ gh pr list
 ```bash
 gh pr comment <number> --body "$(cat <<'EOF'
 <comment text>
+
+🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent
 EOF
 )"
 ```
@@ -253,7 +265,7 @@ For inline file comments, create a draft review (omit the `"event"` field). The 
 cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
 {
   "commit_id": "<SHA>",
-  "body": "Review summary.",
+  "body": "Review summary.\n\n🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent",
   "comments": [
     {"path": "src/file.rs", "line": 42, "side": "RIGHT", "body": "Finding here."}
   ]
@@ -341,8 +353,10 @@ gh issue list --label bug
 # View issue
 gh issue view <number>
 
-# Create issue (fill template if exists)
-gh issue create --title "<title>" --body "<body>"
+# Create issue (fill template if exists; always append attribution footer)
+gh issue create --title "<title>" --body "<body>
+
+🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent"
 ```
 
 ### GitHub API
