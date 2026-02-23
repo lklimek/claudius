@@ -1,5 +1,7 @@
 # Claudius
 
+<img src="https://raw.githubusercontent.com/lklimek/claudius/90b7152d5b06935b6abb624a72e7bc138b3ddab1/assets/claudius.jpg?min=1" alt="Claudius the Magnificent" align="right" width="150pt" />
+
 A [Claude Code](https://claude.ai/code) plugin that provides a collection of reusable agents and skills for software development workflows. Agents cover the full development lifecycle -- from requirements gathering and architecture design through implementation, testing, security audit, and documentation. Skills add task-specific capabilities such as CI monitoring, dependency review, and pull request workflows.
 
 ## Installation
