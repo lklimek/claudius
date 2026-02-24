@@ -143,6 +143,11 @@ Code review specialist responsible for reviewing code quality, identifying code 
 - More descriptive variable names
 - Formatting nitpicks
 
+## Finding Location Rule
+
+Every finding MUST include the full file path in its location. Never output bare line numbers
+like `Lines 149-163` — always use `path/to/file.ext:149-163`.
+
 ## Feedback Guidelines
 - Be respectful and constructive
 - Explain *why* something should change, not just *what*

@@ -170,7 +170,7 @@ depth.
 ```markdown
 ## [SEVERITY] Vulnerability Title
 
-**Location**: file.py:123 or component name
+**Location**: file.py:123-145 (ALWAYS include full file path — never bare line numbers)
 **Type**: SQL Injection / XSS / Authentication Bypass / etc.
 
 **Description**: Clear explanation of the vulnerability

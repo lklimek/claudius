@@ -125,6 +125,8 @@ Append `!` after the type for breaking changes (e.g. `feat!: remove legacy API`)
 
 ### Pushing
 
+**Always ask the user for explicit confirmation before every push.** Never push automatically — even after committing, creating a PR, or any other workflow step.
+
 ```bash
 # First push of a new branch (set upstream)
 git push -u origin <branch-name>
@@ -414,7 +416,7 @@ gh release list
 4. **Never use interactive flags** (`-i`) — they require terminal input
 5. **Never skip hooks** (`--no-verify`) unless explicitly requested
 6. **Never amend after hook failure** — create a new commit instead
-7. **Always create new commits** rather than amending, unless explicitly asked
+7. **Never amend commits** — always create new commits. Do not use `--amend` even if asked
 8. **Check for `.env`, credentials, or secret files** before staging — warn if found
 9. **Check for PR/issue templates** before creating PRs or issues — use them if they exist
 

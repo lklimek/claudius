@@ -83,11 +83,14 @@ All agents must use this format:
 
 ```markdown
 ### <ID> (<Severity>): <Title> — <OWASP Category>
-- **Location**: `<file>:<line>`
+- **Location**: `<file>:<start_line>-<end_line>`
 - **Description**: What the issue is and why it matters
 - **Impact**: What could go wrong
 - **Recommendation**: How to fix it
 ```
+
+**Location field is mandatory and MUST always include the full file path.** Never output bare
+line numbers like `Lines 149-163` — always prefix with the file path (e.g., `src/auth.rs:149-163`).
 
 Severity levels: **CRITICAL > HIGH > MEDIUM > LOW > INFO** (see `severity` skill for definitions)
 
