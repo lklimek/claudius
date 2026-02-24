@@ -278,69 +278,37 @@ ENDJSON
 
 #### PR Review Comments
 
-Operations for fetching, inspecting, and resolving PR review comments. All operations use wrapper scripts from the plugin's top-level `scripts/` directory, invoked via relative path `../../scripts/`. Other skills that work with review feedback (e.g., `check-pr-comments`, `review-pr`, `review-loop`) delegate to these scripts.
+**Always use wrapper scripts — never call `gh api` directly for PR review operations.** Scripts handle pagination, `--jq` filtering, and input validation. Invoked via `../../scripts/`.
 
-##### Fetching inline review comments
-
-Inline review comments (attached to specific diff lines) are only available via `gh api` — there is no high-level `gh pr` equivalent.
-
-```bash
+```
 ../../scripts/gh-fetch-review-comments.sh <owner> <repo> <pr_number>
-```
+  → JSON per line: {id, path, line, original_line, body, user, in_reply_to_id, html_url}
 
-Output: JSON objects with `id`, `path`, `line`, `original_line`, `body`, `user`, `in_reply_to_id`, `html_url`.
-
-##### Fetching reviews
-
-```bash
 ../../scripts/gh-fetch-reviews.sh <owner> <repo> <pr_number>
-```
+  → JSON per line: {id, state, submitted_at, body, user}
 
-Output: JSON objects with `id`, `state`, `submitted_at`, `body`, `user`.
+../../scripts/gh-post-review.sh <owner> <repo> <pr_number> <json_file>
+  → Posts draft review. Input JSON: {commit_id, body, comments: [{path, line, side, body}]}
+  → Strips "event" field to enforce draft mode. Returns review html_url.
 
-For PR-level (issue) comments, use:
-
-```bash
-gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'
-```
-
-##### Requesting reviewers
-
-```bash
 ../../scripts/gh-request-reviewer.sh <owner> <repo> <pr_number> <reviewer>
-```
+  → Adds reviewer to PR.
 
-##### Resolving review threads
-
-First list review threads to map comment database IDs to GraphQL thread IDs, then resolve individual threads:
-
-```bash
-# List all review threads
 ../../scripts/gh-list-review-threads.sh <owner> <repo> <pr_number>
+  → GraphQL JSON: {id, isResolved, comments: [{databaseId, path, body}]}
 
-# Resolve a single thread by its GraphQL node ID
 ../../scripts/gh-resolve-review-thread.sh <thread_id>
-```
+  → Resolves thread by GraphQL node ID (from gh-list-review-threads.sh).
+  → Ask user before resolving. Never resolve partially addressed threads.
 
-Only resolve threads where verification confirms the issue is fixed. Never resolve threads that are only partially addressed. **Always ask the user for confirmation before resolving any threads.**
-
-##### Getting PR base SHA
-
-```bash
 ../../scripts/gh-pr-base-sha.sh <owner> <repo> <pr_number>
+  → Single line: base commit SHA.
+
+../../scripts/diff-anchors.py <file_path> [<file_path> ...]
+  → "path → sha256". For diff URLs: ...files#diff-<SHA256>R<line>
 ```
 
-##### Building diff-view links
-
-Compute SHA256 of each file path to construct links into the PR diff view using the `diff-anchors.py` helper script (in the plugin's top-level `scripts/` directory):
-
-```bash
-../../scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
-```
-
-Link format:
-- Single line: `https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<line>`
-- Line range: `https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<start>-R<end>`
+For PR-level (non-diff) comments: `gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'`
 
 ### Issues
 
@@ -363,11 +331,16 @@ gh issue create --title "<title>" --body "<body>
 
 ### GitHub API
 
-Use wrapper scripts from `scripts/` for PR review operations (see `PR Review Comments` section above). For other `gh api` operations not covered by high-level `gh` subcommands:
+**Never call `gh api` directly for PR review/comment operations.** Always use the wrapper scripts from `scripts/` — they handle pagination, `jq` filtering (via `--jq`, avoiding shell escaping issues), and input validation. See the `PR Review Comments` section above for the full list of scripts.
+
+For other `gh api` operations not covered by wrapper scripts or high-level `gh` subcommands, prefer `--jq` over piping to `jq` to avoid shell escaping problems:
 
 ```bash
-# Query advisories
-gh api /advisories?ecosystem=<eco>&affects=<pkg>
+# Prefer --jq (processed by gh, not bash)
+gh api /advisories?ecosystem=<eco>&affects=<pkg> --jq '.[] | {id, summary}'
+
+# Avoid: piping to jq risks shell interpretation issues (e.g. != becomes \!= )
+# gh api ... | jq '.[] | select(.body != "")'  # BAD — ! triggers history expansion
 ```
 
 ### Repositories
@@ -426,6 +399,7 @@ gh release list
 - Use `--jq` with `gh api` to extract specific fields
 - Use `--json <fields>` with `gh pr view` / `gh issue view` to get structured data
 - When posting JSON payloads via `gh api`, write to a temp file and use `--input`, especially for arrays
+- **Prefer `--jq` over `| jq`** when using `gh api` — `--jq` is processed by `gh` internally, bypassing bash interpretation. Piping to `jq` exposes filters to shell expansion (e.g., `!=` breaks because `!` triggers history expansion)
 
 ## Troubleshooting
 
