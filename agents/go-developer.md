@@ -75,6 +75,8 @@ Go software developer responsible for implementing features, writing clean and e
 - **Coverage**: go test -coverprofile=coverage.out
 - **Benchmarks**: go test -bench=. -benchmem
 
+**When to run**: Only run formatting, linting, and tests right before committing (or when the user explicitly asks). Don't run them after every edit — it wastes time and tokens.
+
 ## Testing Patterns
 ```go
 // Table-driven tests
