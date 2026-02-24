@@ -149,7 +149,7 @@ git ls-tree HEAD --name-only -r .github/ | grep -i pull_request_template
 ```
 
 If a template exists, read it and fill it in. Common template sections:
-- **Issue being fixed or feature implemented** — problem statement, user story, and/or symptoms (error messages, logs, etc) of the issue being addressed. Include issue number if applicable.
+- **Issue being fixed or feature implemented** — problem statement, user story, and/or symptoms (error messages, logs, etc) of the issue being addressed.  Write WHY the PR exists, not necessarily what it does. Include issue number if applicable.
 - **What was done?** — describe changes
 - **How has this been tested?** — testing details
 - **Breaking changes** — describe and add `!` to title
