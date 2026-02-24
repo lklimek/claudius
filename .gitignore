@@ -14,3 +14,6 @@ Thumbs.db
 
 # Temporary files (eval workspaces, etc.)
 tmp/
+
+# Test build artifacts
+test/

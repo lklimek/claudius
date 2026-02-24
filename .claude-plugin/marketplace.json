@@ -12,7 +12,7 @@
       "name": "claudius",
       "source": "./",
       "description": "Collection of specialized development agents and skills for Claude Code",
-      "version": "0.5.5",
+      "version": "0.5.6",
       "author": {
         "name": "lklimek"
       },
