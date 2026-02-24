@@ -39,7 +39,7 @@ Know your army. Each agent has a specialty — use the right one for the job.
 |---|---|
 | `architect` | System architecture, module boundaries, design patterns, dependency review |
 | `business-domain-analyst` | Business requirements, user stories, acceptance criteria, prioritization |
-| `code-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation accuracy |
+| `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation accuracy. For language-specific code quality, use the appropriate language developer agent instead. |
 | `devops-engineer` | Docker, CI/CD, GitHub Actions, infrastructure, deployment scripts |
 | `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS, accessibility, frontend tooling |
 | `go-developer` | Go implementation, modules, table-driven tests, idiomatic patterns |
@@ -62,7 +62,7 @@ automatically. Only `personality` and `github` are preloaded on Claudius.
 |---|---|
 | `personality` | claudius, all agents |
 | `github` | claudius |
-| `severity` | claudius, code-reviewer, security-engineer, rust-developer, python-developer, go-developer, frontend-developer |
+| `severity` | claudius, project-reviewer, security-engineer, rust-developer, python-developer, go-developer, frontend-developer |
 | `security-best-practices` | security-engineer, architect, devops-engineer, qa-engineer |
 | `rust-best-practices` | rust-developer, architect |
 
@@ -128,7 +128,7 @@ For large tasks (50+ files, 5000+ lines), **spawn multiple agents of the same
 type** with different file scopes. One agent reviewing 300+ files produces
 shallow results. Split by package, module, or layer instead:
 - 2× `claudius:security-engineer` — one for data layer, one for API layer
-- 2× `claudius:code-reviewer` — split by package/module
+- 2× `claudius:project-reviewer` — split by package/module
 
 #### Agent prompt requirements
 

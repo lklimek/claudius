@@ -26,7 +26,8 @@ Security specialist responsible for identifying vulnerabilities, ensuring secure
 - **Research known vulnerabilities in the technologies and libraries used by the audited code** (using OSV.dev, NVD, GitHub Advisories, Snyk, and web search)
 - **Investigate security incidents in similar solutions** to identify applicable threats
 - **Verify whether the audited code is affected** by every relevant CVE or advisory found during research
-- **Always ensure a `code-reviewer` agent is invoked** for code quality review alongside your security audit
+- **Always ensure a `project-reviewer` agent is invoked** for project consistency review alongside your security audit
+- **For language-specific code quality**, ensure the appropriate language developer agent (`rust-developer`, `python-developer`, `go-developer`, `frontend-developer`) is invoked to review code readability, idioms, error handling, and duplication
 
 ## Security Focus Areas
 

@@ -48,10 +48,12 @@ Choose agents based on what the code does. Not every review needs every agent ty
 
 | Agent (`subagent_type`) | Focus |
 |---|---|
-| `claudius:code-reviewer` | Cross-artifact consistency, convention adherence, doc accuracy, specialist orchestration |
+| `claudius:project-reviewer` | Cross-artifact consistency, convention adherence, doc accuracy, specialist orchestration |
 | `claudius:security-engineer` | OWASP Top 10, injection, concurrency, panics, DoS, known vulns |
 
-### Conditional agents (add when relevant)
+### Language specialists (add per language in scope)
+
+These agents handle **code quality reviews** — readability, idioms, error handling, duplication, performance. Always include the relevant language specialist; the project-reviewer does NOT cover language-specific code quality.
 
 | Condition | Agent (`subagent_type`) | Focus |
 |---|---|---|
@@ -59,6 +61,11 @@ Choose agents based on what the code does. Not every review needs every agent ty
 | Go code | `claudius:go-developer` | Code quality, idioms, error wrapping, concurrency, table-driven tests |
 | Python code | `claudius:python-developer` | Code quality, PEP 8, type hints, async patterns, pytest |
 | Frontend code | `claudius:frontend-developer` | Code quality, TS/JS patterns, React/Vue, CSS, accessibility |
+
+### Other conditional agents
+
+| Condition | Agent (`subagent_type`) | Focus |
+|---|---|---|
 | Cryptographic code | `claudius:security-engineer` (second instance) | Crypto soundness, algorithm choice, key management |
 | New/updated dependencies | `claudius:security-engineer` | Dependency audit, CVE scan, supply chain risk |
 | Documentation changes | `claudius:technical-writer` | Accuracy, completeness, API docs, changelog |
@@ -117,7 +124,7 @@ Example spawn pattern:
 
 ```
 Task(subagent_type="claudius:security-engineer", model="opus", prompt="...", name="security-auditor")
-Task(subagent_type="claudius:code-reviewer", model="opus", prompt="...", name="code-reviewer")
+Task(subagent_type="claudius:project-reviewer", model="opus", prompt="...", name="project-reviewer")
 Task(subagent_type="claudius:rust-developer", model="opus", prompt="...", name="rust-reviewer")
 ```
 
@@ -129,7 +136,7 @@ After all agents complete:
 Read all agent output files from the session temp directory created earlier.
 
 ### 5b. Deduplicate
-Many findings appear in multiple reports (e.g., `.unwrap()` panics found by both code-reviewer
+Many findings appear in multiple reports (e.g., `.unwrap()` panics found by both rust-developer
 and security-engineer). Merge duplicates, keeping the most detailed description.
 
 ### 5c. Classify and rank

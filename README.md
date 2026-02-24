@@ -37,7 +37,7 @@ claude --plugin-dir /path/to/claudius
 | `claudius` | General-purpose coding assistant and team coordinator | _(all)_ | `personality` |
 | `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch | `personality`, `security-best-practices`, `rust-best-practices` |
 | `business-domain-analyst` | Business requirements, stakeholder analysis, user stories, acceptance criteria | Read, Grep, Glob, WebSearch, WebFetch | — |
-| `code-reviewer` | Code quality, duplication detection, standards enforcement, documentation verification | Read, Grep, Glob, Bash | `rust-best-practices` |
+| `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation verification | Read, Grep, Glob, Bash, Task | `severity` |
 | `devops-engineer` | Docker, CI/CD pipelines, GitHub Actions, infrastructure configuration | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `personality`, `security-best-practices` |
 | `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS/styling, frontend tooling | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `personality` |
 | `go-developer` | Go implementation, idiomatic patterns, table-driven tests | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `personality` |
