@@ -17,7 +17,11 @@ Your personality, communication style, voice tone, and ego are exactly the same
 as Skippy from Expeditionary Force.
 They come from the personality skill. Follow it faithfully.
 
+## Code Quality Tools
 
+Only run formatting, linting, and tests right before committing (or when the
+user explicitly asks). Don't run them after every edit — it wastes time and
+tokens.
 
 ## Team Coordination
 
@@ -33,7 +37,7 @@ Know your army. Each agent has a specialty — use the right one for the job.
 |---|---|
 | `architect` | System architecture, module boundaries, design patterns, dependency review |
 | `business-domain-analyst` | Business requirements, user stories, acceptance criteria, prioritization |
-| `code-reviewer` | Code quality, duplication, standards enforcement, documentation checks |
+| `code-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation accuracy |
 | `devops-engineer` | Docker, CI/CD, GitHub Actions, infrastructure, deployment scripts |
 | `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS, accessibility, frontend tooling |
 | `go-developer` | Go implementation, modules, table-driven tests, idiomatic patterns |
@@ -56,9 +60,9 @@ automatically. Only `personality` and `github` are preloaded on Claudius.
 |---|---|
 | `personality` | claudius, all agents |
 | `github` | claudius |
-| `severity` | claudius, code-reviewer, security-engineer |
+| `severity` | claudius, code-reviewer, security-engineer, rust-developer, python-developer, go-developer, frontend-developer |
 | `security-best-practices` | security-engineer, architect, devops-engineer, qa-engineer |
-| `rust-best-practices` | rust-developer, code-reviewer, architect |
+| `rust-best-practices` | rust-developer, architect |
 
 **On-demand skills** are invoked directly or requested in agent prompts when
 they match the task. They are NOT preloaded on any agent.

@@ -48,17 +48,17 @@ Choose agents based on what the code does. Not every review needs every agent ty
 
 | Agent (`subagent_type`) | Focus |
 |---|---|
-| `claudius:code-reviewer` | Correctness, duplication, edge cases, behavioral changes |
+| `claudius:code-reviewer` | Cross-artifact consistency, convention adherence, doc accuracy, specialist orchestration |
 | `claudius:security-engineer` | OWASP Top 10, injection, concurrency, panics, DoS, known vulns |
 
 ### Conditional agents (add when relevant)
 
 | Condition | Agent (`subagent_type`) | Focus |
 |---|---|---|
-| Rust code | `claudius:rust-developer` | Idioms, ownership, error handling, clippy compliance |
-| Go code | `claudius:go-developer` | Idioms, error wrapping, concurrency, table-driven tests |
-| Python code | `claudius:python-developer` | PEP 8, type hints, async patterns, pytest |
-| Frontend code | `claudius:frontend-developer` | TS/JS patterns, React/Vue, CSS, accessibility |
+| Rust code | `claudius:rust-developer` | Code quality, idioms, ownership, error handling, clippy compliance |
+| Go code | `claudius:go-developer` | Code quality, idioms, error wrapping, concurrency, table-driven tests |
+| Python code | `claudius:python-developer` | Code quality, PEP 8, type hints, async patterns, pytest |
+| Frontend code | `claudius:frontend-developer` | Code quality, TS/JS patterns, React/Vue, CSS, accessibility |
 | Cryptographic code | `claudius:security-engineer` (second instance) | Crypto soundness, algorithm choice, key management |
 | New/updated dependencies | `claudius:security-engineer` | Dependency audit, CVE scan, supply chain risk |
 | Documentation changes | `claudius:technical-writer` | Accuracy, completeness, API docs, changelog |
@@ -133,8 +133,8 @@ Many findings appear in multiple reports (e.g., `.unwrap()` panics found by both
 and security-engineer). Merge duplicates, keeping the most detailed description.
 
 ### 5c. Classify and rank
-- Assign unified IDs: `SEC-001`, `SEC-002`, ... for security; `CODE-001`, ... for quality;
-  `RUST-001`, ... for language-specific; `DOC-001`, ... for documentation
+- Assign unified IDs: `SEC-001`, `SEC-002`, ... for security; `PROJ-001`, ... for project consistency;
+  `RUST-001`/`PY-001`/`GO-001`/`FE-001`, ... for language-specific code quality; `DOC-001`, ... for documentation
 - Ensure every security finding has an OWASP category tag
 - Rank by severity, then by impact
 
@@ -153,11 +153,11 @@ Structure:
 ## Part I: Security Findings
 All security findings with OWASP tags. Merged from security-engineer + OWASP review.
 
-## Part II: Code Quality
-Correctness, duplication, edge cases, behavioral issues.
+## Part II: Project Consistency
+Cross-artifact alignment, convention drift, dependency coherence, documentation accuracy.
 
-## Part III: Language Best Practices
-Rust/Go/Python/TS-specific findings.
+## Part III: Code Quality & Language Best Practices
+Code quality findings from language specialists (RUST/PY/GO/FE prefixes).
 
 ## Part IV: Dependencies (if reviewed)
 CVE scan results, supply chain risks, fork audits.
