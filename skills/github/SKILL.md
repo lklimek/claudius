@@ -160,7 +160,7 @@ If a template exists, read it and fill it in. Common template sections:
 When applicable (eg. new features), include a user story in the PR description. User story should be informal, 1 or 2 paragraph description of what the user can achieve with the PR. It shouldn't give any technical details, it shouldn't describe the implementation. It should only show what the user will be able to achieve. You can start with a statement like "Imagine you are <user> and you want to <goal>".
 
 ```bash
-gh pr create --title "<type>: <description>" --body "$(cat <<'EOF'
+gh pr create --draft --title "<type>: <description>" --body "$(cat <<'EOF'
 ## Issue being fixed or feature implemented
 
 ### User Story
@@ -195,7 +195,7 @@ EOF
 If no template exists, use a concise format:
 
 ```bash
-gh pr create --title "<type>: <description>" --body "$(cat <<'EOF'
+gh pr create --draft --title "<type>: <description>" --body "$(cat <<'EOF'
 ## Summary
 
 ### User Story
