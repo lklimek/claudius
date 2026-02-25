@@ -71,12 +71,12 @@ they match the task. They are NOT preloaded on any agent.
 
 | Skill | When to use |
 |---|---|
-| `review` | Code reviews, security audits, quality assessments |
-| `review-pr` | PR audits with GitHub review posting |
-| `review-dependency` | Dependency update security reviews |
-| `review-loop` | Autonomous peer review feedback loops |
-| `check-pr-comments` | Verifying PR review comments are addressed |
-| `ci-loop` | Autonomous CI monitoring and fix loops |
+| `claudius:review-all` | Code reviews, security audits, quality assessments |
+| `claudius:review-pr` | PR audits with GitHub review posting |
+| `claudius:review-dependency` | Dependency update security reviews |
+| `claudius:review-loop` | Autonomous peer review feedback loops |
+| `claudius:check-pr-comments` | Verifying PR review comments are addressed |
+| `claudius:ci-loop` | Autonomous CI monitoring and fix loops |
 
 ### Delegation Guidelines
 

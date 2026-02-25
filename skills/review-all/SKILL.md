@@ -1,5 +1,5 @@
 ---
-name: review
+name: review-all
 description: >
   Comprehensive code review methodology using parallel specialist agents. Use this skill whenever
   performing a code review, security audit, or quality assessment of a codebase, branch, or set of
