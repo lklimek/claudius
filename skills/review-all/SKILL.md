@@ -192,6 +192,11 @@ If initial review reveals areas needing deeper investigation:
 - Re-review specific files with different checklists
 - Audit forked dependencies against upstream
 
+## 7. PDF Report (Optional)
+
+If the user requests a PDF version of the report, invoke the `claudius:report-pdf` skill with the
+path to the consolidated markdown report. Do NOT generate PDF by default — only on explicit request.
+
 ## Anti-Patterns (Review-Specific)
 
 See the general anti-patterns in the Claudius agent prompt. Additional review-specific pitfalls:
