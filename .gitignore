@@ -17,3 +17,4 @@ tmp/
 
 # Test build artifacts
 test/
+scripts/__pycache__/
