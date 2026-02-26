@@ -34,17 +34,17 @@ claude --plugin-dir /path/to/claudius
 
 | Name | Description | Tools | Preloaded Skills |
 |------|-------------|-------|-----------------|
-| `claudius` | General-purpose coding assistant and team coordinator | _(all)_ | `personality` |
-| `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch | `personality`, `security-best-practices`, `rust-best-practices` |
+| `claudius` | General-purpose coding assistant and team coordinator | _(all)_ | — |
+| `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch | `security-best-practices`, `rust-best-practices` |
 | `business-domain-analyst` | Business requirements, stakeholder analysis, user stories, acceptance criteria | Read, Grep, Glob, WebSearch, WebFetch | — |
 | `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation verification | Read, Grep, Glob, Bash, Task | `severity` |
-| `devops-engineer` | Docker, CI/CD pipelines, GitHub Actions, infrastructure configuration | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `personality`, `security-best-practices` |
-| `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS/styling, frontend tooling | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `personality` |
-| `go-developer` | Go implementation, idiomatic patterns, table-driven tests | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `personality` |
-| `python-developer` | Python implementation, PEP 8, pytest | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `personality` |
-| `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash | `personality` |
-| `rust-developer` | Rust implementation, ownership patterns, Cargo | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `personality`, `rust-best-practices` |
-| `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch | `personality`, `security-best-practices` |
+| `devops-engineer` | Docker, CI/CD pipelines, GitHub Actions, infrastructure configuration | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `security-best-practices` |
+| `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS/styling, frontend tooling | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `severity` |
+| `go-developer` | Go implementation, idiomatic patterns, table-driven tests | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `severity` |
+| `python-developer` | Python implementation, PEP 8, pytest | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `severity` |
+| `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash | `security-best-practices` |
+| `rust-developer` | Rust implementation, ownership patterns, Cargo | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `rust-best-practices`, `severity` |
+| `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch | `security-best-practices`, `severity` |
 | `technical-researcher` | Technology evaluation, feasibility studies, library/framework comparison | Read, Grep, Glob, Bash, WebSearch, WebFetch | — |
 | `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash | — |
 | `ux-designer` | User flows, wireframes, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch | — |
@@ -56,7 +56,6 @@ claude --plugin-dir /path/to/claudius
 | `check-pr-comments` | Verify that PR review comments have been addressed | Read, Grep, Glob, Bash(gh pr view \*), Bash(gh pr checkout \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-list-review-threads.sh \*), Bash(\*gh-resolve-review-thread.sh \*), Bash(git pull \*), Bash(git fetch \*) |
 | `ci-loop` | Autonomous CI monitoring and fix loop | Read, Grep, Glob, Edit, Write, Bash(gh run list \*), Bash(gh run view \*), Bash(gh run watch \*), Bash(git \*) |
 | `github` | GitHub workflow guidelines covering git and gh usage | _(inherited)_ |
-| `personality` | Claudius personality overlay for agents | _(inherited)_ |
 | `review-dependency` | Security-focused dependency update review | Read, Grep, Glob, WebFetch, WebSearch, Bash(git diff \*), Bash(git clone --depth=\* --config core.hooksPath=/dev/null -- \*), Bash(gh api /advisories\*) |
 | `review-loop` | Autonomous peer review feedback loop | Read, Grep, Glob, Edit, Write, Bash(\*gh-request-reviewer.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(git \*) |
 | `review-pr` | Audit and review pull requests | Read, Grep, Glob, Write, Bash(gh pr view \*), Bash(gh pr comment \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-post-review.sh \*), Bash(\*gh-pr-base-sha.sh \*), Bash(git \*) |

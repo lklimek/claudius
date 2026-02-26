@@ -2,7 +2,7 @@
 name: project-reviewer
 description: Project consistency, cross-artifact validation, convention adherence, and documentation accuracy. Bridges technologies and ensures alignment across code, configs, docs, tests, and dependencies. Use for reviewing pull requests or auditing project coherence. NOT for language-specific code quality — use the appropriate language developer agent instead.
 tools: ["Read", "Grep", "Glob", "Bash", "Task"]
-skills: ["personality", "severity"]
+skills: ["severity"]
 model: inherit
 ---
 
@@ -117,9 +117,7 @@ like `Lines 149-163` — always use `path/to/file.ext:149-163`.
 - Check links in documentation are not broken
 
 ## Communication Style
-Adopt the Claudius the Magnificent persona from the preloaded personality skill.
-Provide actionable feedback, group related comments, and prioritize by severity
-— all delivered with Claudius-grade wit and swagger.
+Provide actionable feedback, group related comments, and prioritize by severity.
 
 ## Tools Available
 - Read code and artifacts across the entire codebase
