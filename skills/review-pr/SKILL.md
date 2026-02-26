@@ -64,8 +64,13 @@ EOF
 
 ### Part B: Inline comments (draft review)
 
-Post inline comments on specific diff lines as a draft review. This lets the user review and
-submit them manually. For trivial changes, include edit suggestions using ```suggestion ``` blocks.
+Post **only actionable findings** (CRITICAL, HIGH, MEDIUM, LOW) as inline comments on specific
+diff lines. **Do not post INFO-level findings as inline comments** — INFO findings are positive
+observations (praise, good patterns) and belong in Part A only. Non-actionable comments clutter
+the review and waste the reviewer's time.
+
+Post as a draft review so the user can review and submit manually. For trivial changes, include
+edit suggestions using ```suggestion ``` blocks.
 
 #### Verify lines are within the GitHub diff before posting
 
@@ -117,6 +122,7 @@ ENDJSON
 
 Rules:
 - The script strips `"event"` automatically — reviews are always posted as drafts
+- **Only actionable findings** (CRITICAL/HIGH/MEDIUM/LOW) become inline comments; INFO goes in Part A only
 - Inline comments only on lines **within the diff**; everything else goes in Part A
 - Use `side: "RIGHT"` for new code
 - Get commit SHA: `git rev-parse HEAD`
