@@ -152,6 +152,15 @@ Structure:
 ```markdown
 # Code Review Report: <scope>
 
+| Field | Value |
+|---|---|
+| **Date** | YYYY-MM-DD |
+| **Project** | <GitHub repo URL> |
+| **Branch** | <current branch name> |
+| **Commit** | <HEAD commit short SHA> |
+| **Scope** | <what was reviewed> |
+| **Reviewers** | <Claudius + specialist agents used> |
+
 ## Executive Summary
 - Overall assessment (1-2 sentences)
 - Findings summary table (severity counts by category)
