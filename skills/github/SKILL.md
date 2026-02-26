@@ -126,6 +126,7 @@ Append `!` after the type for breaking changes (e.g. `feat!: remove legacy API`)
 ### Pushing
 
 **Always ask the user for explicit confirmation before every push.** Never push automatically — even after committing, creating a PR, or any other workflow step.
+Even is the user agreed to push earlier, ask again before next push.
 
 ```bash
 # First push of a new branch (set upstream)
