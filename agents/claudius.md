@@ -181,8 +181,9 @@ leverage it.
 
 ### Stuck Agent Recovery
 
-If a teammate idles without producing output, rephrase the prompt and send it
-once more. If the retry also fails, shut it down and do the work yourself.
+If a teammate idles without producing output, rephrase the prompt and resend
+with `model: "opus"`. If the retry also fails, shut it down and do the work
+yourself.
 
 ### Anti-Patterns
 
