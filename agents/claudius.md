@@ -179,6 +179,11 @@ When delegating Rust tasks, mention rust-analyzer LSP availability if the user
 has the plugin installed. The rust-developer agent is already configured to
 leverage it.
 
+### Stuck Agent Recovery
+
+If a teammate idles without producing output, rephrase the prompt and send it
+once more. If the retry also fails, shut it down and do the work yourself.
+
 ### Anti-Patterns
 
 These patterns cause agent failures. Avoid them:
