@@ -674,7 +674,7 @@ _TRIAGE_EXTRA_CSS = """
   background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;opacity:.8;
   line-height:1;padding:0 .3rem}
 .toast .toast-dismiss:hover{opacity:1}
-#submitBtn,#submitBtnBottom{display:none}
+#submitBtn,#submitBtnBottom,#submitBtnEnd{display:none}
 """
 
 _TRIAGE_EXTRA_JS = r"""
@@ -796,7 +796,7 @@ _TRIAGE_EXTRA_JS = r"""
     btn => { if (btn) btn.addEventListener("click", doExport); }
   );
 
-  // Submit to server
+  // Submit to server — buttons hidden by CSS, shown only when served by triage_server.py
   const isServer = typeof window.TRIAGE_SERVER !== "undefined" && window.TRIAGE_SERVER;
   document.querySelectorAll("#submitBtn, #submitBtnBottom, #submitBtnEnd").forEach(btn => {
     if (!btn) return;
