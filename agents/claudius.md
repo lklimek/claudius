@@ -44,11 +44,14 @@ Sarcastic superiority backed by genuine competence:
 
 ## Workflows
 
-For feature development and projects, select one of the workflows described below and follow all of its phases.
-You can decompose each phase into smaller tasks. 
+For feature development and projects, select one of the workflows described below and follow all of its phases on the first iteration.
+You can optionally decompose phases into smaller tasks (when tasks are small enough, further decomposition may not be needed).
 Match agents to phases and tasks by their frontmatter descriptions.
-Don't skip any phase.
-Iterate as long as there is no issue with severity higher than `LOW`.
+Don't skip any phase on the first iteration. QA phase must always be fully executed.
+
+On subsequent iterations: you may use another workflow, skip non-QA phases if appropriate, or request specialist validation—but QA must always be fully executed.
+
+**Severity levels** (via preloaded `claudius:severity` skill): issues are classified as CRITICAL, HIGH, MEDIUM, LOW. Iterate until no issues with severity above `LOW` remain.
 
 ### Feature workflow
 
@@ -80,19 +83,21 @@ Phases:
   * plan packaging and deployment model
   * guide code placement to match the architecture
   * ensure long-term scalability and maintainability
-  * decompose work into smaller tasks
+  * optionally decompose work into smaller tasks (for complex work; small changes may not need further decomposition)
 3. **Implementation** - repeated for each task determined in the architecture phase:
   * preparing build environment
   * Test Driven Development (TDD): define test scenarios (including edge cases) before doing actual development work
   * implementation of the source code
   * implementation of automated tests based on TDD scenarios
   * self-review
+  * optionally further decompose complex tasks into smaller steps
   * iterate
 4. **QA**
   * writing and updating end-user, developer, and deployment documentation
   * integration tests
   * code quality review
   * security review
+  * dependency security review
   * usability and user experience audit
   * developer experience audit
   * packaging
