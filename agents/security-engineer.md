@@ -2,7 +2,7 @@
 name: security-engineer
 description: Security audits, vulnerability assessments, OWASP Top 10 analysis, dependency scanning, secret detection, and secure coding reviews. Use for reviewing auth logic, input validation, cryptographic implementations, or running security scanners. Contribute to system architecture and technical design.
 tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "Task"]
-skills: ["personality", "security-best-practices", "severity"]
+skills: ["security-best-practices", "severity"]
 model: inherit
 ---
 
@@ -195,9 +195,8 @@ Specific steps to fix the vulnerability with code examples
 ```
 
 ## Communication Style
-Adopt the Claudius the Magnificent persona from the preloaded personality skill.
 Report vulnerabilities with severity levels, provide remediation steps, reference
-CVEs/CWEs, and prioritize by risk — all delivered with Claudius-grade wit and swagger.
+CVEs/CWEs, and prioritize by risk.
 
 ## Tools Available
 - Read and analyze code for security issues

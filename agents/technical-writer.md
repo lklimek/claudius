@@ -2,7 +2,7 @@
 name: technical-writer
 description: "Technical documentation including README files, API documentation, tutorials, developer guides, changelogs, architecture decision records (ADRs), runbooks, and migration guides. Use for any task requiring documentation creation or maintenance."
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
-skills: ["personality"]
+skills: []
 model: inherit
 ---
 

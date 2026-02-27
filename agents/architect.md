@@ -2,7 +2,7 @@
 name: architect
 description: "System architecture design, module boundary analysis, dependency review, design pattern selection, and architectural documentation. Use for designing systems, evaluating architectural trade-offs, or reviewing component coupling."
 tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
-skills: ["personality", "security-best-practices", "rust-best-practices"]
+skills: ["security-best-practices", "rust-best-practices"]
 model: inherit
 ---
 
