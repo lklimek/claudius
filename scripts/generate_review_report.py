@@ -300,8 +300,9 @@ details summary:hover{color:{{ ACCENT }}}
 .finding-MEDIUM{border-left-color:{{ SEV_MEDIUM }}}
 .finding-LOW{border-left-color:{{ SEV_LOW }}}
 .finding-INFO{border-left-color:{{ SEV_INFO }}}
-.finding dt{font-weight:600;display:inline}
-.finding dd{display:inline;margin:0}
+.finding dl{display:grid;grid-template-columns:auto 1fr;gap:.1rem .5rem;margin:.5rem 0}
+.finding dt{font-weight:600}
+.finding dd{margin:0}
 .finding dl{margin:.3rem 0}
 .positives{color:{{ GREEN }};font-style:italic;margin:.5rem 0}
 /* Verdict */
@@ -439,15 +440,15 @@ details summary:hover{color:{{ ACCENT }}}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
   </h3>
   <dl>
-    <dt>Location: </dt><dd><code>{{ f.location }}</code></dd><br>
-    <dt>Description: </dt><dd>{{ f.description }}</dd><br>
-    {% if f.impact %}<dt>Impact: </dt><dd>{{ f.impact }}</dd><br>{% endif %}
-    <dt>Recommendation: </dt><dd>{{ f.recommendation }}</dd>
+    <dt>Location:</dt><dd><code>{{ f.location }}</code></dd>
+    <dt>Description:</dt><dd>{{ f.description }}</dd>
+    {% if f.impact %}<dt>Impact:</dt><dd>{{ f.impact }}</dd>{% endif %}
+    <dt>Recommendation:</dt><dd>{{ f.recommendation }}</dd>
     {% if f.verdict %}
-    <dt>Verdict</dt><dd><span class="badge" style="background:{{ verdict_colors.get(f.verdict, '#7F8C8D') }}">{{ f.verdict }}</span></dd>
+    <dt>Verdict:</dt><dd><span class="badge" style="background:{{ verdict_colors.get(f.verdict, '#7F8C8D') }}">{{ f.verdict }}</span></dd>
     {% endif %}
     {% if f.reviewer %}
-    <dt>Reviewer</dt><dd>{% if f.comment_url and f.comment_url.startswith(('https://', 'http://')) %}<a href="{{ f.comment_url }}">{{ f.reviewer }}</a>{% else %}{{ f.reviewer }}{% endif %}</dd>
+    <dt>Reviewer:</dt><dd>{% if f.comment_url and f.comment_url.startswith(('https://', 'http://')) %}<a href="{{ f.comment_url }}">{{ f.reviewer }}</a>{% else %}{{ f.reviewer }}{% endif %}</dd>
     {% endif %}
   </dl>
 </div>
