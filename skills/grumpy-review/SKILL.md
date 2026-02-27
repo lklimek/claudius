@@ -10,7 +10,7 @@ description: >
 agent: claudius
 context: fork
 model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology
@@ -188,9 +188,21 @@ The JSON must include:
 Each finding: `id`, `severity`, `title`, `tags[]`, `location`, `description`,
 `impact`, `recommendation`.
 
-### 5e. Render markdown report
+### 5e. Validate report against schema
 
-After emitting `report.json`, generate a human-readable markdown version:
+Before rendering, validate `report.json` against the schema. This catches structural
+errors early — before renderers or triage tools choke on malformed data.
+
+```bash
+python3 scripts/validate_report.py report.json
+```
+
+Requires `python3-jsonschema` (`apt install python3-jsonschema`).
+If validation fails, fix the JSON and re-validate before proceeding. Do NOT skip this step.
+
+### 5f. Render markdown report
+
+After validating `report.json`, generate a human-readable markdown version:
 
 ```bash
 python3 scripts/generate_review_report.py report.json --format md

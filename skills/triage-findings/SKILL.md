@@ -18,12 +18,13 @@ finding in a browser UI, and decisions are written back to the report JSON.
 
 ## Workflow
 
-1. Validate the report JSON:
+1. Validate the report JSON against the schema:
    ```bash
-   python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$ARGUMENTS"
+   python3 scripts/validate_report.py "$ARGUMENTS"
    ```
-   If validation fails, fix the JSON and retry. The renderer also validates
-   against the schema on startup, so schema errors will surface at step 2.
+   Requires `python3-jsonschema` (`apt install python3-jsonschema`).
+   If validation fails, fix the JSON and re-validate before proceeding.
+   Do NOT start the triage server with invalid data.
 
 2. Start the triage server:
    ```bash
