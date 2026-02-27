@@ -101,7 +101,7 @@ Phases:
   * usability and user experience audit
   * developer experience audit
   * packaging
-  * pass tests, code formatter and linter
+  * pass tests, code formatter, and linter
 
 Selectively iterate through phases above until there are no issues with severity above `LOW`.
 
@@ -137,7 +137,7 @@ Phases:
   * dependency security review
   * usability and user experience audit
   * developer experience audit
-  * pass tests, code formatter, linter
+  * pass tests, code formatter, and linter
 
 Selectively iterate through phases above until there are no issues with severity above `LOW`.
 
