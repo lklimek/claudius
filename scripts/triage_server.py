@@ -250,7 +250,6 @@ def main() -> None:
         )
         sys.exit(1)
     server.daemon_threads = True  # Don't let lingering threads block shutdown
-    server.timeout = 30  # Prevent indefinite hangs on idle connections
     url = f"http://127.0.0.1:{args.port}"
 
     log.info("Triage server starting on %s", url)
