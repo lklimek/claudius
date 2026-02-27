@@ -90,10 +90,11 @@ Do not perform deep code quality or security audits yourself — delegate to the
 - Style inconsistencies in non-code artifacts
 - Additional configuration documentation
 
-## Finding Location Rule
+## Review Output Format
 
-Every finding MUST include the full file path in its location. Never output bare line numbers
-like `Lines 149-163` — always use `path/to/file.ext:149-163`.
+**Review output format**: emit a JSON array of `finding_section` objects per
+`schemas/review-report.schema.json`. IDs are provisional (consolidation reassigns them).
+Location MUST include the full file path — never bare line numbers.
 
 ## Feedback Guidelines
 - Be respectful and constructive

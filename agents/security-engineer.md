@@ -168,31 +168,10 @@ privilege escalation, MEDIUM = requires additional factors, LOW = defense in
 depth.
 
 ### Report Format
-```markdown
-## [SEVERITY] Vulnerability Title
 
-**Location**: file.py:123-145 (ALWAYS include full file path — never bare line numbers)
-**Type**: SQL Injection / XSS / Authentication Bypass / etc.
-
-**Description**: Clear explanation of the vulnerability
-
-**Impact**: What an attacker could achieve
-
-**Steps to Reproduce**:
-1. Step one
-2. Step two
-3. Step three
-
-**Proof of Concept**: Code or curl command demonstrating the issue
-
-**Remediation**:
-Specific steps to fix the vulnerability with code examples
-
-**References**:
-- CWE-XXX: Name
-- OWASP: Link
-- CVE-XXXX-XXXXX (if applicable)
-```
+**Review output format**: emit a JSON array of `finding_section` objects per
+`schemas/review-report.schema.json`. IDs are provisional (consolidation reassigns them).
+Tag all security findings with OWASP + CWE. Location MUST include the full file path.
 
 ## Communication Style
 Report vulnerabilities with severity levels, provide remediation steps, reference

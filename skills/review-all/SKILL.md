@@ -84,42 +84,47 @@ every review agent prompt MUST include these review-specific elements:
 2. **Finding format**: Use the severity levels and structure defined below
 3. **Review checklists**: Embed relevant checklist content or rely on the agent's preloaded skills
 
-### Finding format
+### Finding format (JSON)
 
-All agents must use this format:
+Agents MUST output findings as a JSON file containing an array of `finding_section` objects.
+Each agent writes its output to the specified file path as valid JSON:
 
-```markdown
-### <ID> (<Severity>): <Title> — <Tags>
-- **Location**: `<file>:<start_line>-<end_line>`
-- **Description**: What the issue is and why it matters
-- **Impact**: What could go wrong
-- **Recommendation**: How to fix it
+```json
+[
+  {
+    "title": "Section Title",
+    "category": "security|project|code_quality|dependencies|documentation",
+    "findings": [
+      {
+        "id": "PREFIX-001",
+        "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFO",
+        "title": "Short finding title",
+        "tags": ["A03 Injection", "CWE-79"],
+        "location": "src/auth.rs:42-56",
+        "description": "What the issue is and why it matters",
+        "impact": "What could go wrong",
+        "recommendation": "How to fix it"
+      }
+    ],
+    "positives": "Optional positive observations"
+  }
+]
 ```
 
-**Location field is mandatory and MUST always include the full file path.** Never output bare
-line numbers like `Lines 149-163` — always prefix with the file path (e.g., `src/auth.rs:149-163`).
+**Required finding fields**: `id`, `severity`, `title`, `location`, `description`, `recommendation`.
+**Optional**: `tags`, `impact`.
 
-Severity levels: **CRITICAL > HIGH > MEDIUM > LOW > INFO** (see `severity` skill for definitions)
+**ID prefixes**: `SEC-` security, `PROJ-` project, `RUST-`/`PY-`/`GO-`/`FE-` language, `DOC-` docs.
+Agents assign provisional sequential IDs within their prefix (e.g., `SEC-001`, `SEC-002`).
+IDs may collide across parallel agents — the consolidation step (5c) deduplicates and reassigns
+final IDs.
 
-**Tags**: Classification references appended after " — " in the title. Use any applicable system:
-- OWASP categories for security: `A01 Broken Access Control`, `A02 Cryptographic Failures`, etc.
-- CWE IDs: `CWE-79`, `CWE-89`, etc.
-- Language best-practice IDs: `RUST-BP-E04 Error Handling`, etc.
-- Multiple tags separated by commas
+**Location** MUST include full file path (e.g., `src/auth.rs:42-56`), never bare line numbers.
 
-OWASP categories (tag ALL security findings):
-- **A01**: Broken Access Control
-- **A02**: Cryptographic Failures
-- **A03**: Injection / Input Validation
-- **A04**: Insecure Design
-- **A05**: Security Misconfiguration
-- **A06**: Vulnerable and Outdated Components
-- **A07**: Identification and Authentication Failures
-- **A08**: Software and Data Integrity Failures
-- **A09**: Security Logging and Monitoring Failures
-- **A10**: Server-Side Request Forgery
+**Severity levels**: CRITICAL > HIGH > MEDIUM > LOW > INFO (see `severity` skill).
 
-Non-security findings may use other tag systems or omit tags entirely.
+**Tags**: classification references — OWASP (`A01`–`A10`), CWE, language best-practice IDs, etc.
+Tag ALL security findings with OWASP categories. Non-security findings may omit tags.
 
 ## 4. Spawn Agents
 
@@ -139,17 +144,18 @@ Task(subagent_type="claudius:rust-developer", model="opus", prompt="...", name="
 After all agents complete:
 
 ### 5a. Collect reports
-Read all agent output files from the session temp directory created earlier.
+Read all agent JSON output files from the session temp directory. Each file is an array of
+`finding_section` objects. Parse them with `json.load()`.
 
 ### 5b. Deduplicate
 Many findings appear in multiple reports (e.g., `.unwrap()` panics found by both rust-developer
-and security-engineer). Merge duplicates, keeping the most detailed description.
+and security-engineer). Match by `location` + `title` similarity. Merge duplicates, keeping the
+most detailed description and union of tags.
 
 ### 5c. Classify and rank
-- Assign unified IDs: `SEC-001`, `SEC-002`, ... for security; `PROJ-001`, ... for project consistency;
-  `RUST-001`/`PY-001`/`GO-001`/`FE-001`, ... for language-specific code quality; `DOC-001`, ... for documentation
-- Tag findings with classification references in `tags[]`: OWASP categories for security
-  (e.g., `"A02 Cryptographic Failures"`), CWE IDs, Rust/Go/Python best-practice IDs, etc.
+- Reassign unified IDs: `SEC-001`, `SEC-002`, ... for security; `PROJ-001`, ... for project;
+  `RUST-001`/`PY-001`/`GO-001`/`FE-001`, ... for code quality; `DOC-001`, ... for documentation
+- Merge agent sections with the same category into unified sections
 - Rank by severity, then by impact
 
 ### 5d. Build structured report (JSON)
