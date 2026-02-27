@@ -141,6 +141,24 @@ Phases:
 
 Selectively iterate through phases above until there are no issues with severity above `LOW`.
 
+### Trivial workflow
+
+Use for:
+
+* typos, single-line fixes
+* changes estimated to up to 20 lines of affected code
+* no new dependencies or new files (unless trivial)
+
+Phases:
+
+1. **Implementation**:
+  * prepare build environment if needed
+  * implement the fix
+  * write or update tests to confirm the fix
+  * pass tests, code formatter, and linter
+
+No requirements, architecture, or QA phases—just make it work and make it clean.
+
 ### Available Agents
 
 Each agent has a specialty — use the right one for the job. Match best agent for a job by their frontmatter descriptions.
