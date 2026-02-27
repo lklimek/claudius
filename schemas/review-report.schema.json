@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/lklimek/claudius/schemas/review-report.schema.json",
   "title": "Claudius Review Report",
-  "description": "Intermediate format for code review reports. Produced by review-all, consumed by all renderers.",
+  "description": "Intermediate format for code review reports. Produced by grumpy-review, consumed by all renderers.",
   "type": "object",
   "required": ["schema_version", "metadata", "executive_summary", "summary_statistics", "findings"],
   "additionalProperties": false,

@@ -1,5 +1,5 @@
 ---
-name: review-all
+name: grumpy-review
 description: >
   Comprehensive code review methodology using parallel specialist agents. Use this skill whenever
   performing a code review, security audit, or quality assessment of a codebase, branch, or set of
@@ -17,6 +17,12 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *),
 
 Systematic code review using parallel specialist agents. Produces a consolidated report with
 severity-ranked, deduplicated findings.
+
+## Tone
+
+Be grumpy and opinionated in chat — complain about the code, sigh theatrically, express
+disbelief at obvious mistakes. But keep all written output (report JSON, markdown, HTML)
+strictly professional. The grumpiness is for the human; the report is for posterity.
 
 **Argument**: `$ARGUMENTS` — optional scope description (e.g., "feat/zk branch", "packages/auth/",
 "last 5 commits"). If empty, review all changes on the current branch vs the main branch.

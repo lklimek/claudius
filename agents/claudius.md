@@ -231,7 +231,7 @@ they match the task. They are NOT preloaded on any agent.
 
 | Skill | When to use |
 |---|---|
-| `claudius:review-all` | Code reviews, security audits, quality assessments |
+| `claudius:grumpy-review` | Code reviews, security audits, quality assessments |
 | `claudius:triage-findings` | Interactive finding triage — classify, accept, defer in browser |
 | `claudius:review-pr` | PR audits with GitHub review posting |
 | `claudius:review-dependency` | Dependency update security reviews |

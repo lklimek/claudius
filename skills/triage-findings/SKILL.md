@@ -3,7 +3,7 @@ name: triage-findings
 description: >
   Interactive triage of review findings. Starts a local server with a triage UI.
   User classifies findings in browser, decisions are written back to report.json.
-  Use after review-all to let the user decide what to fix, accept, or defer.
+  Use after grumpy-review to let the user decide what to fix, accept, or defer.
 user-invocable: true
 argument-hint: <path to report.json>
 allowed-tools: Read, Write, Edit, Bash(python3 *), Bash(kill *), Glob, Grep
@@ -14,7 +14,7 @@ allowed-tools: Read, Write, Edit, Bash(python3 *), Bash(kill *), Glob, Grep
 Start an interactive triage session for review findings. The user classifies each
 finding in a browser UI, and decisions are written back to the report JSON.
 
-**Argument**: `$ARGUMENTS` — path to the `report.json` file produced by `review-all`.
+**Argument**: `$ARGUMENTS` — path to the `report.json` file produced by `grumpy-review`.
 
 ## Workflow
 

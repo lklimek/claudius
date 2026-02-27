@@ -25,7 +25,7 @@ git diff $BASE_BRANCH...HEAD
 
 ## 2. Conduct the Review
 
-Invoke the `/claudius:review-all` skill with the PR scope as the argument. It covers:
+Invoke the `/claudius:grumpy-review` skill with the PR scope as the argument. It covers:
 - Agent selection and scaling based on PR size
 - Parallel agent spawning with explicit prompts
 - OWASP classification on all security findings
