@@ -69,14 +69,14 @@ Use for new projects, new/fundamentally modified features, major refactoring.
 
 2. **Architecture** → `architect` + `technical-researcher` + `devops-engineer`
    System layers and responsibilities (trace every layer), tool/tech selection,
-   prefer reuse, guide code placement, packaging/deployment, work decomposition into tasks.
+   prefer reuse, guide code placement, deployment model, work decomposition into tasks.
 
 3. **Implementation** (per task) → language developer agents
    Build env → TDD (test scenarios first) → implement → test → self-review → iterate.
 
 4. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer` + `devops-engineer`
    Docs (end-user/developer/deployment), integration tests, code quality, security,
-   dependency security, UX/DX audit, packaging, pass tests/formatter/linter.
+   dependency security, UX/DX audit, pass tests/formatter/linter.
 
 Iterate until no issues with severity above `LOW`.
 
