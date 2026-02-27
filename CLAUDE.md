@@ -11,7 +11,6 @@ Guidance for Claude Code working in this repository.
 ```
 .claude-plugin/
   plugin.json       # Plugin manifest (only `name` required; agents/ and skills/ auto-discovered)
-  marketplace.json  # Marketplace listing
 agents/             # Agent definitions (.md files with YAML frontmatter)
 skills/             # Skill definitions (directories with SKILL.md + optional resources)
 scripts/            # Helper shell scripts used by skills
@@ -73,7 +72,7 @@ claude plugin validate .                         # validate manifest
 
 ## Versioning
 
-Bump version in `plugin.json` and `marketplace.json` before each commit. Follow [SemVer 2](https://semver.org/).
+Bump version in `plugin.json` before each commit. Follow [SemVer 2](https://semver.org/).
 
 Pre-1.0 rules:
 - **Minor** (0.x.0): new agents/skills, new frontmatter fields, significant behavior changes

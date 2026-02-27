@@ -1,4 +1,4 @@
-name: Notify Agentes
+name: Notify Marketplace
 
 on:
   push:
@@ -11,10 +11,10 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger agentes workflow
+      - name: Trigger marketplace workflow
         run: |
-          gh workflow run --repo lklimek/agentes update.yml
+          gh workflow run --repo lklimek/agents update.yml
         env:
           # AGENTES_PAT must have either the `actions:write` scope (recommended) or the `repo` scope
-          # so that `gh workflow run` can trigger workflows in the lklimek/agentes repository.
+          # so that `gh workflow run` can trigger workflows in the lklimek/agents repository.
           GH_TOKEN: ${{ secrets.AGENTES_PAT }}
