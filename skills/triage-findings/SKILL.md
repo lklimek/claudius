@@ -6,7 +6,7 @@ description: >
   Use after grumpy-review to let the user decide what to fix, accept, or defer.
 user-invocable: true
 argument-hint: <path to report.json>
-allowed-tools: Read, Write, Edit, Bash(python3 *), Bash(kill *), Glob, Grep
+allowed-tools: Read, Write, Edit, Bash(python3 *), Bash(fuser *), Glob, Grep
 ---
 
 # Interactive Finding Triage
@@ -26,14 +26,26 @@ finding in a browser UI, and decisions are written back to the report JSON.
    If validation fails, fix the JSON and re-validate before proceeding.
    Do NOT start the triage server with invalid data.
 
-2. Start the triage server:
+2. Start the triage server (default port 8741):
    ```bash
-   python3 scripts/triage_server.py "$ARGUMENTS"
+   python3 scripts/triage_server.py "$ARGUMENTS" [--port PORT]
    ```
    The server auto-opens a browser. If that fails, it prints the URL for the user.
 
 3. Wait for the user to complete triage in the browser and submit decisions. The
    server writes the `triage` field back into the report JSON and exits.
+
+### Killing a stuck server
+
+The server normally shuts itself down when the user submits with `complete=true`.
+If it gets stuck, kill it by port — **never use `pkill -f`** (risks killing
+servers from other sessions):
+
+```bash
+fuser -k 8741/tcp    # kills whatever is bound to port 8741
+```
+
+Replace `8741` with the actual port if `--port` was used.
 
 4. Read the updated report JSON. Summarize the triage results:
    - How many findings were triaged

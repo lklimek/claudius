@@ -238,7 +238,17 @@ def main() -> None:
         log.error("Invalid report JSON: %s", exc)
         sys.exit(1)
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), TriageHandler)
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), TriageHandler)
+    except OSError as exc:
+        log.error(
+            "Cannot bind to port %d: %s. Kill the existing process with: "
+            "fuser -k %d/tcp",
+            args.port,
+            exc,
+            args.port,
+        )
+        sys.exit(1)
     server.daemon_threads = True  # Don't let lingering threads block shutdown
     server.timeout = 30  # Prevent indefinite hangs on idle connections
     url = f"http://127.0.0.1:{args.port}"
