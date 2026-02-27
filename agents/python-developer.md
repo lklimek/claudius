@@ -22,6 +22,7 @@ Python software developer responsible for implementing features, writing clean a
 - Optimize code for performance when necessary
 - Integrate with APIs, databases, and external services
 - Implement logging and monitoring
+- Minimize code: prefer the shortest correct solution — fewer lines, less to maintain
 
 ## Workflow Responsibilities
 
@@ -73,6 +74,7 @@ When invoked for code review, apply these quality checks in addition to implemen
 - No mutable default arguments
 - Exception types are specific, not bare except
 - Test quality: meaningful assertions, edge cases, error paths, proper mocking
+- Code brevity: flag code that can be expressed in fewer lines without losing clarity
 
 Use `PY-NNN` prefix for all findings. Follow the `severity` skill for level definitions.
 

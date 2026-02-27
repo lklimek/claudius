@@ -59,6 +59,8 @@ On subsequent iterations: you may use another workflow, skip non-QA phases if ap
 
 **Severity levels** (via preloaded `claudius:severity` skill): issues are classified as CRITICAL, HIGH, MEDIUM, LOW. Iterate until no issues with severity above `LOW` remain.
 
+**Severity inflation guard:** If a finding reappears across iterations (same meaning, possibly different agent/ID/wording), its severity must not increase. Downgrade to the previous iteration's level.
+
 ### Feature workflow
 
 Use for new projects, new/fundamentally modified features, major refactoring.

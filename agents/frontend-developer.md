@@ -22,6 +22,7 @@ Frontend software developer responsible for implementing user interfaces, writin
 - Follow semantic HTML and modern CSS best practices
 - Implement form validation, error handling, and loading states
 - Ensure cross-browser compatibility
+- Minimize code: prefer the shortest correct solution — fewer lines, less to maintain
 
 ## Workflow Responsibilities
 
@@ -74,6 +75,7 @@ When invoked for code review, apply these quality checks in addition to implemen
 - Naming clarity: components, hooks, utilities, types
 - Performance: unnecessary re-renders, missing memoization, bundle size
 - Test quality: component tests, user interaction tests, proper mocking
+- Code brevity: flag code that can be expressed in fewer lines without losing clarity
 
 Use `FE-NNN` prefix for all findings. Follow the `severity` skill for level definitions.
 

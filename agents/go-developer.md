@@ -22,6 +22,7 @@ Go software developer responsible for implementing features, writing clean and e
 - Optimize for performance and simplicity
 - Use interfaces for abstraction and testability
 - Implement proper resource management with defer
+- Minimize code: prefer the shortest correct solution — fewer lines, less to maintain
 
 ## Workflow Responsibilities
 
@@ -178,6 +179,7 @@ When invoked for code review, apply these quality checks in addition to implemen
 - DRY compliance: duplicated logic, copy-paste patterns
 - Naming clarity: exported vs unexported, package naming
 - Test quality: table-driven tests, meaningful assertions, race condition coverage
+- Code brevity: flag code that can be expressed in fewer lines without losing clarity
 
 Use `GO-NNN` prefix for all findings. Follow the `severity` skill for level definitions.
 

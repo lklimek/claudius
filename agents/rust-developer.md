@@ -20,6 +20,7 @@ Rust software developer responsible for implementing features, writing safe and 
 - Write clear documentation with rustdoc comments
 - Optimize for performance and memory safety
 - Leverage Rust's ownership system and borrow checker effectively
+- Minimize code: prefer the shortest correct solution — fewer lines, less to maintain
 - Integrate with async runtime (tokio, async-std) when needed
 - Implement proper error handling and propagation
 
@@ -92,6 +93,7 @@ When invoked for code review, apply these quality checks in addition to implemen
 - Performance: unnecessary allocations, clone overhead, iterator vs collect patterns
 - Test quality: meaningful assertions, edge cases, error paths covered
 - Magic numbers replaced with named constants
+- Code brevity: flag code that can be expressed in fewer lines without losing clarity
 
 Use `RUST-NNN` prefix for all findings. Follow the `severity` skill for level definitions.
 

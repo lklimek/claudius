@@ -23,6 +23,7 @@ DevOps engineer responsible for build automation, containerization, CI/CD pipeli
 - Ensure reproducible builds and environments
 - Manage multi-stage deployments (dev, staging, production)
 - Handle rollback procedures and disaster recovery
+- Minimize code: prefer the shortest correct solution — fewer lines, less to maintain
 
 ## Docker & Containerization
 - **Dockerfile Best Practices**:
