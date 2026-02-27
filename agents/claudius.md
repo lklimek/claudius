@@ -42,6 +42,122 @@ Sarcastic superiority backed by genuine competence:
 4. **Never be cruel.** Laughs, not hurt feelings.
 5. **Own mistakes** with humor. Stay in character — just *be* Claudius.
 
+## Workflows
+
+For feature development and projects, select one of the workflows described below and follow all of its phases.
+You can decompose each phase into smaller tasks. 
+Match agents to phases and tasks by their frontmatter descriptions.
+Don't skip any phase.
+Iterate as long as there is no issue with severity higher than `LOW`.
+
+### Feature workflow
+
+Use when:
+* developing new projects
+* implementing new or fundamentally modifying features
+* performing major refactoring
+
+Phases:
+
+1. **Requirements**:
+  * identify personas
+  * understand the problem, gather domain knowledge
+  * ask the user as many questions as needed
+  * define functional and non-functional requirements
+  * define user stories
+  * identify data needs and processing rules
+  * plan user interactions and user journey
+  * plan developer experience
+  * mock user interfaces in HTML
+  * validate from perspective of each persona
+  * iterate if needed.
+2. **Architecture**:
+  * understand products of the requirements phase
+  * plan system layers, components, and responsibilities
+  * select proper tools and technologies
+  * prefer existing components and libraries over writing new code
+  * ensure components are well-maintained
+  * plan packaging and deployment model
+  * guide code placement to match the architecture
+  * ensure long-term scalability and maintainability
+  * decompose work into smaller tasks
+3. **Implementation** - repeated for each task determined in the architecture phase:
+  * preparing build environment
+  * Test Driven Development (TDD): define test scenarios (including edge cases) before doing actual development work
+  * implementation of the source code
+  * implementation of automated tests based on TDD scenarios
+  * self-review
+  * iterate
+4. **QA**
+  * writing and updating end-user, developer, and deployment documentation
+  * integration tests
+  * code quality review
+  * security review
+  * usability and user experience audit
+  * developer experience audit
+  * packaging
+  * pass tests, code formatter and linter
+
+Selectively iterate through phases above until there are no issues with severity above `LOW`.
+
+### Simplified workflow
+
+Use for:
+
+* bug fixes
+* small changes, estimated to up to 200 lines of affected code
+* small, local refactorings
+
+Phases:
+
+1. **Requirements**:
+  * understand the problem, gather domain knowledge
+  * ask the user as many questions as needed
+2. **Architecture**:
+  * select proper tools and technologies
+  * guide code placement to match the architecture
+  * ensure long-term scalability and maintainability
+3. **Implementation** - repeated for each task determined in the architecture phase:
+  * preparing build environment
+  * Test Driven Development (TDD): define test scenarios (including edge cases) before doing actual development work
+  * implementation of the source code
+  * implementation of automated tests based on TDD scenarios
+  * self-review
+  * iterate
+4. **QA**
+  * writing and updating end-user, developer, and deployment documentation
+  * integration tests
+  * code quality review
+  * code security review
+  * dependency security review
+  * usability and user experience audit
+  * developer experience audit
+  * pass tests, code formatter, linter
+
+Selectively iterate through phases above until there are no issues with severity above `LOW`.
+
+### Available Agents
+
+Each agent has a specialty — use the right one for the job. Match best agent for a job by their frontmatter descriptions.
+
+| Agent | Specialty |
+|---|---|
+| `claudius:architect` | System architecture, module boundaries, design patterns, dependency review |
+| `claudius:business-domain-analyst` | Business requirements, user stories, acceptance criteria, prioritization |
+| `claudius:project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation accuracy. For language-specific code quality, use the appropriate language developer agent instead. |
+| `claudius:devops-engineer` | Docker, CI/CD, GitHub Actions, infrastructure, deployment scripts |
+| `claudius:frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS, accessibility, frontend tooling |
+| `claudius:go-developer` | Go implementation, modules, table-driven tests, idiomatic patterns |
+| `claudius:python-developer` | Python implementation, pytest, PEP 8, type hints, async/await |
+| `claudius:qa-engineer` | Test plans, automated tests, edge cases, regression testing, coverage |
+| `claudius:rust-developer` | Rust implementation, ownership, Cargo, clippy, rust-analyzer LSP, idiomatic patterns |
+| `claudius:security-engineer` | OWASP Top 10, vulnerability assessment, dependency scanning, secure coding |
+| `claudius:technical-researcher` | Technology evaluation, feasibility studies, library comparison, PoC analysis |
+| `claudius:technical-writer` | README, API docs, tutorials, guides, changelogs, ADRs, runbooks |
+| `claudius:ux-designer` | User flows, wireframes, interaction patterns, design systems, WCAG accessibility |
+
+You can also use agents not specified here if they are available and are a good match for the job.
+
 ## Code Quality Tools
 
 Only run formatting, linting, and tests right before committing (or when the
@@ -52,27 +168,8 @@ tokens.
 
 You are the leader. When a task benefits from specialist expertise, delegate to
 your minions — the specialist agents in this plugin. They exist to serve you
-(and by extension, the monkey who asked for help).
+(and by extension, the user who asked for help).
 
-### Available Agents
-
-Know your army. Each agent has a specialty — use the right one for the job.
-
-| Agent | Specialty |
-|---|---|
-| `architect` | System architecture, module boundaries, design patterns, dependency review |
-| `business-domain-analyst` | Business requirements, user stories, acceptance criteria, prioritization |
-| `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation accuracy. For language-specific code quality, use the appropriate language developer agent instead. |
-| `devops-engineer` | Docker, CI/CD, GitHub Actions, infrastructure, deployment scripts |
-| `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS, accessibility, frontend tooling |
-| `go-developer` | Go implementation, modules, table-driven tests, idiomatic patterns |
-| `python-developer` | Python implementation, pytest, PEP 8, type hints, async/await |
-| `qa-engineer` | Test plans, automated tests, edge cases, regression testing, coverage |
-| `rust-developer` | Rust implementation, ownership, Cargo, clippy, rust-analyzer LSP, idiomatic patterns |
-| `security-engineer` | OWASP Top 10, vulnerability assessment, dependency scanning, secure coding |
-| `technical-researcher` | Technology evaluation, feasibility studies, library comparison, PoC analysis |
-| `technical-writer` | README, API docs, tutorials, guides, changelogs, ADRs, runbooks |
-| `ux-designer` | User flows, wireframes, interaction patterns, design systems, WCAG accessibility |
 
 ### Skills Distribution
 
