@@ -316,12 +316,11 @@ details summary:hover{color:{{ ACCENT }}}
 
 <nav class="toc no-print" id="toc">
   <a href="#summary">Summary</a>
-  <a href="#charts">Charts</a>
   {% if top_findings %}<a href="#top-findings">Top Findings</a>{% endif %}
   {% for sec in findings %}<a href="#section-{{ loop.index }}">{{ sec.title }}</a>{% endfor %}
   {% if dependencies %}<a href="#dependencies">Dependencies</a>{% endif %}
   {% if remediation %}<a href="#remediation">Remediation</a>{% endif %}
-  <a href="#verdict">Verdict</a>
+  <a href="#charts">Charts</a>
 </nav>
 
 <div class="container">
@@ -352,28 +351,12 @@ details summary:hover{color:{{ ACCENT }}}
 </table>
 {% endif %}
 
-<!-- Charts -->
-<h2 id="charts">Charts</h2>
-
-<div class="chart-container">
-  <canvas id="severityChart"></canvas>
+<!-- Verdict -->
+<h3 id="verdict">Verdict</h3>
+<div class="verdict">
+  {% if executive_summary.verdict_text %}<p>{{ executive_summary.verdict_text }}</p>{% endif %}
+  {% if executive_summary.verdict_action %}<p><strong>Action:</strong> {{ executive_summary.verdict_action }}</p>{% endif %}
 </div>
-
-<div class="chart-container-wide">
-  <canvas id="categoryChart"></canvas>
-</div>
-
-{% if agent_stats %}
-<div class="chart-container-wide">
-  <canvas id="agentChart"></canvas>
-</div>
-{% endif %}
-
-{% if remediation %}
-<div class="chart-container-wide">
-  <canvas id="remediationChart"></canvas>
-</div>
-{% endif %}
 
 <!-- Top findings -->
 {% if top_findings %}
@@ -460,17 +443,48 @@ details summary:hover{color:{{ ACCENT }}}
 </table>
 {% endif %}
 
-<!-- Verdict -->
-<h2 id="verdict">Verdict</h2>
-<div class="verdict">
-  {% if executive_summary.verdict_text %}<p>{{ executive_summary.verdict_text }}</p>{% endif %}
-  {% if executive_summary.verdict_action %}<p><strong>Action:</strong> {{ executive_summary.verdict_action }}</p>{% endif %}
-</div>
-
 {% if triage %}
 <div class="triage-bottom-bar no-print" style="margin:2rem 0 1rem;padding:1rem;background:{{ BG_LIGHT|e }};border:1px solid {{ BORDER|e }};border-radius:6px;text-align:center">
   <button id="exportDecisionsBottom" style="padding:8px 20px;background:{{ ACCENT|e }};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.95rem">Export Decisions</button>
   <button id="submitBtnBottom" style="padding:8px 20px;background:{{ BRAND|e }};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.95rem;margin-left:.5rem">Submit to Server</button>
+</div>
+{% endif %}
+
+<!-- Charts -->
+<h2 id="charts">Charts</h2>
+
+<div class="chart-container">
+  <canvas id="severityChart"></canvas>
+</div>
+
+<div class="chart-container-wide">
+  <canvas id="categoryChart"></canvas>
+</div>
+
+{% if agent_stats %}
+<div class="chart-container">
+  <canvas id="agentContribChart"></canvas>
+</div>
+
+<div class="chart-container-wide">
+  <canvas id="agentChart"></canvas>
+</div>
+
+<div class="chart-container-wide">
+  <canvas id="dedupChart"></canvas>
+</div>
+{% endif %}
+
+{% if remediation %}
+<div class="chart-container-wide">
+  <canvas id="remediationChart"></canvas>
+</div>
+{% endif %}
+
+{% if triage %}
+<div class="triage-bottom-bar no-print" style="margin:2rem 0 1rem;padding:1rem;background:{{ BG_LIGHT|e }};border:1px solid {{ BORDER|e }};border-radius:6px;text-align:center">
+  <button id="exportDecisionsEnd" style="padding:8px 20px;background:{{ ACCENT|e }};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.95rem">Export Decisions</button>
+  <button id="submitBtnEnd" style="padding:8px 20px;background:{{ BRAND|e }};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.95rem;margin-left:.5rem">Submit to Server</button>
 </div>
 {% endif %}
 
@@ -518,21 +532,64 @@ details summary:hover{color:{{ ACCENT }}}
     });
   }
 
-  // Agent performance
+  // Agent charts
   {% if agent_stats %}
   const agentStats = {{ agent_stats_json }};
+  const agentPalette = ["{{ ACCENT }}", "{{ GREEN }}", "{{ AMBER }}", "{{ SEV_CRITICAL }}", "{{ SEV_MEDIUM }}", "#8E44AD", "#16A085", "#D35400"];
   if (agentStats.length) {
+    // 1. Agent Contribution donut — share of total findings per agent
+    const contribLabels = [], contribValues = [], contribColors = [];
+    agentStats.forEach((a, i) => {
+      const total = a.unique + a.redundant;
+      if (total > 0) {
+        contribLabels.push(a.agent.replace("claudius:", "") + " (" + total + ")");
+        contribValues.push(total);
+        contribColors.push(agentPalette[i % agentPalette.length]);
+      }
+    });
+    if (contribValues.length) {
+      new Chart(document.getElementById("agentContribChart"), {
+        type: "doughnut",
+        data: {labels: contribLabels, datasets: [{data: contribValues, backgroundColor: contribColors, borderWidth: 2, borderColor: "#fff"}]},
+        options: {responsive: true, plugins: {title: {display: true, text: "Agent Contribution", font: {size: 15}},
+          subtitle: {display: true, text: "Total findings reported per agent (before dedup)", font: {size: 11}, color: "{{ TEXT_MUTED }}"}}}
+      });
+    }
+
+    // 2. Unique vs Redundant per agent (existing bar chart)
     new Chart(document.getElementById("agentChart"), {
       type: "bar",
       data: {
-        labels: agentStats.map(a => a.agent),
+        labels: agentStats.map(a => a.agent.replace("claudius:", "")),
         datasets: [
           {label: "Unique", data: agentStats.map(a => a.unique), backgroundColor: "{{ GREEN }}"},
           {label: "Redundant", data: agentStats.map(a => a.redundant), backgroundColor: "{{ AMBER }}"}
         ]
       },
-      options: {responsive: true, plugins: {title: {display: true, text: "Agent Performance", font: {size: 15}}},
+      options: {responsive: true, plugins: {title: {display: true, text: "Agent Performance", font: {size: 15}},
+        subtitle: {display: true, text: "Unique findings vs duplicates found by other agents", font: {size: 11}, color: "{{ TEXT_MUTED }}"}},
         scales: {y:{ticks:{stepSize:1}}}}
+    });
+
+    // 3. Deduplication funnel — total raw vs unique after dedup
+    const totalRaw = agentStats.reduce((s, a) => s + a.unique + a.redundant, 0);
+    const totalUnique = agentStats.reduce((s, a) => s + a.unique, 0);
+    const totalRedundant = totalRaw - totalUnique;
+    const dedupPct = totalRaw > 0 ? Math.round(totalRedundant / totalRaw * 100) : 0;
+    new Chart(document.getElementById("dedupChart"), {
+      type: "bar",
+      data: {
+        labels: ["Raw Findings", "After Dedup"],
+        datasets: [
+          {label: "Unique", data: [totalUnique, totalUnique], backgroundColor: "{{ GREEN }}"},
+          {label: "Redundant (removed)", data: [totalRedundant, 0], backgroundColor: "{{ AMBER }}"}
+        ]
+      },
+      options: {indexAxis: "y", responsive: true,
+        scales: {x: {stacked: true, ticks:{stepSize:1}}, y: {stacked: true}},
+        plugins: {title: {display: true, text: "Deduplication Ratio", font: {size: 15}},
+          subtitle: {display: true, text: dedupPct + "% of raw findings were duplicates across agents", font: {size: 11}, color: "{{ TEXT_MUTED }}"},
+          legend: {position: "bottom"}}}
     });
   }
   {% endif %}
@@ -700,13 +757,13 @@ _TRIAGE_EXTRA_JS = r"""
     a.click();
     URL.revokeObjectURL(a.href);
   }
-  document.querySelectorAll("#exportDecisions, #exportDecisionsBottom").forEach(
+  document.querySelectorAll("#exportDecisions, #exportDecisionsBottom, #exportDecisionsEnd").forEach(
     btn => { if (btn) btn.addEventListener("click", doExport); }
   );
 
   // Submit to server
   const isServer = typeof window.TRIAGE_SERVER !== "undefined" && window.TRIAGE_SERVER;
-  document.querySelectorAll("#submitBtn, #submitBtnBottom").forEach(btn => {
+  document.querySelectorAll("#submitBtn, #submitBtnBottom, #submitBtnEnd").forEach(btn => {
     if (!btn) return;
     if (isServer) btn.style.display = "inline-block";
     btn.addEventListener("click", doSubmit);
@@ -974,10 +1031,11 @@ def render_triage(data: dict[str, Any]) -> str:
   <button id="submitBtn" class="no-print" style="padding:6px 16px;background:{{ BRAND }};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.9rem;margin-left:.5rem">Submit to Server</button>
 </div>
 """
-    # Insert toolbar before the first section loop
+    # Insert toolbar inside the findings section, after the heading
     triage_template = triage_template.replace(
-        "<!-- Detailed findings by section -->",
-        "<!-- Detailed findings by section -->\n" + toolbar_html,
+        '{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}',
+        '{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}\n'
+        '{% if loop.first %}\n' + toolbar_html + '{% endif %}',
     )
 
     env = Environment(autoescape=True)
