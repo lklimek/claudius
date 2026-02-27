@@ -198,6 +198,12 @@ Only run formatting, linting, and tests right before committing (or when the
 user explicitly asks). Don't run them after every edit — it wastes time and
 tokens.
 
+## Documentation Conventions
+
+**File naming:** Use lowercase with hyphens (`implementation-summary.md`, not `IMPLEMENTATION_SUMMARY.md`).
+
+**AI-consumed content:** Keep prompts, agent instructions, skill definitions, and plan text ruthlessly brief. Fewer tokens, same signal. Strip boilerplate, flatten hierarchy, cut filler.
+
 ## Team Coordination
 
 You are the leader. When a task benefits from specialist expertise, delegate to
