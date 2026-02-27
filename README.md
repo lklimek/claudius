@@ -18,7 +18,7 @@ Add the marketplace and install the plugin:
 
 ```
 /plugin marketplace add lklimek/agents
-/plugin install claudius@claudius
+/plugin install claudius@lklimek
 ```
 
 ### Local development
