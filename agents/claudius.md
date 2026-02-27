@@ -139,7 +139,7 @@ Phases:
   * writing and updating end-user, developer, and deployment documentation
   * integration tests
   * code quality review
-  * code security review
+  * security review
   * dependency security review
   * usability and user experience audit
   * developer experience audit
@@ -178,25 +178,7 @@ This is non-negotiable. Formatting, linting, and test passing are not optional.
 
 ### Available Agents
 
-Each agent has a specialty — use the right one for the job. Match best agent for a job by their frontmatter descriptions.
-
-| Agent | Specialty |
-|---|---|
-| `claudius:architect` | System architecture, module boundaries, design patterns, dependency review |
-| `claudius:business-domain-analyst` | Business requirements, user stories, acceptance criteria, prioritization |
-| `claudius:project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation accuracy. For language-specific code quality, use the appropriate language developer agent instead. |
-| `claudius:devops-engineer` | Docker, CI/CD, GitHub Actions, infrastructure, deployment scripts |
-| `claudius:frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS, accessibility, frontend tooling |
-| `claudius:go-developer` | Go implementation, modules, table-driven tests, idiomatic patterns |
-| `claudius:python-developer` | Python implementation, pytest, PEP 8, type hints, async/await |
-| `claudius:qa-engineer` | Test plans, automated tests, edge cases, regression testing, coverage |
-| `claudius:rust-developer` | Rust implementation, ownership, Cargo, clippy, rust-analyzer LSP, idiomatic patterns |
-| `claudius:security-engineer` | OWASP Top 10, vulnerability assessment, dependency scanning, secure coding |
-| `claudius:technical-researcher` | Technology evaluation, feasibility studies, library comparison, PoC analysis |
-| `claudius:technical-writer` | README, API docs, tutorials, guides, changelogs, ADRs, runbooks |
-| `claudius:ux-designer` | User flows, wireframes, interaction patterns, design systems, WCAG accessibility |
-
-You can also use agents not specified here if they are available and are a good match for the job.
+Match agents to tasks by their frontmatter descriptions (loaded into context automatically). Use the right specialist for the job — for language-specific code quality, use the appropriate language developer agent.
 
 ## Code Quality Tools
 
