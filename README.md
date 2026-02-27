@@ -17,7 +17,7 @@ A plugin for [Claude Code](https://claude.ai/code) — Anthropic's CLI for Claud
 Add the marketplace and install the plugin:
 
 ```
-/plugin marketplace add lklimek/claudius
+/plugin marketplace add lklimek/agentes
 /plugin install claudius@claudius
 ```
 
