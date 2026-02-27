@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lklimek/claudius/schemas/review-report.schema.json",
+  "title": "Claudius Review Report",
+  "description": "Intermediate format for code review reports. Produced by review-all, consumed by all renderers.",
+  "type": "object",
+  "required": ["schema_version", "metadata", "executive_summary", "summary_statistics", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version (SemVer). Renderers check this for compatibility."
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["project", "date"],
+      "additionalProperties": false,
+      "properties": {
+        "project": { "type": "string", "description": "Project name or repository URL" },
+        "date": { "type": "string", "format": "date", "description": "Review date (YYYY-MM-DD)" },
+        "branch": { "type": "string", "description": "Branch reviewed" },
+        "commit": { "type": "string", "description": "HEAD commit short SHA" },
+        "scope": { "type": "string", "description": "What was reviewed (paths, commit range, etc.)" },
+        "reviewers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Agent types used (e.g., 'security-engineer', 'rust-developer')"
+        }
+      }
+    },
+    "executive_summary": {
+      "type": "object",
+      "required": ["overall_assessment"],
+      "additionalProperties": false,
+      "properties": {
+        "overall_assessment": { "type": "string", "description": "1-2 sentence overall assessment" },
+        "summary_text": { "type": "string", "description": "Expanded summary paragraph" },
+        "verdict_text": { "type": "string", "description": "Final verdict" },
+        "verdict_action": { "type": "string", "description": "Recommended action (e.g., 'Approve with conditions')" }
+      }
+    },
+    "summary_statistics": {
+      "type": "object",
+      "required": ["total_findings", "severity_counts"],
+      "additionalProperties": false,
+      "properties": {
+        "total_findings": { "type": "integer", "minimum": 0 },
+        "redundancy_ratio": { "type": "string", "description": "e.g., '51%'" },
+        "critical_count": { "type": "integer", "minimum": 0 },
+        "severity_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "CRITICAL": { "type": "integer", "minimum": 0, "default": 0 },
+            "HIGH": { "type": "integer", "minimum": 0, "default": 0 },
+            "MEDIUM": { "type": "integer", "minimum": 0, "default": 0 },
+            "LOW": { "type": "integer", "minimum": 0, "default": 0 },
+            "INFO": { "type": "integer", "minimum": 0, "default": 0 }
+          }
+        },
+        "severity_category_matrix": {
+          "type": "array",
+          "description": "Severity x category matrix rows.",
+          "items": {
+            "type": "object",
+            "required": ["severity", "security", "project", "code_quality", "total"],
+            "additionalProperties": false,
+            "properties": {
+              "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] },
+              "security": { "type": "integer", "minimum": 0 },
+              "project": { "type": "integer", "minimum": 0 },
+              "code_quality": { "type": "integer", "minimum": 0 },
+              "documentation": { "type": "integer", "minimum": 0 },
+              "total": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "top_findings": {
+      "type": "array",
+      "description": "Top findings requiring immediate action.",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "title", "location"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" },
+          "title": { "type": "string" },
+          "location": { "type": "string" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "All findings grouped by section.",
+      "items": { "$ref": "#/$defs/finding_section" }
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Dependency audit results.",
+      "items": {
+        "type": "object",
+        "required": ["package", "version"],
+        "additionalProperties": false,
+        "properties": {
+          "package": { "type": "string" },
+          "version": { "type": "string" },
+          "advisories": { "type": "string", "description": "Known advisories (CVE, GHSA, RustSec, etc.) or 'None'" },
+          "applicable": { "type": "string", "description": "Applicability assessment" },
+          "ok": { "type": "boolean", "description": "true if no action needed" }
+        }
+      }
+    },
+    "agent_stats": {
+      "type": "array",
+      "description": "Per-agent unique vs redundant finding counts.",
+      "items": {
+        "type": "object",
+        "required": ["agent", "unique", "redundant"],
+        "additionalProperties": false,
+        "properties": {
+          "agent": { "type": "string" },
+          "unique": { "type": "integer", "minimum": 0 },
+          "redundant": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "remediation": {
+      "type": "array",
+      "description": "Remediation priority buckets.",
+      "items": {
+        "type": "object",
+        "required": ["label", "count", "priority"],
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string", "description": "e.g., 'Before Merge'" },
+          "count": { "type": "integer", "minimum": 0 },
+          "priority": {
+            "type": "string",
+            "enum": ["before_merge", "before_production", "post_deployment"]
+          },
+          "finding_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "IDs of findings in this bucket"
+          }
+        }
+      }
+    },
+    "triage": {
+      "type": "object",
+      "description": "Triage decisions overlay. Added by triage-findings, absent in raw review output.",
+      "additionalProperties": false,
+      "properties": {
+        "triaged_by": { "type": "string" },
+        "triaged_at": { "type": "string", "format": "date-time" },
+        "decisions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/triage_decision" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+    },
+    "finding": {
+      "type": "object",
+      "required": ["id", "severity", "title", "location", "description", "recommendation"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(SEC|PROJ|RUST|PY|GO|FE|DOC)-\\d{3}$",
+          "description": "Finding ID with category prefix"
+        },
+        "severity": { "$ref": "#/$defs/severity" },
+        "title": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Classification tags (OWASP, CWE, Rust best-practice IDs, etc.)"
+        },
+        "location": { "type": "string", "description": "file:start_line-end_line" },
+        "description": { "type": "string" },
+        "impact": { "type": "string" },
+        "recommendation": { "type": "string" }
+      }
+    },
+    "finding_section": {
+      "type": "object",
+      "required": ["title", "category", "findings"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "description": "Section heading" },
+        "subtitle": { "type": "string" },
+        "category": {
+          "type": "string",
+          "enum": ["security", "project", "code_quality", "dependencies", "documentation"]
+        },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/finding" }
+        },
+        "positives": { "type": "string", "description": "Positive observations for this section" }
+      }
+    },
+    "triage_decision": {
+      "type": "object",
+      "required": ["finding_id", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "finding_id": { "type": "string", "description": "References a finding ID" },
+        "action": {
+          "type": "string",
+          "enum": ["fix", "accept_risk", "defer", "false_positive", "duplicate"]
+        },
+        "rationale": { "type": "string" },
+        "assignee": { "type": "string" },
+        "due_date": { "type": "string", "format": "date" },
+        "ticket": { "type": "string", "description": "Issue tracker reference" }
+      }
+    }
+  }
+}

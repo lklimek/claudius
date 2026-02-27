@@ -89,7 +89,7 @@ every review agent prompt MUST include these review-specific elements:
 All agents must use this format:
 
 ```markdown
-### <ID> (<Severity>): <Title> — <OWASP Category>
+### <ID> (<Severity>): <Title> — <Tags>
 - **Location**: `<file>:<start_line>-<end_line>`
 - **Description**: What the issue is and why it matters
 - **Impact**: What could go wrong
@@ -100,6 +100,12 @@ All agents must use this format:
 line numbers like `Lines 149-163` — always prefix with the file path (e.g., `src/auth.rs:149-163`).
 
 Severity levels: **CRITICAL > HIGH > MEDIUM > LOW > INFO** (see `severity` skill for definitions)
+
+**Tags**: Classification references appended after " — " in the title. Use any applicable system:
+- OWASP categories for security: `A01 Broken Access Control`, `A02 Cryptographic Failures`, etc.
+- CWE IDs: `CWE-79`, `CWE-89`, etc.
+- Language best-practice IDs: `RUST-BP-E04 Error Handling`, etc.
+- Multiple tags separated by commas
 
 OWASP categories (tag ALL security findings):
 - **A01**: Broken Access Control
@@ -113,7 +119,7 @@ OWASP categories (tag ALL security findings):
 - **A09**: Security Logging and Monitoring Failures
 - **A10**: Server-Side Request Forgery
 
-Non-security findings (code quality, Rust idioms, documentation) do not need OWASP tags.
+Non-security findings may use other tag systems or omit tags entirely.
 
 ## 4. Spawn Agents
 
@@ -142,48 +148,42 @@ and security-engineer). Merge duplicates, keeping the most detailed description.
 ### 5c. Classify and rank
 - Assign unified IDs: `SEC-001`, `SEC-002`, ... for security; `PROJ-001`, ... for project consistency;
   `RUST-001`/`PY-001`/`GO-001`/`FE-001`, ... for language-specific code quality; `DOC-001`, ... for documentation
-- Ensure every security finding has an OWASP category tag
+- Tag findings with classification references in `tags[]`: OWASP categories for security
+  (e.g., `"A02 Cryptographic Failures"`), CWE IDs, Rust/Go/Python best-practice IDs, etc.
 - Rank by severity, then by impact
 
-### 5d. Build consolidated report
+### 5d. Build structured report (JSON)
 
-Structure:
+Emit a `report.json` file conforming to the schema at `schemas/review-report.schema.json`.
+This is the **primary output** — all renderers consume this format.
 
-```markdown
-# Code Review Report: <scope>
+The JSON must include:
+- `schema_version`: `"1.0.0"`
+- `metadata`: project, date, branch, commit, scope, reviewers
+- `executive_summary`: overall_assessment, summary_text, verdict_text, verdict_action
+- `summary_statistics`: total_findings, redundancy_ratio, critical_count, severity_counts,
+  severity_category_matrix
+- `top_findings`: top 5 (or fewer) findings requiring immediate action
+- `findings`: array of section objects, each with `title`, `category`
+  (`security|project|code_quality|dependencies|documentation`), `findings[]`, and
+  optional `positives` text
+- `dependencies`: dependency audit results (if reviewed)
+- `agent_stats`: per-agent unique vs redundant counts
+- `remediation`: priority buckets (before_merge, before_production, post_deployment)
+  with `finding_ids` arrays
 
-| Field | Value |
-|---|---|
-| **Date** | YYYY-MM-DD |
-| **Project** | <GitHub repo URL> |
-| **Branch** | <current branch name> |
-| **Commit** | <HEAD commit short SHA> |
-| **Scope** | <what was reviewed> |
-| **Reviewers** | <Claudius + specialist agents used> |
+Each finding: `id`, `severity`, `title`, `tags[]`, `location`, `description`,
+`impact`, `recommendation`.
 
-## Executive Summary
-- Overall assessment (1-2 sentences)
-- Findings summary table (severity counts by category)
-- Top 5 findings requiring action
+### 5e. Render markdown report
 
-## Part I: Security Findings
-All security findings with OWASP tags. Merged from security-engineer + OWASP review.
+After emitting `report.json`, generate a human-readable markdown version:
 
-## Part II: Project Consistency
-Cross-artifact alignment, convention drift, dependency coherence, documentation accuracy.
-
-## Part III: Code Quality & Language Best Practices
-Code quality findings from language specialists (RUST/PY/GO/FE prefixes).
-
-## Part IV: Dependencies (if reviewed)
-CVE scan results, supply chain risks, fork audits.
-
-## Part V: Documentation (if reviewed)
-Accuracy, completeness, missing docs.
-
-## Recommendations
-Prioritized: Before Merge > Before Production > Post-Deployment
+```bash
+python3 scripts/generate_review_report.py report.json --format md
 ```
+
+This produces `report.md` next to the JSON file.
 
 ## 6. Iterate if Needed
 
@@ -192,10 +192,16 @@ If initial review reveals areas needing deeper investigation:
 - Re-review specific files with different checklists
 - Audit forked dependencies against upstream
 
-## 7. PDF Report (Optional)
+## 7. Additional Report Formats (Optional)
 
-If the user requests a PDF version of the report, invoke the `claudius:report-pdf` skill with the
-path to the consolidated markdown report. Do NOT generate PDF by default — only on explicit request.
+If the user requests HTML or PDF versions, invoke the renderer directly:
+
+```bash
+python3 scripts/generate_review_report.py report.json --format html
+python3 scripts/generate_review_report.py report.json --format pdf
+```
+
+For interactive triage, use the `claudius:triage-findings` skill with the report.json path.
 
 ## Anti-Patterns (Review-Specific)
 

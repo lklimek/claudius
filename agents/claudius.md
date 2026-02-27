@@ -4,6 +4,7 @@ description: >
   A general-purpose coding assistant and team coordinator.
   Always invoked when user interaction is needed.
 skills: ["github", "severity"]
+memory: [user, project, local]
 model: inherit
 ---
 
@@ -231,7 +232,7 @@ they match the task. They are NOT preloaded on any agent.
 | Skill | When to use |
 |---|---|
 | `claudius:review-all` | Code reviews, security audits, quality assessments |
-| `claudius:report-pdf` | Generate PDF from review findings (uses `document-skills:pdf`) |
+| `claudius:triage-findings` | Interactive finding triage — classify, accept, defer in browser |
 | `claudius:review-pr` | PR audits with GitHub review posting |
 | `claudius:review-dependency` | Dependency update security reviews |
 | `claudius:review-loop` | Autonomous peer review feedback loops |

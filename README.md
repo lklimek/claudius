@@ -58,7 +58,7 @@ claude --plugin-dir /path/to/claudius
 | `github` | GitHub workflow guidelines covering git and gh usage | _(inherited)_ |
 | `review-dependency` | Security-focused dependency update review | Read, Grep, Glob, WebFetch, WebSearch, Bash(git diff \*), Bash(git clone --depth=\* --config core.hooksPath=/dev/null -- \*), Bash(gh api /advisories\*) |
 | `review-loop` | Autonomous peer review feedback loop | Read, Grep, Glob, Edit, Write, Bash(\*gh-request-reviewer.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(git \*) |
-| `report-pdf` | Generate professional PDF from code review findings | Read, Write, Glob, Grep, Bash(python3 \*) |
+| `triage-findings` | Interactive finding triage — classify in browser, decisions feed back to Claude | Read, Write, Edit, Bash(python3 \*), Bash(kill \*), Glob, Grep |
 | `review-pr` | Audit and review pull requests | Read, Grep, Glob, Write, Bash(gh pr view \*), Bash(gh pr comment \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-post-review.sh \*), Bash(\*gh-pr-base-sha.sh \*), Bash(git \*) |
 | `rust-best-practices` | Rust programming checklists and reference material | Read, WebFetch |
 | `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series | WebFetch, WebSearch |

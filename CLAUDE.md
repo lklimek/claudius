@@ -13,7 +13,8 @@ Guidance for Claude Code working in this repository.
   plugin.json       # Plugin manifest (only `name` required; agents/ and skills/ auto-discovered)
 agents/             # Agent definitions (.md files with YAML frontmatter)
 skills/             # Skill definitions (directories with SKILL.md + optional resources)
-scripts/            # Helper shell scripts used by skills
+scripts/            # Helper scripts used by skills (Python + shell)
+schemas/            # JSON Schema definitions for shared data formats
 ```
 
 ## Agents
