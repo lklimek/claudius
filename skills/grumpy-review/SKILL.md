@@ -165,7 +165,7 @@ most detailed description and union of tags.
 - Merge agent sections with the same category into unified sections
 - **INTENTIONAL downgrade**: For each finding, `grep -n 'INTENTIONAL'` in the source file
   at the finding's location. If an `INTENTIONAL(...)` comment exists on or near the flagged
-  lines, downgrade the finding's severity to INFO. These comments are added by previous
+  lines, downgrade the finding's severity to `INFO`. These comments are added by previous
   triage runs accepting the risk and represent deliberate engineering decisions.
 - Rank by severity, then by impact
 

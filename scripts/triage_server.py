@@ -19,7 +19,7 @@ import threading
 import webbrowser
 from datetime import datetime, timezone
 from http import HTTPStatus
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -29,14 +29,19 @@ log = logging.getLogger(__name__)
 REPORT_PATH: Path = Path()
 RENDERER_SCRIPT: Path = Path()
 _cached_triage_html: str = ""
+_cache_generation: int = 0  # Bumped on invalidation; prevents stale repopulation
+_lock = threading.Lock()  # Guards report I/O and HTML cache
 
 
 def _generate_triage_html() -> str:
     """Generate triage HTML by invoking the renderer script."""
     global _cached_triage_html
-    if _cached_triage_html:
-        return _cached_triage_html
+    with _lock:
+        if _cached_triage_html:
+            return _cached_triage_html
+        gen = _cache_generation
 
+    # Subprocess runs outside the lock — it only reads the report file.
     result = subprocess.run(
         [
             sys.executable,
@@ -56,8 +61,11 @@ def _generate_triage_html() -> str:
 
         return f"<html><body><h1>Renderer Error</h1><pre>{html.escape(result.stderr)}</pre></body></html>"
 
-    _cached_triage_html = result.stdout
-    return _cached_triage_html
+    with _lock:
+        # Only populate if no invalidation happened while we were generating.
+        if _cache_generation == gen and not _cached_triage_html:
+            _cached_triage_html = result.stdout
+        return _cached_triage_html or result.stdout
 
 
 def _load_report() -> dict:
@@ -67,20 +75,22 @@ def _load_report() -> dict:
 
 def _save_triage(decisions: list[dict], triaged_by: str = "user") -> dict:
     """Merge triage decisions into the report JSON and save."""
-    global _cached_triage_html
-    _cached_triage_html = ""  # Invalidate cache so next GET reflects new decisions
-    report = _load_report()
-    report["triage"] = {
-        "triaged_by": triaged_by,
-        "triaged_at": datetime.now(timezone.utc).isoformat(),
-        "decisions": decisions,
-    }
-    REPORT_PATH.write_text(
-        json.dumps(report, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    log.info("Triage saved: %d decisions written to %s", len(decisions), REPORT_PATH)
-    return report
+    global _cached_triage_html, _cache_generation
+    with _lock:
+        _cached_triage_html = ""  # Invalidate cache so next GET reflects new decisions
+        _cache_generation += 1
+        report = _load_report()
+        report["triage"] = {
+            "triaged_by": triaged_by,
+            "triaged_at": datetime.now(timezone.utc).isoformat(),
+            "decisions": decisions,
+        }
+        REPORT_PATH.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        log.info("Triage saved: %d decisions written to %s", len(decisions), REPORT_PATH)
+        return report
 
 
 def _triage_status(report: dict) -> dict:
@@ -93,8 +103,6 @@ def _triage_status(report: dict) -> dict:
 
 class TriageHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the triage server."""
-
-    server_instance: HTTPServer  # set by the server
 
     def log_message(self, fmt: str, *args: object) -> None:
         log.info("HTTP %s", fmt % args)
@@ -131,9 +139,12 @@ class TriageHandler(BaseHTTPRequestHandler):
             )
             self._send_html(html)
         elif self.path == "/api/report":
-            self._send_json(_load_report())
+            with _lock:
+                report = _load_report()
+            self._send_json(report)
         elif self.path == "/api/status":
-            report = _load_report()
+            with _lock:
+                report = _load_report()
             self._send_json(_triage_status(report))
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -153,6 +164,9 @@ class TriageHandler(BaseHTTPRequestHandler):
                     f"Body exceeds {self.MAX_BODY} bytes",
                 )
                 return
+            if content_len == 0:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Empty request body")
+                return
             body = self.rfile.read(content_len)
             try:
                 payload = json.loads(body)
@@ -168,16 +182,17 @@ class TriageHandler(BaseHTTPRequestHandler):
                 # If all findings are triaged, schedule shutdown
                 if shutting_down:
                     log.info("Triage complete — shutting down server.")
-                    threading.Thread(target=self._shutdown, daemon=True).start()
+                    # Prevent capturing `self` (and its socket) in the thread.
+                    srv = self.server
+                    threading.Thread(
+                        target=srv.shutdown, daemon=True
+                    ).start()
             except (json.JSONDecodeError, KeyError) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=400)
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 
     # No CORS headers — same-origin requests from triage UI don't need them.
-
-    def _shutdown(self) -> None:
-        self.server.shutdown()
 
 
 def _open_browser(url: str) -> None:
@@ -223,7 +238,8 @@ def main() -> None:
         log.error("Invalid report JSON: %s", exc)
         sys.exit(1)
 
-    server = HTTPServer(("127.0.0.1", args.port), TriageHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), TriageHandler)
+    server.daemon_threads = True  # Don't let lingering threads block shutdown
     server.timeout = 30  # Prevent indefinite hangs on idle connections
     url = f"http://127.0.0.1:{args.port}"
 
@@ -242,7 +258,8 @@ def main() -> None:
         log.info("Server shut down.")
 
     # Print final status
-    report = _load_report()
+    with _lock:
+        report = _load_report()
     triage = report.get("triage")
     if triage:
         decisions = triage.get("decisions", [])
