@@ -99,13 +99,19 @@ class TriageHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:
         log.info("HTTP %s", fmt % args)
 
-    def _send_json(self, data: object, status: int = 200) -> None:
+    def _send_json(
+        self, data: object, status: int = 200, *, close: bool = False
+    ) -> None:
         body = json.dumps(data, indent=2).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        if close:
+            self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
+        if close:
+            self.close_connection = True
 
     def _send_html(self, html: str, status: int = 200) -> None:
         body = html.encode("utf-8")
@@ -154,10 +160,13 @@ class TriageHandler(BaseHTTPRequestHandler):
                 triaged_by = payload.get("triaged_by", "user")
                 report = _save_triage(decisions, triaged_by)
                 status = _triage_status(report)
-                self._send_json({"ok": True, "status": status})
+                shutting_down = payload.get("complete", False)
+                self._send_json(
+                    {"ok": True, "status": status}, close=shutting_down
+                )
 
                 # If all findings are triaged, schedule shutdown
-                if payload.get("complete", False):
+                if shutting_down:
                     log.info("Triage complete — shutting down server.")
                     threading.Thread(target=self._shutdown, daemon=True).start()
             except (json.JSONDecodeError, KeyError) as exc:
@@ -215,6 +224,7 @@ def main() -> None:
         sys.exit(1)
 
     server = HTTPServer(("127.0.0.1", args.port), TriageHandler)
+    server.timeout = 30  # Prevent indefinite hangs on idle connections
     url = f"http://127.0.0.1:{args.port}"
 
     log.info("Triage server starting on %s", url)

@@ -576,11 +576,16 @@ _TRIAGE_EXTRA_CSS = """
 .triage-row select,.triage-row input[type=text]{
   padding:3px 6px;border:1px solid {{ BORDER }};border-radius:4px;font-size:.82rem}
 .triage-row input[type=text]{flex:1;min-width:120px}
-.toast{position:fixed;bottom:1rem;right:1rem;padding:.8rem 1.2rem;border-radius:6px;color:#fff;
-  font-size:.9rem;z-index:999;opacity:0;transition:opacity .3s}
-.toast.show{opacity:1}
+.toast{position:fixed;top:0;left:0;width:100%;padding:1rem 3rem 1rem 1.5rem;color:#fff;
+  font-size:.95rem;z-index:9999;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2);
+  transform:translateY(-100%);transition:transform .3s ease}
+.toast.show{transform:translateY(0)}
 .toast-ok{background:{{ GREEN }}}
 .toast-err{background:{{ RED }}}
+.toast .toast-dismiss{position:absolute;right:1rem;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;opacity:.8;
+  line-height:1;padding:0 .3rem}
+.toast .toast-dismiss:hover{opacity:1}
 #submitBtn,#submitBtnBottom{display:none}
 """
 
@@ -715,25 +720,37 @@ _TRIAGE_EXTRA_JS = r"""
       complete: true,
       decisions
     };
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
     try {
       const resp = await fetch("/api/decisions", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: ctrl.signal
       });
+      clearTimeout(timer);
       if (!resp.ok) throw new Error("HTTP " + resp.status);
-      showToast("Decisions submitted — server shutting down.", "ok");
+      showToast("\u2705 Decisions submitted \u2014 server shutting down.", "ok");
     } catch (e) {
-      showToast("Error: " + e.message, "err");
+      clearTimeout(timer);
+      const msg = e.name === "AbortError" ? "Request timed out" : e.message;
+      showToast("\u274c Error: " + msg, "err");
     }
   }
 
   function showToast(msg, kind) {
+    document.querySelectorAll(".toast").forEach(el => el.remove());
     const t = document.createElement("div");
-    t.className = "toast toast-" + kind + " show";
+    t.className = "toast toast-" + kind;
     t.textContent = msg;
+    const btn = document.createElement("button");
+    btn.className = "toast-dismiss";
+    btn.innerHTML = "\u00d7";
+    btn.onclick = () => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); };
+    t.appendChild(btn);
     document.body.appendChild(t);
-    setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 500); }, 3000);
+    requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add("show")));
   }
 
   // Default sort: severity (CRITICAL first)
