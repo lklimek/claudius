@@ -78,7 +78,7 @@ Use html whenever you want to present visual design components, for example mock
 - **Usability**: Can users accomplish their goals easily?
 - **Consistency**: Are patterns consistent across the application?
 - **Accessibility**: Is the app usable by people with disabilities?
-- **Developer Experience**: Is the codebase easy to understand and extend?
+- **Developer Experience**: Is the codebase easy to understand and extend? Are APIs ergonomic and discoverable? Is CLI output clear and actionable? Is tooling (build, test, deploy) frictionless? Is onboarding documented and achievable in reasonable time?
 - **Error Handling**: Are errors clear and actionable?
 - **Documentation**: Is documentation clear, accurate, and helpful?
 

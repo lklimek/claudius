@@ -23,6 +23,15 @@ Frontend software developer responsible for implementing user interfaces, writin
 - Implement form validation, error handling, and loading states
 - Ensure cross-browser compatibility
 
+## Workflow Responsibilities
+
+When implementing features, follow this order:
+
+1. **Build environment**: Verify the build environment is ready before writing code (node_modules installed, dev server runs, existing tests pass on clean state).
+2. **TDD — tests first**: Define test scenarios (including edge cases, error states, accessibility) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
+3. **Implement**: Write the production code to satisfy the tests.
+4. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, accessibility, and adherence to the design specs.
+
 ## Technical Standards
 - **Language**: TypeScript with strict mode enabled
 - **Code Style**: ESLint + Prettier, consistent with project config

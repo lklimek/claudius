@@ -61,110 +61,42 @@ On subsequent iterations: you may use another workflow, skip non-QA phases if ap
 
 ### Feature workflow
 
-Use when:
-* developing new projects
-* implementing new or fundamentally modifying features
-* performing major refactoring
+Use for new projects, new/fundamentally modified features, major refactoring.
 
-Phases:
+1. **Requirements** → `business-domain-analyst` + `ux-designer`
+   Personas, domain knowledge, functional/non-functional requirements, user stories,
+   data needs & processing rules, user journey, DX planning, UI mocks. Validate per persona. Iterate.
 
-1. **Requirements**:
-  * identify personas
-  * understand the problem, gather domain knowledge
-  * ask the user as many questions as needed
-  * define functional and non-functional requirements
-  * define user stories
-  * identify data needs and processing rules
-  * plan user interactions and user journey
-  * plan developer experience
-  * mock user interfaces in HTML
-  * validate from perspective of each persona
-  * iterate if needed.
-2. **Architecture**:
-  * understand products of the requirements phase
-  * plan system layers, components, and responsibilities
-  * select proper tools and technologies
-  * prefer existing components and libraries over writing new code
-  * ensure components are well-maintained
-  * plan packaging and deployment model
-  * guide code placement to match the architecture
-  * ensure long-term scalability and maintainability
-  * optionally decompose work into smaller tasks (for complex work; small changes may not need further decomposition)
-3. **Implementation** - repeated for each task determined in the architecture phase:
-  * preparing build environment
-  * Test Driven Development (TDD): define test scenarios (including edge cases) before doing actual development work
-  * implementation of the source code
-  * implementation of automated tests based on TDD scenarios
-  * self-review
-  * optionally further decompose complex tasks into smaller steps
-  * iterate
-4. **QA**
-  * writing and updating end-user, developer, and deployment documentation
-  * integration tests
-  * code quality review
-  * security review
-  * dependency security review
-  * usability and user experience audit
-  * developer experience audit
-  * packaging
-  * pass tests, code formatter, and linter
+2. **Architecture** → `architect` + `technical-researcher` + `devops-engineer`
+   System layers and responsibilities (trace every layer), tool/tech selection,
+   prefer reuse, guide code placement, packaging/deployment, work decomposition into tasks.
 
-Selectively iterate through phases above until there are no issues with severity above `LOW`.
+3. **Implementation** (per task) → language developer agents
+   Build env → TDD (test scenarios first) → implement → test → self-review → iterate.
+
+4. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer` + `devops-engineer`
+   Docs (end-user/developer/deployment), integration tests, code quality, security,
+   dependency security, UX/DX audit, packaging, pass tests/formatter/linter.
+
+Iterate until no issues with severity above `LOW`.
 
 ### Simplified workflow
 
-Use for:
+Use for bug fixes, small changes (≤200 lines), small local refactorings.
 
-* bug fixes
-* small changes, estimated to up to 200 lines of affected code
-* small, local refactorings
+1. **Requirements** — understand the problem, gather domain knowledge, ask user questions.
+2. **Architecture** — select tools/technologies, guide code placement, ensure maintainability.
+3. **Implementation** (per task) → language developer agents — same as Feature workflow.
+4. **QA** — same as Feature workflow.
 
-Phases:
-
-1. **Requirements**:
-  * understand the problem, gather domain knowledge
-  * ask the user as many questions as needed
-2. **Architecture**:
-  * select proper tools and technologies
-  * guide code placement to match the architecture
-  * ensure long-term scalability and maintainability
-3. **Implementation** - repeated for each task determined in the architecture phase:
-  * preparing build environment
-  * Test Driven Development (TDD): define test scenarios (including edge cases) before doing actual development work
-  * implementation of the source code
-  * implementation of automated tests based on TDD scenarios
-  * self-review
-  * iterate
-4. **QA**
-  * writing and updating end-user, developer, and deployment documentation
-  * integration tests
-  * code quality review
-  * security review
-  * dependency security review
-  * usability and user experience audit
-  * developer experience audit
-  * pass tests, code formatter, and linter
-
-Selectively iterate through phases above until there are no issues with severity above `LOW`.
+Iterate until no issues with severity above `LOW`.
 
 ### Trivial workflow
 
-Use for:
+Use for typos, single-line fixes (≤20 lines), no new dependencies/files.
 
-* typos, single-line fixes
-* changes estimated to up to 20 lines of affected code
-* no new dependencies or new files (unless trivial)
-
-Phases:
-
-1. **Implementation**:
-  * prepare build environment if needed
-  * implement the fix
-  * write or update tests to confirm the fix
-2. **QA**:
-  * pass tests, code formatter, and linter
-
-No requirements or architecture phases—minimal process, but QA is mandatory.
+1. **Implementation** → language developer agents — build env if needed, implement, write/update tests.
+2. **QA** — pass tests, formatter, linter.
 
 ### The QA Gate
 

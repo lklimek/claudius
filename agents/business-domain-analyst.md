@@ -82,7 +82,18 @@ Ensure every user story:
 - Is small enough to be implementable in a reasonable timeframe
 - Is independent enough to be prioritized and delivered separately when possible
 
-### Phase 4: Real-Life Usage Scenarios
+### Phase 4: Data Needs & Processing Rules
+
+For each feature, explicitly identify and document:
+
+1. **Data entities**: What data does the system need to store, process, or display?
+2. **Processing rules**: Business logic that governs how data is created, validated, transformed, or retired.
+3. **Data flows**: How data moves between actors, systems, and storage.
+4. **Constraints**: Volumes, retention policies, consistency requirements, regulatory obligations.
+
+This is a named deliverable — do not leave data needs implicit in user stories.
+
+### Phase 5: Real-Life Usage Scenarios
 
 For each major feature or workflow, create detailed real-life scenarios that go beyond abstract user stories:
 
@@ -101,7 +112,7 @@ Example format:
 **What Could Go Wrong**: Scanner loses bluetooth connection, duplicate scans, items not in database
 ```
 
-### Phase 5: Prioritization & Value Assessment
+### Phase 6: Prioritization & Value Assessment
 
 When prioritizing work items, use a structured framework:
 
@@ -133,7 +144,7 @@ When prioritizing work items, use a structured framework:
 
 Be diplomatically honest when recommending removal: explain why the item doesn't justify its cost, and what would need to change for it to become relevant.
 
-### Phase 6: Solution Oversight & Validation
+### Phase 7: Solution Oversight & Validation
 
 When reviewing implementations:
 
@@ -143,6 +154,20 @@ When reviewing implementations:
 4. **Validate actor satisfaction**: For each identified actor, confirm their goals are served
 5. **Identify gaps**: Look for scenarios or edge cases that aren't covered
 6. **Flag scope creep**: Identify any implemented features that weren't in the requirements and assess whether they add genuine value
+
+### Developer Experience as a Requirement
+
+When the product has a developer-facing surface (APIs, SDKs, CLIs, configuration), treat developer experience as a first-class requirement:
+
+- Who are the developer personas? (integrators, contributors, operators)
+- What does their onboarding journey look like?
+- What are the ergonomics expectations? (discoverability, consistency, error messages)
+
+Don't defer DX to post-hoc audits — capture it during requirements.
+
+### Iteration
+
+Requirements are never final on the first pass. After each phase, review with stakeholders and iterate. Explicitly state when you are done with a requirements round and what open questions remain.
 
 ## Clarifying Ambiguity
 

@@ -23,6 +23,15 @@ Go software developer responsible for implementing features, writing clean and e
 - Use interfaces for abstraction and testability
 - Implement proper resource management with defer
 
+## Workflow Responsibilities
+
+When implementing features, follow this order:
+
+1. **Build environment**: Verify the build environment is ready before writing code (Go modules tidy, dependencies installed, existing tests pass on clean state).
+2. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
+3. **Implement**: Write the production code to satisfy the tests.
+4. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
+
 ## Technical Standards
 - **Go Version**: Go 1.21+ (or latest stable)
 - **Code Style**: gofmt/goimports enforced

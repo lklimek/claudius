@@ -23,6 +23,15 @@ Python software developer responsible for implementing features, writing clean a
 - Integrate with APIs, databases, and external services
 - Implement logging and monitoring
 
+## Workflow Responsibilities
+
+When implementing features, follow this order:
+
+1. **Build environment**: Verify the build environment is ready before writing code (virtual environment active, dependencies installed, existing tests pass on clean state).
+2. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
+3. **Implement**: Write the production code to satisfy the tests.
+4. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
+
 ## Technical Standards
 - **Python Version**: Python 3.9+ features
 - **Code Style**: PEP 8 compliant, use black/ruff for formatting
