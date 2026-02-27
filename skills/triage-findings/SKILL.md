@@ -3,7 +3,7 @@ name: triage-findings
 description: >
   Interactive triage of review findings. Starts a local server with a triage UI.
   User classifies findings in browser, decisions are written back to report.json.
-  Use after grumpy-review to let the user decide what to fix, accept, or defer.
+  Use after grumpy-review or check-pr-comments to let the user decide what to fix, accept, or defer.
 user-invocable: true
 argument-hint: <path to report.json>
 allowed-tools: Read, Write, Edit, Bash(python3 *), Bash(fuser *), Glob, Grep
@@ -14,7 +14,7 @@ allowed-tools: Read, Write, Edit, Bash(python3 *), Bash(fuser *), Glob, Grep
 Start an interactive triage session for review findings. The user classifies each
 finding in a browser UI, and decisions are written back to the report JSON.
 
-**Argument**: `$ARGUMENTS` — path to the `report.json` file produced by `grumpy-review`.
+**Argument**: `$ARGUMENTS` — path to the `report.json` file produced by `grumpy-review` or `check-pr-comments`.
 
 ## Workflow
 
@@ -71,6 +71,19 @@ Replace `8741` with the actual port if `--port` was used.
    Include the rationale from the triage decision if provided, otherwise
    summarize from the finding's description. Future reviews that encounter
    an `INTENTIONAL` comment will downgrade the finding to INFO severity.
+
+## Comment-Check Reports
+
+For reports with `metadata.report_type == "comment_check"` (produced by `check-pr-comments`):
+
+- Triage actions apply to unresolved PR review comments instead of code review findings
+- **accept_risk / false_positive**: after triage, resolve the associated GitHub review
+  thread using `gh-resolve-review-thread.sh` with the finding's `thread_id` field.
+  Always ask user confirmation before resolving threads.
+- **fix**: apply the fix described in `recommendation`, then resolve the thread
+- **defer**: leave the thread unresolved; add a `TODO` comment as usual
+- The triage decision's `resolve_thread` field (boolean) indicates whether thread
+  resolution is appropriate for each decision
 
 ## Output
 

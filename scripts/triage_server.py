@@ -89,7 +89,9 @@ def _save_triage(decisions: list[dict], triaged_by: str = "user") -> dict:
             json.dumps(report, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        log.info("Triage saved: %d decisions written to %s", len(decisions), REPORT_PATH)
+        log.info(
+            "Triage saved: %d decisions written to %s", len(decisions), REPORT_PATH
+        )
         return report
 
 
@@ -98,7 +100,11 @@ def _triage_status(report: dict) -> dict:
     total = sum(len(s.get("findings", [])) for s in report.get("findings", []))
     triage = report.get("triage", {})
     triaged = len(triage.get("decisions", []))
-    return {"total_findings": total, "triaged": triaged, "remaining": total - triaged}
+    status = {"total_findings": total, "triaged": triaged, "remaining": total - triaged}
+    vc = report.get("summary_statistics", {}).get("verdict_counts")
+    if vc:
+        status["verdict_counts"] = vc
+    return status
 
 
 class TriageHandler(BaseHTTPRequestHandler):
@@ -175,18 +181,14 @@ class TriageHandler(BaseHTTPRequestHandler):
                 report = _save_triage(decisions, triaged_by)
                 status = _triage_status(report)
                 shutting_down = payload.get("complete", False)
-                self._send_json(
-                    {"ok": True, "status": status}, close=shutting_down
-                )
+                self._send_json({"ok": True, "status": status}, close=shutting_down)
 
                 # If all findings are triaged, schedule shutdown
                 if shutting_down:
                     log.info("Triage complete — shutting down server.")
                     # Prevent capturing `self` (and its socket) in the thread.
                     srv = self.server
-                    threading.Thread(
-                        target=srv.shutdown, daemon=True
-                    ).start()
+                    threading.Thread(target=srv.shutdown, daemon=True).start()
             except (json.JSONDecodeError, KeyError) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=400)
         else:

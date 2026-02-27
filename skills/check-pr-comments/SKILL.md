@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
-description: Verify whether existing PR review comments have been addressed in code. Checks out the branch, verifies each comment against current code, resolves addressed threads, and produces a structured report. Use when asked to check, triage, or verify PR review feedback.
-allowed-tools: Read, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-thread.sh *), Bash(git pull *), Bash(git fetch *), Bash(*diff-anchors.py *)
+description: Verify whether existing PR review comments have been addressed in code. Checks out the branch, verifies each comment against current code, resolves addressed threads, and produces a structured JSON report compatible with triage-findings. Use when asked to check, triage, or verify PR review feedback.
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-thread.sh *), Bash(git pull *), Bash(git fetch *), Bash(*validate_report.py *), Bash(*generate_review_report.py *)
 ---
 
 # Check PR Comments Workflow
@@ -29,66 +29,92 @@ For every inline comment, read the file at the referenced location and **verify 
 - For comments with multiple sub-items, verify each one independently
 - A comment is only "resolved" if **all** of its sub-items are addressed
 
-## 4. Produce a Structured Report
+## 4. Build Structured Report JSON
 
-The report has three sections: **Resolved Comments**, **Unresolved Comments**, and **Summary**.
+Produce a `report.json` file following the unified report schema (`schemas/review-report.schema.json` v1.1.0).
 
-Items are numbered globally across both sections (e.g. if resolved has 1-6, unresolved starts at 7).
+### Report structure
 
-### Building diff-view links
+```json
+{
+  "schema_version": "1.1.0",
+  "metadata": {
+    "project": "<owner>/<repo>",
+    "date": "YYYY-MM-DD",
+    "branch": "<pr-branch>",
+    "commit": "<HEAD short SHA>",
+    "scope": "PR #<number> comment verification",
+    "reviewers": ["<unique reviewer usernames>"],
+    "report_type": "comment_check",
+    "pr_number": <number>
+  },
+  "executive_summary": {
+    "overall_assessment": "X of Y review comments resolved",
+    "verdict_action": "N comments require attention"
+  },
+  "summary_statistics": {
+    "total_findings": <total>,
+    "severity_counts": { "CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0 },
+    "verdict_counts": { "RESOLVED": <n>, "UNRESOLVED": <n> }
+  },
+  "findings": [
+    {
+      "title": "PR Comment Verification",
+      "category": "pr_comments",
+      "findings": [ ... ]
+    }
+  ]
+}
+```
 
-Compute SHA256 of each file path to construct links into the PR diff view. See the **github** skill (`PR Review Comments > Building diff-view links`) for the `diff-anchors.py` helper script.
+### Finding format
+
+Each review comment becomes one finding:
+
+```json
+{
+  "id": "CMT-001",
+  "severity": "INFO for RESOLVED, assessed severity for UNRESOLVED",
+  "title": "Short description of what the comment requests",
+  "location": "path/to/file.rs:42-56",
+  "description": "What the comment asked for (multi-line OK)",
+  "recommendation": "What was done (RESOLVED) or what to do (UNRESOLVED)",
+  "reviewer": "github-username",
+  "comment_id": 12345678,
+  "comment_url": "https://github.com/<owner>/<repo>/pull/<number>/files#r<commentId>",
+  "thread_id": "GraphQL-node-ID-for-thread-resolution",
+  "verdict": "RESOLVED or UNRESOLVED"
+}
+```
+
+- **Resolved** comments: `severity: "INFO"`, `verdict: "RESOLVED"`. `recommendation` describes what was done.
+- **Unresolved** comments: assessed severity (CRITICAL > HIGH > MEDIUM > LOW), `verdict: "UNRESOLVED"`. `recommendation` describes what still needs to be done.
+- Severity levels: see `severity` skill.
+- `thread_id`: from `gh-list-review-threads.sh` output. Needed for thread resolution in step 7.
+
+### Numbering
+
+Assign sequential IDs: `CMT-001`, `CMT-002`, etc. Order: unresolved first (by severity descending), then resolved.
+
+## 5. Validate Report
 
 ```bash
-../../scripts/diff-anchors.py path/to/file1.rs path/to/file2.rs
+python3 scripts/validate_report.py report.json
 ```
 
-Link format:
-- Single line: `https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<line>`
-- Line range: `https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<start>-R<end>`
+If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid data.
 
-### Resolved Comments and Unresolved Comments sections
+## 6. Render and Present
 
-Both sections use identical item format. The only differences are:
-- Unresolved items include a severity tag `[<SEVERITY>]` in the title
-- The verdict word differs
-
-Severity levels (UPPERCASE): CRITICAL > HIGH > MEDIUM > LOW > INFO (see `severity` skill).
-Verdict values (UPPERCASE): RESOLVED, UNRESOLVED.
-
-Item format:
-
-```markdown
-#### <N>. <Reviewer> #<commentId> -- [<SEVERITY>] <title>
-
-**Review:** [<Reviewer>](https://github.com/<owner>/<repo>/pull/<number>/files#r<commentId>)
-**Location:** [`<file>:<lines>`](https://github.com/<owner>/<repo>/pull/<number>/files#diff-<SHA256>R<start>-R<end>)
-
-<Multi-line description of what the comment asked for.>
-
-**Verdict:** RESOLVED / UNRESOLVED
-
-<Multi-line explanation: how the code addresses the issue, or what remains unaddressed and why.>
+```bash
+python3 scripts/generate_review_report.py report.json --format md
 ```
 
-For resolved items, the `[<SEVERITY>]` tag is omitted from the title.
+Present the rendered markdown report to the user. Optionally generate HTML (`--format html`) for richer display.
 
-### Summary section
+The user can also invoke `triage-findings report.json` for interactive browser-based triage of unresolved comments.
 
-Table covering all comments from both sections, using the same global `<N>`:
-
-```markdown
-| # | Location | Verdict | Comments |
-|---|----------|---------|----------|
-| <N> | `<file>:<lines>` | RESOLVED / UNRESOLVED | <Short explanation> |
-```
-
-- **#**: the same global number `<N>` used in the detailed sections above
-- **Location**: file name and line numbers only (no link)
-- **Verdict**: one word, UPPERCASE -- RESOLVED or UNRESOLVED
-- **Comments**: optional short explanation of the verdict
-
-## 5. Resolve Addressed Threads
+## 7. Resolve Addressed Threads
 
 **Always ask the user for confirmation before resolving any threads.**
 

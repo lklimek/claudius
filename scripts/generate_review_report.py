@@ -9,6 +9,7 @@ import logging
 import sys
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape as xml_escape
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -93,8 +94,12 @@ def render_markdown(data: dict[str, Any]) -> str:
     stats = data.get("summary_statistics", {})
     lines: list[str] = []
 
+    report_type = meta.get("report_type", "code_review")
     scope = meta.get("scope", "N/A")
-    lines.append(f"# Code Review Report: {scope}")
+    if report_type == "comment_check":
+        lines.append(f"# PR Comment Verification: {scope}")
+    else:
+        lines.append(f"# Code Review Report: {scope}")
     lines.append("")
 
     # Metadata table
@@ -134,6 +139,16 @@ def render_markdown(data: dict[str, Any]) -> str:
             )
         lines.append("")
 
+    vc = stats.get("verdict_counts")
+    if vc:
+        lines.append("### Verdict Summary")
+        lines.append("")
+        lines.append("| Verdict | Count |")
+        lines.append("|---------|-------|")
+        for verdict, count in vc.items():
+            lines.append(f"| {verdict} | {count} |")
+        lines.append("")
+
     # Top findings
     top = data.get("top_findings", [])
     if top:
@@ -152,6 +167,7 @@ def render_markdown(data: dict[str, Any]) -> str:
         "code_quality": "Part III: Code Quality & Language Best Practices",
         "dependencies": "Part IV: Dependencies",
         "documentation": "Part V: Documentation",
+        "pr_comments": "Part VI: PR Comment Verification",
     }
     for section in data.get("findings", []):
         cat = section.get("category", "")
@@ -170,6 +186,15 @@ def render_markdown(data: dict[str, Any]) -> str:
             if f.get("impact"):
                 lines.append(f"- **Impact**: {f['impact']}")
             lines.append(f"- **Recommendation**: {f['recommendation']}")
+            if f.get("verdict"):
+                lines.append(f"- **Verdict**: {f['verdict']}")
+            if f.get("reviewer"):
+                url = f.get("comment_url", "")
+                if url and url.startswith(("https://", "http://")):
+                    safe_reviewer = f["reviewer"].replace("]", "\\]")
+                    lines.append(f"- **Reviewer**: [{safe_reviewer}]({url})")
+                else:
+                    lines.append(f"- **Reviewer**: {f['reviewer']}")
             lines.append("")
 
         if section.get("positives"):
@@ -225,7 +250,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Code Review Report: {{ scope }}</title>
+<title>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}: {{ scope }}</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -309,7 +334,7 @@ details summary:hover{color:{{ ACCENT }}}
 <body>
 <div class="header-bar">
   <div class="container">
-    <h1>Code Review Report: {{ scope }}</h1>
+    <h1>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}: {{ scope }}</h1>
     <div class="meta">{{ meta.project }} &middot; {{ meta.date }}{% if meta.branch %} &middot; {{ meta.branch }}{% endif %}</div>
   </div>
 </div>
@@ -418,6 +443,12 @@ details summary:hover{color:{{ ACCENT }}}
     <dt>Description: </dt><dd>{{ f.description }}</dd><br>
     {% if f.impact %}<dt>Impact: </dt><dd>{{ f.impact }}</dd><br>{% endif %}
     <dt>Recommendation: </dt><dd>{{ f.recommendation }}</dd>
+    {% if f.verdict %}
+    <dt>Verdict</dt><dd><span class="badge" style="background:{{ verdict_colors.get(f.verdict, '#7F8C8D') }}">{{ f.verdict }}</span></dd>
+    {% endif %}
+    {% if f.reviewer %}
+    <dt>Reviewer</dt><dd>{% if f.comment_url and f.comment_url.startswith(('https://', 'http://')) %}<a href="{{ f.comment_url }}">{{ f.reviewer }}</a>{% else %}{{ f.reviewer }}{% endif %}</dd>
+    {% endif %}
   </dl>
 </div>
 {% endfor %}
@@ -679,15 +710,18 @@ _TRIAGE_EXTRA_JS = r"""
   // Filter + search + sort
   const sevFilter = document.getElementById("filterSeverity");
   const catFilter = document.getElementById("filterCategory");
+  const verdictFilter = document.getElementById("verdictFilter");
   const searchInput = document.getElementById("filterSearch");
   const sortSelect = document.getElementById("sortBy");
 
   function applyFilters() {
     const sv = sevFilter.value, ct = catFilter.value, q = searchInput.value.toLowerCase();
+    const vd = verdictFilter ? verdictFilter.value : "";
     findings.forEach(f => {
       let show = true;
       if (sv && f.dataset.severity !== sv) show = false;
       if (ct && f.dataset.category !== ct) show = false;
+      if (vd && f.dataset.verdict !== vd) show = false;
       if (q && !f.textContent.toLowerCase().includes(q)) show = false;
       f.style.display = show ? "" : "none";
     });
@@ -708,6 +742,7 @@ _TRIAGE_EXTRA_JS = r"""
 
   if (sevFilter) sevFilter.addEventListener("change", applyFilters);
   if (catFilter) catFilter.addEventListener("change", applyFilters);
+  if (verdictFilter) verdictFilter.addEventListener("change", applyFilters);
   if (searchInput) searchInput.addEventListener("input", applyFilters);
   if (sortSelect) sortSelect.addEventListener("change", () => { applySort(); applyFilters(); });
 
@@ -844,6 +879,7 @@ def _build_html_context(
         ]
 
     return {
+        "report_type": meta.get("report_type", "code_review"),
         "scope": meta.get("scope", meta.get("project", "Review")),
         "meta": meta,
         "executive_summary": data.get("executive_summary", {}),
@@ -890,6 +926,7 @@ def _build_html_context(
             "</", r"<\/"
         ),
         "priority_colors_json": json.dumps(PRIORITY_COLORS).replace("</", r"<\/"),
+        "verdict_colors": {"RESOLVED": GREEN, "UNRESOLVED": RED},
         "triage": triage,
     }
 
@@ -967,9 +1004,12 @@ def render_triage(data: dict[str, Any]) -> str:
     new_finding_div = (
         '<div class="finding finding-{{ f.severity }}" id="finding-{{ f.id }}"'
         ' data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}"'
-        ' data-category="{{ sec.category }}">'
+        ' data-category="{{ sec.category }}" data-verdict="{{ f.verdict | default(\'\', true) }}">'
     )
     triage_template = triage_template.replace(old_finding_div, new_finding_div)
+    assert (
+        new_finding_div in triage_template
+    ), "Template patch failed: finding div not found in triage template"
 
     # Add triage row after each finding's </dl>
     old_dl_close = "  </dl>\n</div>\n{% endfor %}"
@@ -1017,7 +1057,15 @@ def render_triage(data: dict[str, Any]) -> str:
     <option value="code_quality">Code Quality</option>
     <option value="documentation">Documentation</option>
     <option value="dependencies">Dependencies</option>
+    <option value="pr_comments">PR Comments</option>
   </select>
+  {% if report_type == "comment_check" %}
+  <select id="verdictFilter">
+    <option value="">All Verdicts</option>
+    <option value="RESOLVED">Resolved</option>
+    <option value="UNRESOLVED">Unresolved</option>
+  </select>
+  {% endif %}
   <input type="text" id="filterSearch" placeholder="Search findings...">
   <select id="sortBy">
     <option value="">Sort By...</option>
@@ -1033,9 +1081,9 @@ def render_triage(data: dict[str, Any]) -> str:
 """
     # Insert toolbar inside the findings section, after the heading
     triage_template = triage_template.replace(
-        '{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}',
-        '{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}\n'
-        '{% if loop.first %}\n' + toolbar_html + '{% endif %}',
+        "{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}",
+        "{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}\n"
+        "{% if loop.first %}\n" + toolbar_html + "{% endif %}",
     )
 
     env = Environment(autoescape=True)
@@ -1614,6 +1662,31 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         if impact:
             elements.append(Paragraph(f"<b>Impact:</b> {impact}", s["finding_body"]))
         elements.append(Paragraph(f"<b>Recommendation:</b> {rec}", s["finding_body"]))
+        verdict = f.get("verdict", "")
+        if verdict:
+            v_clr = GREEN if verdict == "RESOLVED" else RED
+            elements.append(
+                Paragraph(
+                    f'<b>Verdict:</b> <font color="{v_clr}"><b>{xml_escape(verdict)}</b></font>',
+                    s["finding_body"],
+                )
+            )
+        reviewer = f.get("reviewer", "")
+        if reviewer:
+            comment_url = f.get("comment_url", "")
+            if comment_url and comment_url.startswith(("https://", "http://")):
+                elements.append(
+                    Paragraph(
+                        f'<b>Reviewer:</b> <a href="{xml_escape(comment_url, {chr(34): "&quot;"})}" color="{ACCENT}">{xml_escape(reviewer)}</a>',
+                        s["finding_body"],
+                    )
+                )
+            else:
+                elements.append(
+                    Paragraph(
+                        f"<b>Reviewer:</b> {xml_escape(reviewer)}", s["finding_body"]
+                    )
+                )
         return KeepTogether(elements)
 
     # --- Page header/footer ---

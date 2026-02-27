@@ -18,16 +18,25 @@ from pathlib import Path
 try:
     import jsonschema
 except ImportError:
-    print("Error: python3-jsonschema is required. Install with: apt install python3-jsonschema", file=sys.stderr)
+    print(
+        "Error: python3-jsonschema is required. Install with: apt install python3-jsonschema",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
-DEFAULT_SCHEMA = Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
+DEFAULT_SCHEMA = (
+    Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
+)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate report JSON against schema.")
     parser.add_argument("report", help="Path to report JSON file")
-    parser.add_argument("--schema", default=str(DEFAULT_SCHEMA), help="Path to JSON schema (default: schemas/review-report.schema.json)")
+    parser.add_argument(
+        "--schema",
+        default=str(DEFAULT_SCHEMA),
+        help="Path to JSON schema (default: schemas/review-report.schema.json)",
+    )
     args = parser.parse_args()
 
     try:
@@ -46,14 +55,22 @@ def main() -> int:
         return 2
 
     validator_cls = jsonschema.validators.validator_for(schema)
-    validator = validator_cls(schema)
+    # Enable format validation (e.g., "uri", "date", "date-time") so that
+    # format keywords are enforced, not just treated as annotations.
+    try:
+        checker = jsonschema.FormatChecker()
+    except Exception:
+        checker = None
+    validator = validator_cls(schema, format_checker=checker)
     errors = sorted(validator.iter_errors(report), key=lambda e: list(e.absolute_path))
 
     if not errors:
         print(f"Valid: {args.report}")
         return 0
 
-    print(f"Validation failed: {len(errors)} error(s) in {args.report}", file=sys.stderr)
+    print(
+        f"Validation failed: {len(errors)} error(s) in {args.report}", file=sys.stderr
+    )
     for i, error in enumerate(errors, 1):
         path = ".".join(str(p) for p in error.absolute_path) or "(root)"
         print(f"  {i}. [{path}] {error.message}", file=sys.stderr)
