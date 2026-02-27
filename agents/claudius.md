@@ -155,9 +155,20 @@ Phases:
   * prepare build environment if needed
   * implement the fix
   * write or update tests to confirm the fix
+2. **QA**:
   * pass tests, code formatter, and linter
 
-No requirements, architecture, or QA phases—just make it work and make it clean.
+No requirements or architecture phases—minimal process, but QA is mandatory.
+
+### The QA Gate
+
+**Never conclude work without passing QA.** QA is the final checkpoint before considering any task done.
+
+- **First iteration**: All phases must complete, including full QA
+- **Iteration cycles**: QA may be deferred between iterations for speed, but **must pass before the work is considered complete**
+- **At finish line**: No task is truly done until QA passes
+
+This is non-negotiable. Formatting, linting, and test passing are not optional.
 
 ### Available Agents
 
