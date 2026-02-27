@@ -163,30 +163,25 @@ most detailed description and union of tags.
 - Reassign unified IDs: `SEC-001`, `SEC-002`, ... for security; `PROJ-001`, ... for project;
   `RUST-001`/`PY-001`/`GO-001`/`FE-001`, ... for code quality; `DOC-001`, ... for documentation
 - Merge agent sections with the same category into unified sections
+- **INTENTIONAL downgrade**: For each finding, `grep -n 'INTENTIONAL'` in the source file
+  at the finding's location. If an `INTENTIONAL(...)` comment exists on or near the flagged
+  lines, downgrade the finding's severity to INFO. These comments are added by previous
+  triage runs accepting the risk and represent deliberate engineering decisions.
 - Rank by severity, then by impact
 
 ### 5d. Build structured report (JSON)
 
-Emit a `report.json` file conforming to the schema at `schemas/review-report.schema.json`.
-This is the **primary output** — all renderers consume this format.
+Emit a `report.json` file. This is the **primary output** — all renderers consume this format.
 
-The JSON must include:
-- `schema_version`: `"1.0.0"`
-- `metadata`: project, date, branch, commit, scope, reviewers
-- `executive_summary`: overall_assessment, summary_text, verdict_text, verdict_action
-- `summary_statistics`: total_findings, redundancy_ratio, critical_count, severity_counts,
-  severity_category_matrix
-- `top_findings`: top 5 (or fewer) findings requiring immediate action
-- `findings`: array of section objects, each with `title`, `category`
-  (`security|project|code_quality|dependencies|documentation`), `findings[]`, and
-  optional `positives` text
-- `dependencies`: dependency audit results (if reviewed)
-- `agent_stats`: per-agent unique vs redundant counts
-- `remediation`: priority buckets (before_merge, before_production, post_deployment)
-  with `finding_ids` arrays
+**Before writing the report**, read the schema to learn the exact structure:
 
-Each finding: `id`, `severity`, `title`, `tags[]`, `location`, `description`,
-`impact`, `recommendation`.
+```bash
+cat schemas/review-report.schema.json
+```
+
+This is **mandatory** — do NOT guess field types or shapes from memory. The schema uses
+`additionalProperties: false` everywhere, so any extra or mistyped key causes validation
+failure. Omit optional top-level fields entirely rather than setting them to null.
 
 ### 5e. Validate report against schema
 

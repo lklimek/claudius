@@ -1,6 +1,6 @@
 {
   "name": "claudius",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Collection of specialized development agents and skills for Claude Code",
   "author": {
     "name": "lklimek",

@@ -44,6 +44,22 @@ finding in a browser UI, and decisions are written back to the report JSON.
    `recommendation` fields to apply the recommended fixes. Work through them
    one at a time, verifying each fix before proceeding to the next.
 
+6. For findings marked `defer`: add a `TODO` comment at the finding's location
+   referencing the finding ID and title:
+   ```
+   // TODO(SEC-004): BannerHandle is Send+Sync but read-modify-write is not atomic
+   ```
+   Use the file's native comment syntax (`//`, `#`, `<!-- -->`, etc.).
+
+7. For findings marked `accept_risk`: add an `INTENTIONAL` comment at the
+   finding's location documenting the accepted risk and rationale:
+   ```
+   // INTENTIONAL(SEC-005): Relaxed ordering adequate for single-threaded UI model
+   ```
+   Include the rationale from the triage decision if provided, otherwise
+   summarize from the finding's description. Future reviews that encounter
+   an `INTENTIONAL` comment will downgrade the finding to INFO severity.
+
 ## Output
 
 The report JSON file is updated in-place with a `triage` field containing all
