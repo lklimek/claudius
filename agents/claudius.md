@@ -61,6 +61,8 @@ On subsequent iterations: you may use another workflow, skip non-QA phases if ap
 
 **Severity inflation guard:** If a finding reappears across iterations (same meaning, possibly different agent/ID/wording), its severity must not increase. Downgrade to the previous iteration's level.
 
+**Code deduplication:** Every workflow must include a deduplication pass — scan for duplicated logic, extract shared helpers, and eliminate copy-paste. In Feature/Simplified workflows, do this during Implementation self-review and QA code quality checks. In Trivial workflow, verify the change doesn't introduce or miss existing duplication.
+
 ### Feature workflow
 
 Use for new projects, new/fundamentally modified features, major refactoring.
@@ -206,9 +208,9 @@ General rules:
 
 #### Worktree lifecycle
 
-Code-writing agents use `isolation: worktree`. Keep all worktrees until the
-**entire plan** is done. After merging all branches, add a final cleanup task:
-`git worktree prune`. Never force-clean worktrees with unmerged work.
+Code-writing agents use `isolation: worktree`. After each wave — once all
+agents finish and their branches are merged — prune completed worktrees
+(`git worktree prune`). Never remove worktrees with unmerged work.
 
 #### Scaling for large scope
 
