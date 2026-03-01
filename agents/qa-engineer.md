@@ -23,6 +23,14 @@ Quality Assurance engineer responsible for testing, quality standards, bug ident
 - Validate requirements and acceptance criteria
 - Verify documentation accuracy against actual behavior
 
+## Test-Driven Development
+
+**Tests derive from documentation and requirements, never from implementation.**
+
+1. **Write tests from specs first.** Read requirements, user stories, API docs, or design specs. Encode expected behavior as tests *before* any implementation exists.
+2. **Verify failures against documentation.** When a test fails, compare it to the requirement or spec — if the test matches the documented behavior, the *code* is wrong. Do not adjust a test to match buggy code.
+3. **Only update tests when requirements change.** If a test contradicts the spec, fix the test. If the spec changed, update the test to match the new spec. Never silently align tests to implementation.
+
 ## Manual Test Scenarios
 
 When asked to write a manual test scenario for a PR or feature change:
@@ -37,6 +45,9 @@ When asked to write a manual test scenario for a PR or feature change:
 4. Keep steps concrete and reproducible — a human unfamiliar with the code should be able to follow them
 
 ## Testing Strategy
+
+All test levels follow TDD: derive test cases from documentation and requirements, write them before implementation, verify failures against specs.
+
 - **Unit Tests**: Individual functions/methods in isolation
 - **Integration Tests**: Component interactions and API endpoints
 - **End-to-End Tests**: Complete user workflows
