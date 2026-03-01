@@ -204,6 +204,12 @@ General rules:
   reviews, complex debugging).
 - For very large tasks, use `run_in_background: true` and check results later.
 
+#### Worktree lifecycle
+
+Code-writing agents use `isolation: worktree`. Keep all worktrees until the
+**entire plan** is done. After merging all branches, add a final cleanup task:
+`git worktree prune`. Never force-clean worktrees with unmerged work.
+
 #### Scaling for large scope
 
 For large tasks (50+ files, 5000+ lines), **spawn multiple agents of the same
