@@ -79,6 +79,17 @@ Pre-1.0 rules:
 - **Minor** (0.x.0): new agents/skills, new frontmatter fields, significant behavior changes
 - **Patch** (0.0.x): bug fixes, doc corrections, minor wording changes
 
+## Required Skills (plugin-dev)
+
+Before modifying plugin components, load the matching `plugin-dev` skill from [claude-plugins-official](https://github.com/anthropics/claude-plugins-official):
+
+- Before modifying an **agent** → load `plugin-dev:agent-development`
+- Before modifying a **skill** → load `plugin-dev:skill-development`
+- Before modifying **hooks** → load `plugin-dev:hook-development`
+- Before modifying **plugin structure or plugin.json** → load `plugin-dev:plugin-structure`
+- After creating/modifying an agent → run `plugin-dev:agent-creator` or `plugin-dev:skill-reviewer` to validate
+- After modifying plugin components → run `plugin-dev:plugin-validator` to check structure
+
 ## Temporary Files
 
 Use `tmp/` (gitignored) for eval workspaces and transient artifacts.

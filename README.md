@@ -49,6 +49,17 @@ claude --plugin-dir /path/to/claudius
 | `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash | — |
 | `ux-designer` | User flows, wireframes, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch | — |
 
+### Optional plugin dependencies
+
+Some agents delegate to skills from external plugins for specialized capabilities. These plugins are **not required** — agents work without them — but installing them unlocks additional quality.
+
+| Agent | External Skill | Plugin | Benefit |
+|-------|---------------|--------|---------|
+| `frontend-developer` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
+| `rust-developer` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
+
+> **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
+
 ## Skills
 
 | Name | Description | Allowed Tools |
