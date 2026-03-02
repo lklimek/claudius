@@ -79,6 +79,8 @@ Bump version in `plugin.json` before each commit. Follow [SemVer 2](https://semv
 - **Minor** (0.x.0): new agents/skills, new frontmatter fields, significant behavior changes
 - **Patch** (0.0.x): bug fixes, doc corrections, minor wording changes
 
+Update `CHANGELOG.md` with every version bump. Follow [Keep a Changelog](https://keepachangelog.com/) format.
+
 ## Required Skills (plugin-dev)
 
 Before modifying plugin components, load the matching `plugin-dev` skill from [claude-plugins-official](https://github.com/anthropics/claude-plugins-official):
