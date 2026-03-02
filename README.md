@@ -55,12 +55,15 @@ claude --plugin-dir /path/to/claudius
 |------|-------------|---------------|
 | `check-pr-comments` | Verify that PR review comments have been addressed | Read, Grep, Glob, Bash(gh pr view \*), Bash(gh pr checkout \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-list-review-threads.sh \*), Bash(\*gh-resolve-review-thread.sh \*), Bash(git pull \*), Bash(git fetch \*) |
 | `ci-loop` | Autonomous CI monitoring and fix loop | Read, Grep, Glob, Edit, Write, Bash(gh run list \*), Bash(gh run view \*), Bash(gh run watch \*), Bash(git \*) |
+| `grumpy-review` | Multi-agent code review with consolidated severity-ranked report | Read, Grep, Glob, Write, Edit, Bash(git \*), Task |
 | `github` | GitHub workflow guidelines covering git and gh usage | _(inherited)_ |
 | `review-dependency` | Security-focused dependency update review | Read, Grep, Glob, WebFetch, WebSearch, Bash(git diff \*), Bash(git clone --depth=\* --config core.hooksPath=/dev/null -- \*), Bash(gh api /advisories\*) |
 | `review-loop` | Autonomous peer review feedback loop | Read, Grep, Glob, Edit, Write, Bash(\*gh-request-reviewer.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(git \*) |
 | `triage-findings` | Interactive finding triage — classify in browser, decisions feed back to Claude | Read, Write, Edit, Bash(python3 \*), Bash(kill \*), Glob, Grep |
 | `review-pr` | Audit and review pull requests | Read, Grep, Glob, Write, Bash(gh pr view \*), Bash(gh pr comment \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-post-review.sh \*), Bash(\*gh-pr-base-sha.sh \*), Bash(git \*) |
 | `rust-best-practices` | Rust programming checklists and reference material | Read, WebFetch |
+| `severity` | Consistent severity classification (CRITICAL–INFO) for review findings | _(preloaded)_ |
+| `merge-base` | Careful merge of remote base branch into current feature branch | _(inherited)_ |
 | `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series | WebFetch, WebSearch |
 
 ### Recommended permissions
@@ -68,6 +71,31 @@ claude --plugin-dir /path/to/claudius
 The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively — which defeats the purpose of autonomous operation.
 
 Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
+
+## Skill: `grumpy-review` + `triage-findings`
+
+A two-phase code review workflow: automated multi-agent review followed by interactive human triage.
+
+**Phase 1 — Review.** `/grumpy-review` spawns parallel specialist agents (security, code quality, project consistency, language-specific) that independently audit your branch. Findings are deduplicated, severity-ranked, and consolidated into a structured `report.json` with an HTML/Markdown report.
+
+<p align="center">
+  <img src="assets/triage-report-summary.png" alt="Review report summary with severity matrix and verdict" width="700" />
+</p>
+
+**Phase 2 — Triage.** `/triage-findings report.json` starts a local web server and opens a browser UI where you classify each finding:
+
+- **Fix** — Claude applies the recommended fix to code
+- **Accept Risk** — adds an `INTENTIONAL(...)` comment; future reviews auto-downgrade the finding to INFO
+- **Defer** — adds a `TODO` comment with the finding ID
+- **False Positive / Duplicate** — dismissed with rationale
+
+<p align="center">
+  <img src="assets/triage-findings.png" alt="Interactive triage UI with Fix, Accept Risk, and Defer decisions" width="700" />
+</p>
+
+After you submit decisions, Claude reads the updated report and acts on them — applying fixes, inserting comments, and summarizing what was done.
+
+**Why this matters:** Code reviews produce noise. Not every finding deserves immediate action. The triage step puts a human in the loop *before* any code changes happen, so you control exactly what gets fixed, deferred, or accepted. The `INTENTIONAL` comment mechanism creates a persistent record that carries forward across reviews.
 
 ## Skill: `security-best-practices`
 
