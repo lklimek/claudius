@@ -6,7 +6,7 @@ description: >
   Use after grumpy-review or check-pr-comments to let the user decide what to fix, accept, or defer.
 user-invocable: true
 argument-hint: <path to report.json>
-allowed-tools: Read, Write, Edit, Bash(python3 *), Bash(fuser *), Glob, Grep
+allowed-tools: Read, Write, Edit, Bash(*validate_report.py *), Bash(*triage_server.py *), Bash(fuser -k */tcp), Glob, Grep
 ---
 
 # Interactive Finding Triage
