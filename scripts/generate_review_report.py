@@ -664,7 +664,8 @@ _TRIAGE_EXTRA_CSS = """
 .triage-row{display:flex;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap}
 .triage-row select,.triage-row input[type=text]{
   padding:3px 6px;border:1px solid {{ BORDER }};border-radius:4px;font-size:.82rem}
-.triage-row input[type=text]{flex:1;min-width:120px}
+.triage-row select{width:auto;max-width:140px;flex-shrink:0}
+.triage-row input[type=text]{flex:1;min-width:200px}
 .toast{position:fixed;top:0;left:0;width:100%;padding:1rem 3rem 1rem 1.5rem;color:#fff;
   font-size:.95rem;z-index:9999;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2);
   transform:translateY(-100%);transition:transform .3s ease}
@@ -676,6 +677,16 @@ _TRIAGE_EXTRA_CSS = """
   line-height:1;padding:0 .3rem}
 .toast .toast-dismiss:hover{opacity:1}
 #submitBtn,#submitBtnBottom,#submitBtnEnd{display:none}
+/* Decision explanation hints */
+.decision-hint{width:100%;font-size:.78rem;line-height:1.35;color:{{ TEXT_MUTED }};
+  max-height:0;overflow:hidden;opacity:0;
+  transition:max-height .2s ease,opacity .15s ease}
+.decision-hint.visible{max-height:3rem;opacity:1}
+.decision-hint[data-action="fix"]{color:{{ ACCENT }}}
+.decision-hint[data-action="accept_risk"]{color:{{ AMBER }}}
+.decision-hint[data-action="defer"]{color:{{ TEXT_MUTED }}}
+.decision-hint[data-action="false_positive"]{color:{{ GREEN }}}
+.decision-hint[data-action="duplicate"]{color:{{ GREEN }}}
 """
 
 _TRIAGE_EXTRA_JS = r"""
@@ -693,19 +704,41 @@ _TRIAGE_EXTRA_JS = r"""
   const topMap = {};
   topSelects.forEach(sel => { topMap[sel.dataset.findingId] = sel; });
 
+  // Decision explanation hints
+  const DECISION_HINTS = {
+    "fix":            "Claude will apply the recommended fix to the code.",
+    "accept_risk":    "Adds INTENTIONAL comment to code. Future reviews downgrade to INFO.",
+    "defer":          "Adds TODO comment to code. Issue postponed for later.",
+    "false_positive": "Finding dismissed \u2014 no code changes.",
+    "duplicate":      "Dismissed as already reported \u2014 no code changes."
+  };
+  function updateHint(selectEl) {
+    const row = selectEl.closest(".triage-row");
+    const hint = row ? row.querySelector(".decision-hint") : null;
+    if (!hint) return;
+    const text = DECISION_HINTS[selectEl.value] || "";
+    hint.textContent = text;
+    hint.setAttribute("data-action", selectEl.value);
+    hint.classList.toggle("visible", !!text);
+  }
+
   // Synchronize: top → detail and detail → top
   topSelects.forEach(sel => {
     sel.addEventListener("change", () => {
       const d = detailMap[sel.dataset.findingId];
-      if (d) d.value = sel.value;
+      if (d) { d.value = sel.value; updateHint(d); }
     });
   });
   findings.forEach(f => {
     const sel = f.querySelector(".triage-action");
-    if (sel) sel.addEventListener("change", () => {
-      const t = topMap[f.dataset.findingId];
-      if (t) t.value = sel.value;
-    });
+    if (sel) {
+      sel.addEventListener("change", () => {
+        const t = topMap[f.dataset.findingId];
+        if (t) t.value = sel.value;
+        updateHint(sel);
+      });
+      updateHint(sel); // init on page load
+    }
   });
 
   // Filter + search + sort
@@ -758,6 +791,7 @@ _TRIAGE_EXTRA_JS = r"""
       const sel = f.querySelector(".triage-action");
       if (sel) {
         sel.value = action;
+        updateHint(sel);
         // Sync to top table
         const t = topMap[f.dataset.findingId];
         if (t) t.value = action;
@@ -1024,8 +1058,9 @@ def render_triage(data: dict[str, Any]) -> str:
         '      <option value="defer">Defer</option>\n'
         '      <option value="false_positive">False Positive</option>\n'
         '      <option value="duplicate">Duplicate</option>\n'
-        "    </select>\n"
+        '    </select>\n'
         '    <input type="text" class="triage-rationale" placeholder="Rationale...">\n'
+        '    <span class="decision-hint" aria-live="polite"></span>\n'
         "  </div>\n"
         "</div>\n{% endfor %}"
     )
