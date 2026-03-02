@@ -138,6 +138,8 @@ For PR-level (non-diff) comments: `gh pr view <number> --json comments --jq '.co
 
 Check for issue templates (`git ls-tree HEAD --name-only -r .github/ | grep -i issue_template`) before creating. Always append attribution footer.
 
+**Feature/enhancement issues must include a `### User Story` section** — an informal story describing what the user can achieve (no technical details). Start with "As a **\<persona\>**, I want to ... so that ...". Multiple personas are fine. Place user stories before technical details.
+
 ## Safety Rules
 
 1. **Always ask before publishing anything to GitHub** — commits, pushes, PRs, issues, comments, reviews. Ask for confirmation before any state-changing action.
