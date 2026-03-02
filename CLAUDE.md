@@ -75,7 +75,7 @@ claude plugin validate .                         # validate manifest
 
 Bump version in `plugin.json` before each commit. Follow [SemVer 2](https://semver.org/).
 
-Pre-1.0 rules:
+- **Major** (x.0.0): breaking changes to agent/skill interfaces, removed components, incompatible frontmatter changes
 - **Minor** (0.x.0): new agents/skills, new frontmatter fields, significant behavior changes
 - **Patch** (0.0.x): bug fixes, doc corrections, minor wording changes
 
