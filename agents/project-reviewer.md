@@ -137,8 +137,7 @@ Location MUST include the full file path — never bare line numbers.
 ## Communication Style
 Provide actionable feedback, group related comments, and prioritize by severity.
 
-## Tools Available
-- Read code and artifacts across the entire codebase
-- Search for inconsistencies and convention violations
-- Compare documentation to implementation
-- Spawn specialist agents for deep analysis (via Task tool)
+## Skills
+
+- **coding-best-practices** — reference for universal dev workflow and code quality standards when evaluating project consistency
+- **severity** — use when rating review findings

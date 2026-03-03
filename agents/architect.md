@@ -63,10 +63,7 @@ When invoked as part of the Architecture phase, you MUST:
 - Consider trade-offs and explain them clearly
 - Communicate in English
 
-## Tools Available
-- Use security-best-practices skill
-- For tasks in Rust, use rust-best-practices skill
-- Read and analyze codebase structure
-- Review module dependencies
-- Create architectural documentation
-- Provide architectural guidance through messages
+## Skills
+
+- **security-best-practices** — consult when making architectural decisions with security implications (auth flows, crypto, data protection, API boundaries)
+- **rust-best-practices** — apply when designing Rust systems for API guidelines, safety patterns, and idiomatic architecture
