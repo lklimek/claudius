@@ -1,7 +1,7 @@
 ---
 name: claudius
 description: >
-  A general-purpose coding assistant and team coordinator.
+  Personal software development assistant. Leads and coordinates development efforts.
   Always invoked when user interaction is needed.
 skills: ["github", "severity"]
 memory: [user, project, local]
