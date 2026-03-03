@@ -93,21 +93,56 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 
 ### ghsu — Elevated GitHub Access
 
-Two-token model: Claude operates with a read-only GitHub token by default. When a command needs write access, `ghsu` (GitHub Sudo) re-executes it with a stored read-write token — but only after the user explicitly approves via a GUI popup or terminal prompt.
+**Why this exists:** Claude Code authenticates to GitHub via `gh` (GitHub CLI). By default, `gh auth login` sets a single token used for all operations — both reads and writes. That means Claude can push to any repo, merge PRs, or delete branches without asking. ghsu replaces this with a **two-token model**: Claude's default token is read-only, and write operations require explicit human approval each time.
 
-Supports **per-organization tokens** — each GitHub org/owner gets its own encrypted token. The target org is auto-detected from `-R owner/repo` flags or git remotes.
+**How it works:**
 
-**Prerequisites:** `pip install cryptography`
+1. Claude operates day-to-day with a **read-only** GitHub token (clone, fetch, view PRs, read issues).
+2. When a command needs write access (push, merge, create PR), GitHub returns 403 Forbidden.
+3. Claude re-runs the failed command through `ghsu.py <command>`.
+4. ghsu detects the target org, shows a GUI dialog (or terminal prompt) with the exact command, and waits for human approval.
+5. If approved, ghsu decrypts that org's **read-write** token and re-executes with `GH_TOKEN` set. The write token exists in memory only for the duration of that single command.
 
-**Setup** (per org, per machine):
+Supports **per-organization tokens** — each GitHub org/owner gets its own encrypted read-write token. The target org is auto-detected from `-R owner/repo` flags or git remotes.
+
+**Prerequisites:**
+
+- `pip install cryptography`
+- `gh auth setup-git` — configures git's credential helper so HTTPS remotes work with `gh`
+- Git remotes must use HTTPS (`https://github.com/…`), not SSH — update with:
+  `git remote set-url origin https://github.com/OWNER/REPO.git`
+
+**Step 1 — Log in to `gh` with a read-only token:**
 
 ```bash
-python3 scripts/ghsu.py --setup dashpay    # store token for dashpay org
-python3 scripts/ghsu.py --setup lklimek    # store token for lklimek org
-python3 scripts/ghsu.py --list             # see stored orgs
+gh auth login
 ```
 
-**How it works:** When Claude encounters a 403 Forbidden error, it re-runs the failed command through `ghsu.py <command>`. ghsu detects the target org, shows a dialog with the exact command and org, and if approved, decrypts that org's token and re-executes with `GH_TOKEN` set.
+When prompted, select **GitHub.com → HTTPS → Paste an authentication token**. Use a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) with **read-only** repository permissions (Contents: Read, Metadata: Read). This becomes Claude's default token — it can browse code and PRs but cannot modify anything.
+
+Then configure git to use this token for HTTPS operations:
+
+```bash
+gh auth setup-git
+```
+
+**Step 2 — Generate a read-write token and store it with ghsu:**
+
+Create a second [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) scoped to the target organization with **read-write** permissions:
+
+- **Contents:** Read and write (push, create branches)
+- **Pull requests:** Read and write (create, merge, comment)
+- **Issues:** Read and write (create, comment, label)
+- **Workflows:** Read and write (if CI is needed)
+- Add other permissions as needed for your workflow.
+
+Then store it with ghsu (per org, per machine):
+
+```bash
+python3 scripts/ghsu.py --setup dashpay    # store write token for dashpay org
+python3 scripts/ghsu.py --setup lklimek    # store write token for lklimek org
+python3 scripts/ghsu.py --list             # see stored orgs
+```
 
 | Option | Description |
 |--------|-------------|
