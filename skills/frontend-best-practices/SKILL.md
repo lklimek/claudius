@@ -15,7 +15,7 @@ allowed-tools: Read
 - **Testing**: Vitest or Jest with Testing Library, minimum 80% coverage
 - **Accessibility**: axe-core automated checks, manual keyboard testing
 - **Performance**: Lighthouse CI, bundle size budgets
-- **Documentation**: JSDoc for public APIs and complex logic
+- **Documentation**: One-line JSDoc for every public function; expand only for complex logic
 
 ## Best Practices
 - Semantic HTML elements over generic divs

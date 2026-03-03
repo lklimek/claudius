@@ -13,7 +13,7 @@ allowed-tools: Read
 - **Code Style**: PEP 8, use black/ruff for formatting
 - **Type Hints**: typing module for all public APIs
 - **Testing**: pytest with minimum 80% coverage
-- **Documentation**: Docstrings for all public functions/classes (Google/NumPy/Sphinx style)
+- **Documentation**: One-line docstring for every public function/class; expand only when non-obvious (Google/NumPy/Sphinx style)
 - **Error Handling**: Specific exception types, proper error messages
 - **Dependencies**: poetry or pip-tools
 - **Virtual Environments**: Always use virtual environments

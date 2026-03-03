@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-03-03
+
+### Changed
+- Tighten comment brevity rule in `coding-best-practices`: 1 line great, 2 good, 3 mediocre
+- Soften doc-comment rules across all language best-practices skills: one-line doc-comment always, expand only when non-obvious
+
 ## [1.3.1] - 2026-03-03
 
 ### Fixed

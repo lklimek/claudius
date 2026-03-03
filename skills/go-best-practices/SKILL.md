@@ -13,7 +13,7 @@ allowed-tools: Read
 - **Code Style**: gofmt/goimports enforced
 - **Linting**: golangci-lint with comprehensive checks
 - **Testing**: go test with table-driven tests
-- **Documentation**: Godoc comments for all exported identifiers
+- **Documentation**: One-line Godoc comment for every exported identifier; expand only when non-obvious
 - **Error Handling**: Explicit with error wrapping (fmt.Errorf with %w)
 - **Modules**: Go modules for dependency management
 - **Context**: context.Context for cancellation and timeouts

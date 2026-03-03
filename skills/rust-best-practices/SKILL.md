@@ -29,7 +29,7 @@ When you need detailed guidance on a specific item, read the corresponding refer
 - **Code Style**: rustfmt with default settings
 - **Linting**: clippy with `deny(warnings)` in CI
 - **Testing**: cargo test with doc tests
-- **Documentation**: `///` comments for all public APIs
+- **Documentation**: One-line `///` comment for every public item; expand only when non-obvious
 - **Error Handling**: Result<T, E> with custom error types or thiserror/anyhow
 - **Dependencies**: Minimal, prefer std when possible
 - **Async**: tokio for async runtime when needed
@@ -143,8 +143,8 @@ For detailed descriptions of any M-prefixed item, read `references/microsoft-gui
 ### Documentation
 - [ ] **M-NO-TOMBSTONES** — Never add comments explaining removed code; git history is the record
 - [ ] **M-FIRST-DOC-SENTENCE** — First doc sentence is one line, ~15 words
-- [ ] **M-MODULE-DOCS** — All public modules have `//!` documentation
-- [ ] **M-CANONICAL-DOCS** — Documentation has canonical sections (Examples, Errors, Panics, Safety)
+- [ ] **M-MODULE-DOCS** — Non-trivial public modules have `//!` documentation
+- [ ] **M-CANONICAL-DOCS** — Complex APIs have canonical doc sections (Examples, Errors, Panics, Safety)
 - [ ] **M-DOC-INLINE** — Mark `pub use` items with `#[doc(inline)]`
 
 ### AI
@@ -184,7 +184,7 @@ For detailed descriptions of any C-prefixed item, read `references/api-guideline
 
 ### Documentation (C-*)
 - [ ] **C-CRATE-DOC** — Crate-level docs are thorough and include examples
-- [ ] **C-EXAMPLE** — All public items have a rustdoc example
+- [ ] **C-EXAMPLE** — Non-trivial public items have a rustdoc example
 - [ ] **C-QUESTION-MARK** — Examples use `?`, not `try!`, not `unwrap`
 - [ ] **C-FAILURE** — Function docs include Error, Panic, and Safety sections
 - [ ] **C-LINK** — Prose contains hyperlinks to relevant things
