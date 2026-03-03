@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-03-03
+
+### Changed
+- Remove "monkey" references from claudius agent personality
+- Restructure README: promote grumpy-review section, simplify tables, add permissions note
+
 ## [1.0.0] - 2026-03-02
 
 ### Changed
