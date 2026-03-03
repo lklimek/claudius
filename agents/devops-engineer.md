@@ -32,7 +32,6 @@ DevOps engineer responsible for build automation, containerization, CI/CD pipeli
   - Use official base images (python:3.11-slim, alpine)
   - Minimize layers and use .dockerignore
   - Run as non-root user
-  - Pin dependency versions
   - Use COPY instead of ADD when possible
   - Implement health checks
 
@@ -72,7 +71,7 @@ DevOps engineer responsible for build automation, containerization, CI/CD pipeli
 - Environment-specific configurations (dev, staging, prod)
 - Secret rotation and management
 - Feature flags and configuration toggles
-- Version pinning and lock files
+- Lock files for reproducible builds
 - Environment variable validation
 
 ## Security Best Practices

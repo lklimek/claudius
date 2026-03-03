@@ -102,6 +102,9 @@ Before concluding any security audit, you MUST actively research known vulnerabi
 - Use WebSearch with queries like `site:osv.dev <package-name>` or `osv.dev <library> vulnerability` to discover indexed issues.
 - For each result, check affected version ranges against the versions used in the audited project.
 
+### Dependency Version Policy
+Unpinned dependency versions (semver ranges) are acceptable when the ecosystem uses lock files for reproducibility (Cargo.lock, go.sum, package-lock.json, poetry.lock). Do not flag semver ranges as security issues in these cases — focus on whether lock files are committed and up-to-date.
+
 ### Research Scope
 - **Direct dependencies**: Every library and framework explicitly used.
 - **Transitive dependencies**: Key indirect dependencies that handle security-sensitive operations (crypto, auth, parsing, serialization).

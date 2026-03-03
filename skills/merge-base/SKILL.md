@@ -1,10 +1,8 @@
 ---
 name: merge-base
 description: >
-  Careful merge of the remote base branch into the current feature branch. Use when the user wants
-  to sync their branch with main/master, merge upstream changes, update from base, or rebase-via-merge.
-  Also use when the user says "merge base", "pull from main", "sync with main", "update branch",
-  or any variation of incorporating base branch changes into the current working branch.
+  Merge base branch into feature branch with conflict resolution and behavioral analysis.
+  Use for large merges or branches with conflicts.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git branch *), Bash(git rev-parse *), Bash(git fetch *), Bash(git pull *), Bash(git symbolic-ref refs/remotes/origin/HEAD), Bash(git merge-base *), Bash(git merge *), Bash(git merge --abort), Bash(git log *), Bash(git diff *), Bash(git add *), Bash(git commit *), Bash(git status), Bash(git status *), Bash(gh pr view *)
 ---
 

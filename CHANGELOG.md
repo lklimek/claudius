@@ -4,10 +4,17 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
-## [1.1.1] - 2026-03-03
+## [1.2.0] - 2026-03-03
 
 ### Added
-- No-tombstone-comments rule to all developer agents, project-reviewer, and rust-best-practices skill (M-NO-TOMBSTONES) — never comment on why removed code was removed
+- `coding-best-practices` skill — shared coding rules extracted from all developer agents (workflow discipline, code quality tool timing, review output format, security awareness, worktree discipline, cross-cutting rules)
+- Meaningful-comments-only rule in `coding-best-practices` skill: don't comment self-explanatory code or simple one-liners
+
+### Changed
+- All developer agents now preload `coding-best-practices` skill instead of duplicating shared sections
+- Removed ~1,300 tokens of duplicated boilerplate from developer agents
+- Removed version pinning requirements from developer agents and devops-engineer — lock files handle reproducibility
+- Added lock-file-aware dependency policy to project-reviewer and security-engineer: unpinned semver ranges are acceptable when ecosystem uses lock files (Cargo.lock, go.sum, package-lock.json)
 
 ## [1.1.0] - 2026-03-03
 
@@ -156,7 +163,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
-[1.1.1]: https://github.com/lklimek/claudius/compare/v1.1.0...v1.1.1
+[1.2.0]: https://github.com/lklimek/claudius/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/lklimek/claudius/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/lklimek/claudius/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/lklimek/claudius/compare/v0.16.2...v1.0.0

@@ -159,6 +159,7 @@ automatically. Only `github` is preloaded on Claudius.
 |---|---|
 | `github` | claudius |
 | `severity` | claudius, project-reviewer, security-engineer, rust-developer, python-developer, go-developer, frontend-developer |
+| `coding-best-practices` | rust-developer, python-developer, go-developer, frontend-developer, project-reviewer |
 | `security-best-practices` | security-engineer, architect, devops-engineer, qa-engineer |
 | `rust-best-practices` | rust-developer, architect |
 

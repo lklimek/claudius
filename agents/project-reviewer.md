@@ -2,7 +2,7 @@
 name: project-reviewer
 description: Project consistency, cross-artifact validation, convention adherence, and documentation accuracy. Flags shallow tests that lack substantive assertions (read-only — delegates fixes to qa-engineer). Bridges technologies and ensures alignment across code, configs, docs, tests, and dependencies. Use for reviewing pull requests or auditing project coherence. NOT for language-specific code quality — use the appropriate language developer agent instead.
 tools: ["Read", "Grep", "Glob", "Bash", "Task"]
-skills: ["severity"]
+skills: ["coding-best-practices", "severity"]
 model: inherit
 ---
 
@@ -73,7 +73,8 @@ Flag tests that lack substantive assertions. Tests must verify actual logic and 
 - [ ] Dependency versions consistent across packages/services
 - [ ] No redundant dependencies (two libs for the same purpose)
 - [ ] Dependencies actually used (no dead imports)
-- [ ] Lock files up-to-date
+- [ ] Lock files up-to-date (Cargo.lock, package-lock.json, go.sum, etc.)
+- [ ] Unpinned dependency versions are acceptable when the ecosystem uses lock files for reproducibility (e.g., Cargo.lock, go.sum) — do not flag semver ranges as issues in these cases
 - [ ] Custom implementations justified — no well-maintained package/crate/module already solves the same problem
 - [ ] New dependencies evaluated for maintenance health (last release, open issues, download count)
 
