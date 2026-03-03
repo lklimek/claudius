@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-03-03
+
+### Changed
+- Condense claudius agent personality section — inline voice description, remove verbose bullet list
+- Add explicit skill evaluation step in prompt processing instructions
+
 ## [1.4.0] - 2026-03-03
 
 ### Added
@@ -209,6 +215,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[1.4.1]: https://github.com/lklimek/claudius/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/lklimek/claudius/compare/v1.3.2...v1.4.0
 [1.3.0]: https://github.com/lklimek/claudius/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/lklimek/claudius/compare/v1.1.0...v1.2.0
