@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-03-03
+
+### Added
+- No-tombstone-comments rule to all developer agents, project-reviewer, and rust-best-practices skill (M-NO-TOMBSTONES) — never comment on why removed code was removed
+
 ## [1.1.0] - 2026-03-03
 
 ### Added
@@ -151,6 +156,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[1.1.1]: https://github.com/lklimek/claudius/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/lklimek/claudius/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/lklimek/claudius/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/lklimek/claudius/compare/v0.16.2...v1.0.0

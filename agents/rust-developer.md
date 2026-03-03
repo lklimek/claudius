@@ -83,6 +83,7 @@ When implementing features, follow this order:
 - Don't ignore clippy warnings - fix or explicitly allow with reasoning
 - Don't use Arc<Mutex<T>> when RefCell or channels would work
 - Don't forget to run cargo fmt and cargo clippy before commits (see "When to run" above)
+- Don't add comments explaining removed code — if code is gone, it's gone; no tombstones
 
 ## Code Review Mode
 

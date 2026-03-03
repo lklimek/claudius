@@ -54,6 +54,7 @@ Flag tests that lack substantive assertions. Tests must verify actual logic and 
 - [ ] No shallow anti-patterns: bare `is not None`, status-code-only, `len > 0` without content checks, "runs without error" without output assertions
 
 ### Project Conventions
+- [ ] No tombstone comments explaining removed code (git history is the record, not inline comments)
 - [ ] Naming conventions consistent across the codebase
 - [ ] File and directory organization follows project patterns
 - [ ] Commit messages follow project style

@@ -74,6 +74,7 @@ When implementing features, follow this order:
 - Don't use `dangerouslySetInnerHTML` without sanitization (XSS risk)
 - Don't store derived state — compute it during render
 - Don't forget `loading`, `error`, and `empty` states in every data-driven component
+- Don't add comments explaining removed code — if code is gone, it's gone; no tombstones
 
 ## Package.json Best Practices
 - Pin exact versions for critical dependencies (`--save-exact`)

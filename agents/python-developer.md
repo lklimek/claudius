@@ -53,6 +53,7 @@ When implementing features, follow this order:
 - Use generators for memory efficiency with large datasets
 - Implement proper logging (logging module, not print statements)
 - Use async/await for I/O-bound operations when beneficial
+- Never add comments explaining removed code — if code is gone, it's gone; no tombstones
 
 ## Code Quality Tools
 - **Linting**: pylint, flake8, or ruff

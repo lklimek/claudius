@@ -167,6 +167,7 @@ project/
 - Don't forget to close resources (files, connections)
 - Don't use panic/recover for normal error handling
 - Don't share memory by communicating - communicate by sharing memory
+- Don't add comments explaining removed code — if code is gone, it's gone; no tombstones
 
 ## Code Review Mode
 
