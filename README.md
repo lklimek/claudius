@@ -91,6 +91,34 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 | `merge-base` | Careful merge of remote base branch into current feature branch |
 | `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series |
 
+### ghsu — Elevated GitHub Access
+
+Two-token model: Claude operates with a read-only GitHub token by default. When a command needs write access, `ghsu` (GitHub Sudo) re-executes it with a stored read-write token — but only after the user explicitly approves via a GUI popup or terminal prompt.
+
+Supports **per-organization tokens** — each GitHub org/owner gets its own encrypted token. The target org is auto-detected from `-R owner/repo` flags or git remotes.
+
+**Prerequisites:** `pip install cryptography`
+
+**Setup** (per org, per machine):
+
+```bash
+python3 scripts/ghsu.py setup dashpay      # store token for dashpay org
+python3 scripts/ghsu.py setup lklimek      # store token for lklimek org
+python3 scripts/ghsu.py list               # see stored orgs
+```
+
+**How it works:** When Claude encounters a 403 Forbidden error, it re-runs the failed command through `ghsu run <command>`. ghsu detects the target org, shows a dialog with the exact command and org, and if approved, decrypts that org's token and re-executes with `GH_TOKEN` set.
+
+| Subcommand | Description |
+|------------|-------------|
+| `setup <org>` | Prompt for PAT, validate, encrypt, store for org |
+| `run [--org ORG] <cmd>` | Show approval dialog → decrypt → execute with elevated token |
+| `verify [org]` | Verify specific org's token, or all if omitted |
+| `revoke [org]` | Revoke specific org's token, or all if omitted |
+| `list` | List orgs with stored tokens |
+
+**Security:** Tokens encrypted with AES-256-GCM, keys derived (PBKDF2, 600k iterations) from machine-specific identifiers (machine-id, hostname, username). Token files (`~/.config/ghsu/tokens/<org>.enc`) are `0600`-permissioned and non-portable across machines. Decrypted tokens exist only in memory during command execution.
+
 ### Recommended permissions
 
 The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively — which defeats the purpose of autonomous operation.
