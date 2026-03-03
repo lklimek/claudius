@@ -63,7 +63,6 @@ Add the marketplace and install the plugin:
 | `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash |
 | `rust-developer` | Rust implementation, ownership patterns, Cargo | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
 | `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
-| `technical-researcher` | Technology evaluation, feasibility studies, library/framework comparison | Read, Grep, Glob, Bash, WebSearch, WebFetch |
 | `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash |
 | `ux-designer` | User flows, wireframes, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch |
 

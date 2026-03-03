@@ -19,7 +19,7 @@ Match agents to phases by their frontmatter descriptions.
    Personas, domain knowledge, functional/non-functional requirements, user stories,
    data needs & processing rules, user journey, DX planning, UI mocks. Validate per persona. Iterate.
 
-2. **Architecture** → `architect` + `technical-researcher` + `devops-engineer`
+2. **Architecture** → `architect` + `devops-engineer`
    System layers and responsibilities (trace every layer), tool/tech selection,
    prefer reuse, guide code placement, deployment model, work decomposition into tasks.
 

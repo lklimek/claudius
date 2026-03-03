@@ -91,7 +91,7 @@ Include: file:line references, CWE IDs where applicable, impact, and remediation
 
 ## 4. Vulnerability Research
 
-Spawn a `technical-researcher` agent in parallel with step 3. The agent must:
+Spawn an `architect` agent in parallel with step 3. The agent must:
 
 - Query all major vulnerability databases listed in step 2c
 - Search the library's issue tracker for security-related discussions and responsible disclosures
