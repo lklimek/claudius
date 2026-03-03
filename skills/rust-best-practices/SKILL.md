@@ -1,8 +1,6 @@
 ---
 name: rust-best-practices
-description: >
-  Rust best practices checklists (Microsoft Pragmatic + Rust API Guidelines). Use when writing,
-  reviewing, or discussing Rust code quality, API design, safety, or idioms.
+description: "Rust best practices checklists (Microsoft Pragmatic + Rust API Guidelines). Use when writing, reviewing, or discussing Rust code quality, API design, safety, or idioms."
 allowed-tools: Read, WebFetch
 ---
 

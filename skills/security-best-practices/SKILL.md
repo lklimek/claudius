@@ -1,8 +1,6 @@
 ---
 name: security-best-practices
-description: >
-  OWASP-based secure programming practices. Use when writing or reviewing code handling auth,
-  crypto, user input, secrets, or API endpoints. Consult proactively during reviews and planning.
+description: "OWASP-based secure programming practices. Use when writing or reviewing code handling auth, crypto, user input, secrets, or API endpoints. Consult proactively during reviews and planning."
 model: opus
 allowed-tools: Grep, Read, Glob, WebFetch, WebSearch
 ---

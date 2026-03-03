@@ -1,8 +1,6 @@
 ---
 name: go-best-practices
-description: >
-  Go best practices — idioms, error handling, concurrency, testing patterns.
-  Use when writing, reviewing, or discussing Go code.
+description: "Go best practices — idioms, error handling, concurrency, testing patterns. Use when writing, reviewing, or discussing Go code."
 allowed-tools: Read
 ---
 

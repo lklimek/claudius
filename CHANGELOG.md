@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.4.2] - 2026-03-03
+
+### Changed
+- Collapse all multi-line YAML frontmatter values to single-line strings across agents and skills
+- Add frontmatter single-line convention to CLAUDE.md
+
 ## [1.4.1] - 2026-03-03
 
 ### Changed

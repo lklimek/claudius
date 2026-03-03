@@ -63,6 +63,7 @@ Skills resolve relative paths from their base directory at invocation time.
 - Frontmatter `description`: state **when** to use, not just what it does
 - Prefer minimal tool sets; read-only agents omit Edit/Write
 - Keep all descriptions and instructions concise — fewer tokens, same signal
+- Frontmatter values: single-line strings, no YAML folded/literal scalars (`>`, `|`). Use long lines instead of wrapping.
 
 ## Development
 

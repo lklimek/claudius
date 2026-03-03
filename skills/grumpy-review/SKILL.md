@@ -1,8 +1,6 @@
 ---
 name: grumpy-review
-description: >
-  Parallel-agent code review for quality, security, dependencies, and docs. Use for reviews,
-  audits, or quality assessments. Produces deduplicated severity-ranked report.
+description: "Parallel-agent code review for quality, security, dependencies, and docs. Use for reviews, audits, or quality assessments. Produces deduplicated severity-ranked report."
 agent: claudius
 context: fork
 model: opus

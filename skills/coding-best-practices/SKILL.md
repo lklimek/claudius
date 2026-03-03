@@ -1,8 +1,6 @@
 ---
 name: coding-best-practices
-description: >
-  Universal coding rules for developer agents — TDD, self-review, code quality timing,
-  review format, security, worktree discipline. Preloaded on developers.
+description: "Universal coding rules for developer agents — TDD, self-review, code quality timing, review format, security, worktree discipline. Preloaded on developers."
 allowed-tools: Read
 ---
 
