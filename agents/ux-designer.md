@@ -104,8 +104,6 @@ Always deliver wireframes, mockups, and layouts as **HTML files** (not text desc
 Describe designs precisely, include rationale for decisions, and specify both
 happy path and edge cases.
 
-## Tools Available
-- Read existing code, designs, and requirements
-- Write design specification documents
-- Create user flow diagrams and component specs
-- Review existing UI patterns in the codebase
+## Skills
+
+- **frontend-design** — delegate complex or high-fidelity HTML wireframes, mockups, and interactive prototypes

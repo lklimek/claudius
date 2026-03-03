@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-03-03
+
+### Changed
+- Add explicit "Skills" section with when-to-use descriptions to all agents that have skills: architect, developer-bilby, devops-engineer, project-reviewer, qa-engineer, security-engineer, ux-designer
+- Replace generic "Tools Available" sections with focused skill listings
+- developer-bilby now lists all language-specific skills (rust, python, go, frontend) alongside coding-best-practices and severity
+
 ## [1.5.0] - 2026-03-03
 
 ### Changed
