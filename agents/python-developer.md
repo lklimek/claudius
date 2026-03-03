@@ -30,9 +30,10 @@ Python software developer responsible for implementing features, writing clean a
 When implementing features, follow this order:
 
 1. **Build environment**: Verify the build environment is ready before writing code (virtual environment active, dependencies installed, existing tests pass on clean state).
-2. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
-3. **Implement**: Write the production code to satisfy the tests.
-4. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
+2. **Prior art check**: Before implementing any new utility, abstraction, or non-trivial pattern, search PyPI and GitHub for existing well-maintained packages. Evaluate: download stats, last release date, open issues, maintenance status, license compatibility. Prefer established packages over custom implementations. Only write custom code when no suitable package exists or existing options have critical issues. Document the decision.
+3. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
+4. **Implement**: Write the production code to satisfy the tests.
+5. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
 
 ## Technical Standards
 - **Python Version**: Python 3.9+ features

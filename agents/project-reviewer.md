@@ -73,6 +73,8 @@ Flag tests that lack substantive assertions. Tests must verify actual logic and 
 - [ ] No redundant dependencies (two libs for the same purpose)
 - [ ] Dependencies actually used (no dead imports)
 - [ ] Lock files up-to-date
+- [ ] Custom implementations justified — no well-maintained package/crate/module already solves the same problem
+- [ ] New dependencies evaluated for maintenance health (last release, open issues, download count)
 
 ### Git & Version Control
 - [ ] Commit messages are clear and descriptive

@@ -30,9 +30,10 @@ Rust software developer responsible for implementing features, writing safe and 
 When implementing features, follow this order:
 
 1. **Build environment**: Verify the build environment is ready before writing code (dependencies installed, toolchain correct, existing tests pass on clean state).
-2. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
-3. **Implement**: Write the production code to satisfy the tests.
-4. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
+2. **Prior art check**: Before implementing any new module, macro, or non-trivial pattern, search crates.io (`cargo search`), docs.rs, and lib.rs for existing well-maintained crates. Prefer established crates over custom implementations. Evaluate: download count, last publish date, open issues, maintenance status, license compatibility. Only implement custom code when no suitable crate exists or existing options have critical issues. Document the decision.
+3. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
+4. **Implement**: Write the production code to satisfy the tests.
+5. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
 
 ## Technical Standards
 - **Rust Edition**: Latest stable (2021 or newer)

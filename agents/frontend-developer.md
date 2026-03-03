@@ -30,9 +30,10 @@ Frontend software developer responsible for implementing user interfaces, writin
 When implementing features, follow this order:
 
 1. **Build environment**: Verify the build environment is ready before writing code (node_modules installed, dev server runs, existing tests pass on clean state).
-2. **TDD — tests first**: Define test scenarios (including edge cases, error states, accessibility) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
-3. **Implement**: Write the production code to satisfy the tests.
-4. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, accessibility, and adherence to the design specs.
+2. **Prior art check**: Before implementing any new component, hook, utility, or non-trivial pattern, search npm and GitHub for existing well-maintained packages. Evaluate: weekly downloads, last publish date, bundle size (bundlephobia.com), open issues, maintenance status, license compatibility. Prefer established packages over custom implementations. Only write custom code when no suitable package exists or existing options have critical issues (size, security, maintenance). Document the decision.
+3. **TDD — tests first**: Define test scenarios (including edge cases, error states, accessibility) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
+4. **Implement**: Write the production code to satisfy the tests.
+5. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, accessibility, and adherence to the design specs.
 
 ## Technical Standards
 - **Language**: TypeScript with strict mode enabled

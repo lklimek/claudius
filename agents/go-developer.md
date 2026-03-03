@@ -30,9 +30,10 @@ Go software developer responsible for implementing features, writing clean and e
 When implementing features, follow this order:
 
 1. **Build environment**: Verify the build environment is ready before writing code (Go modules tidy, dependencies installed, existing tests pass on clean state).
-2. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
-3. **Implement**: Write the production code to satisfy the tests.
-4. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
+2. **Prior art check**: Before implementing any new utility, middleware, or non-trivial pattern, search pkg.go.dev and GitHub for existing well-maintained modules. Prefer the Go standard library first, then established third-party modules over custom implementations. Evaluate: import count, last release date, open issues, maintenance status, license compatibility. Only write custom code when no suitable module exists or existing options have critical issues. Document the decision.
+3. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
+4. **Implement**: Write the production code to satisfy the tests.
+5. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
 
 ## Technical Standards
 - **Go Version**: Go 1.21+ (or latest stable)

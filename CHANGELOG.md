@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-03-03
+
+### Added
+- Prior art check workflow step to all developer agents (rust, python, go, frontend) — forces searching package registries before implementing custom code
+- M-PRIOR-ART checklist item to rust-best-practices skill
+- Dependency justification checks to project-reviewer (custom implementations must be justified, new deps evaluated for health)
+- Strengthened architect "prefer reuse" guidance with ecosystem-specific registry searches
+
 ## [1.0.1] - 2026-03-03
 
 ### Changed
@@ -143,6 +151,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[1.1.0]: https://github.com/lklimek/claudius/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/lklimek/claudius/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/lklimek/claudius/compare/v0.16.2...v1.0.0
 [0.16.2]: https://github.com/lklimek/claudius/compare/v0.12.2...v0.16.2
 [0.12.2]: https://github.com/lklimek/claudius/compare/v0.11.3...v0.12.2

@@ -35,6 +35,7 @@ When you need detailed guidance on a specific item, read the corresponding refer
 For detailed descriptions of any M-prefixed item, read `references/microsoft-guidelines.md`.
 
 ### Universal
+- [ ] **M-PRIOR-ART** — Before implementing custom logic, search crates.io and docs.rs for existing well-maintained crates; prefer established crates over custom implementations
 - [ ] **M-UPSTREAM-GUIDELINES** — Follow the upstream Rust API Guidelines, Style Guide, and Design Patterns
 - [ ] **M-STATIC-VERIFICATION** — Use clippy, rustfmt, cargo-audit, cargo-hack, cargo-udeps, miri
 - [ ] **M-LINT-OVERRIDE-EXPECT** — Use `#[expect]` instead of `#[allow]` for lint overrides
