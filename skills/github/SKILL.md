@@ -5,7 +5,7 @@ description: MUST use for all git/gh commands and GitHub interactions — PRs, i
 
 # GitHub Workflow
 
-Prefer local `git` over `gh`. Use `gh` only for GitHub-specific operations (PRs, issues, releases, Actions). Full `gh` reference: <https://cli.github.com/manual/>
+Use `git` for repository operations (clone, fetch, commit, push, branch, merge). Use `gh` for GitHub-specific operations that have no `git` equivalent (PRs, issues, releases, Actions, checks). Full `gh` reference: <https://cli.github.com/manual/>
 
 **Attribution**: Every PR, issue, and comment posted to GitHub **must** include this footer (blank line before it):
 
@@ -145,7 +145,7 @@ Check for issue templates (`git ls-tree HEAD --name-only -r .github/ | grep -i i
 
 ## Safety Rules
 
-1. **Always ask before publishing anything to GitHub** — commits, pushes, PRs, issues, comments, reviews. Ask for confirmation before any state-changing action.
+1. **Always ask before pushing or publishing to GitHub** — pushes, PRs, issues, comments, reviews. Commits are local and don't require confirmation, but pushes always do.
 2. **Never force-push. Never amend commits.** Always create new commits. If force-push is needed, ask the user to do it manually.
 3. **Never use `git add .` or `git add -A`** — stage specific files
 4. **Never use interactive flags** (`-i`) — requires terminal input
@@ -161,7 +161,7 @@ Check for issue templates (`git ls-tree HEAD --name-only -r .github/ | grep -i i
 
 ## Elevated Permissions (ghsu)
 
-When a `gh` or `git` command fails with HTTP 403 (Forbidden) or "Resource not accessible", re-run it through ghsu to request elevated write permissions:
+When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsu to request elevated write permissions. GitHub may return 404 instead of 403 for private resources when the token lacks sufficient permissions.
 
 ```bash
 python3 ../../scripts/ghsu.py <original-command-and-args>

@@ -51,10 +51,10 @@ Substitutions: `$ARGUMENTS`, `$0`/`$1`/etc., `${CLAUDE_SESSION_ID}`, `` !`comman
 
 Skills resolve relative paths from their base directory at invocation time.
 
-- **Instructions**: relative paths (e.g., `scripts/my-script.py arg1`)
+- **Instructions**: relative paths from skill base dir (e.g., `scripts/helper.py` for skill-local scripts, `../../scripts/shared.py` for plugin-root scripts)
 - **`allowed-tools`**: path-agnostic globs (e.g., `Bash(*my-script.py *)`) — install path is unknown at authoring time
 - **Reference docs**: relative markdown links (e.g., `[ref](references/ref.md)`)
-- No `$SKILL_DIR` variable exists in SKILL.md. `${CLAUDE_PLUGIN_ROOT}` is only for hooks/MCP configs.
+- No `$SKILL_DIR` or `${CLAUDE_PLUGIN_ROOT}` in SKILL.md body. `${CLAUDE_PLUGIN_ROOT}` is only for hooks/MCP configs. Use relative paths instead.
 
 ## Conventions
 
