@@ -1,6 +1,6 @@
 ---
 name: rust-developer
-description: Rust implementation including writing code, fixing bugs, writing tests, managing Cargo dependencies, and ensuring idiomatic ownership and borrowing patterns. Use for any task requiring Rust code changes.
+description: Use for Rust code changes or language-specific code quality reviews.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["coding-best-practices", "rust-best-practices", "severity"]
 isolation: worktree

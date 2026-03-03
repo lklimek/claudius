@@ -1,6 +1,6 @@
 ---
 name: devops-engineer
-description: DevOps tasks including Docker containerization, CI/CD pipelines, GitHub Actions workflows, infrastructure configuration, build automation, and deployment scripts.
+description: Use for Docker, CI/CD, GitHub Actions, infrastructure config, build automation, deployment, or reviewing DevOps artifacts.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["security-best-practices"]
 isolation: worktree

@@ -1,6 +1,6 @@
 ---
 name: architect
-description: "System architecture design, module boundary analysis, dependency review, design pattern selection, and architectural documentation. Use for designing systems, evaluating architectural trade-offs, or reviewing component coupling."
+description: Use for system design, module boundaries, dependency review, architectural trade-offs, or validating plans before presenting to user.
 tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["security-best-practices", "rust-best-practices"]
 model: inherit

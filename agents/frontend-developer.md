@@ -1,6 +1,6 @@
 ---
 name: frontend-developer
-description: "Frontend implementation including TypeScript/JavaScript, React/Vue/Svelte components, CSS/styling, state management, accessibility, and frontend build tooling. Use for any task requiring frontend code changes."
+description: Use for frontend code changes or reviews — TypeScript/JS, React/Vue/Svelte, CSS, accessibility.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["coding-best-practices", "severity"]
 isolation: worktree

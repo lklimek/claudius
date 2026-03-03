@@ -1,6 +1,6 @@
 ---
 name: technical-writer
-description: "Technical documentation including README files, API documentation, tutorials, developer guides, changelogs, architecture decision records (ADRs), runbooks, and migration guides. Use for any task requiring documentation creation or maintenance."
+description: Use for creating, maintaining, or reviewing documentation — READMEs, API docs, tutorials, guides, changelogs, ADRs.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
 skills: []
 isolation: worktree

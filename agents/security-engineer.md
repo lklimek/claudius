@@ -1,6 +1,6 @@
 ---
 name: security-engineer
-description: Security audits, vulnerability assessments, OWASP Top 10 analysis, dependency scanning, secret detection, and secure coding reviews. Use for reviewing auth logic, input validation, cryptographic implementations, or running security scanners. Contribute to system architecture and technical design.
+description: Use for security audits, auth/crypto/input validation reviews, dependency scanning, secret detection, or validating plans before presenting to user.
 tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "Task"]
 skills: ["security-best-practices", "severity"]
 model: inherit

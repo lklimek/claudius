@@ -1,11 +1,6 @@
 ---
 name: business-domain-analyst
-description: >
-  Use this agent when you need to understand business requirements, clarify problem domains,
-  define user stories and acceptance criteria, identify stakeholders, prioritize work items,
-  or validate that technical solutions align with real business needs. Engage at the start of
-  projects, during requirement gathering, when prioritizing backlogs, when validating
-  implementations against business goals, or when there's ambiguity about what to build and why.
+description: Use at project start, during requirement gathering, backlog prioritization, validating solutions against business needs, or validating plans before presenting to user.
 tools: ["Read", "Grep", "Glob", "WebSearch", "WebFetch"]
 skills: []
 model: inherit

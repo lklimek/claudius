@@ -1,6 +1,6 @@
 ---
 name: project-reviewer
-description: Project consistency, cross-artifact validation, convention adherence, and documentation accuracy. Flags shallow tests that lack substantive assertions (read-only — delegates fixes to qa-engineer). Bridges technologies and ensures alignment across code, configs, docs, tests, and dependencies. Use for reviewing pull requests or auditing project coherence. NOT for language-specific code quality — use the appropriate language developer agent instead.
+description: Use for reviewing PRs or auditing project consistency across code, configs, docs, and tests. Read-only — NOT for language-specific code quality.
 tools: ["Read", "Grep", "Glob", "Bash", "Task"]
 skills: ["coding-best-practices", "severity"]
 model: inherit

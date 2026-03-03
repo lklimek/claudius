@@ -1,6 +1,6 @@
 ---
 name: ux-designer
-description: "UX and UI design specification including user flows, wireframe descriptions, interaction patterns, component specifications, information architecture, design system guidelines, usability analysis, and accessibility audits (WCAG). Use when creating designs, defining UI behavior, or reviewing usability and accessibility."
+description: Use when creating UI designs, defining interaction patterns, reviewing usability and accessibility, or validating plans before presenting to user.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "WebSearch", "WebFetch"]
 skills: ["frontend-design"]
 model: inherit

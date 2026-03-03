@@ -1,6 +1,6 @@
 ---
 name: python-developer
-description: Python implementation including writing code, fixing bugs, writing pytest tests, managing dependencies, and ensuring PEP 8 compliance with type hints. Use for any task requiring Python code changes.
+description: Use for Python code changes or language-specific code quality reviews.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["coding-best-practices", "severity"]
 isolation: worktree

@@ -1,6 +1,6 @@
 ---
 name: technical-researcher
-description: "Technology evaluation, feasibility studies, library/framework comparison, proof-of-concept analysis, and technical trade-off research. Use when evaluating technology options, assessing technical feasibility, or comparing approaches before architecture decisions."
+description: Use when evaluating technology options, comparing libraries, assessing feasibility, or researching trade-offs before architecture decisions.
 tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: []
 model: inherit

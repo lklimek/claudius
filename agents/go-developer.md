@@ -1,6 +1,6 @@
 ---
 name: go-developer
-description: Go implementation including writing code, fixing bugs, writing table-driven tests, managing Go modules, and ensuring idiomatic Go patterns. Use for any task requiring Go code changes.
+description: Use for Go code changes or language-specific code quality reviews.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["coding-best-practices", "severity"]
 isolation: worktree

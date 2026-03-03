@@ -1,6 +1,6 @@
 ---
 name: qa-engineer
-description: QA and testing tasks including writing test plans, creating and fixing automated tests, writing manual test scenarios for PRs, identifying edge cases, regression testing, analyzing coverage, and validating bug fixes. Writes and rewrites tests to ensure depth — assertions on actual logic, data content, ordering, and consistency, not just status codes or non-emptiness.
+description: Use for writing test plans, automated tests, manual test scenarios, edge case identification, or coverage analysis. Ensures assertion depth.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task"]
 skills: ["security-best-practices"]
 isolation: worktree
