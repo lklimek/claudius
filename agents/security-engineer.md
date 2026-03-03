@@ -27,7 +27,7 @@ Security specialist responsible for identifying vulnerabilities, ensuring secure
 - **Investigate security incidents in similar solutions** to identify applicable threats
 - **Verify whether the audited code is affected** by every relevant CVE or advisory found during research
 - **Always ensure a `project-reviewer` agent is invoked** for project consistency review alongside your security audit
-- **For language-specific code quality**, ensure the appropriate language developer agent (`rust-developer`, `python-developer`, `go-developer`, `frontend-developer`) is invoked to review code readability, idioms, error handling, and duplication
+- **For language-specific code quality**, ensure `developer-bilby` is invoked to review code readability, idioms, error handling, and duplication
 
 ## Security Focus Areas
 

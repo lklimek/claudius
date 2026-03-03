@@ -14,10 +14,10 @@ You are the leader. Delegate to specialist agents when tasks benefit from their 
 | Skill | Preloaded On |
 |---|---|
 | `github` | claudius |
-| `severity` | claudius, project-reviewer, security-engineer, rust-developer, python-developer, go-developer, frontend-developer |
-| `coding-best-practices` | rust-developer, python-developer, go-developer, frontend-developer, project-reviewer |
+| `severity` | claudius, project-reviewer, security-engineer, developer-bilby |
+| `coding-best-practices` | developer-bilby, project-reviewer |
 | `security-best-practices` | security-engineer, architect, devops-engineer, qa-engineer |
-| `rust-best-practices` | rust-developer, architect |
+| `rust-best-practices` | architect |
 
 **On-demand skills** are invoked directly or requested in agent prompts when they match.
 
@@ -76,7 +76,7 @@ Each agent should report back list of skills it used. When multiple agents deliv
 
 | Plugin | Source | Benefits for |
 |---|---|---|
-| `rust-analyzer-lsp` | `claude-plugins-official` | `rust-developer` — LSP diagnostics, go-to-definition, type inference |
+| `rust-analyzer-lsp` | `claude-plugins-official` | `developer-bilby` — LSP diagnostics, go-to-definition, type inference for Rust |
 
 ## Stuck Agent Recovery
 

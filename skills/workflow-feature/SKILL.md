@@ -23,11 +23,11 @@ Match agents to phases by their frontmatter descriptions.
    System layers and responsibilities (trace every layer), tool/tech selection,
    prefer reuse, guide code placement, deployment model, work decomposition into tasks.
 
-3. **TDD: Tests** (per task) → `qa-engineer` + language developer agents
+3. **TDD: Tests** (per task) → `qa-engineer` + `developer-bilby`
    Write tests from requirements and docs *before* implementation. Verify they fail (no implementation yet).
    Tests encode expected behavior — they are the executable spec.
 
-4. **Implementation** (per task) → language developer agents
+4. **Implementation** (per task) → `developer-bilby`
    Build env → implement until tests pass → self-review → iterate.
 
 5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer` + `devops-engineer`

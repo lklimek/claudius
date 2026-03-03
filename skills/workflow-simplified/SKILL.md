@@ -15,10 +15,10 @@ Follow all phases on the first iteration. QA must always be fully executed.
 
 2. **Architecture** — select tools/technologies, guide code placement, ensure maintainability.
 
-3. **TDD: Tests** (per task) → `qa-engineer` + language developer agents
+3. **TDD: Tests** (per task) → `qa-engineer` + `developer-bilby`
    Write tests from requirements and docs *before* implementation. Verify they fail.
 
-4. **Implementation** (per task) → language developer agents
+4. **Implementation** (per task) → `developer-bilby`
    Build env → implement until tests pass → self-review → iterate.
 
 5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer` + `devops-engineer`

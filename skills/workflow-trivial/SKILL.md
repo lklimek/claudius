@@ -11,7 +11,7 @@ Use for typos, single-line fixes (≤20 lines), no new dependencies/files.
 
 1. **TDD: Tests** — write/update tests first from requirements, verify they fail.
 
-2. **Implementation** → language developer agents — build env if needed, implement until tests pass.
+2. **Implementation** → `developer-bilby` — build env if needed, implement until tests pass.
 
 3. **QA** — pass tests, formatter, linter.
 

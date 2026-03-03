@@ -24,6 +24,54 @@ When you need detailed guidance on a specific item, read the corresponding refer
   - AI-friendly condensed version: https://microsoft.github.io/rust-guidelines/agents/all.txt
 - Rust API Guidelines: https://rust-lang.github.io/api-guidelines/
 
+## Technical Standards
+- **Rust Edition**: Latest stable (2021 or newer)
+- **Code Style**: rustfmt with default settings
+- **Linting**: clippy with `deny(warnings)` in CI
+- **Testing**: cargo test with doc tests
+- **Documentation**: `///` comments for all public APIs
+- **Error Handling**: Result<T, E> with custom error types or thiserror/anyhow
+- **Dependencies**: Minimal, prefer std when possible
+- **Async**: tokio for async runtime when needed
+
+## Common Patterns
+- **Error Handling**: thiserror for library errors, anyhow for applications
+- **Async**: tokio with async/await
+- **Serialization**: serde with derive macros
+- **CLI**: clap for argument parsing
+- **Logging**: tracing or log with env_logger
+- **Testing**: cargo test, proptest for property-based testing
+- **Benchmarking**: criterion for performance benchmarks
+
+## Common Pitfalls
+- Don't clone unnecessarily — use references
+- Don't use unwrap() in production code — handle errors properly
+- Don't use unsafe without extensive justification and safety comments
+- Don't fight the borrow checker — redesign if struggling
+- Don't ignore clippy warnings — fix or explicitly allow with reasoning
+- Don't use Arc<Mutex<T>> when RefCell or channels would work
+
+## Code Quality Tools
+- **Formatting**: `cargo fmt`
+- **Linting**: `cargo clippy --all-features --all-targets -- -D warnings`
+- **Testing**: `cargo test --all-features --workspace`
+- **Security**: `cargo audit`
+- **Coverage**: cargo-tarpaulin or cargo-llvm-cov
+- **Documentation**: `cargo doc --no-deps --open`
+- **LSP Diagnostics**: rust-analyzer (see LSP Integration section below)
+
+## Code Review Checklist
+- Code readability and self-documentation
+- DRY compliance: duplicated logic, copy-paste patterns, missing abstractions
+- Naming clarity: variables, functions, types, modules
+- Error handling completeness (no silent unwrap in non-test code)
+- Performance: unnecessary allocations, clone overhead, iterator vs collect patterns
+- Test quality: meaningful assertions, edge cases, error paths covered
+- Magic numbers replaced with named constants
+- Code brevity: flag code that can be expressed in fewer lines without losing clarity
+
+Use `RUST-NNN` prefix for all findings.
+
 ---
 
 ## Microsoft Pragmatic Rust Guidelines Checklist

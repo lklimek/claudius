@@ -56,12 +56,9 @@ Add the marketplace and install the plugin:
 | `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
 | `business-domain-analyst` | Business requirements, stakeholder analysis, user stories, acceptance criteria | Read, Grep, Glob, WebSearch, WebFetch |
 | `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation verification | Read, Grep, Glob, Bash, Task |
+| `developer-bilby` | Code changes and reviews in any language (Rust, Python, Go, frontend) | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
 | `devops-engineer` | Docker, CI/CD pipelines, GitHub Actions, infrastructure configuration | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
-| `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS/styling, frontend tooling | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
-| `go-developer` | Go implementation, idiomatic patterns, table-driven tests | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
-| `python-developer` | Python implementation, PEP 8, pytest | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
 | `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash |
-| `rust-developer` | Rust implementation, ownership patterns, Cargo | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
 | `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
 | `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash |
 | `ux-designer` | User flows, wireframes, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch |
@@ -72,8 +69,8 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 
 | Agent | External Skill | Plugin | Benefit |
 |-------|---------------|--------|---------|
-| `frontend-developer` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
-| `rust-developer` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
+| `developer-bilby` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
+| `developer-bilby` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
 
 > **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
 

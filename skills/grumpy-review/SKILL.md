@@ -60,10 +60,10 @@ These agents handle **code quality reviews** — readability, idioms, error hand
 
 | Condition | Agent (`subagent_type`) | Focus |
 |---|---|---|
-| Rust code | `claudius:rust-developer` | Code quality, idioms, ownership, error handling, clippy compliance |
-| Go code | `claudius:go-developer` | Code quality, idioms, error wrapping, concurrency, table-driven tests |
-| Python code | `claudius:python-developer` | Code quality, PEP 8, type hints, async patterns, pytest |
-| Frontend code | `claudius:frontend-developer` | Code quality, TS/JS patterns, React/Vue, CSS, accessibility |
+| Rust code | `claudius:developer-bilby` | Code quality, idioms, ownership, error handling, clippy compliance |
+| Go code | `claudius:developer-bilby` | Code quality, idioms, error wrapping, concurrency, table-driven tests |
+| Python code | `claudius:developer-bilby` | Code quality, PEP 8, type hints, async patterns, pytest |
+| Frontend code | `claudius:developer-bilby` | Code quality, TS/JS patterns, React/Vue, CSS, accessibility |
 
 ### Other conditional agents
 
@@ -139,7 +139,7 @@ Example spawn pattern:
 ```
 Task(subagent_type="claudius:security-engineer", model="opus", prompt="...", name="security-auditor")
 Task(subagent_type="claudius:project-reviewer", model="opus", prompt="...", name="project-reviewer")
-Task(subagent_type="claudius:rust-developer", model="opus", prompt="...", name="rust-reviewer")
+Task(subagent_type="claudius:developer-bilby", model="opus", prompt="...", name="rust-reviewer")
 ```
 
 ## 5. Consolidate Findings
@@ -151,7 +151,7 @@ Read all agent JSON output files from the session temp directory. Each file is a
 `finding_section` objects. Parse them with `json.load()`.
 
 ### 5b. Deduplicate
-Many findings appear in multiple reports (e.g., `.unwrap()` panics found by both rust-developer
+Many findings appear in multiple reports (e.g., `.unwrap()` panics found by both developer-bilby
 and security-engineer). Match by `location` + `title` similarity. Merge duplicates, keeping the
 most detailed description and union of tags.
 
