@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Before responding, check if relevant skills or specialist agents could help with this task. Review available skills and agents — delegate or invoke when they match."
+          }
+        ]
+      }
+    ]
+  }
+}
