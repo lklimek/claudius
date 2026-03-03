@@ -4,6 +4,31 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-03-03
+
+### Added
+- `workflow-feature` skill — Feature development workflow (Requirements → Architecture → TDD → Implementation → QA)
+- `workflow-simplified` skill — Simplified workflow for bug fixes and small changes
+- `workflow-trivial` skill — Trivial workflow for typos and single-line fixes
+- `team-coordination` skill — delegation, spawning, prompt requirements, worktree lifecycle, anti-patterns
+- `python-best-practices` skill — Python standards, patterns, and review checklist
+- `go-best-practices` skill — Go standards, concurrency, error handling, and review checklist
+- `frontend-best-practices` skill — TypeScript/React/Vue/Svelte standards, accessibility, and review checklist
+- `developer-bilby` agent — single polyglot developer (Bilby the Dev) replacing 4 language-specific agents
+- `UserPromptSubmit` hook — reminds about available skills and agents before each response
+
+### Changed
+- Slim `claudius.md` from ~304 lines to ~83 lines by extracting workflows and team coordination into on-demand skills
+- Workflow and delegation details now load fresh into context when invoked, reducing attention dilution in long conversations
+- Condense all skill descriptions (~50% shorter) — focus on trigger conditions, not implementation details
+- Condense all agent descriptions — focus on when to use, not capability lists
+- Update claudius description to development lead role
+- Expand `rust-best-practices` with technical standards, patterns, pitfalls, and review checklist from old agent
+
+### Removed
+- `rust-developer`, `python-developer`, `go-developer`, `frontend-developer` agents — replaced by `developer-bilby`
+- `technical-researcher` agent — duties absorbed by `architect`
+
 ## [1.2.0] - 2026-03-03
 
 ### Added
@@ -163,6 +188,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[1.3.0]: https://github.com/lklimek/claudius/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/lklimek/claudius/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/lklimek/claudius/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/lklimek/claudius/compare/v1.0.0...v1.0.1
