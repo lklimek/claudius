@@ -13,7 +13,6 @@ Token is stored AES-256-GCM encrypted, keyed to machine characteristics.
 
 from __future__ import annotations
 
-import argparse
 import getpass
 import hashlib
 import os
@@ -240,7 +239,7 @@ def _load_token(org: str) -> str:
         if orgs:
             _err(f"Available orgs: {', '.join(orgs)}\n")
         _err("To set up a token, run:")
-        _err(f"    python3 {Path(__file__).resolve()} setup {org}\n")
+        _err(f"    python3 {Path(__file__).resolve()} --setup {org}\n")
         _err(
             "This will prompt you for a GitHub Personal Access Token with"
         )
@@ -257,7 +256,7 @@ def _load_token(org: str) -> str:
         _err(
             "Was it stored on a different machine, or did the hostname change?"
         )
-        _err(f"Re-run:  python3 {Path(__file__).resolve()} setup {org}")
+        _err(f"Re-run:  python3 {Path(__file__).resolve()} --setup {org}")
         sys.exit(EXIT_ERROR)
 
 
@@ -562,9 +561,9 @@ def _get_token_scopes(token: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def cmd_setup(args: argparse.Namespace) -> int:
+def cmd_setup(org: str) -> int:
     """Store an encrypted GitHub PAT for a specific org."""
-    org = _validate_org_name(args.org)
+    org = _validate_org_name(org)
     path = _token_path(org)
 
     _info("GitHub Elevated Access — Token Setup")
@@ -612,24 +611,15 @@ def cmd_setup(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def cmd_run(args: argparse.Namespace) -> int:
+def cmd_run(cmd: list[str], *, org: str | None = None, no_gui: bool = False) -> int:
     """Show approval dialog, then re-execute command with elevated token."""
-    cmd = args.cmd
     if not cmd:
-        _err("No command specified. Usage: ghsu run [--org ORG] <command...>")
-        return EXIT_ERROR
-
-    # Strip leading '--' that argparse may leave
-    if cmd and cmd[0] == "--":
-        cmd = cmd[1:]
-
-    if not cmd:
-        _err("No command specified after '--'.")
+        _err("No command specified.")
+        _err(f"Usage: ghsu.py <command...>")
         return EXIT_ERROR
 
     # Determine org
     _debug("detecting org")
-    org = getattr(args, "org", None)
     if not org:
         org = _detect_org(cmd)
     _debug(f"org={org}")
@@ -642,12 +632,12 @@ def cmd_run(args: argparse.Namespace) -> int:
             _err("Cannot determine target organization.\n")
             _err(f"Available orgs: {', '.join(orgs)}")
             _err("Use --org <name> to specify, e.g.:")
-            _err(f"    ghsu run --org {orgs[0]} {shlex.join(cmd)}")
+            _err(f"    ghsu.py --org {orgs[0]} {shlex.join(cmd)}")
             return EXIT_ERROR
         else:
             _err("No tokens configured.\n")
             _err("To set up a token, run:")
-            _err(f"    python3 {Path(__file__).resolve()} setup <org>")
+            _err(f"    python3 {Path(__file__).resolve()} --setup <org>")
             _err(f"\nSee: {_README_URL}")
             sys.exit(EXIT_NO_TOKEN)
 
@@ -661,7 +651,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     cmd_str = shlex.join(cmd)
 
     _debug("requesting approval")
-    if not _ask_approval(cmd_str, org, no_gui=args.no_gui):
+    if not _ask_approval(cmd_str, org, no_gui=no_gui):
         _info("Permission denied by user.")
         return EXIT_DENIED
     _debug("approved, executing command")
@@ -675,9 +665,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     return result.returncode
 
 
-def cmd_verify(args: argparse.Namespace) -> int:
+def cmd_verify(org: str | None = None) -> int:
     """Verify stored token(s) can be decrypted and are valid."""
-    org = getattr(args, "org", None)
 
     if org:
         return _verify_one(_validate_org_name(org))
@@ -686,7 +675,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     orgs = _list_orgs()
     if not orgs:
         _err("No tokens stored.")
-        _err(f"Run:  python3 {Path(__file__).resolve()} setup <org>")
+        _err(f"Run:  python3 {Path(__file__).resolve()} --setup <org>")
         return EXIT_NO_TOKEN
 
     failures = 0
@@ -712,7 +701,7 @@ def _verify_one(org: str) -> int:
     user_info = _validate_token(token)
     if not user_info:
         _err(f"Token for '{org}' rejected by GitHub. It may be expired.")
-        _err(f"Re-run:  python3 {Path(__file__).resolve()} setup {org}")
+        _err(f"Re-run:  python3 {Path(__file__).resolve()} --setup {org}")
         return EXIT_ERROR
 
     scopes = _get_token_scopes(token) or "unknown"
@@ -720,9 +709,8 @@ def _verify_one(org: str) -> int:
     return EXIT_OK
 
 
-def cmd_revoke(args: argparse.Namespace) -> int:
+def cmd_revoke(org: str | None = None) -> int:
     """Delete stored encrypted token(s)."""
-    org = getattr(args, "org", None)
 
     if org:
         return _revoke_one(_validate_org_name(org))
@@ -772,12 +760,12 @@ def _revoke_one(org: str) -> int:
     return EXIT_OK
 
 
-def cmd_list(_args: argparse.Namespace) -> int:
+def cmd_list() -> int:
     """List organizations with stored tokens."""
     orgs = _list_orgs()
     if not orgs:
         _info("No tokens stored.")
-        _info(f"Run:  python3 {Path(__file__).resolve()} setup <org>")
+        _info(f"Run:  python3 {Path(__file__).resolve()} --setup <org>")
         return EXIT_OK
 
     _info(f"Stored tokens ({len(orgs)}):")
@@ -790,55 +778,73 @@ def cmd_list(_args: argparse.Namespace) -> int:
 # Entry point
 # ---------------------------------------------------------------------------
 
+_USAGE = """\
+usage: ghsu.py [options] <command...>
+       ghsu.py --setup <org>
+       ghsu.py --list | --verify [org] | --revoke [org]
+
+GitHub Sudo — re-execute commands with per-org elevated tokens.
+
+Anything not prefixed with -- is the command to run:
+  ghsu.py gh pr merge 123
+  ghsu.py --org dashpay gh pr list
+
+Options:
+  --org ORG       Target org (auto-detected from -R flag or git remote)
+  --no-gui        Skip GUI dialog, use terminal prompt only
+  --setup ORG     Store encrypted GitHub PAT for an org
+  --verify [ORG]  Verify stored token(s)
+  --revoke [ORG]  Revoke stored token(s)
+  --list          List orgs with stored tokens
+  -h, --help      Show this help
+"""
+
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        prog="ghsu",
-        description="GitHub Sudo — re-execute commands with per-org elevated tokens",
-    )
-    sub = parser.add_subparsers(dest="command")
+    argv = sys.argv[1:]
 
-    setup_p = sub.add_parser("setup", help="Store encrypted GitHub PAT for an org")
-    setup_p.add_argument("org", help="GitHub org/owner name (e.g. dashpay, lklimek)")
+    if not argv or "-h" in argv or "--help" in argv:
+        print(_USAGE, file=sys.stderr)
+        return EXIT_OK if ("-h" in argv or "--help" in argv) else EXIT_ERROR
 
-    run_p = sub.add_parser(
-        "run", help="Execute command with elevated token"
-    )
-    run_p.add_argument(
-        "--org",
-        help="GitHub org/owner (auto-detected from -R flag or git remote if omitted)",
-    )
-    run_p.add_argument(
-        "--no-gui",
-        action="store_true",
-        help="Skip GUI dialog, use terminal prompt only",
-    )
-    run_p.add_argument(
-        "cmd", nargs=argparse.REMAINDER, help="Command to execute"
-    )
+    # Parse -- flags, collect the rest as the command
+    org: str | None = None
+    no_gui = False
+    cmd: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--setup":
+            if i + 1 >= len(argv):
+                _err("--setup requires an org name.")
+                return EXIT_ERROR
+            return cmd_setup(argv[i + 1])
+        elif arg == "--list":
+            return cmd_list()
+        elif arg == "--verify":
+            verify_org = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else None
+            return cmd_verify(verify_org)
+        elif arg == "--revoke":
+            revoke_org = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else None
+            return cmd_revoke(revoke_org)
+        elif arg == "--org":
+            if i + 1 >= len(argv):
+                _err("--org requires an org name.")
+                return EXIT_ERROR
+            org = argv[i + 1]
+            i += 2
+            continue
+        elif arg == "--no-gui":
+            no_gui = True
+            i += 1
+            continue
+        else:
+            # Everything from here on is the command
+            cmd = argv[i:]
+            break
+        i += 1
 
-    verify_p = sub.add_parser("verify", help="Verify stored token(s)")
-    verify_p.add_argument("org", nargs="?", help="Specific org (default: all)")
-
-    revoke_p = sub.add_parser("revoke", help="Delete stored token(s)")
-    revoke_p.add_argument("org", nargs="?", help="Specific org (default: all)")
-
-    sub.add_parser("list", help="List orgs with stored tokens")
-
-    args = parser.parse_args()
-
-    if not args.command:
-        parser.print_help()
-        return EXIT_ERROR
-
-    handlers = {
-        "setup": cmd_setup,
-        "run": cmd_run,
-        "verify": cmd_verify,
-        "revoke": cmd_revoke,
-        "list": cmd_list,
-    }
-    return handlers[args.command](args)
+    return cmd_run(cmd, org=org, no_gui=no_gui)
 
 
 if __name__ == "__main__":

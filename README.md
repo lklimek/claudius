@@ -102,20 +102,22 @@ Supports **per-organization tokens** — each GitHub org/owner gets its own encr
 **Setup** (per org, per machine):
 
 ```bash
-python3 scripts/ghsu.py setup dashpay      # store token for dashpay org
-python3 scripts/ghsu.py setup lklimek      # store token for lklimek org
-python3 scripts/ghsu.py list               # see stored orgs
+python3 scripts/ghsu.py --setup dashpay    # store token for dashpay org
+python3 scripts/ghsu.py --setup lklimek    # store token for lklimek org
+python3 scripts/ghsu.py --list             # see stored orgs
 ```
 
-**How it works:** When Claude encounters a 403 Forbidden error, it re-runs the failed command through `ghsu run <command>`. ghsu detects the target org, shows a dialog with the exact command and org, and if approved, decrypts that org's token and re-executes with `GH_TOKEN` set.
+**How it works:** When Claude encounters a 403 Forbidden error, it re-runs the failed command through `ghsu.py <command>`. ghsu detects the target org, shows a dialog with the exact command and org, and if approved, decrypts that org's token and re-executes with `GH_TOKEN` set.
 
-| Subcommand | Description |
-|------------|-------------|
-| `setup <org>` | Prompt for PAT, validate, encrypt, store for org |
-| `run [--org ORG] <cmd>` | Show approval dialog → decrypt → execute with elevated token |
-| `verify [org]` | Verify specific org's token, or all if omitted |
-| `revoke [org]` | Revoke specific org's token, or all if omitted |
-| `list` | List orgs with stored tokens |
+| Option | Description |
+|--------|-------------|
+| `<command...>` | Default: show approval dialog → decrypt → execute with elevated token |
+| `--org ORG` | Specify target org (auto-detected from `-R` flag or git remote if omitted) |
+| `--no-gui` | Skip GUI dialog, use terminal prompt only |
+| `--setup <org>` | Prompt for PAT, validate, encrypt, store for org |
+| `--verify [org]` | Verify specific org's token, or all if omitted |
+| `--revoke [org]` | Revoke specific org's token, or all if omitted |
+| `--list` | List orgs with stored tokens |
 
 **Security:** Tokens encrypted with AES-256-GCM, keys derived (PBKDF2, 600k iterations) from machine-specific identifiers (machine-id, hostname, username). Token files (`~/.config/ghsu/tokens/<org>.enc`) are `0600`-permissioned and non-portable across machines. Decrypted tokens exist only in memory during command execution.
 
