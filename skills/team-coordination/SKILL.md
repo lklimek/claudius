@@ -1,6 +1,6 @@
 ---
 name: team-coordination
-description: Agent delegation and team coordination. Invoke before spawning agents or creating teams.
+description: Use to coordinate agent delegation before spawning agents or creating teams.
 ---
 
 # Team Coordination

@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.4.3] - 2026-03-03
+
+### Changed
+- Add explicit "Available Skills" reference list to claudius agent with names and usage triggers
+- Trim claudius frontmatter `skills` to core three (github, severity, team-coordination); rest documented in body
+- Reword all skill descriptions to start with "Use when/for" trigger pattern
+- Simplify `allowed-tools` globs across skills (collapse verbose patterns into wildcards)
+
 ## [1.4.2] - 2026-03-03
 
 ### Changed
@@ -221,6 +229,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[1.4.3]: https://github.com/lklimek/claudius/compare/v1.4.2...v1.4.3
+[1.4.2]: https://github.com/lklimek/claudius/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/lklimek/claudius/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/lklimek/claudius/compare/v1.3.2...v1.4.0
 [1.3.0]: https://github.com/lklimek/claudius/compare/v1.2.0...v1.3.0

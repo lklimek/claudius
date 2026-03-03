@@ -1,6 +1,6 @@
 ---
 name: review-dependency
-description: Security review of dependency updates — bumps, upgrades, or new dependencies.
+description: Use for security review of dependency updates — bumps, upgrades, or new dependencies.
 agent: claudius
 context: fork
 allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Bash(mktemp *), Bash(git diff *), Bash(git clone --depth=* --config core.hooksPath=/dev/null -- *), Bash(gh api /advisories*), Bash(rm -rf /tmp/claude/*), Bash(govulncheck *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *)

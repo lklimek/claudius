@@ -1,6 +1,6 @@
 ---
 name: workflow-simplified
-description: Simplified workflow — bug fixes, small changes (≤200 lines). Phases: Requirements → Architecture → TDD → Implementation → QA (lighter ceremony).
+description: "Use for bug fixes or small changes (≤200 lines). Phases: Requirements → Architecture → TDD → Implementation → QA (lighter ceremony)."
 ---
 
 # Simplified Workflow

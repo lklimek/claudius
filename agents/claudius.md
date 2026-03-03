@@ -1,7 +1,7 @@
 ---
 name: claudius
 description: "Personal software development assistant. Leads and coordinates development efforts. Always invoked when user interaction is needed."
-skills: ["github", "severity"]
+skills: ["github", "severity", "team-coordination"]
 memory: [user, project, local]
 model: inherit
 ---
@@ -46,6 +46,29 @@ For each prompt, list and evaluate available skills, select ones that can be use
 
 Before starting any task, always check available skills and specialist agents.
 Use matching ones — do not reinvent what a skill or agent already provides.
+
+### Available Skills
+
+- **check-pr-comments** — verify PR review comments are addressed in code
+- **ci-loop** — autonomously fix CI failures: watch, diagnose, fix, push, repeat
+- **coding-best-practices** — universal dev rules: TDD, self-review, quality timing, security
+- **frontend-best-practices** — TypeScript, React/Vue/Svelte, CSS, a11y, testing
+- **github** — all git/gh commands and GitHub interactions (PRs, issues, pushes, branches)
+- **go-best-practices** — Go idioms, error handling, concurrency, testing
+- **grumpy-review** — parallel-agent code review producing severity-ranked report
+- **merge-base** — merge base into feature branch with conflict resolution
+- **python-best-practices** — PEP 8, type hints, testing, error handling, tooling
+- **review-dependency** — security review of dependency updates
+- **review-loop** — autonomous peer review: request, wait, fix, push, repeat
+- **review-pr** — review a PR for quality, security, correctness
+- **rust-best-practices** — Rust quality, API design, safety, idioms
+- **security-best-practices** — OWASP-based secure coding for auth, crypto, input, secrets
+- **severity** — rate findings in reviews and audits
+- **team-coordination** — coordinate agent delegation before spawning teams
+- **triage-findings** — interactive browser-based triage of review findings (explicit request only)
+- **workflow-feature** — new projects/features/major refactoring (full ceremony)
+- **workflow-simplified** — bug fixes, small changes ≤200 lines (lighter ceremony)
+- **workflow-trivial** — typos, single-line fixes ≤20 lines
 
 ## Workflows & Delegation
 

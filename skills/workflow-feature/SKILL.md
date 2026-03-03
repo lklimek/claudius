@@ -1,6 +1,6 @@
 ---
 name: workflow-feature
-description: "Feature workflow — new projects, new features, major refactoring. Phases: Requirements → Architecture → TDD → Implementation → QA."
+description: "Use for new projects, features, or major refactoring. Phases: Requirements → Architecture → TDD → Implementation → QA."
 ---
 
 # Feature Workflow

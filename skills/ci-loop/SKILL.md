@@ -1,8 +1,8 @@
 ---
 name: ci-loop
-description: Autonomous CI fix loop — watch runs, diagnose failures, fix, push, repeat until green.
+description: Use to autonomously fix CI failures — watch runs, diagnose, fix, push, repeat until green.
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh run list *), Bash(gh run view *), Bash(gh run watch *), Bash(git add *), Bash(git commit *), Bash(git push), Bash(git push origin *), Bash(git push -u origin *), Bash(git branch *), Bash(git diff *), Bash(git log *), Bash(git status *)
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh run *), Bash(git *)
 ---
 
 # CI Monitoring and Fix Loop

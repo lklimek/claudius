@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Review a PR for code quality, security, and correctness.
+description: Use to review a PR for code quality, security, and correctness.
 agent: claudius
 context: fork
 allowed-tools: Read, Grep, Glob, Write, Bash(gh pr view *), Bash(gh pr comment *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage

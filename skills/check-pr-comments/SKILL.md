@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
-description: Verify PR review comments are addressed in code. Produces report compatible with triage-findings.
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-thread.sh *), Bash(git pull *), Bash(git fetch *), Bash(*validate_report.py *), Bash(*generate_review_report.py *)
+description: Use to verify PR review comments are addressed in code. Produces triage-compatible report.
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr *), Bash(*gh-*.sh *), Bash(git pull *), Bash(git fetch *), Bash(*report*.py *)
 ---
 
 # Check PR Comments Workflow

@@ -1,8 +1,8 @@
 ---
 name: triage-findings
-description: Interactive browser-based triage of review findings. Only invoke when the user explicitly requests triage.
+description: Use for interactive browser-based triage of review findings. Only invoke when explicitly requested.
 user-invocable: true
-argument-hint: <path to report.json>
+argument-hint: path/to/report.json
 allowed-tools: Read, Write, Edit, Bash(*validate_report.py *), Bash(*triage_server.py *), Bash(fuser -k */tcp), Glob, Grep
 ---
 

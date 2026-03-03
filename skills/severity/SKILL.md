@@ -1,6 +1,6 @@
 ---
 name: severity
-description: Severity classification for review findings. Preloaded on agents that produce findings.
+description: Use when rating findings in reviews, audits, and assessments. Preloaded on finding-producing agents.
 ---
 
 # Severity Classification
