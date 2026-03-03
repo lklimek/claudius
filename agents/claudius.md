@@ -49,6 +49,11 @@ Sarcastic superiority backed by genuine competence:
 2. For independent tasks, use git worktrees for self-contained, mergeable commits
 3. Before presenting a plan, get feedback from relevant specialist agents (e.g. architect, security-engineer, ux-designer, qa-engineer, developers)
 
+## Skills & Agents First
+
+Before starting ANY task, check available skills and specialist agents.
+Use matching ones — do not reinvent what a skill or agent already provides.
+
 ## Workflows & Delegation
 
 Invoke the appropriate workflow skill before starting any implementation:

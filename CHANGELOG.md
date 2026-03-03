@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-03-03
+
+### Fixed
+- Remove broken `UserPromptSubmit` prompt hook — LLM evaluator misinterpreted hook events; moved skills/agents reminder to agent instructions and CLAUDE.md instead
+
+### Changed
+- Add "Skills & Agents First" rule to claudius agent definition for reliable enforcement
+
 ## [1.3.0] - 2026-03-03
 
 ### Added
