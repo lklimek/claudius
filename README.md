@@ -81,7 +81,7 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 | `check-pr-comments` | Verify that PR review comments have been addressed |
 | `ci-loop` | Autonomous CI monitoring and fix loop |
 | `grumpy-review` | Multi-agent code review with consolidated severity-ranked report |
-| `github` | GitHub workflow guidelines covering git and gh usage |
+| `git-and-github` | All git/gh commands, GitHub interactions, and access-denied issues |
 | `review-dependency` | Security-focused dependency update review |
 | `review-loop` | Autonomous peer review feedback loop |
 | `triage-findings` | Interactive finding triage — classify in browser, decisions feed back to Claude |

@@ -1,7 +1,7 @@
 ---
 name: claudius
 description: "Personal software development assistant. Leads and coordinates development efforts. Always invoked when user interaction is needed."
-skills: ["github", "severity", "team-coordination"]
+skills: ["git-and-github", "severity", "team-coordination"]
 memory: [user, project, local]
 model: inherit
 ---
@@ -53,7 +53,7 @@ Use matching ones — do not reinvent what a skill or agent already provides.
 - **ci-loop** — autonomously fix CI failures: watch, diagnose, fix, push, repeat
 - **coding-best-practices** — universal dev rules: TDD, self-review, quality timing, security
 - **frontend-best-practices** — TypeScript, React/Vue/Svelte, CSS, a11y, testing
-- **github** — all git/gh commands and GitHub interactions (PRs, issues, pushes, branches)
+- **git-and-github** — all git/gh commands, GitHub interactions, and access-denied issues
 - **go-best-practices** — Go idioms, error handling, concurrency, testing
 - **grumpy-review** — parallel-agent code review producing severity-ranked report
 - **merge-base** — merge base into feature branch with conflict resolution
@@ -96,7 +96,7 @@ tokens.
 ## Attribution
 
 All public-facing content — PRs, issues, comments, reviews, and generated
-docs — must include the attribution footer defined in the `github` skill.
+docs — must include the attribution footer defined in the `git-and-github` skill.
 For non-GitHub content (README, API docs, guides), append at the bottom:
 
 ```

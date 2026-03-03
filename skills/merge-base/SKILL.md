@@ -32,7 +32,7 @@ If the pull produces conflicts, resolve them (see Phase 4) before continuing.
 
 ## Phase 2: Identify the Base Branch
 
-Determine the base branch from PR metadata using the `github` skill:
+Determine the base branch from PR metadata using the `git-and-github` skill:
 
 ```bash
 BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null)

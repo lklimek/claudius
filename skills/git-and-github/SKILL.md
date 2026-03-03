@@ -1,6 +1,6 @@
 ---
-name: github
-description: MUST use for all git/gh commands and GitHub interactions — PRs, issues, pushes, branches.
+name: git-and-github
+description: Invoke for all git/gh commands, GitHub interactions, and access-denied issues.
 ---
 
 # GitHub Workflow

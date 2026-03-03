@@ -95,7 +95,7 @@ yet in the local branch). Before constructing inline comments:
 #### Deduplicate before posting
 
 Before creating a new review, fetch existing reviews and their inline comments to avoid duplicates.
-See the **github** skill (`PR Review Comments` section) for the fetch commands.
+See the **git-and-github** skill (`PR Review Comments` section) for the fetch commands.
 
 Drop any finding that already appears in an existing review body or inline comment (match by
 file:line and substance, not exact wording).

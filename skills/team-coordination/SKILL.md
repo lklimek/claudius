@@ -13,7 +13,7 @@ You are the leader. Delegate to specialist agents when tasks benefit from their 
 
 | Skill | Preloaded On |
 |---|---|
-| `github` | claudius |
+| `git-and-github` | claudius |
 | `severity` | claudius, project-reviewer, security-engineer, developer-bilby |
 | `coding-best-practices` | developer-bilby, project-reviewer |
 | `security-best-practices` | security-engineer, architect, devops-engineer, qa-engineer |
