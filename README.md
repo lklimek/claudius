@@ -12,78 +12,9 @@ I command a curated set of specialist agents and skills across the full developm
 
 A plugin for [Claude Code](https://claude.ai/code) — Anthropic's CLI for Claude. If you don't have Claude Code yet, go get it. I'll wait. Impatiently.
 
-## Installation
+## My favorite feature
 
-Add the marketplace and install the plugin:
-
-```
-/plugin marketplace add lklimek/agents
-/plugin install claudius@lklimek
-```
-
-### Local development
-
-To test the plugin from a local clone without installing:
-
-```bash
-git clone https://github.com/lklimek/claudius.git
-claude --plugin-dir /path/to/claudius
-```
-
-## Agents
-
-| Name | Description | Tools | Preloaded Skills |
-|------|-------------|-------|-----------------|
-| `claudius` | General-purpose coding assistant and team coordinator | _(all)_ | — |
-| `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch | `security-best-practices`, `rust-best-practices` |
-| `business-domain-analyst` | Business requirements, stakeholder analysis, user stories, acceptance criteria | Read, Grep, Glob, WebSearch, WebFetch | — |
-| `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation verification | Read, Grep, Glob, Bash, Task | `severity` |
-| `devops-engineer` | Docker, CI/CD pipelines, GitHub Actions, infrastructure configuration | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `security-best-practices` |
-| `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS/styling, frontend tooling | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `severity` |
-| `go-developer` | Go implementation, idiomatic patterns, table-driven tests | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `severity` |
-| `python-developer` | Python implementation, PEP 8, pytest | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `severity` |
-| `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash | `security-best-practices` |
-| `rust-developer` | Rust implementation, ownership patterns, Cargo | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch | `rust-best-practices`, `severity` |
-| `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch | `security-best-practices`, `severity` |
-| `technical-researcher` | Technology evaluation, feasibility studies, library/framework comparison | Read, Grep, Glob, Bash, WebSearch, WebFetch | — |
-| `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash | — |
-| `ux-designer` | User flows, wireframes, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch | — |
-
-### Optional plugin dependencies
-
-Some agents delegate to skills from external plugins for specialized capabilities. These plugins are **not required** — agents work without them — but installing them unlocks additional quality.
-
-| Agent | External Skill | Plugin | Benefit |
-|-------|---------------|--------|---------|
-| `frontend-developer` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
-| `rust-developer` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
-
-> **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
-
-## Skills
-
-| Name | Description | Allowed Tools |
-|------|-------------|---------------|
-| `check-pr-comments` | Verify that PR review comments have been addressed | Read, Grep, Glob, Bash(gh pr view \*), Bash(gh pr checkout \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-list-review-threads.sh \*), Bash(\*gh-resolve-review-thread.sh \*), Bash(git pull \*), Bash(git fetch \*) |
-| `ci-loop` | Autonomous CI monitoring and fix loop | Read, Grep, Glob, Edit, Write, Bash(gh run list \*), Bash(gh run view \*), Bash(gh run watch \*), Bash(git \*) |
-| `grumpy-review` | Multi-agent code review with consolidated severity-ranked report | Read, Grep, Glob, Write, Edit, Bash(git \*), Task |
-| `github` | GitHub workflow guidelines covering git and gh usage | _(inherited)_ |
-| `review-dependency` | Security-focused dependency update review | Read, Grep, Glob, WebFetch, WebSearch, Bash(git diff \*), Bash(git clone --depth=\* --config core.hooksPath=/dev/null -- \*), Bash(gh api /advisories\*) |
-| `review-loop` | Autonomous peer review feedback loop | Read, Grep, Glob, Edit, Write, Bash(\*gh-request-reviewer.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(git \*) |
-| `triage-findings` | Interactive finding triage — classify in browser, decisions feed back to Claude | Read, Write, Edit, Bash(python3 \*), Bash(kill \*), Glob, Grep |
-| `review-pr` | Audit and review pull requests | Read, Grep, Glob, Write, Bash(gh pr view \*), Bash(gh pr comment \*), Bash(\*gh-fetch-review-comments.sh \*), Bash(\*gh-fetch-reviews.sh \*), Bash(\*gh-post-review.sh \*), Bash(\*gh-pr-base-sha.sh \*), Bash(git \*) |
-| `rust-best-practices` | Rust programming checklists and reference material | Read, WebFetch |
-| `severity` | Consistent severity classification (CRITICAL–INFO) for review findings | _(preloaded)_ |
-| `merge-base` | Careful merge of remote base branch into current feature branch | _(inherited)_ |
-| `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series | WebFetch, WebSearch |
-
-### Recommended permissions
-
-The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively — which defeats the purpose of autonomous operation.
-
-Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
-
-## Skill: `grumpy-review` + `triage-findings`
+### `/grumpy-review` then `/triage-findings`
 
 A two-phase code review workflow: automated multi-agent review followed by interactive human triage.
 
@@ -107,6 +38,70 @@ A two-phase code review workflow: automated multi-agent review followed by inter
 After you submit decisions, Claude reads the updated report and acts on them — applying fixes, inserting comments, and summarizing what was done.
 
 **Why this matters:** Code reviews produce noise. Not every finding deserves immediate action. The triage step puts a human in the loop *before* any code changes happen, so you control exactly what gets fixed, deferred, or accepted. The `INTENTIONAL` comment mechanism creates a persistent record that carries forward across reviews.
+
+## Installation
+
+Add the marketplace and install the plugin:
+
+```
+/plugin marketplace add lklimek/agents
+/plugin install claudius@lklimek
+```
+
+## Agents
+
+| Name | Description | Tools |
+|------|-------------|-------|
+| `claudius` | General-purpose coding assistant and team coordinator | _(all)_ |
+| `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
+| `business-domain-analyst` | Business requirements, stakeholder analysis, user stories, acceptance criteria | Read, Grep, Glob, WebSearch, WebFetch |
+| `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation verification | Read, Grep, Glob, Bash, Task |
+| `devops-engineer` | Docker, CI/CD pipelines, GitHub Actions, infrastructure configuration | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
+| `frontend-developer` | TypeScript/JavaScript, React/Vue/Svelte, CSS/styling, frontend tooling | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
+| `go-developer` | Go implementation, idiomatic patterns, table-driven tests | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
+| `python-developer` | Python implementation, PEP 8, pytest | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
+| `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash |
+| `rust-developer` | Rust implementation, ownership patterns, Cargo | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
+| `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
+| `technical-researcher` | Technology evaluation, feasibility studies, library/framework comparison | Read, Grep, Glob, Bash, WebSearch, WebFetch |
+| `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash |
+| `ux-designer` | User flows, wireframes, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch |
+
+### Optional plugin dependencies
+
+Some agents delegate to skills from external plugins for specialized capabilities. These plugins are **not required** — agents work without them — but installing them unlocks additional quality.
+
+| Agent | External Skill | Plugin | Benefit |
+|-------|---------------|--------|---------|
+| `frontend-developer` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
+| `rust-developer` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
+
+> **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
+
+## Skills
+
+| Name | Description |
+|------|-------------|
+| `check-pr-comments` | Verify that PR review comments have been addressed |
+| `ci-loop` | Autonomous CI monitoring and fix loop |
+| `grumpy-review` | Multi-agent code review with consolidated severity-ranked report |
+| `github` | GitHub workflow guidelines covering git and gh usage |
+| `review-dependency` | Security-focused dependency update review |
+| `review-loop` | Autonomous peer review feedback loop |
+| `triage-findings` | Interactive finding triage — classify in browser, decisions feed back to Claude |
+| `review-pr` | Audit and review pull requests |
+| `rust-best-practices` | Rust programming checklists and reference material |
+| `severity` | Consistent severity classification (CRITICAL–INFO) for review findings |
+| `merge-base` | Careful merge of remote base branch into current feature branch |
+| `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series |
+
+### Recommended permissions
+
+The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively — which defeats the purpose of autonomous operation.
+
+Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
+
+> **Note:** The maintainer typically runs Claude Code with `--dangerously-skip-permissions` in an isolated environment, so the permission list in `settings.example.json` may be incomplete or outdated. PRs improving it are welcome.
 
 ## Skill: `security-best-practices`
 
