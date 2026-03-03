@@ -1,12 +1,8 @@
 ---
 name: rust-best-practices
 description: >
-  Rust programming best practices checklists from Microsoft Pragmatic Rust Guidelines and official
-  Rust API Guidelines. Use this skill whenever writing, reviewing, or discussing Rust code quality,
-  API design, library design, error handling, naming conventions, type safety, documentation, safety,
-  performance, or FFI. Also use when someone asks about Rust idioms, patterns, or conventions, or
-  when reviewing a Rust crate for compliance with community standards. This skill provides actionable
-  checklists and detailed reference material covering all aspects of professional Rust development.
+  Rust best practices checklists (Microsoft Pragmatic + Rust API Guidelines). Use when writing,
+  reviewing, or discussing Rust code quality, API design, safety, or idioms.
 allowed-tools: Read, WebFetch
 ---
 

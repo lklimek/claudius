@@ -1,9 +1,6 @@
 ---
 name: team-coordination
-description: >
-  Team coordination and agent delegation guidelines. Invoke before spawning agents
-  or creating teams. Covers delegation, spawning, prompt requirements, worktree lifecycle,
-  scaling, output conventions, stuck agent recovery, and anti-patterns.
+description: Agent delegation and team coordination. Invoke before spawning agents or creating teams.
 ---
 
 # Team Coordination

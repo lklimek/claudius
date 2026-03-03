@@ -1,8 +1,6 @@
 ---
 name: severity
-description: >
-  Severity classification for findings in code reviews, security audits, and quality assessments.
-  Preload on agents that produce review findings to ensure consistent severity ratings.
+description: Severity classification for review findings. Preloaded on agents that produce findings.
 ---
 
 # Severity Classification

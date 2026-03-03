@@ -1,14 +1,8 @@
 ---
 name: security-best-practices
 description: >
-  Secure programming best practices based on the OWASP Cheat Sheet Series. Use this skill
-  whenever writing, reviewing, or discussing application security, input validation, authentication,
-  authorization, cryptography, session management, error handling, logging, or any code that handles
-  user input, secrets, HTTP headers, file uploads, or API endpoints. Also use when someone asks about
-  preventing common vulnerabilities (XSS, SQL injection, CSRF, SSRF, etc.), securing infrastructure
-  (Docker, Kubernetes, CI/CD), or reviewing dependencies for supply chain risks. This skill should be
-  consulted proactively during code review and security audit tasks, even if the user does not
-  explicitly mention security.
+  OWASP-based secure programming practices. Use when writing or reviewing code handling auth,
+  crypto, user input, secrets, or API endpoints. Consult proactively during reviews and planning.
 model: opus
 allowed-tools: Grep, Read, Glob, WebFetch, WebSearch
 ---

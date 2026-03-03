@@ -1,9 +1,6 @@
 ---
 name: workflow-simplified
-description: >
-  Simplified development workflow — use for bug fixes, small changes (≤200 lines), small local
-  refactorings. Same 5 phases as feature workflow but with lighter ceremony.
-  Invoke before starting small implementation tasks.
+description: Simplified workflow — bug fixes, small changes (≤200 lines). Phases: Requirements → Architecture → TDD → Implementation → QA (lighter ceremony).
 ---
 
 # Simplified Workflow

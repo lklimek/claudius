@@ -1,9 +1,8 @@
 ---
 name: workflow-feature
 description: >
-  Feature development workflow — use for new projects, new/fundamentally modified features, major
-  refactoring. Defines 5 phases: Requirements → Architecture → TDD → Implementation → QA.
-  Invoke before starting any significant implementation task.
+  Feature workflow — new projects, new features, major refactoring.
+  Phases: Requirements → Architecture → TDD → Implementation → QA.
 ---
 
 # Feature Workflow

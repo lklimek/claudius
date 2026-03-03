@@ -1,8 +1,6 @@
 ---
 name: merge-base
-description: >
-  Merge base branch into feature branch with conflict resolution and behavioral analysis.
-  Use for large merges or branches with conflicts.
+description: Merge base into feature branch with conflict resolution. Use for large or conflict-heavy merges.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git branch *), Bash(git rev-parse *), Bash(git fetch *), Bash(git pull *), Bash(git symbolic-ref refs/remotes/origin/HEAD), Bash(git merge-base *), Bash(git merge *), Bash(git merge --abort), Bash(git log *), Bash(git diff *), Bash(git add *), Bash(git commit *), Bash(git status), Bash(git status *), Bash(gh pr view *)
 ---
 

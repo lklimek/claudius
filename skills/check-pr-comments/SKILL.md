@@ -1,6 +1,6 @@
 ---
 name: check-pr-comments
-description: Verify whether existing PR review comments have been addressed in code. Checks out the branch, verifies each comment against current code, resolves addressed threads, and produces a structured JSON report compatible with triage-findings. Use when asked to check, triage, or verify PR review feedback.
+description: Verify PR review comments are addressed in code. Produces report compatible with triage-findings.
 allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr checkout *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-thread.sh *), Bash(git pull *), Bash(git fetch *), Bash(*validate_report.py *), Bash(*generate_review_report.py *)
 ---
 

@@ -1,12 +1,8 @@
 ---
 name: grumpy-review
 description: >
-  Comprehensive code review methodology using parallel specialist agents. Use this skill whenever
-  performing a code review, security audit, or quality assessment of a codebase, branch, or set of
-  changes. Covers: code quality, security (with OWASP classification), cryptographic soundness,
-  dependency security, language best practices, and documentation. Produces a consolidated report
-  with deduplicated, severity-ranked findings. Designed for large codebases where parallel agents
-  provide thorough coverage.
+  Parallel-agent code review for quality, security, dependencies, and docs. Use for reviews,
+  audits, or quality assessments. Produces deduplicated severity-ranked report.
 agent: claudius
 context: fork
 model: opus

@@ -1,8 +1,6 @@
 ---
 name: workflow-trivial
-description: >
-  Trivial workflow — use for typos, single-line fixes (≤20 lines), no new dependencies or files.
-  Only 3 phases: TDD → Implementation → QA.
+description: Trivial workflow — typos, ≤20 lines. Phases: TDD → Implementation → QA.
 ---
 
 # Trivial Workflow

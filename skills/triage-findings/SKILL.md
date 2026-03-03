@@ -1,9 +1,6 @@
 ---
 name: triage-findings
-description: >
-  Interactive triage of review findings. Starts a local server with a triage UI.
-  User classifies findings in browser, decisions are written back to report.json.
-  Use after grumpy-review or check-pr-comments to let the user decide what to fix, accept, or defer.
+description: Interactive browser-based triage of review findings. Only invoke when the user explicitly requests triage.
 user-invocable: true
 argument-hint: <path to report.json>
 allowed-tools: Read, Write, Edit, Bash(*validate_report.py *), Bash(*triage_server.py *), Bash(fuser -k */tcp), Glob, Grep
