@@ -36,5 +36,5 @@ if ! [[ "$reviewer" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\[bot\])?$ ]]; th
   exit 1
 fi
 
-gh api "repos/${owner}/${repo}/pulls/${pr_number}/requested_reviewers" \
+ghsudo gh api "repos/${owner}/${repo}/pulls/${pr_number}/requested_reviewers" \
   --method POST -f "reviewers[]=${reviewer}"

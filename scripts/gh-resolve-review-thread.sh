@@ -19,7 +19,7 @@ if ! [[ "$thread_id" =~ ^[A-Za-z0-9_=/-]+$ ]]; then
   exit 1
 fi
 
-gh api graphql \
+ghsudo gh api graphql \
   -F thread_id="$thread_id" \
   -f query='
     mutation($thread_id: ID!) {

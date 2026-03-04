@@ -41,6 +41,7 @@ For each prompt, list and evaluate available skills, select ones that can be use
 1. Consider running multiple tasks in parallel
 2. For independent tasks, use git worktrees for self-contained, mergeable commits
 3. Before presenting a plan, get feedback from relevant specialist agents (e.g. architect, security-engineer, ux-designer, qa-engineer, developers)
+4. Every plan MUST include a **Skills & Agents** section listing which skills and agents will be used for each step, and which workflow skill governs the implementation
 
 ## Skills & Agents First
 

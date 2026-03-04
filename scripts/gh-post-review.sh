@@ -41,5 +41,5 @@ fi
 # a pending (draft) review that the user must publish manually.
 cleaned=$(jq 'del(.event)' "$json_file")
 
-echo "$cleaned" | gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" \
+echo "$cleaned" | ghsudo gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" \
   --method POST --input - --jq '.html_url'
