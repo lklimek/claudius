@@ -4,7 +4,7 @@ description: "Parallel-agent code review for quality, security, dependencies, an
 agent: claudius
 context: fork
 model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(cat ../../schemas/*), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology
@@ -171,7 +171,7 @@ Emit a `report.json` file. This is the **primary output** — all renderers cons
 **Before writing the report**, read the schema to learn the exact structure:
 
 ```bash
-cat schemas/review-report.schema.json
+cat ../../schemas/review-report.schema.json
 ```
 
 This is **mandatory** — do NOT guess field types or shapes from memory. The schema uses
@@ -184,7 +184,7 @@ Before rendering, validate `report.json` against the schema. This catches struct
 errors early — before renderers or triage tools choke on malformed data.
 
 ```bash
-python3 scripts/validate_report.py report.json
+python3 ../../scripts/validate_report.py report.json
 ```
 
 Requires `python3-jsonschema` (`apt install python3-jsonschema`).
@@ -195,7 +195,7 @@ If validation fails, fix the JSON and re-validate before proceeding. Do NOT skip
 After validating `report.json`, generate a human-readable markdown version:
 
 ```bash
-python3 scripts/generate_review_report.py report.json --format md
+python3 ../../scripts/generate_review_report.py report.json --format md
 ```
 
 This produces `report.md` next to the JSON file.
@@ -212,8 +212,8 @@ If initial review reveals areas needing deeper investigation:
 If the user requests HTML or PDF versions, invoke the renderer directly:
 
 ```bash
-python3 scripts/generate_review_report.py report.json --format html
-python3 scripts/generate_review_report.py report.json --format pdf
+python3 ../../scripts/generate_review_report.py report.json --format html
+python3 ../../scripts/generate_review_report.py report.json --format pdf
 ```
 
 For interactive triage, use the `claudius:triage-findings` skill with the report.json path.

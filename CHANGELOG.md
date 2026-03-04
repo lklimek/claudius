@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.8.2] - 2026-03-04
+
+### Fixed
+- Script/schema paths in triage-findings, grumpy-review, and check-pr-comments skills now use `../../scripts/` and `../../schemas/` relative paths instead of bare `scripts/` (which resolved against agent cwd, not plugin root)
+- Tightened `allowed-tools` globs to use exact command prefixes (e.g., `python3 ../../scripts/validate_report.py *`) instead of loose wildcards
+
 ## [1.8.1] - 2026-03-04
 
 ### Changed

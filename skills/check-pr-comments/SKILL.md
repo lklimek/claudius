@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Use to verify PR review comments are addressed in code. Produces triage-compatible report.
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr *), Bash(*gh-*.sh *), Bash(git pull *), Bash(git fetch *), Bash(*report*.py *)
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr *), Bash(*gh-*.sh *), Bash(git pull *), Bash(git fetch *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *)
 ---
 
 # Check PR Comments Workflow
@@ -31,7 +31,7 @@ For every inline comment, read the file at the referenced location and **verify 
 
 ## 4. Build Structured Report JSON
 
-Produce a `report.json` file following the unified report schema (`schemas/review-report.schema.json` v1.1.0).
+Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v1.1.0).
 
 ### Report structure
 
@@ -99,7 +99,7 @@ Assign sequential IDs: `CMT-001`, `CMT-002`, etc. Order: unresolved first (by se
 ## 5. Validate Report
 
 ```bash
-python3 scripts/validate_report.py report.json
+python3 ../../scripts/validate_report.py report.json
 ```
 
 If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid data.
@@ -107,7 +107,7 @@ If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid d
 ## 6. Render and Present
 
 ```bash
-python3 scripts/generate_review_report.py report.json --format md
+python3 ../../scripts/generate_review_report.py report.json --format md
 ```
 
 Present the rendered markdown report to the user. Optionally generate HTML (`--format html`) for richer display.

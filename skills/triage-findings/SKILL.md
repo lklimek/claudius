@@ -3,7 +3,7 @@ name: triage-findings
 description: Use for interactive browser-based triage of review findings. Only invoke when explicitly requested.
 user-invocable: true
 argument-hint: path/to/report.json
-allowed-tools: Read, Write, Edit, Bash(*validate_report.py *), Bash(*triage_server.py *), Bash(fuser -k */tcp), Glob, Grep
+allowed-tools: Read, Write, Edit, Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/triage_server.py *), Bash(fuser -k */tcp), Glob, Grep
 ---
 
 # Interactive Finding Triage
@@ -17,7 +17,7 @@ finding in a browser UI, and decisions are written back to the report JSON.
 
 1. Validate the report JSON against the schema:
    ```bash
-   python3 scripts/validate_report.py "$ARGUMENTS"
+   python3 ../../scripts/validate_report.py "$ARGUMENTS"
    ```
    Requires `python3-jsonschema` (`apt install python3-jsonschema`).
    If validation fails, fix the JSON and re-validate before proceeding.
@@ -25,7 +25,7 @@ finding in a browser UI, and decisions are written back to the report JSON.
 
 2. Start the triage server (default port 8741):
    ```bash
-   python3 scripts/triage_server.py "$ARGUMENTS" [--port PORT]
+   python3 ../../scripts/triage_server.py "$ARGUMENTS" [--port PORT]
    ```
    The server auto-opens a browser. If that fails, it prints the URL for the user.
 
