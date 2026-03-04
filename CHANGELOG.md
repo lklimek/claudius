@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-03-04
+
+### Changed
+- Claudius agent is now a pure coordinator — selects skills/agents, plans, and delegates; never implements directly
+- Merged `team-coordination` skill content into claudius agent definition (delegation style, spawning approaches, agent prompt requirements, worktree lifecycle, scaling, output conventions, anti-patterns)
+
+### Removed
+- `team-coordination` skill — consolidated into claudius agent
+
 ## [1.6.4] - 2026-03-04
 
 ### Changed
