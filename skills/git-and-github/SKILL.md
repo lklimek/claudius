@@ -33,6 +33,13 @@ Use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summar
 
 ## Pushing
 
+**Always use `ghsudo` for pushes** — ensures the correct write-access token is used:
+
+```bash
+ghsudo git push
+ghsudo git push -u origin <branch>
+```
+
 **Always ask the user for explicit confirmation before every push.** Never push automatically — even after committing or creating a PR. Even if the user agreed to push earlier, ask again before next push.
 
 **Never force-push. Never amend commits.** Always create new commits. If force-push is required, ask the user to do it manually.
