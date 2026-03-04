@@ -1,29 +1,26 @@
 #!/usr/bin/env bash
 # Get the base commit SHA for a pull request.
 #
-# Usage: gh-pr-base-sha.sh <owner> <repo> <pr_number>
+# Usage: gh-pr-base-sha.sh <owner/repo> <pr_number>
 #
 # Output: the base SHA (single line)
 set -euo pipefail
 
-if [[ $# -ne 3 ]]; then
-  echo "Usage: $0 <owner> <repo> <pr_number>" >&2
+if [[ $# -ne 2 ]]; then
+  echo "Usage: $0 <owner/repo> <pr_number>" >&2
   exit 1
 fi
 
-owner="$1"
-repo="$2"
-pr_number="$3"
+owner_repo="$1"
+pr_number="$2"
 
-if ! [[ "$owner" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "Error: invalid owner format" >&2
+if ! [[ "$owner_repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: invalid owner/repo format (expected: owner/repo)" >&2
   exit 1
 fi
 
-if ! [[ "$repo" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "Error: invalid repo format" >&2
-  exit 1
-fi
+owner="${owner_repo%/*}"
+repo="${owner_repo##*/}"
 
 if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   echo "Error: pr_number must be a positive integer" >&2

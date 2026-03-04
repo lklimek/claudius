@@ -79,7 +79,7 @@ yet in the local branch). Before constructing inline comments:
 
 1. **Get the PR base SHA** that GitHub uses:
    ```bash
-   ../../scripts/gh-pr-base-sha.sh <owner> <repo> <number>
+   ../../scripts/gh-pr-base-sha.sh <owner/repo> <number>
    ```
 
 2. **Check each file's diff hunks** to confirm your comment lines are within them. Use the local
@@ -117,7 +117,7 @@ cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
   ]
 }
 ENDJSON
-../../scripts/gh-post-review.sh <owner> <repo> <number> "$SESSION_DIR/pr-review.json"
+../../scripts/gh-post-review.sh <owner/repo> <number> "$SESSION_DIR/pr-review.json"
 ```
 
 Rules:

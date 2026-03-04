@@ -1,31 +1,28 @@
 #!/usr/bin/env bash
 # Post a draft review with inline comments on a pull request.
 #
-# Usage: gh-post-review.sh <owner> <repo> <pr_number> <json_file>
+# Usage: gh-post-review.sh <owner/repo> <pr_number> <json_file>
 #
 # The json_file must contain a JSON object with commit_id, body, and comments array.
 # The script enforces draft mode by stripping any "event" field from the input.
 set -euo pipefail
 
-if [[ $# -ne 4 ]]; then
-  echo "Usage: $0 <owner> <repo> <pr_number> <json_file>" >&2
+if [[ $# -ne 3 ]]; then
+  echo "Usage: $0 <owner/repo> <pr_number> <json_file>" >&2
   exit 1
 fi
 
-owner="$1"
-repo="$2"
-pr_number="$3"
-json_file="$4"
+owner_repo="$1"
+pr_number="$2"
+json_file="$3"
 
-if ! [[ "$owner" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "Error: invalid owner format" >&2
+if ! [[ "$owner_repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: invalid owner/repo format (expected: owner/repo)" >&2
   exit 1
 fi
 
-if ! [[ "$repo" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "Error: invalid repo format" >&2
-  exit 1
-fi
+owner="${owner_repo%/*}"
+repo="${owner_repo##*/}"
 
 if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   echo "Error: pr_number must be a positive integer" >&2

@@ -102,30 +102,30 @@ cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
   ]
 }
 ENDJSON
-../../scripts/gh-post-review.sh <owner> <repo> <number> "$SESSION_DIR/pr-review.json"
+../../scripts/gh-post-review.sh <owner/repo> <number> "$SESSION_DIR/pr-review.json"
 ```
 
 **Available scripts** (`../../scripts/`):
 
 ```
-gh-fetch-review-comments.sh <owner> <repo> <pr>
+gh-fetch-review-comments.sh <owner/repo> <pr>
   → {id, path, line, original_line, body, user, in_reply_to_id, html_url}
 
-gh-fetch-reviews.sh <owner> <repo> <pr>
+gh-fetch-reviews.sh <owner/repo> <pr>
   → {id, state, submitted_at, body, user}
 
-gh-post-review.sh <owner> <repo> <pr> <json_file>
+gh-post-review.sh <owner/repo> <pr> <json_file>
   → Posts draft review. Input: {commit_id, body, comments: [{path, line, side, body}]}
 
-gh-request-reviewer.sh <owner> <repo> <pr> <reviewer>
+gh-request-reviewer.sh <owner/repo> <pr> <reviewer>
 
-gh-list-review-threads.sh <owner> <repo> <pr>
+gh-list-review-threads.sh <owner/repo> <pr>
   → {id, isResolved, comments: [{databaseId, path, body}]}
 
 gh-resolve-review-thread.sh <thread_id>
   → Ask user before resolving. Never resolve partially addressed threads.
 
-gh-pr-base-sha.sh <owner> <repo> <pr>
+gh-pr-base-sha.sh <owner/repo> <pr>
   → Base commit SHA.
 
 diff-anchors.py <file_path> [...]

@@ -1,28 +1,25 @@
 #!/usr/bin/env bash
 # Request a reviewer on a pull request.
 #
-# Usage: gh-request-reviewer.sh <owner> <repo> <pr_number> <reviewer>
+# Usage: gh-request-reviewer.sh <owner/repo> <pr_number> <reviewer>
 set -euo pipefail
 
-if [[ $# -ne 4 ]]; then
-  echo "Usage: $0 <owner> <repo> <pr_number> <reviewer>" >&2
+if [[ $# -ne 3 ]]; then
+  echo "Usage: $0 <owner/repo> <pr_number> <reviewer>" >&2
   exit 1
 fi
 
-owner="$1"
-repo="$2"
-pr_number="$3"
-reviewer="$4"
+owner_repo="$1"
+pr_number="$2"
+reviewer="$3"
 
-if ! [[ "$owner" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "Error: invalid owner format" >&2
+if ! [[ "$owner_repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: invalid owner/repo format (expected: owner/repo)" >&2
   exit 1
 fi
 
-if ! [[ "$repo" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "Error: invalid repo format" >&2
-  exit 1
-fi
+owner="${owner_repo%/*}"
+repo="${owner_repo##*/}"
 
 if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   echo "Error: pr_number must be a positive integer" >&2

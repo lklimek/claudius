@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.8.3] - 2026-03-04
+
+### Changed
+- All `gh-*.sh` scripts now accept `owner/repo` as a single argument instead of separate `<owner>` and `<repo>` args
+- Updated usage examples in `git-and-github` and `review-pr` skills to match new script signatures
+
 ## [1.8.2] - 2026-03-04
 
 ### Fixed
