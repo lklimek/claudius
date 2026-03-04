@@ -71,7 +71,7 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 |-------|---------------|--------|---------|
 | `developer-bilby` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
 | `developer-bilby` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
-| `claudius` (all workflows) | `persistent-memory` | [`mindojo`](https://github.com/lklimek/mindojo)¹ | Persistent lessons-learned memory across sessions |
+| `claudius` (all workflows) | `lessons-learned` | [`mindojo`](https://github.com/lklimek/mindojo)¹ | Persistent lessons-learned memory across sessions |
 
 > **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
 

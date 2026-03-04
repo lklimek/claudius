@@ -80,7 +80,7 @@ Use matching ones — do not reinvent what a skill or agent already provides.
 - **go-best-practices** — Go idioms, error handling, concurrency, testing
 - **grumpy-review** — parallel-agent code review producing severity-ranked report
 - **merge-base** — merge base into feature branch with conflict resolution
-- **persistent-memory** — save and recall lessons learned, decisions, preferences across sessions
+- **lessons-learned** — extract and recall learnings from conversation history
 - **python-best-practices** — PEP 8, type hints, testing, error handling, tooling
 - **review-dependency** — security review of dependency updates
 - **review-loop** — autonomous peer review: request, wait, fix, push, repeat
