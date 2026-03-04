@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.6.1] - 2026-03-04
+
+### Added
+- Test isolation rule in `coding-best-practices` — protect real user data by redirecting config/data/DB to temp paths
+
 ## [1.6.0] - 2026-03-04
 
 ### Changed
@@ -251,6 +256,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[1.6.1]: https://github.com/lklimek/claudius/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/lklimek/claudius/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/lklimek/claudius/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/lklimek/claudius/compare/v1.4.3...v1.5.0
