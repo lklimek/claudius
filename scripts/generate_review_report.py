@@ -329,6 +329,15 @@ details summary:hover{color:{{ ACCENT }}}
   .kpi-row{flex-direction:column}
   .header-bar h1{font-size:1.1rem}
 }
+/* Report toolbar (filter/sort) */
+.report-toolbar{background:{{ BG_LIGHT }};border:1px solid {{ BORDER }};border-radius:6px;
+  padding:.6rem .8rem;margin:.8rem auto;max-width:960px;display:flex;flex-wrap:wrap;
+  gap:.5rem;align-items:center}
+.report-toolbar select,.report-toolbar input[type=text]{padding:5px 10px;border:1px solid {{ BORDER }};
+  border-radius:4px;font-size:.85rem;transition:border-color .15s,box-shadow .15s}
+.report-toolbar select:focus,.report-toolbar input:focus{border-color:{{ ACCENT }};
+  box-shadow:0 0 0 2px rgba(36,113,163,.15);outline:none}
+.report-toolbar .count-label{font-size:.8rem;color:{{ TEXT_MUTED }};margin-left:auto}
 {% block extra_css %}{% endblock %}
 </style>
 </head>
@@ -348,6 +357,36 @@ details summary:hover{color:{{ ACCENT }}}
   {% if remediation %}<a href="#remediation">Remediation</a>{% endif %}
   <a href="#charts">Charts</a>
 </nav>
+
+{% if not triage %}
+<div class="report-toolbar no-print" id="reportToolbar">
+  <select id="filterSeverity">
+    <option value="">All Severities</option>
+    <option value="CRITICAL">Critical</option>
+    <option value="HIGH">High</option>
+    <option value="MEDIUM">Medium</option>
+    <option value="LOW">Low</option>
+    <option value="INFO">Info</option>
+  </select>
+  <select id="filterCategory">
+    <option value="">All Categories</option>
+    <option value="security">Security</option>
+    <option value="project">Project</option>
+    <option value="code_quality">Code Quality</option>
+    <option value="documentation">Documentation</option>
+    <option value="dependencies">Dependencies</option>
+    <option value="pr_comments">PR Comments</option>
+  </select>
+  <input type="text" id="filterSearch" placeholder="Search findings\u2026" aria-label="Search findings">
+  <select id="sortBy">
+    <option value="">Sort by\u2026</option>
+    <option value="severity">Severity</option>
+    <option value="id">ID</option>
+    <option value="category">Category</option>
+  </select>
+  <span class="count-label" id="filterCount"></span>
+</div>
+{% endif %}
 
 <div class="container">
 
@@ -433,7 +472,7 @@ details summary:hover{color:{{ ACCENT }}}
 <summary>{{ sec.findings | length }} finding{{ "s" if sec.findings | length != 1 else "" }}</summary>
 
 {% for f in sec.findings %}
-<div class="finding finding-{{ f.severity }}" id="finding-{{ f.id }}">
+<div class="finding finding-{{ f.severity }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ sec.category }}">
   <h3>
     <span class="badge badge-{{ f.severity }}">{{ f.severity }}</span>
     {{ f.id }}: {{ f.title }}
@@ -646,6 +685,69 @@ details summary:hover{color:{{ ACCENT }}}
   {% endif %}
 })();
 </script>
+
+{% if not triage %}
+<script>
+(function(){
+  const findings = document.querySelectorAll(".finding[data-finding-id]");
+  const totalCount = findings.length;
+  const sevFilter = document.getElementById("filterSeverity");
+  const catFilter = document.getElementById("filterCategory");
+  const searchInput = document.getElementById("filterSearch");
+  const sortSelect = document.getElementById("sortBy");
+  const countLabel = document.getElementById("filterCount");
+
+  function updateCount() {
+    const visible = Array.from(findings).filter(f => f.style.display !== "none").length;
+    if (countLabel) countLabel.textContent = visible < totalCount
+      ? "Showing " + visible + " of " + totalCount + " findings"
+      : totalCount + " findings";
+  }
+
+  function applyFilters() {
+    const sv = sevFilter ? sevFilter.value : "";
+    const ct = catFilter ? catFilter.value : "";
+    const q = searchInput ? searchInput.value.toLowerCase() : "";
+    findings.forEach(f => {
+      let show = true;
+      if (sv && f.dataset.severity !== sv) show = false;
+      if (ct && f.dataset.category !== ct) show = false;
+      if (q && !f.textContent.toLowerCase().includes(q)) show = false;
+      f.style.display = show ? "" : "none";
+    });
+    // Hide parent <details> sections when all their findings are hidden
+    document.querySelectorAll("details").forEach(det => {
+      const children = det.querySelectorAll(".finding[data-finding-id]");
+      if (children.length === 0) return;
+      const allHidden = Array.from(children).every(c => c.style.display === "none");
+      det.style.display = allHidden ? "none" : "";
+    });
+    updateCount();
+  }
+
+  function applySort() {
+    const key = sortSelect ? sortSelect.value : "";
+    if (!key) return;
+    const sevRank = {"CRITICAL":0,"HIGH":1,"MEDIUM":2,"LOW":3,"INFO":4};
+    const arr = Array.from(findings);
+    arr.sort((a, b) => {
+      if (key === "severity") return (sevRank[a.dataset.severity]||9) - (sevRank[b.dataset.severity]||9);
+      if (key === "id") return a.dataset.findingId.localeCompare(b.dataset.findingId);
+      if (key === "category") return (a.dataset.category||"").localeCompare(b.dataset.category||"");
+      return 0;
+    });
+    arr.forEach(el => el.parentNode.appendChild(el));
+  }
+
+  if (sevFilter) sevFilter.addEventListener("change", applyFilters);
+  if (catFilter) catFilter.addEventListener("change", applyFilters);
+  if (searchInput) searchInput.addEventListener("input", applyFilters);
+  if (sortSelect) sortSelect.addEventListener("change", () => { applySort(); applyFilters(); });
+
+  updateCount();
+})();
+</script>
+{% endif %}
 
 {% block extra_js %}{% endblock %}
 </body>
@@ -1022,7 +1124,10 @@ def render_triage(data: dict[str, Any]) -> str:
     """Render the report as an interactive triage HTML page."""
     from jinja2 import Environment
 
-    # Build a triage-augmented template by injecting extra CSS and JS blocks
+    # Build a triage-augmented template by injecting extra CSS and JS blocks.
+    # The base template already provides data attributes on findings and a
+    # filter toolbar (hidden when triage=True via {% if not triage %}).
+    # Here we add triage-specific CSS, JS, controls, and the triage toolbar.
     triage_template = _HTML_TEMPLATE.replace(
         "{% block extra_css %}{% endblock %}",
         _TRIAGE_EXTRA_CSS,
@@ -1031,20 +1136,20 @@ def render_triage(data: dict[str, Any]) -> str:
         _TRIAGE_EXTRA_JS,
     )
 
-    # Augment the finding divs to include triage controls and data attributes
-    # We do this by replacing the finding div in the template
+    # Add data-verdict attribute to finding divs (base template has the others)
     old_finding_div = (
-        '<div class="finding finding-{{ f.severity }}" id="finding-{{ f.id }}">'
+        ' data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}"'
+        ' data-category="{{ sec.category }}">'
     )
     new_finding_div = (
-        '<div class="finding finding-{{ f.severity }}" id="finding-{{ f.id }}"'
         ' data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}"'
-        ' data-category="{{ sec.category }}" data-verdict="{{ f.verdict | default(\'\', true) }}">'
+        ' data-category="{{ sec.category }}"'
+        " data-verdict=\"{{ f.verdict | default('', true) }}\">"
     )
     triage_template = triage_template.replace(old_finding_div, new_finding_div)
-    assert (
-        new_finding_div in triage_template
-    ), "Template patch failed: finding div not found in triage template"
+    assert new_finding_div in triage_template, (
+        "Template patch failed: finding div not found in triage template"
+    )
 
     # Add triage row after each finding's </dl>
     old_dl_close = "  </dl>\n</div>\n{% endfor %}"
@@ -1058,7 +1163,7 @@ def render_triage(data: dict[str, Any]) -> str:
         '      <option value="defer">Defer</option>\n'
         '      <option value="false_positive">False Positive</option>\n'
         '      <option value="duplicate">Duplicate</option>\n'
-        '    </select>\n'
+        "    </select>\n"
         '    <input type="text" class="triage-rationale" placeholder="Rationale...">\n'
         '    <span class="decision-hint" aria-live="polite"></span>\n'
         "  </div>\n"
@@ -1066,7 +1171,9 @@ def render_triage(data: dict[str, Any]) -> str:
     )
     triage_template = triage_template.replace(old_dl_close, new_dl_close)
 
-    # Add toolbar before the first section heading
+    # Add triage toolbar before the first section heading.
+    # The base report toolbar is hidden ({% if not triage %}), so we inject
+    # the triage-specific toolbar with bulk actions, verdict filter, etc.
     toolbar_html = """
 <div class="triage-toolbar no-print" id="triageToolbar">
   <select id="bulkAction">
