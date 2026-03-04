@@ -15,7 +15,7 @@ Use for typos, single-line fixes (≤20 lines), no new dependencies/files.
 
 3. **QA** — pass tests, formatter, linter.
 
-4. **Lessons Learned** — if anything noteworthy was learned, save via `mindajo:persistent-memory` skill (if available). Default to global memories unless strictly project-specific. Report count of memories saved. Skip for truly trivial fixes.
+4. **Lessons Learned** — if anything noteworthy was learned, save via `mindojo:persistent-memory` skill (if available). Default to global memories unless strictly project-specific. Report count of memories saved. Skip for truly trivial fixes.
 
 ## TDD Discipline
 

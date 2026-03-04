@@ -7,9 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ## [1.8.0] - 2026-03-04
 
 ### Added
-- Lessons Learned phase to all workflow skills (feature, simplified, trivial) — reflects on task, saves insights via `mindajo:persistent-memory` skill (if available), defaults to global memories, reports count of memories saved
+- Lessons Learned phase to all workflow skills (feature, simplified, trivial) — reflects on task, saves insights via `mindojo:persistent-memory` skill (if available), defaults to global memories, reports count of memories saved
 - `persistent-memory` to claudius agent's Available Skills list
-- `mindajo` as optional plugin dependency in README (requires Docker Compose for Qdrant; install from `lklimek/agents` marketplace)
+- `mindojo` as optional plugin dependency in README (requires Docker Compose for Qdrant; install from `lklimek/agents` marketplace)
 
 ## [1.7.0] - 2026-03-04
 
