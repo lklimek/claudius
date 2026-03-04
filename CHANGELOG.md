@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.6.2] - 2026-03-04
+
+### Added
+- Interactive filter/sort toolbar in standalone HTML report (`--format html`): severity filter, category filter, text search, sort by severity/ID/category with ascending/descending toggle
+- Sort by severity regroups findings under severity headings (CRITICAL, HIGH, etc.) with color-coded borders
+- Section hiding — entire finding sections collapse when all their findings are filtered out
+- Visible count label ("Showing X of Y findings") updates dynamically
+- Data attributes (`data-finding-id`, `data-severity`, `data-category`) on finding divs in base template, shared by both html and triage formats
+- Sort order toggle button (▲/▼) for reversing sort direction
+
+### Changed
+- Refactored `render_triage()` to build on base template data attributes instead of re-patching them
+- Toolbar hidden via `{% if not triage %}` guard — triage keeps its own richer toolbar
+- Toolbar hidden in print via existing `.no-print` CSS rule
+
 ## [1.6.1] - 2026-03-04
 
 ### Added

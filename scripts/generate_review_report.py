@@ -358,36 +358,6 @@ details summary:hover{color:{{ ACCENT }}}
   <a href="#charts">Charts</a>
 </nav>
 
-{% if not triage %}
-<div class="report-toolbar no-print" id="reportToolbar">
-  <select id="filterSeverity">
-    <option value="">All Severities</option>
-    <option value="CRITICAL">Critical</option>
-    <option value="HIGH">High</option>
-    <option value="MEDIUM">Medium</option>
-    <option value="LOW">Low</option>
-    <option value="INFO">Info</option>
-  </select>
-  <select id="filterCategory">
-    <option value="">All Categories</option>
-    <option value="security">Security</option>
-    <option value="project">Project</option>
-    <option value="code_quality">Code Quality</option>
-    <option value="documentation">Documentation</option>
-    <option value="dependencies">Dependencies</option>
-    <option value="pr_comments">PR Comments</option>
-  </select>
-  <input type="text" id="filterSearch" placeholder="Search findings\u2026" aria-label="Search findings">
-  <select id="sortBy">
-    <option value="">Sort by\u2026</option>
-    <option value="severity">Severity</option>
-    <option value="id">ID</option>
-    <option value="category">Category</option>
-  </select>
-  <span class="count-label" id="filterCount"></span>
-</div>
-{% endif %}
-
 <div class="container">
 
 <!-- Executive Summary -->
@@ -464,7 +434,40 @@ details summary:hover{color:{{ ACCENT }}}
 {% endif %}
 
 <!-- Detailed findings by section -->
+{% if not triage %}
+<div class="report-toolbar no-print" id="reportToolbar">
+  <select id="filterSeverity">
+    <option value="">All Severities</option>
+    <option value="CRITICAL">Critical</option>
+    <option value="HIGH">High</option>
+    <option value="MEDIUM">Medium</option>
+    <option value="LOW">Low</option>
+    <option value="INFO">Info</option>
+  </select>
+  <select id="filterCategory">
+    <option value="">All Categories</option>
+    <option value="security">Security</option>
+    <option value="project">Project</option>
+    <option value="code_quality">Code Quality</option>
+    <option value="documentation">Documentation</option>
+    <option value="dependencies">Dependencies</option>
+    <option value="pr_comments">PR Comments</option>
+  </select>
+  <input type="text" id="filterSearch" placeholder="Search findings&hellip;" aria-label="Search findings">
+  <select id="sortBy">
+    <option value="">Sort by&hellip;</option>
+    <option value="severity">Severity</option>
+    <option value="id">ID</option>
+    <option value="category">Category</option>
+  </select>
+  <button type="button" id="sortOrder" title="Toggle sort order" style="padding:4px 10px;border:1px solid {{ BORDER }};border-radius:4px;background:{{ BG_WHITE }};cursor:pointer;font-size:.95rem;line-height:1;transition:border-color .15s">&#9650;</button>
+  <span class="count-label" id="filterCount"></span>
+</div>
+{% endif %}
+
+<div id="findingsContainer">
 {% for sec in findings %}
+<div class="findings-section" data-section-category="{{ sec.category }}">
 <h2 id="section-{{ loop.index }}">{{ sec.title }}</h2>
 {% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}
 
@@ -497,7 +500,9 @@ details summary:hover{color:{{ ACCENT }}}
 <p class="positives"><strong>Positive observations:</strong> {{ sec.positives }}</p>
 {% endif %}
 </details>
+</div>
 {% endfor %}
+</div>
 
 <!-- Remediation -->
 {% if remediation %}
@@ -689,22 +694,43 @@ details summary:hover{color:{{ ACCENT }}}
 {% if not triage %}
 <script>
 (function(){
-  const findings = document.querySelectorAll(".finding[data-finding-id]");
-  const totalCount = findings.length;
+  const container = document.getElementById("findingsContainer");
+  const originalHTML = container.innerHTML;
   const sevFilter = document.getElementById("filterSeverity");
   const catFilter = document.getElementById("filterCategory");
   const searchInput = document.getElementById("filterSearch");
   const sortSelect = document.getElementById("sortBy");
+  const sortOrderBtn = document.getElementById("sortOrder");
   const countLabel = document.getElementById("filterCount");
+  let ascending = true;
+  let currentSort = "";
+
+  const sevOrder = ["CRITICAL","HIGH","MEDIUM","LOW","INFO"];
+  const sevRank = {"CRITICAL":0,"HIGH":1,"MEDIUM":2,"LOW":3,"INFO":4};
+  const sevColors = {{ sev_colors_json }};
+  const catLabels = {"security":"Security","project":"Project Consistency",
+    "code_quality":"Code Quality","documentation":"Documentation",
+    "dependencies":"Dependencies","pr_comments":"PR Comments"};
+
+  function getFindings() {
+    return container.querySelectorAll(".finding[data-finding-id]");
+  }
+
+  function getTotalCount() {
+    return getFindings().length;
+  }
 
   function updateCount() {
+    const findings = getFindings();
+    const total = findings.length;
     const visible = Array.from(findings).filter(f => f.style.display !== "none").length;
-    if (countLabel) countLabel.textContent = visible < totalCount
-      ? "Showing " + visible + " of " + totalCount + " findings"
-      : totalCount + " findings";
+    if (countLabel) countLabel.textContent = visible < total
+      ? "Showing " + visible + " of " + total + " findings"
+      : total + " findings";
   }
 
   function applyFilters() {
+    const findings = getFindings();
     const sv = sevFilter ? sevFilter.value : "";
     const ct = catFilter ? catFilter.value : "";
     const q = searchInput ? searchInput.value.toLowerCase() : "";
@@ -715,34 +741,87 @@ details summary:hover{color:{{ ACCENT }}}
       if (q && !f.textContent.toLowerCase().includes(q)) show = false;
       f.style.display = show ? "" : "none";
     });
-    // Hide parent <details> sections when all their findings are hidden
-    document.querySelectorAll("details").forEach(det => {
-      const children = det.querySelectorAll(".finding[data-finding-id]");
+    // Hide entire section when all its findings are filtered out
+    container.querySelectorAll(".findings-section").forEach(sec => {
+      const children = sec.querySelectorAll(".finding[data-finding-id]");
       if (children.length === 0) return;
       const allHidden = Array.from(children).every(c => c.style.display === "none");
-      det.style.display = allHidden ? "none" : "";
+      sec.style.display = allHidden ? "none" : "";
     });
     updateCount();
   }
 
-  function applySort() {
-    const key = sortSelect ? sortSelect.value : "";
-    if (!key) return;
-    const sevRank = {"CRITICAL":0,"HIGH":1,"MEDIUM":2,"LOW":3,"INFO":4};
-    const arr = Array.from(findings);
-    arr.sort((a, b) => {
-      if (key === "severity") return (sevRank[a.dataset.severity]||9) - (sevRank[b.dataset.severity]||9);
-      if (key === "id") return a.dataset.findingId.localeCompare(b.dataset.findingId);
-      if (key === "category") return (a.dataset.category||"").localeCompare(b.dataset.category||"");
-      return 0;
-    });
-    arr.forEach(el => el.parentNode.appendChild(el));
+  function buildSection(title, findingEls, color) {
+    const sec = document.createElement("div");
+    sec.className = "findings-section";
+    const h2 = document.createElement("h2");
+    h2.textContent = title;
+    if (color) h2.style.borderBottomColor = color;
+    sec.appendChild(h2);
+    const det = document.createElement("details");
+    det.open = true;
+    const sum = document.createElement("summary");
+    sum.textContent = findingEls.length + " finding" + (findingEls.length !== 1 ? "s" : "");
+    det.appendChild(sum);
+    findingEls.forEach(f => det.appendChild(f));
+    sec.appendChild(det);
+    return sec;
+  }
+
+  function rebuildView() {
+    const key = currentSort;
+    // Collect all finding elements before rebuilding
+    const allFindings = Array.from(getFindings());
+
+    if (!key || key === "category") {
+      // Restore original category-based layout
+      container.innerHTML = originalHTML;
+      applyFilters();
+      return;
+    }
+
+    const dir = ascending ? 1 : -1;
+
+    if (key === "severity") {
+      // Group by severity, ordered by sevOrder
+      const groups = new Map();
+      sevOrder.forEach(s => groups.set(s, []));
+      allFindings.forEach(f => {
+        const s = f.dataset.severity;
+        if (!groups.has(s)) groups.set(s, []);
+        groups.get(s).push(f);
+      });
+      container.innerHTML = "";
+      const order = ascending ? sevOrder : [...sevOrder].reverse();
+      order.forEach(sev => {
+        const items = groups.get(sev);
+        if (items && items.length > 0) {
+          container.appendChild(buildSection(sev, items, sevColors[sev]));
+        }
+      });
+    } else if (key === "id") {
+      // Flat list sorted by ID
+      allFindings.sort((a, b) => a.dataset.findingId.localeCompare(b.dataset.findingId) * dir);
+      container.innerHTML = "";
+      container.appendChild(buildSection("All Findings (by ID)", allFindings));
+    }
+
+    applyFilters();
   }
 
   if (sevFilter) sevFilter.addEventListener("change", applyFilters);
   if (catFilter) catFilter.addEventListener("change", applyFilters);
   if (searchInput) searchInput.addEventListener("input", applyFilters);
-  if (sortSelect) sortSelect.addEventListener("change", () => { applySort(); applyFilters(); });
+  if (sortSelect) sortSelect.addEventListener("change", () => {
+    currentSort = sortSelect.value;
+    rebuildView();
+  });
+  if (sortOrderBtn) sortOrderBtn.addEventListener("click", () => {
+    ascending = !ascending;
+    sortOrderBtn.innerHTML = ascending ? "&#9650;" : "&#9660;";
+    sortOrderBtn.title = ascending ? "Ascending (click to reverse)" : "Descending (click to reverse)";
+    rebuildView();
+  });
 
   updateCount();
 })();
