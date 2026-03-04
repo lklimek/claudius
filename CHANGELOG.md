@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.6.3] - 2026-03-04
+
+### Changed
+- Add severity re-evaluation step to grumpy-review dedup phase — agents must load the `severity` skill and strictly apply its criteria to combat over-inflation
+
 ## [1.6.2] - 2026-03-04
 
 ### Added

@@ -161,6 +161,7 @@ most detailed description and union of tags.
   at the finding's location. If an `INTENTIONAL(...)` comment exists on or near the flagged
   lines, downgrade the finding's severity to `INFO`. These comments are added by previous
   triage runs accepting the risk and represent deliberate engineering decisions.
+- **Severity re-evaluation**: Load the `severity` skill (`/severity`), then re-assess every finding's severity using its criteria. Agents often over-inflate — apply the skill's definitions strictly.
 - Rank by severity, then by impact
 
 ### 5d. Build structured report (JSON)
