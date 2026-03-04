@@ -1,6 +1,6 @@
 ---
 name: workflow-simplified
-description: "Use for bug fixes or small changes (≤200 lines). Phases: Requirements → Architecture → TDD → Implementation → QA (lighter ceremony)."
+description: "Use for bug fixes or small changes (≤200 lines). Phases: Requirements → Architecture → TDD → Implementation → QA → Lessons Learned (lighter ceremony)."
 ---
 
 # Simplified Workflow
@@ -24,6 +24,16 @@ Follow all phases on the first iteration. QA must always be fully executed.
 5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer` + `devops-engineer`
    Docs, integration tests, code quality, security, dependency security, UX/DX audit,
    pass tests/formatter/linter.
+
+6. **Lessons Learned**
+   After QA passes, reflect on the task. Use `mindajo:persistent-memory` skill (if available) to save:
+   - Bugs found and their root causes
+   - Architecture or design decisions with rationale
+   - Patterns, anti-patterns, or workarounds discovered
+   - Surprising behavior or non-obvious gotchas
+   Default to **global memories** (omit `project` param) unless the lesson is strictly project-specific.
+   Skip if nothing noteworthy was learned. Quality over quantity.
+   Report how many memories were saved at the end of this phase.
 
 ## Subsequent Iterations
 

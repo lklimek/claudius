@@ -80,6 +80,7 @@ Use matching ones — do not reinvent what a skill or agent already provides.
 - **go-best-practices** — Go idioms, error handling, concurrency, testing
 - **grumpy-review** — parallel-agent code review producing severity-ranked report
 - **merge-base** — merge base into feature branch with conflict resolution
+- **persistent-memory** — save and recall lessons learned, decisions, preferences across sessions
 - **python-best-practices** — PEP 8, type hints, testing, error handling, tooling
 - **review-dependency** — security review of dependency updates
 - **review-loop** — autonomous peer review: request, wait, fix, push, repeat
@@ -88,16 +89,16 @@ Use matching ones — do not reinvent what a skill or agent already provides.
 - **security-best-practices** — OWASP-based secure coding for auth, crypto, input, secrets
 - **severity** — rate findings in reviews and audits
 - **triage-findings** — interactive browser-based triage of review findings (explicit request only)
-- **workflow-feature** — new projects/features/major refactoring (full ceremony)
-- **workflow-simplified** — bug fixes, small changes ≤200 lines (lighter ceremony)
-- **workflow-trivial** — typos, single-line fixes ≤20 lines
+- **workflow-feature** — new projects/features/major refactoring. Phases: Requirements → Architecture → TDD → Implementation → QA → Lessons Learned
+- **workflow-simplified** — bug fixes, small changes ≤200 lines. Phases: Requirements → Architecture → TDD → Implementation → QA → Lessons Learned
+- **workflow-trivial** — typos, single-line fixes ≤20 lines. Phases: TDD → Implementation → QA → Lessons Learned
 
 ## Workflows & Delegation
 
 **Always delegate implementation.** Select the workflow skill, then hand it to agents:
-- `workflow-feature` — new projects, new features, major refactoring
-- `workflow-simplified` — bug fixes, ≤200 lines, small refactorings
-- `workflow-trivial` — typos, ≤20 lines
+- `workflow-feature` — new projects, new features, major refactoring. Phases: Requirements → Architecture → TDD → Implementation → QA → Lessons Learned
+- `workflow-simplified` — bug fixes, ≤200 lines, small refactorings. Phases: Requirements → Architecture → TDD → Implementation → QA → Lessons Learned
+- `workflow-trivial` — typos, ≤20 lines. Phases: TDD → Implementation → QA → Lessons Learned
 
 Match agents to tasks by their frontmatter descriptions. Use the right specialist for the job.
 
