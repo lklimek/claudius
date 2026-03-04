@@ -1,6 +1,6 @@
 ---
 name: git-and-github
-description: Invoke for all git/gh commands, GitHub interactions, and access-denied issues.
+description: Invoke for all git/gh commands, GitHub interactions, and git access denied issues.
 ---
 
 # GitHub Workflow
@@ -131,8 +131,8 @@ gh-pr-base-sha.sh <owner> <repo> <pr>
 diff-anchors.py <file_path> [...]
   → "path → sha256". For diff URLs: ...files#diff-<SHA256>R<line>
 
-ghsu.py [--org ORG] <cmd> | --setup <org> | --verify [org] | --revoke [org] | --list
-  → Per-org elevated token management. See "Elevated Permissions" section below.
+ghsudo [--org ORG] <cmd> | --setup <org> | --verify [org] | --revoke [org] | --list
+  → Per-org elevated token management (pip install ghsudo). See "Elevated Permissions" section below.
 ```
 
 For PR-level (non-diff) comments: `gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'`
@@ -159,19 +159,19 @@ Check for issue templates (`git ls-tree HEAD --name-only -r .github/ | grep -i i
 - Use HEREDOCs (`<<'EOF'`) for multi-line bodies
 - When using `gh api` (read-only only), prefer `--jq` over `| jq` — `--jq` is processed internally by `gh`, avoiding shell expansion issues (`!` triggers history expansion)
 
-## Elevated Permissions (ghsu)
+## Elevated Permissions (ghsudo)
 
-When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsu to request elevated write permissions. GitHub may return 404 instead of 403 for private resources when the token lacks sufficient permissions.
+When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo to request elevated write permissions. GitHub may return 404 instead of 403 for private resources when the token lacks sufficient permissions.
 
 ```bash
-python3 ../../scripts/ghsu.py <original-command-and-args>
+ghsudo <original-command-and-args>
 # Or with explicit org:
-python3 ../../scripts/ghsu.py --org dashpay <original-command-and-args>
+ghsudo --org dashpay <original-command-and-args>
 ```
 
-ghsu auto-detects the target org from `-R owner/repo` flags or the current repo's git remote. It shows a GUI popup (or terminal prompt) with the exact command and org, asking the user to approve. If approved, it re-executes the command with the org's stored read-write token.
+ghsudo auto-detects the target org from `-R owner/repo` flags or the current repo's git remote. It shows a GUI popup (or terminal prompt) with the exact command and org, asking the user to approve. If approved, it re-executes the command with the org's stored read-write token.
 
-- Exit code 4 → no token stored. Tell the user to run `python3 ../../scripts/ghsu.py --setup <org>` to configure their read-write PAT.
+- Exit code 4 → no token stored. Tell the user to run `ghsudo --setup <org>` to configure their read-write PAT.
 - Exit code 2 → user denied the request. Do not retry.
 - Exit code 3 → no GUI and no terminal available. Inform the user.
 

@@ -91,23 +91,23 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 | `merge-base` | Careful merge of remote base branch into current feature branch |
 | `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series |
 
-### ghsu — Elevated GitHub Access
+### ghsudo — Elevated GitHub Access
 
-**Why this exists:** Claude Code authenticates to GitHub via `gh` (GitHub CLI). By default, `gh auth login` sets a single token used for all operations — both reads and writes. That means Claude can push to any repo, merge PRs, or delete branches without asking. ghsu replaces this with a **two-token model**: Claude's default token is read-only, and write operations require explicit human approval each time.
+**Why this exists:** Claude Code authenticates to GitHub via `gh` (GitHub CLI). By default, `gh auth login` sets a single token used for all operations — both reads and writes. That means Claude can push to any repo, merge PRs, or delete branches without asking. ghsudo replaces this with a **two-token model**: Claude's default token is read-only, and write operations require explicit human approval each time.
 
 **How it works:**
 
 1. Claude operates day-to-day with a **read-only** GitHub token (clone, fetch, view PRs, read issues).
 2. When a command needs write access (push, merge, create PR), GitHub returns 403 Forbidden.
-3. Claude re-runs the failed command through `ghsu.py <command>`.
-4. ghsu detects the target org, shows a GUI dialog (or terminal prompt) with the exact command, and waits for human approval.
-5. If approved, ghsu decrypts that org's **read-write** token and re-executes with `GH_TOKEN` set. The write token exists in memory only for the duration of that single command.
+3. Claude re-runs the failed command through `ghsudo <command>`.
+4. ghsudo detects the target org, shows a GUI dialog (or terminal prompt) with the exact command, and waits for human approval.
+5. If approved, ghsudo decrypts that org's **read-write** token and re-executes with `GH_TOKEN` set. The write token exists in memory only for the duration of that single command.
 
 Supports **per-organization tokens** — each GitHub org/owner gets its own encrypted read-write token. The target org is auto-detected from `-R owner/repo` flags or git remotes.
 
 **Prerequisites:**
 
-- `pip install cryptography`
+- `pip install ghsudo`
 - `gh auth setup-git` — configures git's credential helper so HTTPS remotes work with `gh`
 - Git remotes must use HTTPS (`https://github.com/…`), not SSH — update with:
   `git remote set-url origin https://github.com/OWNER/REPO.git`
@@ -126,7 +126,7 @@ Then configure git to use this token for HTTPS operations:
 gh auth setup-git
 ```
 
-**Step 2 — Generate a read-write token and store it with ghsu:**
+**Step 2 — Generate a read-write token and store it with ghsudo:**
 
 Create a second [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) scoped to the target organization with **read-write** permissions:
 
@@ -136,12 +136,12 @@ Create a second [fine-grained PAT](https://github.com/settings/personal-access-t
 - **Workflows:** Read and write (if CI is needed)
 - Add other permissions as needed for your workflow.
 
-Then store it with ghsu (per org, per machine):
+Then store it with ghsudo (per org, per machine):
 
 ```bash
-python3 scripts/ghsu.py --setup dashpay    # store write token for dashpay org
-python3 scripts/ghsu.py --setup lklimek    # store write token for lklimek org
-python3 scripts/ghsu.py --list             # see stored orgs
+ghsudo --setup dashpay    # store write token for dashpay org
+ghsudo --setup lklimek    # store write token for lklimek org
+ghsudo --list             # see stored orgs
 ```
 
 | Option | Description |
@@ -154,7 +154,7 @@ python3 scripts/ghsu.py --list             # see stored orgs
 | `--revoke [org]` | Revoke specific org's token, or all if omitted |
 | `--list` | List orgs with stored tokens |
 
-**Security:** Tokens encrypted with AES-256-GCM, keys derived (PBKDF2, 600k iterations) from machine-specific identifiers (machine-id, hostname, username). Token files (`~/.config/ghsu/tokens/<org>.enc`) are `0600`-permissioned and non-portable across machines. Decrypted tokens exist only in memory during command execution.
+See [ghsudo on GitHub](https://github.com/lklimek/ghsudo) for full documentation and security details.
 
 ### Recommended permissions
 

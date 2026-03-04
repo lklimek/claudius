@@ -84,9 +84,9 @@
       "Bash(*validate_report.py *)",
       "Bash(*generate_review_report.py *)",
       "Bash(*triage_server.py *)",
-      "Bash(*ghsu.py *)",
-      "Bash(*ghsu.py --verify *)",
-      "Bash(*ghsu.py --list)",
+      "Bash(ghsudo *)",
+      "Bash(ghsudo --verify *)",
+      "Bash(ghsudo --list)",
 
       "Bash(govulncheck *)",
       "Bash(cargo audit *)",
