@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] - 2026-03-05
+
+### Added
+- `scripts/consolidate_reports.py` — two-phase report consolidation for parallel agent reviews (prepare + assemble)
+- Unit tests for consolidation script (`tests/test_consolidate_reports.py`, 59 tests)
+- `dependencies` column in schema severity-category matrix (`review-report.schema.json`)
+
+### Changed
+- `grumpy-review` skill rewritten to use consolidation script instead of manual multi-step process
+- Schema validation now gates report output — invalid reports are not written (exit code 1)
+- `jsonschema` is now a hard requirement for the consolidation script
+- Code quality prefix fallback changed from `RUST-` to `CODE-` for language-neutral reviews
+- `$TMPDIR` references in skill examples now use `${TMPDIR:-/tmp}` fallback
+
+### Fixed
+- Path traversal in `scan_intentional` — file paths are now resolved and checked against repo root
+- `assign_ids()` docstring corrected to document in-place mutation
+- `generate_remediation()` no longer includes INFO findings in action buckets
+- Unknown severity values no longer crash sorting (safe dict lookup with default)
+- Dead `category_sections` variable removed from `assign_ids()`
+- Added 8 MB input file size limit to prevent resource exhaustion
+- Output directories are created automatically if they don't exist
+
 ## [1.8.3] - 2026-03-04
 
 ### Changed

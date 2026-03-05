@@ -4,7 +4,7 @@ description: "Parallel-agent code review for quality, security, dependencies, an
 agent: claudius
 context: fork
 model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(cat ../../schemas/*), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 ../../scripts/consolidate_reports.py *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(cat ../../schemas/*), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology
@@ -142,57 +142,89 @@ Task(subagent_type="claudius:developer-bilby", model="opus", prompt="...", name=
 
 ## 5. Consolidate Findings
 
-After all agents complete:
+After all agents complete, use the two-phase consolidation script. This automates the mechanical
+work (flattening, duplicate detection, ID assignment, statistics) and leaves judgment calls
+(dedup merging, severity re-assessment, executive summary) to you.
 
-### 5a. Collect reports
-Read all agent JSON output files from the session temp directory. Each file is an array of
-`finding_section` objects. Parse them with `json.load()`.
+### 5a. Phase 1 — Prepare
 
-### 5b. Deduplicate
-Many findings appear in multiple reports (e.g., `.unwrap()` panics found by both developer-bilby
-and security-engineer). Match by `location` + `title` similarity. Merge duplicates, keeping the
-most detailed description and union of tags.
-
-### 5c. Classify and rank
-- Reassign unified IDs: `SEC-001`, `SEC-002`, ... for security; `PROJ-001`, ... for project;
-  `RUST-001`/`PY-001`/`GO-001`/`FE-001`, ... for code quality; `DOC-001`, ... for documentation
-- Merge agent sections with the same category into unified sections
-- **INTENTIONAL downgrade**: For each finding, `grep -n 'INTENTIONAL'` in the source file
-  at the finding's location. If an `INTENTIONAL(...)` comment exists on or near the flagged
-  lines, downgrade the finding's severity to `INFO`. These comments are added by previous
-  triage runs accepting the risk and represent deliberate engineering decisions.
-- **Severity re-evaluation**: Load the `severity` skill (`/severity`), then re-assess every finding's severity using its criteria. Agents often over-inflate — apply the skill's definitions strictly.
-- Rank by severity, then by impact
-
-### 5d. Build structured report (JSON)
-
-Emit a `report.json` file. This is the **primary output** — all renderers consume this format.
-
-**Before writing the report**, read the schema to learn the exact structure:
+Run the consolidation script to flatten all agent reports, detect duplicate candidates, and
+scan for INTENTIONAL comments:
 
 ```bash
-cat ../../schemas/review-report.schema.json
+python3 ../../scripts/consolidate_reports.py prepare \
+    security-engineer:${TMPDIR:-/tmp}/security-findings.json \
+    project-reviewer:${TMPDIR:-/tmp}/project-findings.json \
+    developer-bilby:${TMPDIR:-/tmp}/rust-findings.json \
+    --repo-root $(git rev-parse --show-toplevel) \
+    --output ${TMPDIR:-/tmp}/intermediate.json \
+    --metadata '{"project":"...","date":"...","branch":"...","commit":"..."}'
 ```
 
-This is **mandatory** — do NOT guess field types or shapes from memory. The schema uses
-`additionalProperties: false` everywhere, so any extra or mistyped key causes validation
-failure. Omit optional top-level fields entirely rather than setting them to null.
+This produces `intermediate.json` containing: flattened `raw_findings` (with agent attribution),
+`duplicate_groups` (candidate clusters with overlap reasons), `intentional_downgrades` (findings
+near INTENTIONAL comments), and `section_positives`.
 
-### 5e. Validate report against schema
+### 5b. Review and merge (LLM judgment)
 
-Before rendering, validate `report.json` against the schema. This catches structural
-errors early — before renderers or triage tools choke on malformed data.
+Read `intermediate.json` and make these decisions:
+
+1. **Duplicate resolution**: For each `duplicate_groups` entry, decide whether to merge (keep the
+   most detailed description, union tags) or keep separate. Remove redundant findings.
+2. **INTENTIONAL downgrade**: For each `intentional_downgrades` entry, downgrade the finding's
+   severity to `INFO`. These represent deliberate engineering decisions from previous triage.
+3. **Severity re-evaluation**: Load the `severity` skill (`/severity`), then re-assess every
+   finding's severity using its criteria. Agents often over-inflate — apply the definitions strictly.
+4. **Merge sections**: Combine agent sections with the same category into unified sections.
+5. **Executive summary**: Write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action`.
+6. **Agent stats**: Record per-agent unique vs redundant counts.
+
+Write the result as `merged-findings.json` with this structure:
+
+```json
+{
+  "metadata": { "project": "...", "date": "...", ... },
+  "executive_summary": { "overall_assessment": "...", ... },
+  "findings": [ { "title": "...", "category": "...", "findings": [...], "positives": "..." } ],
+  "agent_stats": [ { "agent": "...", "unique": N, "redundant": N } ],
+  "top_findings_override": null,
+  "remediation_override": null
+}
+```
+
+Findings do NOT need `id` fields — the script assigns them in phase 2. Set `top_findings_override`
+or `remediation_override` to a JSON array to override auto-generation, or `null` to auto-generate.
+
+### 5c. Phase 2 — Assemble
+
+Run the script to assign IDs, compute statistics, and produce a schema-valid report:
+
+```bash
+python3 ../../scripts/consolidate_reports.py assemble \
+    --input ${TMPDIR:-/tmp}/merged-findings.json \
+    --output report.json
+```
+
+The script assigns sequential IDs by category (SEC-001, PROJ-001, RUST-001, etc.), computes
+`summary_statistics` (severity counts, category matrix, redundancy ratio), generates
+`top_findings` from CRITICAL/HIGH items, and creates `remediation` priority buckets. It
+validates against the schema and REFUSES to write output if validation fails (exits with
+code 1). Validation is mandatory and blocks output — jsonschema is a hard requirement.
+
+### 5d. Validate report against schema
+
+The assemble step already validates and blocks output on failure, but you can re-validate
+manually (e.g., after hand-editing the report):
 
 ```bash
 python3 ../../scripts/validate_report.py report.json
 ```
 
-Requires `python3-jsonschema` (`apt install python3-jsonschema`).
-If validation fails, fix the JSON and re-validate before proceeding. Do NOT skip this step.
+If validation fails, fix the `merged-findings.json` and re-run assemble. Do NOT skip validation.
 
-### 5f. Render markdown report
+### 5e. Render markdown report
 
-After validating `report.json`, generate a human-readable markdown version:
+After validation, generate a human-readable markdown version:
 
 ```bash
 python3 ../../scripts/generate_review_report.py report.json --format md

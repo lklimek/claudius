@@ -81,6 +81,7 @@
               "security": { "type": "integer", "minimum": 0 },
               "project": { "type": "integer", "minimum": 0 },
               "code_quality": { "type": "integer", "minimum": 0 },
+              "dependencies": { "type": "integer", "minimum": 0 },
               "documentation": { "type": "integer", "minimum": 0 },
               "pr_comments": { "type": "integer", "minimum": 0 },
               "total": { "type": "integer", "minimum": 0 }
