@@ -1,19 +1,21 @@
 ---
 name: git-and-github
-description: Invoke for all git/gh commands, GitHub interactions, and git access denied issues.
+description: Invoke for all git and gh commands, GitHub interactions. Solves git and gh access / permission denied issues.
 ---
 
 # GitHub Workflow
 
 Use `git` for repository operations (clone, fetch, commit, push, branch, merge). Use `gh` for GitHub-specific operations that have no `git` equivalent (PRs, issues, releases, Actions, checks). Full `gh` reference: <https://cli.github.com/manual/>
 
-**Attribution**: Every PR, issue, and comment posted to GitHub **must** include this footer (blank line before it):
+**Attribution**: Every commit, PR, issue, and comment posted to GitHub **must** include this footer (blank line before it):
 
 ```
 <sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
 ```
 
 ## Committing
+
+Create feature branches. NEVER commit to base branch.
 
 Stage specific files — never `git add .` or `git add -A`.
 
