@@ -50,7 +50,7 @@ def make_finding():
 
 
 @pytest.fixture
-def make_section(make_finding):
+def make_section():
     """Factory for creating finding_section dicts."""
 
     def _make(
@@ -109,13 +109,13 @@ class TestSimilarityScore:
         f1 = {"location": "src/main.rs:10-20", "title": "A"}
         f2 = {"location": "src/main.rs:15-25", "title": "B"}
         score, _ = cr._similarity_score(f1, f2)
-        assert score >= 0.5  # overlap contributes 0.5
+        assert score >= 0.3  # overlap contributes 1.0 * 0.3 = 0.3
 
     def test_adjacent_lines(self):
         f1 = {"location": "src/main.rs:10-15", "title": "X"}
         f2 = {"location": "src/main.rs:20-25", "title": "Y"}
         score, _ = cr._similarity_score(f1, f2)
-        assert score >= 0.3  # adjacent contributes 0.3
+        assert score >= 0.18  # adjacent contributes 0.6 * 0.3 = 0.18
 
     def test_similar_titles(self):
         f1 = {"location": "a.rs:1", "title": "Missing error handling in auth module"}
@@ -146,8 +146,8 @@ class TestSimilarityScore:
         f1 = {"location": "a.rs:1", "title": ""}
         f2 = {"location": "a.rs:1", "title": ""}
         score, _ = cr._similarity_score(f1, f2)
-        # Empty titles don't add to score, but overlap does
-        assert score >= 0.5
+        # Empty titles don't add to score, overlap contributes 1.0 * 0.3 = 0.3
+        assert score >= 0.3
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +202,7 @@ class TestFindDuplicateGroups:
             {"location": "a.rs:10-20", "title": "Same title"},
             {"location": "a.rs:10-20", "title": "Same title"},
         ]
-        groups = cr.find_duplicate_groups(findings, threshold=0.9)
+        groups = cr.find_duplicate_groups(findings, threshold=0.7)
         assert len(groups) == 1
 
     def test_empty_list(self):
@@ -240,13 +240,13 @@ class TestAssignIds:
                 findings=[make_finding(severity="LOW", title="Stale comment")],
             ),
         ]
-        result = cr.assign_ids(sections)
-        assert result[0]["findings"][0]["id"] == "SEC-001"
-        assert result[1]["findings"][0]["id"] == "PROJ-001"
-        assert result[2]["findings"][0]["id"].startswith("CODE-")
-        assert result[3]["findings"][0]["id"] == "DEP-001"
-        assert result[4]["findings"][0]["id"] == "DOC-001"
-        assert result[5]["findings"][0]["id"] == "CMT-001"
+        cr.assign_ids(sections)
+        assert sections[0]["findings"][0]["id"] == "SEC-001"
+        assert sections[1]["findings"][0]["id"] == "PROJ-001"
+        assert sections[2]["findings"][0]["id"].startswith("CODE-")
+        assert sections[3]["findings"][0]["id"] == "DEP-001"
+        assert sections[4]["findings"][0]["id"] == "DOC-001"
+        assert sections[5]["findings"][0]["id"] == "CMT-001"
 
     def test_sorted_by_severity(self, make_finding, make_section):
         findings = [
@@ -255,8 +255,8 @@ class TestAssignIds:
             make_finding(severity="HIGH", title="High"),
         ]
         sections = [make_section(category="security", findings=findings)]
-        result = cr.assign_ids(sections)
-        sevs = [f["severity"] for f in result[0]["findings"]]
+        cr.assign_ids(sections)
+        sevs = [f["severity"] for f in sections[0]["findings"]]
         assert sevs == ["CRITICAL", "HIGH", "LOW"]
 
     def test_code_fallback_no_original_id(self, make_finding, make_section):
@@ -266,8 +266,8 @@ class TestAssignIds:
                 findings=[make_finding(title="No prefix")],
             ),
         ]
-        result = cr.assign_ids(sections)
-        assert result[0]["findings"][0]["id"].startswith("CODE-")
+        cr.assign_ids(sections)
+        assert sections[0]["findings"][0]["id"].startswith("CODE-")
 
     def test_detects_rust_prefix(self, make_finding, make_section):
         sections = [
@@ -279,8 +279,8 @@ class TestAssignIds:
                 ],
             ),
         ]
-        result = cr.assign_ids(sections)
-        assert result[0]["findings"][0]["id"].startswith("RUST-")
+        cr.assign_ids(sections)
+        assert sections[0]["findings"][0]["id"].startswith("RUST-")
 
     def test_removes_original_id(self, make_finding, make_section):
         sections = [
@@ -289,8 +289,8 @@ class TestAssignIds:
                 findings=[make_finding(original_id="OLD-001")],
             ),
         ]
-        result = cr.assign_ids(sections)
-        assert "original_id" not in result[0]["findings"][0]
+        cr.assign_ids(sections)
+        assert "original_id" not in sections[0]["findings"][0]
 
     def test_unknown_severity_no_crash(self, make_finding, make_section):
         sections = [
@@ -299,8 +299,8 @@ class TestAssignIds:
                 findings=[make_finding(severity="UNKNOWN")],
             ),
         ]
-        result = cr.assign_ids(sections)
-        assert result[0]["findings"][0]["id"] == "SEC-001"
+        cr.assign_ids(sections)
+        assert sections[0]["findings"][0]["id"] == "SEC-001"
 
     def test_in_place_mutation_of_findings(self, make_finding, make_section):
         f = make_finding(severity="HIGH")
@@ -360,6 +360,51 @@ class TestComputeStatistics:
     def test_no_redundancy_ratio_without_agent_stats(self, make_section):
         stats = cr.compute_statistics([], [])
         assert "redundancy_ratio" not in stats
+
+    def test_matrix_cell_values(self, make_finding, make_section):
+        sections = [
+            make_section(
+                category="security",
+                findings=[
+                    make_finding(severity="HIGH"),
+                    make_finding(severity="HIGH"),
+                    make_finding(severity="CRITICAL"),
+                ],
+            ),
+            make_section(
+                category="project",
+                findings=[
+                    make_finding(severity="LOW"),
+                ],
+            ),
+            make_section(
+                category="code_quality",
+                findings=[
+                    make_finding(severity="MEDIUM"),
+                    make_finding(severity="MEDIUM"),
+                ],
+            ),
+        ]
+        stats = cr.compute_statistics(sections, [])
+        matrix = stats["severity_category_matrix"]
+        matrix_by_sev = {row["severity"]: row for row in matrix}
+
+        assert matrix_by_sev["HIGH"]["security"] == 2
+        assert matrix_by_sev["HIGH"]["project"] == 0
+        assert matrix_by_sev["HIGH"]["total"] == 2
+
+        assert matrix_by_sev["CRITICAL"]["security"] == 1
+        assert matrix_by_sev["CRITICAL"]["total"] == 1
+
+        assert matrix_by_sev["LOW"]["project"] == 1
+        assert matrix_by_sev["LOW"]["security"] == 0
+        assert matrix_by_sev["LOW"]["total"] == 1
+
+        assert matrix_by_sev["MEDIUM"]["code_quality"] == 2
+        assert matrix_by_sev["MEDIUM"]["security"] == 0
+        assert matrix_by_sev["MEDIUM"]["total"] == 2
+
+        assert matrix_by_sev["INFO"]["total"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +620,162 @@ class TestValidateReport:
         }
         result = cr._validate_report(report)
         assert isinstance(result, bool)
+
+
+# ---------------------------------------------------------------------------
+# _flatten_agent_report
+# ---------------------------------------------------------------------------
+class TestFlattenAgentReport:
+    def test_normal_section_with_findings(self):
+        sections = [
+            {
+                "category": "security",
+                "title": "Security Review",
+                "positives": "Good auth setup",
+                "findings": [
+                    {
+                        "id": "SEC-001",
+                        "severity": "HIGH",
+                        "title": "SQL injection",
+                        "tags": ["sql", "injection"],
+                        "location": "src/db.rs:10-20",
+                        "description": "Unsafe query",
+                        "impact": "Data breach",
+                        "recommendation": "Use parameterized queries",
+                    }
+                ],
+            }
+        ]
+        raw, positives = cr._flatten_agent_report("sec-agent", sections)
+
+        assert len(raw) == 1
+        f = raw[0]
+        assert f["agent"] == "sec-agent"
+        assert f["original_id"] == "SEC-001"
+        assert f["category"] == "security"
+        assert f["section_title"] == "Security Review"
+        assert f["severity"] == "HIGH"
+        assert f["title"] == "SQL injection"
+        assert f["tags"] == ["sql", "injection"]
+        assert f["location"] == "src/db.rs:10-20"
+        assert f["description"] == "Unsafe query"
+        assert f["impact"] == "Data breach"
+        assert f["recommendation"] == "Use parameterized queries"
+
+        assert len(positives) == 1
+        assert positives[0]["category"] == "security"
+        assert positives[0]["agent"] == "sec-agent"
+        assert positives[0]["text"] == "Good auth setup"
+
+    def test_missing_optional_fields_get_defaults(self):
+        sections = [
+            {
+                "category": "code_quality",
+                "title": "CQ",
+                "findings": [
+                    {
+                        "severity": "LOW",
+                        "title": "Minor issue",
+                        "location": "f.py:1",
+                        "description": "Desc",
+                        "recommendation": "Fix",
+                    }
+                ],
+            }
+        ]
+        raw, positives = cr._flatten_agent_report("agent-a", sections)
+
+        assert len(raw) == 1
+        f = raw[0]
+        assert f.get("tags", []) == []
+        assert f.get("impact", "") == ""
+        # original_id is empty string, stripped by _strip_none_values
+        assert "original_id" not in f or f["original_id"] == ""
+        assert positives == []
+
+    def test_empty_sections_list(self):
+        raw, positives = cr._flatten_agent_report("agent-x", [])
+        assert raw == []
+        assert positives == []
+
+    def test_non_string_severity_skipped(self):
+        """Findings with non-string severity should be skipped by validation."""
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [
+                    {
+                        "severity": 42,
+                        "title": "Bad sev",
+                        "location": "f.rs:1",
+                        "description": "D",
+                        "recommendation": "R",
+                    }
+                ],
+            }
+        ]
+        raw, _ = cr._flatten_agent_report("agent-b", sections)
+        # With SEC-001 fix, invalid severity findings are skipped
+        assert len(raw) == 0
+
+    def test_non_list_tags_handled_gracefully(self):
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [
+                    {
+                        "severity": "MEDIUM",
+                        "title": "Tag issue",
+                        "tags": "not-a-list",
+                        "location": "f.rs:1",
+                        "description": "D",
+                        "recommendation": "R",
+                    }
+                ],
+            }
+        ]
+        raw, _ = cr._flatten_agent_report("agent-c", sections)
+        assert len(raw) == 1
+        # With SEC-001 fix, non-list tags default to empty list
+        assert raw[0]["tags"] == []
+
+    def test_missing_required_fields_skipped(self):
+        """Findings missing required fields (title/location/etc) are skipped."""
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [
+                    {
+                        "severity": "HIGH",
+                    }
+                ],
+            }
+        ]
+        raw, _ = cr._flatten_agent_report("agent-d", sections)
+        assert len(raw) == 0
+
+    def test_empty_title_skipped(self):
+        """Finding with empty title is skipped."""
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [
+                    {
+                        "severity": "HIGH",
+                        "title": "",
+                        "location": "f.rs:1",
+                        "description": "D",
+                        "recommendation": "R",
+                    }
+                ],
+            }
+        ]
+        raw, _ = cr._flatten_agent_report("agent-e", sections)
+        assert len(raw) == 0
 
 
 # ---------------------------------------------------------------------------

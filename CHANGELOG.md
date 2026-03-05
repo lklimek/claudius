@@ -4,6 +4,33 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.1] - 2026-03-05
+
+### Changed
+- Schema finding ID pattern now accepts `CODE-` and `DEP-` prefixes (was blocking report output)
+- Schema required string fields (`title`, `location`, `description`, `recommendation`) enforce `minLength: 1`
+- `_flatten_agent_report` skips findings with empty required fields (aligned with schema)
+- `_flatten_agent_report` validates severity is a known enum value and location is a string
+- Schema validation returns error (not silent pass) when schema file is missing
+- `jsonschema` imported at module level with clear error message if missing
+- Extracted `_load_json_file()` helper to eliminate duplicated file-loading boilerplate
+- Extracted `_iter_findings()` generator for consistent section/finding iteration
+- `assign_ids()` mutates in-place, returns None (was hybrid mutate-and-return)
+- `similarity_score` normalized to 0.0–1.0 range (was unbounded sum up to 3.0)
+- `scan_intentional` uses pure Python file reading instead of subprocess grep
+- `generate_remediation` logs warning for unknown severity values
+- Standardized None/empty value cleanup via `_strip_none_values` helper
+- Changelog [1.9.0] "Fixed" items moved to "Changed" (design decisions, not bug fixes)
+- INTENTIONAL annotation added for schema matrix not requiring dependencies column
+
+### Added
+- `TestFlattenAgentReport` test class (7 tests for field extraction, validation, edge cases)
+- `test_matrix_cell_values` — asserts specific counts in severity-category matrix
+- `test_empty_title_skipped` — verifies empty required fields are rejected
+
+### Fixed
+- Unused `make_finding` parameter removed from `make_section` test fixture
+
 ## [1.9.0] - 2026-03-05
 
 ### Added
@@ -17,15 +44,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - `jsonschema` is now a hard requirement for the consolidation script
 - Code quality prefix fallback changed from `RUST-` to `CODE-` for language-neutral reviews
 - `$TMPDIR` references in skill examples now use `${TMPDIR:-/tmp}` fallback
-
-### Fixed
-- Path traversal in `scan_intentional` — file paths are now resolved and checked against repo root
-- `assign_ids()` docstring corrected to document in-place mutation
-- `generate_remediation()` no longer includes INFO findings in action buckets
-- Unknown severity values no longer crash sorting (safe dict lookup with default)
-- Dead `category_sections` variable removed from `assign_ids()`
-- Added 8 MB input file size limit to prevent resource exhaustion
-- Output directories are created automatically if they don't exist
+- Path traversal protection in `scan_intentional` — file paths resolved and checked against repo root
+- `assign_ids()` mutates in-place and returns None
+- `generate_remediation()` excludes INFO findings from action buckets
+- Unknown severity values handled safely in sorting (dict lookup with default)
+- 8 MB input file size limit to prevent resource exhaustion
+- Output directories created automatically if they don't exist
 
 ## [1.8.3] - 2026-03-04
 

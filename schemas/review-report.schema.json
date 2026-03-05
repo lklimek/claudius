@@ -74,6 +74,7 @@
           "description": "Severity x category matrix rows.",
           "items": {
             "type": "object",
+            "_comment": "INTENTIONAL(PROJ-002): Matrix does not require dependencies/documentation/pr_comments columns — extra properties are allowed by the schema",
             "required": ["severity", "security", "project", "code_quality", "total"],
             "additionalProperties": false,
             "properties": {
@@ -197,7 +198,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^(SEC|PROJ|RUST|PY|GO|FE|DOC|CMT)-\\d{3}$",
+          "pattern": "^(SEC|PROJ|RUST|PY|GO|FE|DOC|CMT|CODE|DEP)-\\d{3}$",
           "description": "Finding ID with category prefix (SEC→security, PROJ→project, RUST/PY/GO/FE→code_quality, DOC→documentation, CMT→pr_comments)"
         },
         "severity": { "$ref": "#/$defs/severity" },

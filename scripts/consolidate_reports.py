@@ -28,12 +28,24 @@ import argparse
 import json
 import logging
 import re
-import subprocess
 import sys
 from collections import defaultdict
+from collections.abc import Iterator
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
+
+try:
+    import jsonschema
+
+    _HAS_JSONSCHEMA = True
+except ImportError:
+    _HAS_JSONSCHEMA = False
+    print(
+        "WARNING: jsonschema package not installed. "
+        "Install with: pip install jsonschema",
+        file=sys.stderr,
+    )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -58,6 +70,59 @@ CODE_QUALITY_PREFIXES = {"RUST-", "PY-", "GO-", "FE-"}
 
 MAX_INPUT_SIZE = 8 * 1024 * 1024  # 8 MB
 
+SIMILARITY_THRESHOLD = 0.3
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+def _load_json_file(path: Path, max_size: int = MAX_INPUT_SIZE) -> dict | list:
+    """Load and parse a JSON file with size validation.
+
+    Raises:
+        FileNotFoundError: if the file does not exist.
+        ValueError: if the file exceeds max_size or contains invalid JSON.
+    """
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError:
+        raise FileNotFoundError(f"File not found: {path}")
+    if size > max_size:
+        raise ValueError(f"File too large (>{max_size // (1024 * 1024)} MB): {path}")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in {path}: {e}") from e
+
+
+def _iter_findings(
+    sections: list[dict[str, Any]],
+) -> Iterator[tuple[dict[str, Any], dict[str, Any]]]:
+    """Yield (section, finding) tuples from a list of finding sections."""
+    for section in sections:
+        for finding in section.get("findings", []):
+            yield section, finding
+
+
+def _strip_none_values(d: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of dict with None and empty-string values removed."""
+    return {k: v for k, v in d.items() if v is not None and v != ""}
+
+
+def _read_schema_version() -> str:
+    """Read schema_version from the schema file, falling back to a default."""
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        versions = schema.get("properties", {}).get("schema_version", {}).get("enum", [])
+        if versions:
+            return versions[-1]
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        pass
+    return "1.1.0"
+
+
+SCHEMA_VERSION = _read_schema_version()
+
 
 # ---------------------------------------------------------------------------
 # Location parsing
@@ -66,7 +131,6 @@ def parse_location(location: str) -> tuple[str, int | None, int | None]:
     """Parse 'file:start-end', 'file:line', or 'file' into (path, start, end)."""
     if not location:
         return ("", None, None)
-    # Match last colon followed by digits (handles Windows paths like C:\...)
     m = re.search(r":(\d+)(?:-(\d+))?$", location)
     if not m:
         return (location, None, None)
@@ -80,37 +144,47 @@ def parse_location(location: str) -> tuple[str, int | None, int | None]:
 # Duplicate detection
 # ---------------------------------------------------------------------------
 def _similarity_score(f1: dict[str, Any], f2: dict[str, Any]) -> tuple[float, str]:
-    """Compute similarity between two findings. Returns (score, reason)."""
+    """Compute normalized similarity (0.0-1.0) between two findings.
+
+    Weighted average: title similarity (50%), location overlap (30%), tag overlap (20%).
+    """
     path1, s1, e1 = parse_location(f1.get("location", ""))
     path2, s2, e2 = parse_location(f2.get("location", ""))
 
-    score = 0.0
+    loc_overlap = 0.0
     reasons: list[str] = []
 
     if path1 and path2 and path1 == path2:
         if s1 is not None and s2 is not None and e1 is not None and e2 is not None:
-            # Overlapping ranges
             if s1 <= e2 and s2 <= e1:
-                score += 0.5
+                loc_overlap = 1.0
                 reasons.append(f"overlapping location {path1}:{s1}-{e1} & {s2}-{e2}")
-            # Adjacent (within 10 lines)
             elif abs(s1 - e2) <= 10 or abs(s2 - e1) <= 10:
-                score += 0.3
+                loc_overlap = 0.6
                 reasons.append(f"adjacent lines in {path1}")
 
     title1 = f1.get("title", "").lower()
     title2 = f2.get("title", "").lower()
+    title_sim = 0.0
     if title1 and title2:
         title_sim = SequenceMatcher(None, title1, title2).ratio()
-        score += title_sim * 0.5
         if title_sim > 0.5:
             reasons.append(f"title similarity {title_sim:.2f}")
 
+    tags1 = set(f1.get("tags", []))
+    tags2 = set(f2.get("tags", []))
+    tag_sim = 0.0
+    if tags1 or tags2:
+        union = tags1 | tags2
+        if union:
+            tag_sim = len(tags1 & tags2) / len(union)
+
+    score = title_sim * 0.5 + loc_overlap * 0.3 + tag_sim * 0.2
     return score, ", ".join(reasons)
 
 
 def find_duplicate_groups(
-    findings: list[dict[str, Any]], threshold: float = 0.6
+    findings: list[dict[str, Any]], threshold: float = SIMILARITY_THRESHOLD
 ) -> list[dict[str, Any]]:
     """Find groups of potentially duplicate findings using transitive closure.
 
@@ -118,7 +192,6 @@ def find_duplicate_groups(
     A and C are dissimilar. Groups are candidates for human review, not auto-merge.
     """
     n = len(findings)
-    # Build adjacency with reasons
     adj: dict[int, set[int]] = defaultdict(set)
     pair_reasons: dict[tuple[int, int], str] = {}
 
@@ -130,7 +203,6 @@ def find_duplicate_groups(
                 adj[j].add(i)
                 pair_reasons[(i, j)] = reason
 
-    # Transitive closure via BFS
     visited: set[int] = set()
     groups: list[dict[str, Any]] = []
     group_id = 0
@@ -151,7 +223,6 @@ def find_duplicate_groups(
                 if neighbor not in component:
                     queue.append(neighbor)
 
-        # Collect reasons for this group
         all_reasons: list[str] = []
         for i in component:
             for j in component:
@@ -170,7 +241,7 @@ def find_duplicate_groups(
 
 
 # ---------------------------------------------------------------------------
-# INTENTIONAL scan
+# INTENTIONAL scan (pure Python, no subprocess)
 # ---------------------------------------------------------------------------
 def scan_intentional(
     findings: list[dict[str, Any]], repo_root: str
@@ -178,49 +249,47 @@ def scan_intentional(
     """Scan source files for INTENTIONAL comments near finding locations."""
     results: list[dict[str, Any]] = []
     repo = Path(repo_root)
+    resolved_repo = repo.resolve()
 
+    # Group findings by file path to avoid re-reading
+    file_findings: dict[str, list[tuple[int, int]]] = defaultdict(list)
     for idx, finding in enumerate(findings):
         file_path, start, _end = parse_location(finding.get("location", ""))
         if not file_path or start is None:
             continue
-
         full_path = (repo / file_path).resolve()
-        if not full_path.is_relative_to(repo.resolve()):
+        if not full_path.is_relative_to(resolved_repo):
             continue
         if not full_path.is_file():
             continue
+        file_findings[file_path].append((idx, start))
 
+    for file_path, idx_starts in file_findings.items():
+        full_path = (repo / file_path).resolve()
         try:
-            proc = subprocess.run(
-                ["grep", "-n", "INTENTIONAL", str(full_path)],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+            lines = full_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
             continue
 
-        if proc.returncode != 0:
+        intentional_lines: list[tuple[int, str]] = []
+        for line_num_0, line_text in enumerate(lines):
+            if "INTENTIONAL" in line_text:
+                intentional_lines.append((line_num_0 + 1, line_text.strip()))
+
+        if not intentional_lines:
             continue
 
-        for line in proc.stdout.strip().split("\n"):
-            if not line:
-                continue
-            m = re.match(r"^(\d+):", line)
-            if not m:
-                continue
-            comment_line = int(m.group(1))
-            if abs(comment_line - start) <= 5:
-                # Extract the INTENTIONAL(...) content
-                comment_text = line[m.end() :].strip()
-                results.append(
-                    {
-                        "finding_index": idx,
-                        "intentional_comment": comment_text,
-                        "source_line": f"{file_path}:{comment_line}",
-                    }
-                )
-                break
+        for idx, start in idx_starts:
+            for comment_line, comment_text in intentional_lines:
+                if abs(comment_line - start) <= 5:
+                    results.append(
+                        {
+                            "finding_index": idx,
+                            "intentional_comment": comment_text,
+                            "source_line": f"{file_path}:{comment_line}",
+                        }
+                    )
+                    break
 
     return results
 
@@ -246,39 +315,25 @@ def _detect_code_quality_prefix(
 
 def assign_ids(
     sections: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Assign sequential IDs to findings in-place, ordered by severity within each category.
-
-    Returns the modified list of sections.
-    """
-    result: list[dict[str, Any]] = []
-    # Track per-category counters
+) -> None:
+    """Assign sequential IDs to findings in-place, ordered by severity within each category."""
     category_counters: dict[str, int] = defaultdict(int)
 
     for section in sections:
         cat = section.get("category", "code_quality")
-        findings = list(section.get("findings", []))
+        findings = section.get("findings", [])
 
-        # Determine prefix
         if cat == "code_quality":
             prefix = _detect_code_quality_prefix(findings)
         else:
             prefix = CATEGORY_PREFIX.get(cat, "CODE-")
 
-        # Sort by severity (CRITICAL first)
         findings.sort(key=lambda f: SEV_RANK.get(f.get("severity", "INFO"), len(SEV_ORDER)))
 
         for f in findings:
             category_counters[cat] += 1
             f["id"] = f"{prefix}{category_counters[cat]:03d}"
-            # Remove original_id if present (not in schema)
             f.pop("original_id", None)
-
-        new_section = dict(section)
-        new_section["findings"] = findings
-        result.append(new_section)
-
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -290,21 +345,19 @@ def compute_statistics(
 ) -> dict[str, Any]:
     """Compute summary_statistics from findings and agent_stats."""
     severity_counts: dict[str, int] = {s: 0 for s in SEV_ORDER}
-    # category x severity matrix
     categories = list(CATEGORY_PREFIX.keys())
     matrix_data: dict[str, dict[str, int]] = {
         sev: {cat: 0 for cat in categories} for sev in SEV_ORDER
     }
 
     total = 0
-    for section in sections:
-        cat = section.get("category", "code_quality")
-        for f in section.get("findings", []):
-            sev = f.get("severity", "INFO")
-            severity_counts[sev] = severity_counts.get(sev, 0) + 1
-            if sev in matrix_data and cat in matrix_data[sev]:
-                matrix_data[sev][cat] += 1
-            total += 1
+    for _section, f in _iter_findings(sections):
+        cat = _section.get("category", "code_quality")
+        sev = f.get("severity", "INFO")
+        severity_counts[sev] = severity_counts.get(sev, 0) + 1
+        if sev in matrix_data and cat in matrix_data[sev]:
+            matrix_data[sev][cat] += 1
+        total += 1
 
     matrix = []
     for sev in SEV_ORDER:
@@ -323,7 +376,6 @@ def compute_statistics(
         "severity_category_matrix": matrix,
     }
 
-    # Redundancy ratio
     if agent_stats:
         total_all = sum(a.get("unique", 0) + a.get("redundant", 0) for a in agent_stats)
         total_redundant = sum(a.get("redundant", 0) for a in agent_stats)
@@ -362,20 +414,22 @@ def generate_remediation(
         },
     }
 
-    for section in sections:
-        for f in section.get("findings", []):
-            sev = f.get("severity", "INFO")
-            if sev == "INFO":
-                continue
-            fid = f.get("id", "UNKNOWN")
-            if sev in ("CRITICAL", "HIGH"):
-                bucket = "before_merge"
-            elif sev == "MEDIUM":
-                bucket = "before_production"
-            else:
-                bucket = "post_deployment"
-            buckets[bucket]["count"] += 1
-            buckets[bucket]["finding_ids"].append(fid)
+    for _section, f in _iter_findings(sections):
+        sev = f.get("severity", "INFO")
+        if sev == "INFO":
+            continue
+        fid = f.get("id", "UNKNOWN")
+        if sev in ("CRITICAL", "HIGH"):
+            bucket = "before_merge"
+        elif sev == "MEDIUM":
+            bucket = "before_production"
+        elif sev in SEV_RANK:
+            bucket = "post_deployment"
+        else:
+            log.warning("Unknown severity '%s' in finding '%s', skipping remediation bucket", sev, fid)
+            continue
+        buckets[bucket]["count"] += 1
+        buckets[bucket]["finding_ids"].append(fid)
 
     return [
         buckets["before_merge"],
@@ -392,18 +446,16 @@ def generate_top_findings(
 ) -> list[dict[str, Any]]:
     """Extract CRITICAL and HIGH findings as top findings."""
     top: list[dict[str, Any]] = []
-    for section in sections:
-        for f in section.get("findings", []):
-            if f.get("severity") in ("CRITICAL", "HIGH"):
-                top.append(
-                    {
-                        "id": f["id"],
-                        "severity": f["severity"],
-                        "title": f["title"],
-                        "location": f["location"],
-                    }
-                )
-    # Sort: CRITICAL first, then HIGH
+    for _section, f in _iter_findings(sections):
+        if f.get("severity") in ("CRITICAL", "HIGH"):
+            top.append(
+                {
+                    "id": f["id"],
+                    "severity": f["severity"],
+                    "title": f["title"],
+                    "location": f["location"],
+                }
+            )
     top.sort(key=lambda f: SEV_RANK.get(f["severity"], len(SEV_ORDER)))
     return top
 
@@ -429,22 +481,54 @@ def _flatten_agent_report(
             )
 
         for f in section.get("findings", []):
-            raw.append(
+            severity = f.get("severity", "INFO")
+            if not isinstance(severity, str) or severity not in SEV_RANK:
+                log.warning(
+                    "Skipping finding with invalid severity '%s' from agent '%s'",
+                    severity, agent_name,
+                )
+                continue
+
+            location = f.get("location", "")
+            if not isinstance(location, str):
+                log.warning(
+                    "Skipping finding with non-string location from agent '%s'",
+                    agent_name,
+                )
+                continue
+
+            title = f.get("title", "")
+            description = f.get("description", "")
+            recommendation = f.get("recommendation", "")
+            if not all([location, title, description, recommendation]):
+                log.warning(
+                    "Skipping finding with empty required field(s) from agent '%s': "
+                    "title=%r, location=%r",
+                    agent_name, title, location,
+                )
+                continue
+
+            tags = f.get("tags", [])
+            if not isinstance(tags, list):
+                tags = []
+
+            entry = _strip_none_values(
                 {
                     "agent": agent_name,
                     "original_id": f.get("id", ""),
                     "category": cat,
                     "section_title": section_title,
-                    "severity": f.get("severity", "INFO"),
-                    "title": f.get("title", ""),
-                    "tags": f.get("tags", []),
-                    "location": f.get("location", ""),
-                    "description": f.get("description", ""),
+                    "severity": severity,
+                    "title": title,
+                    "tags": tags,
+                    "location": location,
+                    "description": description,
                     "impact": f.get("impact", ""),
-                    "recommendation": f.get("recommendation", ""),
+                    "recommendation": recommendation,
                     "positives": section_positives if section_positives else None,
                 }
             )
+            raw.append(entry)
 
     return raw, positives
 
@@ -464,20 +548,12 @@ def cmd_prepare(args: argparse.Namespace) -> int:
 
         report_path = Path(path_str)
         try:
-            if report_path.stat().st_size > MAX_INPUT_SIZE:
-                log.error("Input file too large (>8 MB): %s", path_str)
-                return 2
+            data = _load_json_file(report_path)
         except FileNotFoundError:
             log.error("Report not found: %s", path_str)
             return 2
-
-        try:
-            data = json.loads(report_path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            log.error("Report not found: %s", path_str)
-            return 2
-        except json.JSONDecodeError as e:
-            log.error("Invalid JSON in %s: %s", path_str, e)
+        except ValueError as e:
+            log.error("%s", e)
             return 2
 
         if not isinstance(data, list):
@@ -488,15 +564,12 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         raw_findings.extend(raw)
         section_positives.extend(pos)
 
-    # Detect duplicates
     dup_groups = find_duplicate_groups(raw_findings)
 
-    # Scan INTENTIONAL comments
     intentional: list[dict[str, Any]] = []
     if args.repo_root:
         intentional = scan_intentional(raw_findings, args.repo_root)
 
-    # Parse metadata
     metadata: dict[str, Any] = {}
     if args.metadata:
         try:
@@ -504,11 +577,6 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         except json.JSONDecodeError as e:
             log.error("Invalid metadata JSON: %s", e)
             return 2
-
-    # Clean None values from raw findings
-    for f in raw_findings:
-        if f.get("positives") is None:
-            del f["positives"]
 
     output = {
         "metadata": metadata,
@@ -539,20 +607,12 @@ def cmd_assemble(args: argparse.Namespace) -> int:
     """Execute the assemble phase."""
     input_path = Path(args.input)
     try:
-        if input_path.stat().st_size > MAX_INPUT_SIZE:
-            log.error("Input file too large (>8 MB): %s", args.input)
-            return 2
+        data = _load_json_file(input_path)
     except FileNotFoundError:
         log.error("Input not found: %s", args.input)
         return 2
-
-    try:
-        data = json.loads(input_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        log.error("Input not found: %s", args.input)
-        return 2
-    except json.JSONDecodeError as e:
-        log.error("Invalid JSON in %s: %s", args.input, e)
+    except ValueError as e:
+        log.error("%s", e)
         return 2
 
     metadata = data.get("metadata", {})
@@ -562,27 +622,22 @@ def cmd_assemble(args: argparse.Namespace) -> int:
     top_override = data.get("top_findings_override")
     remediation_override = data.get("remediation_override")
 
-    # Assign IDs
-    findings_sections = assign_ids(findings_sections)
+    assign_ids(findings_sections)
 
-    # Compute statistics
     stats = compute_statistics(findings_sections, agent_stats)
 
-    # Top findings
     if top_override:
         top_findings = top_override
     else:
         top_findings = generate_top_findings(findings_sections)
 
-    # Remediation
     if remediation_override:
         remediation = remediation_override
     else:
         remediation = generate_remediation(findings_sections)
 
-    # Build report
     report: dict[str, Any] = {
-        "schema_version": "1.1.0",
+        "schema_version": SCHEMA_VERSION,
         "metadata": metadata,
         "executive_summary": exec_summary,
         "summary_statistics": stats,
@@ -596,7 +651,6 @@ def cmd_assemble(args: argparse.Namespace) -> int:
     if agent_stats:
         report["agent_stats"] = agent_stats
 
-    # Validate against schema
     if not _validate_report(report):
         log.error("Report failed schema validation, not writing output")
         return 1
@@ -611,16 +665,17 @@ def cmd_assemble(args: argparse.Namespace) -> int:
 def _validate_report(report: dict[str, Any]) -> bool:
     """Validate report against the JSON schema.
 
-    Returns True if valid, False if validation fails.
-    Requires jsonschema to be installed (ImportError propagates if missing).
+    Returns True if valid, False if validation fails or schema is unavailable.
     """
-    import jsonschema
+    if not _HAS_JSONSCHEMA:
+        log.error("jsonschema package not installed, cannot validate report")
+        return False
 
     try:
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        log.warning("Could not load schema: %s", e)
-        return True
+        log.error("Could not load schema: %s", e)
+        return False
 
     validator = jsonschema.Draft202012Validator(schema)
     errors = sorted(validator.iter_errors(report), key=lambda e: list(e.absolute_path))
@@ -643,7 +698,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # prepare
     p_prepare = sub.add_parser(
         "prepare", help="Phase 1: flatten, detect dups, scan INTENTIONAL"
     )
@@ -660,7 +714,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p_prepare.add_argument("--metadata", default=None, help="JSON metadata string")
 
-    # assemble
     p_assemble = sub.add_parser(
         "assemble", help="Phase 2: assign IDs, compute stats, build report"
     )
