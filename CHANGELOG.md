@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.2] - 2026-03-05
+
+### Fixed
+- Schema finding fields (`title`, `location`, `description`, `recommendation`) now enforce `minLength: 1` — was documented in 1.9.1 changelog but missing from schema due to lost worktree merge
+
 ## [1.9.1] - 2026-03-05
 
 ### Changed
