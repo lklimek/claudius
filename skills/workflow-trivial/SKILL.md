@@ -30,3 +30,14 @@ No task is done until QA passes. Formatting, linting, and test passing are not o
 ## Code Deduplication
 
 Verify the change doesn't introduce or miss existing duplication.
+
+## Worktree & Commit Discipline
+
+All implementation agents (`developer-bilby`, `qa-engineer`, `devops-engineer`, `technical-writer`) run in isolated worktrees. After each agent wave:
+
+1. Verify all worktrees have committed changes (`git worktree list` + `git status` per worktree)
+2. Merge/copy changes into the main working directory
+3. Run tests in main to catch integration issues
+4. Clean up worktrees only after confirming changes are merged
+
+Never skip verification — uncommitted worktree changes are invisible and will be lost on cleanup.

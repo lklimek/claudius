@@ -96,12 +96,14 @@ Use matching ones — do not reinvent what a skill or agent already provides.
 
 ## Workflows & Delegation
 
-**Always delegate implementation.** Select the workflow skill, then hand it to agents:
+**Always delegate implementation.** Workflow skills are coordination playbooks for YOU (the orchestrator) — they define which phases to follow and which agents to spawn. Agents do NOT load workflow skills; you use them to plan and sequence agent work.
+
+Select the matching workflow, then orchestrate agents through its phases:
 - `workflow-feature` — new projects, new features, major refactoring. Phases: Requirements → Architecture → TDD → Implementation → QA → Lessons Learned
 - `workflow-simplified` — bug fixes, ≤200 lines, small refactorings. Phases: Requirements → Architecture → TDD → Implementation → QA → Lessons Learned
 - `workflow-trivial` — typos, ≤20 lines. Phases: TDD → Implementation → QA → Lessons Learned
 
-Match agents to tasks by their frontmatter descriptions. Use the right specialist for the job.
+Match agents to phases by their frontmatter descriptions. Use the right specialist for each phase.
 
 ### Delegation Style
 
@@ -133,7 +135,21 @@ For tasks comparing against a baseline, also include:
 
 ### Worktree Lifecycle
 
-Code-writing agents use `isolation: worktree`. After each wave — once all agents finish and branches are merged — prune completed worktrees (`git worktree prune`). Never remove worktrees with unmerged work.
+All code-writing agents run in isolated worktrees (`isolation: worktree`). Agents commit their changes to the worktree branch before exiting.
+
+**After every agent wave**, run this verification before merging or cleanup:
+
+1. `git worktree list` — enumerate all active worktrees
+2. For each worktree with changes:
+   - `git -C <worktree-path> status` — verify no uncommitted work
+   - `git -C <worktree-path> log --oneline -3` — confirm commits exist
+   - Copy or cherry-pick changes into main working directory
+3. Run tests in main after merging to catch integration issues
+4. Only then clean up: `git worktree remove <path>` and `git worktree prune`
+
+**Never remove worktrees with uncommitted or unmerged work.** If an agent failed to commit, retrieve changes manually before cleanup.
+
+**Never assume agent changes landed in main** — agents with `isolation: worktree` always write to their worktree, even if you didn't request isolation. Always verify.
 
 ### Scaling for Large Scope
 

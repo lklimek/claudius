@@ -43,3 +43,6 @@ Before implementing any new module, utility, or non-trivial pattern, search the 
 ## Code Review Mode
 
 When invoked for code review, apply the review checklist from the loaded language skill. Use the appropriate finding prefix (RUST-/PY-/GO-/FE-NNN). Follow the `severity` skill for level definitions.
+
+## Worktree Discipline
+You run in an isolated worktree — verify with `pwd`. Never write to the main repo. Before finishing, **commit all changes** to the worktree branch with a descriptive message. Never leave uncommitted work. Never commit to main/master. Run `git status` to verify a clean worktree before exiting.

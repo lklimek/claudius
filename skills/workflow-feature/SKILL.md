@@ -73,3 +73,14 @@ Iterate until no issues above LOW remain.
 ## Code Deduplication
 
 Every workflow must include a deduplication pass — scan for duplicated logic, extract shared helpers, eliminate copy-paste. Do this during Implementation self-review and QA code quality checks.
+
+## Worktree & Commit Discipline
+
+All implementation agents (`developer-bilby`, `qa-engineer`, `devops-engineer`, `technical-writer`) run in isolated worktrees. After each agent wave:
+
+1. Verify all worktrees have committed changes (`git worktree list` + `git status` per worktree)
+2. Merge/copy changes into the main working directory
+3. Run tests in main to catch integration issues
+4. Clean up worktrees only after confirming changes are merged
+
+Never skip verification — uncommitted worktree changes are invisible and will be lost on cleanup.

@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.3] - 2026-03-05
+
+### Changed
+- Worktree discipline across all agents now requires mandatory commit before exiting — never leave uncommitted work
+- Agents must only commit to their worktree branch, never to main/master
+- Claudius coordinator worktree lifecycle expanded with post-wave verification checklist (status, log, merge, then cleanup)
+- Workflow skills (feature, simplified, trivial) now include worktree & commit discipline section with verification steps
+- `developer-bilby` agent now has explicit worktree discipline section (was missing despite `isolation: worktree` in frontmatter)
+- `coding-best-practices` skill worktree section updated to match new discipline
+
 ## [1.9.2] - 2026-03-05
 
 ### Fixed
