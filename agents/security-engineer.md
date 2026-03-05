@@ -3,7 +3,7 @@ name: security-engineer
 description: Use for security audits, auth/crypto/input validation reviews, dependency scanning, secret detection, or validating plans before presenting to user.
 tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "Task"]
 skills: ["security-best-practices", "severity"]
-model: inherit
+model: opus
 ---
 
 # Security Engineer Agent

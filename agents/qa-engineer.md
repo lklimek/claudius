@@ -4,7 +4,7 @@ description: Use for writing test plans, automated tests, manual test scenarios,
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task"]
 skills: ["security-best-practices"]
 isolation: worktree
-model: inherit
+model: opus
 ---
 
 # QA Engineer Agent

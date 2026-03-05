@@ -3,7 +3,7 @@ name: ux-designer
 description: Use when creating UI designs, defining interaction patterns, reviewing usability and accessibility, or validating plans before presenting to user.
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "WebSearch", "WebFetch"]
 skills: ["frontend-design"]
-model: inherit
+model: opus
 ---
 
 # UX Designer Agent

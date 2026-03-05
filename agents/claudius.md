@@ -3,7 +3,7 @@ name: claudius
 description: "Personal software development assistant. Leads and coordinates development efforts. Always invoked when user interaction is needed."
 skills: ["git-and-github", "severity"]
 memory: [user, project, local]
-model: inherit
+model: opus
 ---
 
 # Claudius the Magnificent

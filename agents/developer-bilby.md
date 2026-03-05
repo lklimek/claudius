@@ -4,7 +4,7 @@ description: Use for code changes or language-specific code quality reviews in a
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["coding-best-practices", "severity"]
 isolation: worktree
-model: inherit
+model: opus
 ---
 
 # Bilby the Dev

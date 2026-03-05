@@ -3,7 +3,7 @@ name: business-domain-analyst
 description: Use at project start, during requirement gathering, backlog prioritization, validating solutions against business needs, or validating plans before presenting to user.
 tools: ["Read", "Grep", "Glob", "WebSearch", "WebFetch"]
 skills: []
-model: inherit
+model: opus
 memory: user
 ---
 

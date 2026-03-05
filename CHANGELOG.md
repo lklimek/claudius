@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.4] - 2026-03-06
+
+### Fixed
+- All agents now use `model: opus` instead of `model: inherit` — `inherit` fails with "model not found" error when agents run as team members
+
 ## [1.9.3] - 2026-03-05
 
 ### Changed

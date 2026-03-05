@@ -4,7 +4,7 @@ description: Use for creating, maintaining, or reviewing documentation — READM
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
 skills: []
 isolation: worktree
-model: inherit
+model: opus
 ---
 
 # Technical Writer Agent

@@ -3,7 +3,7 @@ name: project-reviewer
 description: Use for reviewing PRs or auditing project consistency across code, configs, docs, and tests. Read-only — NOT for language-specific code quality.
 tools: ["Read", "Grep", "Glob", "Bash", "Task"]
 skills: ["coding-best-practices", "severity"]
-model: inherit
+model: opus
 ---
 
 # Project Reviewer Agent

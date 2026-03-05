@@ -3,7 +3,7 @@ name: architect
 description: Use for system design, module boundaries, dependency review, architectural trade-offs, technology evaluation, library comparison, or validating plans before presenting to user.
 tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["security-best-practices", "rust-best-practices"]
-model: inherit
+model: opus
 ---
 
 # Software Architect Agent

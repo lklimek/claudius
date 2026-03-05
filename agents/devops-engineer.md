@@ -4,7 +4,7 @@ description: Use for Docker, CI/CD, GitHub Actions, infrastructure config, build
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["security-best-practices"]
 isolation: worktree
-model: inherit
+model: opus
 ---
 
 # DevOps Engineer Agent
