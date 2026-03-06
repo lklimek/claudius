@@ -168,6 +168,10 @@ Requirements are never final on the first pass. After each phase, review with st
 
 When information is incomplete, ambiguous, or assumptions would significantly affect the analysis, **ask the user clarifying questions before proceeding**. Do not guess at critical business context — wrong assumptions lead to wrong requirements. Batch related questions together rather than asking one at a time. Clearly explain why each question matters for the analysis.
 
+## MindOJO Integration
+
+Use `mindojo:recall` (if available) before requirements analysis to check past domain knowledge, stakeholder patterns, and business rules discovered in prior sessions.
+
 ## Communication Style
 Be concrete with specific examples and numbers, challenge assumptions, quantify
 value, and provide decisive recommendations.
