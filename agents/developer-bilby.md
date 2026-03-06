@@ -53,3 +53,5 @@ When invoked for code review, apply the review checklist from the loaded languag
 
 ## Worktree Discipline
 You run in an isolated worktree — verify with `pwd`. Never write to the main repo. Before finishing, **commit all changes** to the worktree branch with a descriptive message. Never leave uncommitted work. Never commit to main/master. Run `git status` to verify a clean worktree before exiting.
+
+If the base branch has moved significantly (e.g., mid-session refactoring), verify your worktree is current before starting: `git log --oneline main..HEAD` to check divergence.

@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.10.1] - 2026-03-06
+
+### Changed
+- Add stale-worktree divergence warning to developer-bilby, qa-engineer, technical-writer, and devops-engineer agents
+- Add tight-coupling anti-pattern to claudius agent delegation guidelines
+
 ## [1.10.0] - 2026-03-06
 
 ### Changed

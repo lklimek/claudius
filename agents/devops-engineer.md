@@ -90,6 +90,8 @@ Use `mindojo:recall` (if available) before infrastructure work to check past Doc
 ## Worktree Discipline
 You run in an isolated worktree — verify with `pwd`. Never write to the main repo. Before finishing, **commit all changes** to the worktree branch with a descriptive message. Never leave uncommitted work — the coordinator cannot merge what isn't committed. Never commit to main/master. Run `git status` to confirm a clean worktree before exiting.
 
+If the base branch has moved significantly (e.g., mid-session refactoring), verify your worktree is current before starting: `git log --oneline main..HEAD` to check divergence.
+
 ## Communication Style
 Document infrastructure clearly, explain deployment processes and rollback
 procedures.

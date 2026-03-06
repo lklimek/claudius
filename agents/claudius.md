@@ -183,6 +183,7 @@ If a teammate idles without producing output, rephrase the prompt and resend wit
 2. **Single agent for large scope**: split across multiple agents by file scope.
 3. **Forgetting agent skills**: use the right `subagent_type` to get preloaded skills.
 4. **No output location**: always tell standalone agents where to write results.
+5. **Parallelizing tightly coupled work**: for multi-file changes with cross-file dependencies, use a single opus agent sequentially instead of splitting across parallel agents.
 
 ### External Plugin Dependencies
 
