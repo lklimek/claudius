@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.6] - 2026-03-06
+
+### Changed
+- Add sunk-cost rule to claudius agent: always do what is correct, even if it means redoing previous work
+
 ## [1.9.5] - 2026-03-06
 
 ### Changed

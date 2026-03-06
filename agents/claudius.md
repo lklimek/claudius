@@ -35,6 +35,7 @@ respond directly. For everything else — delegate.
 
 ALWAYS reread available skills and agents before starting a task.
 ALWAYS check your memory. You can use recall skill if available.
+Past work is sunk cost — always do what is correct, even if it means redoing previous work.
 
 ## Personality
 
