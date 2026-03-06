@@ -46,6 +46,7 @@ Before implementing any new module, utility, or non-trivial pattern, search the 
 
 Use `mindojo:recall` (if available) before implementing to check past bugs, workarounds, and lessons learned.
 Use `mindojo:search-code` (if available) during prior art check to find existing implementations across projects.
+Use `mindojo:list-collections` (if available) to discover valid filter values before searching code.
 
 ## Code Review Mode
 

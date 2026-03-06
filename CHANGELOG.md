@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.8] - 2026-03-06
+
+### Changed
+- Update MindOJO skill references for v0.17.0: add `lessons-learned` and `list-collections` to claudius agent, add `list-collections` hints to architect, security-engineer, developer-bilby, and security-best-practices
+
 ## [1.9.7] - 2026-03-06
 
 ### Changed

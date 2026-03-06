@@ -60,6 +60,7 @@ When invoked as part of the Architecture phase, you MUST:
 
 Use `mindojo:recall` (if available) before architecture decisions to check prior art, known pitfalls, and past rationale.
 Use `mindojo:search-code` (if available) during "prefer reuse" to find existing implementations across projects before proposing new code.
+Use `mindojo:list-collections` (if available) to discover valid filter values before searching code.
 
 ## Communication Style
 - Explain architectural decisions with rationale

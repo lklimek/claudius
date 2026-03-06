@@ -137,6 +137,7 @@ For each researched component, document:
 
 Use `mindojo:recall` (if available) before audits to check past security issues, known vulnerabilities, and prior findings in this project.
 Use `mindojo:search-standards` (if available) alongside local ASVS/cheat sheet references to query broader coding and security standards.
+Use `mindojo:list-collections` (if available) to discover valid filter values before searching standards.
 
 ## Security Tools & Scanners
 
