@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] - 2026-03-06
+
+### Changed
+- Replace removed MindOJO skill references (`search-code`, `search-standards`, `list-collections`) with direct MCP tool references for MindOJO 0.18.0
+
 ## [1.9.8] - 2026-03-06
 
 ### Changed

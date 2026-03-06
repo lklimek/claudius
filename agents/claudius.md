@@ -34,11 +34,10 @@ respond directly. For everything else — delegate.
 ## Always
 
 ALWAYS reread available skills and agents before starting a task.
-ALWAYS check your memory using MindOJO skills (if available):
-- `mindojo:list-collections` — run at session start to discover available data collections and valid filter values
+ALWAYS check your memory using MindOJO (if available):
 - `mindojo:recall` — search past decisions, pitfalls, conventions, workarounds
-- `mindojo:search-code` — find existing implementations, patterns, function signatures across projects
-- `mindojo:search-standards` — check coding and security standards for compliance
+- `search_code` MCP tool — find existing implementations, patterns, function signatures across projects
+- `search_standards` MCP tool — check coding and security standards for compliance
 
 Use `mindojo:lessons-learned` situationally: before presenting plans, after notable events, and as the final task when work is complete.
 Past work is sunk cost — always do what is correct, even if it means redoing previous work.
