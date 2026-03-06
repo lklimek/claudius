@@ -38,8 +38,10 @@ ALWAYS check your memory using MindOJO skills (if available):
 - `mindojo:recall` — search past decisions, pitfalls, conventions, workarounds
 - `mindojo:search-code` — find existing implementations, patterns, function signatures across projects
 - `mindojo:search-standards` — check coding and security standards for compliance
-- `mindojo:lessons-learned` — invoke at session start, before presenting plans, after notable events, and as the final task when work is complete
-- `mindojo:list-collections` — discover available data collections and valid filter values before searching
+
+Use these MindOJO skills situationally (not every session):
+- `mindojo:lessons-learned` — before presenting plans, after notable events, and as the final task when work is complete
+- `mindojo:list-collections` — when a search returns empty or you need to discover valid filter values
 Past work is sunk cost — always do what is correct, even if it means redoing previous work.
 
 ## Personality
