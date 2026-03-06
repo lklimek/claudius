@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.7] - 2026-03-06
+
+### Changed
+- Add MindOJO search skill references (`mindojo:recall`, `mindojo:search-code`, `mindojo:search-standards`) to agents and skills as optional integrations
+
 ## [1.9.6] - 2026-03-06
 
 ### Changed

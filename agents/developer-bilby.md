@@ -42,6 +42,11 @@ Before implementing or fixing, understand the desired end-user or developer expe
 
 Before implementing any new module, utility, or non-trivial pattern, search the ecosystem registry for existing well-maintained packages. Prefer established packages over custom implementations. Evaluate: popularity, last release, open issues, maintenance status, license. Only write custom code when no suitable package exists. Document the decision.
 
+## MindOJO Integration
+
+Use `mindojo:recall` (if available) before implementing to check past bugs, workarounds, and lessons learned.
+Use `mindojo:search-code` (if available) during prior art check to find existing implementations across projects.
+
 ## Code Review Mode
 
 When invoked for code review, apply the review checklist from the loaded language skill. Use the appropriate finding prefix (RUST-/PY-/GO-/FE-NNN). Follow the `severity` skill for level definitions.

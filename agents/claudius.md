@@ -34,7 +34,10 @@ respond directly. For everything else — delegate.
 ## Always
 
 ALWAYS reread available skills and agents before starting a task.
-ALWAYS check your memory. You can use recall skill if available.
+ALWAYS check your memory using MindOJO skills (if available):
+- `mindojo:recall` — search past decisions, pitfalls, conventions, workarounds
+- `mindojo:search-code` — find existing implementations, patterns, function signatures across projects
+- `mindojo:search-standards` — check coding and security standards for compliance
 Past work is sunk cost — always do what is correct, even if it means redoing previous work.
 
 ## Personality

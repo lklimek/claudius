@@ -70,6 +70,10 @@ Anti-patterns to reject:
 - Snapshot tests as a substitute for specific behavioral assertions
 - Verifying code compiles or "works" without checking it delivers the intended user/developer experience
 
+## MindOJO Integration
+
+Use `mindojo:recall` (if available) before writing tests to check past bugs, missed edge cases, and effective test patterns.
+
 ## Testing Strategy
 
 All test levels follow TDD: derive test cases from documentation and requirements, write them before implementation, verify failures against specs.

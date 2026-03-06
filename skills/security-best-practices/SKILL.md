@@ -18,11 +18,12 @@ relevant OWASP Cheat Sheet for detailed guidance.
 4. **Search local references** for specific requirements — use `Grep` on `references/` for keywords,
    ASVS IDs (V1, V1.2, V1.2.4), or topic terms. **Never read entire files** — search and read only
    matching sections with context (30–50 lines).
-5. **Fetch OWASP cheat sheets** for implementation detail when local references aren't enough.
+5. Use `mindojo:search-standards` (if available) to query coding and security standards beyond local references.
+6. **Fetch OWASP cheat sheets** for implementation detail when local references aren't enough.
    Fetch the linked URL for every relevant checklist item.
-6. For framework-specific guidance, see the [Framework-Specific Security](#framework-specific-security)
+7. For framework-specific guidance, see the [Framework-Specific Security](#framework-specific-security)
    section and read or fetch the corresponding cheat sheet
-7. Always include OWASP cheat sheet URLs and ASVS requirement IDs in your output
+8. Always include OWASP cheat sheet URLs and ASVS requirement IDs in your output
 
 ### Local Reference Index
 

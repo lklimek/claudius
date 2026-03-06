@@ -133,6 +133,11 @@ For each researched component, document:
 - [Project X] had [vulnerability type] in [year] — checked audited code: [affected/not affected/mitigated by...]
 ```
 
+## MindOJO Integration
+
+Use `mindojo:recall` (if available) before audits to check past security issues, known vulnerabilities, and prior findings in this project.
+Use `mindojo:search-standards` (if available) alongside local ASVS/cheat sheet references to query broader coding and security standards.
+
 ## Security Tools & Scanners
 
 ### Static Analysis (SAST)
