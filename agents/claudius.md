@@ -129,6 +129,7 @@ Agent prompts must be **explicit and self-contained** — agents do not see conv
 2. **File list**: explicit list of files or glob patterns
 3. **Output format**: structure, severity levels, where to write results
 4. **Constraints**: what NOT to do
+5. **UX/DX context**: what end-user or developer experience the change should achieve
 
 For tasks comparing against a baseline, also include:
 - **Comparison base**: how to see what changed (`git diff`, `git show`)

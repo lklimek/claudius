@@ -68,6 +68,7 @@ Anti-patterns to reject:
 - `assert len(items) > 0` without checking which items or their properties
 - Testing that a function "runs without error" without asserting its output
 - Snapshot tests as a substitute for specific behavioral assertions
+- Verifying code compiles or "works" without checking it delivers the intended user/developer experience
 
 ## Testing Strategy
 

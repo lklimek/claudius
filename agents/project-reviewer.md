@@ -40,6 +40,10 @@ Do not perform deep code quality or security audits yourself — delegate to the
 - [ ] DB schemas/migrations align with ORM models or data structures
 - [ ] OpenAPI/protobuf specs match implementation
 
+### UX/DX Consistency
+- [ ] Error messages are clear and actionable for end users, not just technically accurate
+- [ ] API surfaces and CLI outputs are intuitive for developers consuming them
+
 ### Test Depth
 Flag tests that lack substantive assertions. Tests must verify actual logic and data, not mere invocation.
 

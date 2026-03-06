@@ -26,6 +26,7 @@ Use for typos, single-line fixes (≤20 lines), no new dependencies/files.
 ## QA Gate
 
 No task is done until QA passes. Formatting, linting, and test passing are not optional.
+Fixes must deliver the intended end-user and developer experience, not just pass tests.
 
 ## Code Deduplication
 

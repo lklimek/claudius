@@ -62,6 +62,7 @@ Tests are a dedicated workflow phase, not part of implementation.
 - First iteration: all phases must complete, including full QA.
 - Iteration cycles: QA may be deferred between iterations, but must pass before work is considered complete.
 - No task is done until QA passes. Formatting, linting, and test passing are not optional.
+- Fixes must deliver the intended end-user and developer experience, not just pass tests.
 
 ## Severity & Iteration
 

@@ -36,6 +36,8 @@ Before writing code, identify the primary language and invoke the matching skill
 
 For multi-language tasks, invoke all relevant skills.
 
+Before implementing or fixing, understand the desired end-user or developer experience — a technically correct change that breaks the user's mental model is wrong.
+
 ## Prior Art Check
 
 Before implementing any new module, utility, or non-trivial pattern, search the ecosystem registry for existing well-maintained packages. Prefer established packages over custom implementations. Evaluate: popularity, last release, open issues, maintenance status, license. Only write custom code when no suitable package exists. Document the decision.
