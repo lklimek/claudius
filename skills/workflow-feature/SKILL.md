@@ -11,6 +11,14 @@ Follow all phases on the first iteration. Don't skip any phase.
 Decompose phases into smaller tasks when useful.
 Match agents to phases by their frontmatter descriptions.
 
+## Before You Start
+
+Search project and global memories for relevant context before planning or dispatching agents:
+1. `search_memories(query="<topic>", project="<repo>")` — discover what past sessions learned about this area
+2. `get_memories(memory_id="<id>")` — read full details of relevant memories found in step 1
+
+These are MCP tools on the MindOJO server. Use them if available. Skip silently if not.
+
 ## Phases
 
 1. **Requirements** → `business-domain-analyst` + `ux-designer`

@@ -9,6 +9,14 @@ Use for bug fixes, small changes (≤200 lines), small local refactorings.
 
 Follow all phases on the first iteration. QA must always be fully executed.
 
+## Before You Start
+
+Search project and global memories for relevant context before planning or dispatching agents:
+1. `search_memories(query="<topic>", project="<repo>")` — discover what past sessions learned about this area
+2. `get_memories(memory_id="<id>")` — read full details of relevant memories found in step 1
+
+These are MCP tools on the MindOJO server. Use them if available. Skip silently if not.
+
 ## Phases
 
 1. **Requirements** — understand the problem, gather domain knowledge, ask user questions.

@@ -7,6 +7,14 @@ description: "Use for typos or single-line fixes (≤20 lines). Phases: TDD → 
 
 Use for typos, single-line fixes (≤20 lines), no new dependencies/files.
 
+## Before You Start
+
+Search project and global memories for relevant context before planning or dispatching agents:
+1. `search_memories(query="<topic>", project="<repo>")` — discover what past sessions learned about this area
+2. `get_memories(memory_id="<id>")` — read full details of relevant memories found in step 1
+
+These are MCP tools on the MindOJO server. Use them if available. Skip silently if not.
+
 ## Phases
 
 1. **TDD: Tests** — write/update tests first from requirements, verify they fail.

@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Changed
 - Add stale-worktree divergence warning to developer-bilby, qa-engineer, technical-writer, and devops-engineer agents
 - Add tight-coupling anti-pattern to claudius agent delegation guidelines
+- Add "Before You Start" memory-check step to workflow-feature, workflow-simplified, and workflow-trivial skills
 
 ## [1.10.0] - 2026-03-06
 
