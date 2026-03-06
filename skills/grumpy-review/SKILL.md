@@ -84,6 +84,7 @@ every review agent prompt MUST include these review-specific elements:
 1. **Comparison base**: How to see what changed (`git show <base>:<file>` or `git diff`)
 2. **Finding format**: Use the severity levels and structure defined below
 3. **Review checklists**: Embed relevant checklist content or rely on the agent's preloaded skills
+4. **UX/DX lens**: instruct agents to assess how findings affect end-user workflows and developer experience, not just code correctness
 
 ### Finding format (JSON)
 
@@ -114,6 +115,7 @@ Each agent writes its output to the specified file path as valid JSON:
 
 **Required finding fields**: `id`, `severity`, `title`, `location`, `description`, `recommendation`.
 **Optional**: `tags`, `impact`.
+**Impact guidance**: assess end-user and developer experience impact, not just technical correctness.
 
 **ID prefixes**: `SEC-` security, `PROJ-` project, `RUST-`/`PY-`/`GO-`/`FE-` language, `DOC-` docs.
 Agents assign provisional sequential IDs within their prefix (e.g., `SEC-001`, `SEC-002`).

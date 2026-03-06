@@ -48,3 +48,4 @@ clean separation of concerns, effective use of type system.*
 - When in doubt between two levels, choose the higher one
 - Severity reflects **impact and likelihood**, not effort to fix
 - A trivial one-line fix can still be CRITICAL if the impact is severe
+- UX/DX impact is a severity factor — a broken user journey or confusing developer experience can be HIGH even if the code compiles and passes tests

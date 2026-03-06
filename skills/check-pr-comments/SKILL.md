@@ -28,6 +28,7 @@ For every inline comment, read the file at the referenced location and **verify 
 - Determine if the current code satisfies the request (semantically, not just syntactically)
 - For comments with multiple sub-items, verify each one independently
 - A comment is only "resolved" if **all** of its sub-items are addressed
+- Verify the fix achieves the intended end-user or developer experience, not just technical correctness
 
 ## 4. Build Structured Report JSON
 

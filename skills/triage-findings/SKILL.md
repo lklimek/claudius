@@ -52,6 +52,7 @@ Replace `8741` with the actual port if `--port` was used.
 5. For findings marked `fix`: use the finding's `location`, `description`, and
    `recommendation` fields to apply the recommended fixes. Work through them
    one at a time, verifying each fix before proceeding to the next.
+   Verify each fix achieves the desired end-user or developer experience, not just code correctness.
 
 6. For findings marked `defer`: add a `TODO` comment at the finding's location
    referencing the finding ID and title:

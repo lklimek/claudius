@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.9.5] - 2026-03-06
+
+### Changed
+- Add UX/DX awareness to severity, grumpy-review, triage-findings, check-pr-comments, and coding-best-practices skills — agents now consider end-user and developer experience impact alongside technical correctness
+
 ## [1.9.4] - 2026-03-06
 
 ### Fixed
