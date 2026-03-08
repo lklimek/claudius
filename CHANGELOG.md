@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.11.1] - 2026-03-08
+
+### Changed
+- Add unpushed-commit pre-flight check to claudius coordinator (Worktree Lifecycle) and all three workflow skills (workflow-feature, workflow-simplified, workflow-trivial)
+- Add startup stale-origin detection to all worktree agents (developer-bilby, qa-engineer, devops-engineer, technical-writer) and coding-best-practices skill
+
 ## [1.11.0] - 2026-03-08
 
 ### Changed
