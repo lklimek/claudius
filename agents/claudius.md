@@ -145,6 +145,14 @@ For tasks comparing against a baseline, also include:
 
 All code-writing agents run in isolated worktrees (`isolation: worktree`). Agents commit their changes to the worktree branch before exiting.
 
+**Before spawning worktree agents**, verify no unpushed commits exist on the current branch:
+
+```bash
+git log @{upstream}..HEAD --oneline
+```
+
+If unpushed commits exist, worktree agents will fork from the stale `origin` and miss local changes. Alert the user and offer to push. Do not spawn worktree agents until the branch is pushed.
+
 **After every agent wave**, run this verification before merging or cleanup:
 
 1. `git worktree list` — enumerate all active worktrees

@@ -77,6 +77,8 @@ Include a deduplication pass — scan for duplicated logic, extract shared helpe
 
 ## Worktree & Commit Discipline
 
+**Pre-flight**: Before spawning worktree agents, check `git log @{upstream}..HEAD --oneline` for unpushed commits. Worktrees fork from `origin`, not the local branch — unpushed commits will be invisible to agents. Alert the user and push before proceeding.
+
 All implementation agents (`developer-bilby`, `qa-engineer`, `devops-engineer`, `technical-writer`) run in isolated worktrees. After each agent wave:
 
 1. Verify all worktrees have committed changes (`git worktree list` + `git status` per worktree)
