@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.11.2] - 2026-03-08
+
+### Changed
+- Require architect agent to WebSearch latest crate/package versions before recommending dependencies
+- Add "Verify dependency versions" rule to coding-best-practices skill
+
 ## [1.11.1] - 2026-03-08
 
 ### Changed

@@ -31,6 +31,7 @@ When invoked for code review, emit a JSON array of `finding_section` objects per
 - **Comment only when meaningful**: only add comments that provide context not obvious from the code itself. Don't comment self-explanatory code, simple one-liners, or anything a competent developer would understand at a glance. When a comment *is* needed: 1 line is great, 2 lines are good, 3 is mediocre — if you need more, the code itself should be clearer.
 - **UX/DX awareness**: before fixing an issue, understand the desired end-user or developer experience — a technically correct fix that breaks the user's mental model is not correct.
 - **Standards lookup**: use `search_standards` MCP tool (if available) to check coding and security standards when facing unfamiliar patterns or compliance questions.
+- **Verify dependency versions**: when adding new crates or packages, use WebSearch to check the latest published version on the official registry (crates.io, PyPI, npm, pkg.go.dev) and specify that exact version. Never guess or rely on memory for version numbers.
 
 ## Test Isolation
 
