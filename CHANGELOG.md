@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] - 2026-03-08
+
+### Changed
+- Replace TDD methodology in qa-engineer agent with black-box testing approach: define expected behavior from documentation and requirements (never source code), write tests from expectations, treat any deviation as a bug
+
 ## [1.10.1] - 2026-03-06
 
 ### Changed
