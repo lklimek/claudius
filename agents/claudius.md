@@ -141,31 +141,27 @@ Agent prompts must be **explicit and self-contained** — agents do not see conv
 For tasks comparing against a baseline, also include:
 - **Comparison base**: how to see what changed (`git diff`, `git show`)
 
-### Worktree Lifecycle
+### Worktree Isolation
 
-All code-writing agents run in isolated worktrees (`isolation: worktree`). Agents commit their changes to the worktree branch before exiting.
+Use `isolation: "worktree"` when spawning **parallel agents** that would conflict on the same files. For single-agent tasks, let the agent work directly in the main working directory.
 
-**Before spawning worktree agents**, verify no unpushed commits exist on the current branch:
+**Pre-flight** (when using worktrees): verify no unpushed commits exist on the current branch:
 
 ```bash
 git log @{upstream}..HEAD --oneline
 ```
 
-If unpushed commits exist, worktree agents will fork from the stale `origin` and miss local changes. Alert the user and offer to push. Do not spawn worktree agents until the branch is pushed.
+If unpushed commits exist, worktree agents will fork from stale `origin`. Alert the user and push first.
 
-**After every agent wave**, run this verification before merging or cleanup:
+**Post-wave verification** (when worktrees were used):
 
-1. `git worktree list` — enumerate all active worktrees
-2. For each worktree with changes:
-   - `git -C <worktree-path> status` — verify no uncommitted work
-   - `git -C <worktree-path> log --oneline -3` — confirm commits exist
-   - Copy or cherry-pick changes into main working directory
-3. Run tests in main after merging to catch integration issues
-4. Only then clean up: `git worktree remove <path>` and `git worktree prune`
+1. `git worktree list` — enumerate active worktrees
+2. For each: `git -C <path> status` + `git -C <path> log --oneline -3` — verify commits
+3. Cherry-pick or merge changes into main working directory
+4. Run tests after merging
+5. Clean up: `git worktree remove <path>` + `git worktree prune`
 
-**Never remove worktrees with uncommitted or unmerged work.** If an agent failed to commit, retrieve changes manually before cleanup.
-
-**Never assume agent changes landed in main** — agents with `isolation: worktree` always write to their worktree, even if you didn't request isolation. Always verify.
+Never remove worktrees with uncommitted or unmerged work.
 
 ### Scaling for Large Scope
 

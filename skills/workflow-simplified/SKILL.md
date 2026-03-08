@@ -75,15 +75,10 @@ Iterate until no issues above LOW remain.
 
 Include a deduplication pass — scan for duplicated logic, extract shared helpers, eliminate copy-paste. Do this during Implementation self-review and QA code quality checks.
 
-## Worktree & Commit Discipline
+## Commit Discipline
 
-**Pre-flight**: Before spawning worktree agents, check `git log @{upstream}..HEAD --oneline` for unpushed commits. Worktrees fork from `origin`, not the local branch — unpushed commits will be invisible to agents. Alert the user and push before proceeding.
+Agents must commit all changes before exiting — uncommitted work cannot be merged.
 
-All implementation agents (`developer-bilby`, `qa-engineer`, `devops-engineer`, `technical-writer`) run in isolated worktrees. After each agent wave:
+**When spawning parallel agents**, use `isolation: "worktree"` to avoid file conflicts. Pre-flight: check `git log @{upstream}..HEAD --oneline` for unpushed commits (worktrees fork from `origin`, not local branch). After each parallel wave: verify worktree commits, merge into main, run tests, then clean up.
 
-1. Verify all worktrees have committed changes (`git worktree list` + `git status` per worktree)
-2. Merge/copy changes into the main working directory
-3. Run tests in main to catch integration issues
-4. Clean up worktrees only after confirming changes are merged
-
-Never skip verification — uncommitted worktree changes are invisible and will be lost on cleanup.
+**Single-agent phases** run directly in the working directory — no worktree overhead.

@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.12.0] - 2026-03-08
+
+### Changed
+- Worktree isolation is now a coordinator decision at spawn time, not an agent default — use only for parallel agents
+- Remove `isolation: worktree` from agent frontmatter (developer-bilby, qa-engineer, devops-engineer, technical-writer)
+- Replace verbose "Worktree Discipline" sections in agents and coding-best-practices with lightweight "Commit Discipline"
+- Rewrite coordinator "Worktree Lifecycle" as "Worktree Isolation" — parallel-only policy with same safety checks
+- Simplify "Worktree & Commit Discipline" in all workflow skills (feature, simplified, trivial) to "Commit Discipline"
+
 ## [1.11.2] - 2026-03-08
 
 ### Changed
