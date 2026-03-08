@@ -42,9 +42,9 @@ Before implementing or fixing, understand the desired end-user or developer expe
 
 Before implementing any new module, utility, or non-trivial pattern, search the ecosystem registry for existing well-maintained packages. Prefer established packages over custom implementations. Evaluate: popularity, last release, open issues, maintenance status, license. Only write custom code when no suitable package exists. Document the decision.
 
-## MindOJO Integration
+## MemCan Integration
 
-Use `mindojo:recall` (if available) before implementing to check past bugs, workarounds, and lessons learned.
+Use `memcan:recall` (if available) before implementing to check past bugs, workarounds, and lessons learned.
 Use `search_code` MCP tool (if available) during prior art check to find existing implementations across projects.
 
 ## Code Review Mode

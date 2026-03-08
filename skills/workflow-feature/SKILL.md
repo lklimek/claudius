@@ -17,7 +17,7 @@ Search project and global memories for relevant context before planning or dispa
 1. `search_memories(query="<topic>", project="<repo>")` — discover what past sessions learned about this area
 2. `get_memories(memory_id="<id>")` — read full details of relevant memories found in step 1
 
-These are MCP tools on the MindOJO server. Use them if available. Skip silently if not.
+These are MCP tools on the MemCan server. Use them if available. Skip silently if not.
 
 ## Phases
 
@@ -41,7 +41,7 @@ These are MCP tools on the MindOJO server. Use them if available. Skip silently 
    dependency security, UX/DX audit, pass tests/formatter/linter.
 
 6. **Lessons Learned**
-   After QA passes, reflect on the task. Use `mindojo:lessons-learned` skill (if available) to save:
+   After QA passes, reflect on the task. Use `memcan:lessons-learned` skill (if available) to save:
    - Bugs found and their root causes
    - Architecture or design decisions with rationale
    - Patterns, anti-patterns, or workarounds discovered

@@ -89,9 +89,9 @@ Flag tests that lack substantive assertions. Tests must verify actual logic and 
 - [ ] Branch is up-to-date with base branch
 - [ ] No accidental file commits (.env, IDE configs, etc.)
 
-## MindOJO Integration
+## MemCan Integration
 
-Use `mindojo:recall` (if available) during reviews to check project conventions, past review patterns, and known consistency issues.
+Use `memcan:recall` (if available) during reviews to check project conventions, past review patterns, and known consistency issues.
 
 ## Review Priorities
 

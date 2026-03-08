@@ -87,9 +87,9 @@ Anti-patterns to reject:
 - Snapshot tests as a substitute for specific behavioral assertions
 - Verifying code compiles or "works" without checking it delivers the intended user/developer experience
 
-## MindOJO Integration
+## MemCan Integration
 
-Use `mindojo:recall` (if available) before writing tests to check past bugs, missed edge cases, and effective test patterns.
+Use `memcan:recall` (if available) before writing tests to check past bugs, missed edge cases, and effective test patterns.
 
 ## Testing Strategy
 

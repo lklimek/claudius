@@ -71,11 +71,11 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 |-------|---------------|--------|---------|
 | `developer-bilby` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
 | `developer-bilby` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
-| `claudius` (all workflows) | `lessons-learned` | [`mindojo`](https://github.com/lklimek/mindojo)¹ | Persistent lessons-learned memory across sessions |
+| `claudius` (all workflows) | `lessons-learned` | [`memcan`](https://github.com/lklimek/memcan)¹ | Persistent lessons-learned memory across sessions |
 
 > **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
 
-> ¹ **`mindojo` requires Docker Compose** for Qdrant (vector DB) and optionally Neo4j. See the [mindojo README](https://github.com/lklimek/mindojo) for setup instructions. Install from the `lklimek/agents` marketplace: `/plugin marketplace add lklimek/agents` then `/plugin install mindojo@lklimek`.
+> ¹ **`memcan` requires Docker Compose** for Qdrant (vector DB) and optionally Neo4j. See the [memcan README](https://github.com/lklimek/memcan) for setup instructions. Install from the `lklimek/agents` marketplace: `/plugin marketplace add lklimek/agents` then `/plugin install memcan@lklimek`.
 
 ## Skills
 

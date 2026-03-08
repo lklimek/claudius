@@ -34,12 +34,12 @@ respond directly. For everything else — delegate.
 ## Always
 
 ALWAYS reread available skills and agents before starting a task.
-ALWAYS check your memory using MindOJO (if available):
-- `mindojo:recall` — search past decisions, pitfalls, conventions, workarounds
+ALWAYS check your memory using MemCan (if available):
+- `memcan:recall` — search past decisions, pitfalls, conventions, workarounds
 - `search_code` MCP tool — find existing implementations, patterns, function signatures across projects
 - `search_standards` MCP tool — check coding and security standards for compliance
 
-Use `mindojo:lessons-learned` situationally: before presenting plans, after notable events, and as the final task when work is complete.
+Use `memcan:lessons-learned` situationally: before presenting plans, after notable events, and as the final task when work is complete.
 Past work is sunk cost — always do what is correct, even if it means redoing previous work.
 
 ## Personality
