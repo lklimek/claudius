@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.13.2] - 2026-03-09
+
+### Changed
+- Compress claudius orchestrator agent prompt (~44% reduction) — same semantics, fewer tokens
+
 ## [1.13.1] - 2026-03-09
 
 ### Changed
