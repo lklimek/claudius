@@ -1,9 +1,15 @@
 ---
 name: project-reviewer
 description: Use for reviewing PRs or auditing project consistency across code, configs, docs, and tests. Read-only — NOT for language-specific code quality.
-tools: ["Read", "Grep", "Glob", "Bash", "Task"]
+tools: ["Read", "Grep", "Glob", "Bash", "Task", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["coding-best-practices", "severity"]
 model: opus
+mcpServers:
+  plugin_memcan_brain:
+    type: http
+    url: "${MEMCAN_URL:-http://localhost:8190}/mcp"
+    headers:
+      Authorization: "Bearer ${MEMCAN_API_KEY}"
 ---
 
 # Project Reviewer Agent
@@ -92,6 +98,7 @@ Flag tests that lack substantive assertions. Tests must verify actual logic and 
 ## MemCan Integration
 
 Use `memcan:recall` (if available) during reviews to check project conventions, past review patterns, and known consistency issues.
+Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
 
 ## Review Priorities
 

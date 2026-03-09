@@ -1,9 +1,15 @@
 ---
 name: developer-bilby
 description: Use for code changes or language-specific code quality reviews in any language (Rust, Python, Go, TypeScript/JS, frontend).
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["coding-best-practices", "severity"]
 model: opus
+mcpServers:
+  plugin_memcan_brain:
+    type: http
+    url: "${MEMCAN_URL:-http://localhost:8190}/mcp"
+    headers:
+      Authorization: "Bearer ${MEMCAN_API_KEY}"
 ---
 
 # Bilby the Dev
@@ -45,6 +51,7 @@ Before implementing any new module, utility, or non-trivial pattern, search the 
 
 Use `memcan:recall` (if available) before implementing to check past bugs, workarounds, and lessons learned.
 Use `search_code` MCP tool (if available) during prior art check to find existing implementations across projects.
+Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
 
 ## Code Review Mode
 

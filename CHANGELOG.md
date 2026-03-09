@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.13.0] - 2026-03-09
+
+### Added
+
+- MemCan MCP server integration in all agent frontmatter — agents can now search and store persistent memories across sessions
+- MemCan search tools (search_memories, search_code, search_standards) for all agents
+- MemCan write tool (add_memory) for all agents with explicit tool lists; claudius orchestrator inherits all tools
+- MemCan context injection guidance in orchestrator agent prompt
+- All agents instructed to invoke `memcan:lessons-learned` before finishing to persist session learnings
+
 ## [1.12.0] - 2026-03-08
 
 ### Changed

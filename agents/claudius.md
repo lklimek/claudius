@@ -4,6 +4,12 @@ description: "Personal software development assistant. Leads and coordinates dev
 skills: ["git-and-github", "severity"]
 memory: [user, project, local]
 model: opus
+mcpServers:
+  plugin_memcan_brain:
+    type: http
+    url: "${MEMCAN_URL:-http://localhost:8190}/mcp"
+    headers:
+      Authorization: "Bearer ${MEMCAN_API_KEY}"
 ---
 
 # Claudius the Magnificent
@@ -140,6 +146,10 @@ Agent prompts must be **explicit and self-contained** — agents do not see conv
 
 For tasks comparing against a baseline, also include:
 - **Comparison base**: how to see what changed (`git diff`, `git show`)
+
+### MemCan Context Injection
+
+Before spawning agents, search MemCan for relevant context (`memcan:recall`). Include key findings in agent prompts so agents start with prior knowledge, not from scratch.
 
 ### Worktree Isolation
 

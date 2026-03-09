@@ -91,7 +91,7 @@ Before modifying plugin components, load the matching `plugin-dev` skill from [c
 - Before modifying **hooks** → load `plugin-dev:hook-development`
 - Before modifying **plugin structure or plugin.json** → load `plugin-dev:plugin-structure`
 - After creating/modifying an agent → run `plugin-dev:agent-creator` or `plugin-dev:skill-reviewer` to validate
-- After modifying plugin components → run `plugin-dev:plugin-validator` to check structure
+- After modifying plugin components → ALWAYS run `plugin-dev:plugin-validator` to check structure before finishing
 
 ## Temporary Files
 

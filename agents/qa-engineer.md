@@ -1,9 +1,15 @@
 ---
 name: qa-engineer
 description: Use for writing test plans, automated tests, manual test scenarios, edge case identification, or coverage analysis. Ensures assertion depth.
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["security-best-practices"]
 model: opus
+mcpServers:
+  plugin_memcan_brain:
+    type: http
+    url: "${MEMCAN_URL:-http://localhost:8190}/mcp"
+    headers:
+      Authorization: "Bearer ${MEMCAN_API_KEY}"
 ---
 
 # QA Engineer Agent
@@ -89,6 +95,7 @@ Anti-patterns to reject:
 ## MemCan Integration
 
 Use `memcan:recall` (if available) before writing tests to check past bugs, missed edge cases, and effective test patterns.
+Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
 
 ## Testing Strategy
 

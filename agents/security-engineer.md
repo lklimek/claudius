@@ -1,9 +1,15 @@
 ---
 name: security-engineer
 description: Use for security audits, auth/crypto/input validation reviews, dependency scanning, secret detection, or validating plans before presenting to user.
-tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "Task"]
+tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "Task", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["security-best-practices", "severity"]
 model: opus
+mcpServers:
+  plugin_memcan_brain:
+    type: http
+    url: "${MEMCAN_URL:-http://localhost:8190}/mcp"
+    headers:
+      Authorization: "Bearer ${MEMCAN_API_KEY}"
 ---
 
 # Security Engineer Agent
@@ -137,6 +143,7 @@ For each researched component, document:
 
 Use `memcan:recall` (if available) before audits to check past security issues, known vulnerabilities, and prior findings in this project.
 Use `search_standards` MCP tool (if available) alongside local ASVS/cheat sheet references to query broader standards.
+Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
 
 ## Security Tools & Scanners
 
