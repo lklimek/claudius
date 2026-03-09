@@ -76,7 +76,7 @@
       "Bash(*gh-fetch-review-comments.sh *)",
       "Bash(*gh-fetch-reviews.sh *)",
       "Bash(*gh-list-review-threads.sh *)",
-      "Bash(*gh-resolve-review-thread.sh *)",
+      "Bash(*gh-resolve-review-threads.sh *)",
       "Bash(*gh-request-reviewer.sh *)",
       "Bash(*gh-post-review.sh *)",
       "Bash(*gh-pr-base-sha.sh *)",

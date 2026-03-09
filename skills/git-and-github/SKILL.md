@@ -131,8 +131,8 @@ gh-request-reviewer.sh <owner/repo> <pr> <reviewer>
 gh-list-review-threads.sh <owner/repo> <pr>
   → {id, isResolved, comments: [{databaseId, path, body}]}
 
-gh-resolve-review-thread.sh <thread_id>
-  → Ask user before resolving. Never resolve partially addressed threads.
+gh-resolve-review-threads.sh <thread_id> [thread_id ...]
+  → Resolves all given threads in a single API call. Ask user before resolving.
 
 gh-pr-base-sha.sh <owner/repo> <pr>
   → Base commit SHA.

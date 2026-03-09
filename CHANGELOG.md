@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.13.1] - 2026-03-09
+
+### Changed
+- Rename `gh-resolve-review-thread.sh` → `gh-resolve-review-threads.sh` (plural) — now accepts multiple thread IDs
+- Batch all thread resolutions into a single GraphQL call using aliased mutations (one `ghsudo` invocation)
+- Update references in `settings.example.json`, `git-and-github` skill, and `triage-findings` skill
+
 ## [1.13.0] - 2026-03-09
 
 ### Added
