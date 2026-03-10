@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.16.1] - 2026-03-10
+
+### Fixed
+
+- `check-pr-comments`: replaced generic `Bash(*gh-*.sh *)` with specific per-script allowed-tools
+- Added CLAUDE.md convention: `allowed-tools` Bash globs must match exact script names, not generic patterns
+
 ## [1.16.0] - 2026-03-10
 
 ### Changed
