@@ -81,13 +81,11 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 
 All agents connect to the [GitHub MCP server](https://github.com/github/github-mcp-server) for direct GitHub API access (issues, PRs, code search, actions, etc.). This requires a GitHub Personal Access Token. The token is read from `GH_TOKEN` (preferred) or `GITHUB_TOKEN` as fallback.
 
-Each agent gets only the toolsets it needs (via `X-MCP-Toolsets` header) to minimize context size. All agents except `claudius` run in read-only mode — writes go through `gh` CLI.
-
 **Step 1 — Create a fine-grained PAT:**
 
-[→ Create a new fine-grained Personal Access Token](https://github.com/settings/personal-access-tokens/new)
+[→ Create a new fine-grained PAT with pre-selected permissions](https://github.com/settings/personal-access-tokens/new?name=Claudius+GitHub+MCP&actions=read&contents=write&discussions=read&issues=write&metadata=read&pull_requests=write)
 
-Set the token expiration and repository access scope as needed, then grant these **repository permissions**:
+The link above pre-fills these **repository permissions**:
 
 | Permission | Access | Used for |
 |---|---|---|
@@ -97,6 +95,8 @@ Set the token expiration and repository access scope as needed, then grant these
 | **Issues** | Read and write | Create issues, add comments |
 | **Metadata** | Read-only | Basic repository metadata (always required) |
 | **Pull requests** | Read and write | Create PRs, review, comment, resolve threads |
+
+Set the token expiration and repository access scope as needed, then create the token.
 
 > **Tip:** The GitHub MCP server auto-detects your token's permissions and hides tools you don't have access to. Start with the permissions above and add more if needed.
 
