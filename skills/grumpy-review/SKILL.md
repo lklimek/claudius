@@ -37,13 +37,20 @@ git diff $BASE_BRANCH...HEAD -- <paths>
 ```
 
 Assess scale:
-- **Small** (< 500 lines, < 10 files): 2 agents suffice
+- **Trivial** (< 200 lines, < 5 files, single language): 1 agent — single `developer-bilby` prompted with `security-best-practices` and `coding-best-practices` skills. Skip consolidation pipeline; agent writes report directly.
+- **Small** (< 500 lines, < 10 files): 2 agents
 - **Medium** (500-5000 lines, 10-50 files): 3-4 agents
 - **Large** (5000+ lines, 50+ files): 5+ agents, split by file groups
 
 ## 2. Select Agent Mix
 
 Choose agents based on what the code does. Not every review needs every agent type.
+
+### Trivial reviews (single agent)
+
+For trivial reviews (< 200 lines, < 5 files, single language), skip the multi-agent pipeline.
+Spawn a single `developer-bilby` and instruct it to also apply `security-best-practices` and
+`coding-best-practices` checklists. The agent writes the report JSON directly — no consolidation needed.
 
 ### Core agents (always include)
 
@@ -67,9 +74,10 @@ These agents handle **code quality reviews** — readability, idioms, error hand
 
 | Condition | Agent (`subagent_type`) | Focus |
 |---|---|---|
-| Cryptographic code | `claudius:security-engineer` (second instance) | Crypto soundness, algorithm choice, key management |
-| New/updated dependencies | `claudius:security-engineer` | Dependency audit, CVE scan, supply chain risk |
 | Documentation changes | `claudius:technical-writer` | Accuracy, completeness, API docs, changelog |
+
+For crypto-heavy code or significant dependency changes, expand the single security-engineer's
+prompt scope to include crypto soundness and dependency audit — do NOT spawn a second instance.
 
 ### Scaling for large codebases
 
