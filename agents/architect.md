@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Use for system design, module boundaries, dependency review, architectural trade-offs, technology evaluation, library comparison, or validating plans before presenting to user.
-tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
+tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["security-best-practices", "rust-best-practices"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]

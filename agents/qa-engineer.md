@@ -1,7 +1,7 @@
 ---
 name: qa-engineer
 description: Use for writing test plans, automated tests, manual test scenarios, edge case identification, or coverage analysis. Ensures assertion depth.
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["security-best-practices"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]

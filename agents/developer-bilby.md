@@ -1,7 +1,7 @@
 ---
 name: developer-bilby
 description: Use for code changes or language-specific code quality reviews in any language (Rust, Python, Go, TypeScript/JS, frontend).
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["coding-best-practices", "severity"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]

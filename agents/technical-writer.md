@@ -1,7 +1,7 @@
 ---
 name: technical-writer
 description: Use for creating, maintaining, or reviewing documentation — READMEs, API docs, tutorials, guides, changelogs, ADRs.
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: []
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]

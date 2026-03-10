@@ -1,7 +1,7 @@
 ---
 name: project-reviewer
 description: Use for reviewing PRs or auditing project consistency across code, configs, docs, and tests. Read-only — NOT for language-specific code quality.
-tools: ["Read", "Grep", "Glob", "Bash", "Task"]
+tools: ["Read", "Grep", "Glob", "Bash", "Task", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["coding-best-practices", "severity"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]

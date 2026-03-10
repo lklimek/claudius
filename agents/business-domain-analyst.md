@@ -1,7 +1,7 @@
 ---
 name: business-domain-analyst
 description: Use at project start, during requirement gathering, backlog prioritization, validating solutions against business needs, or validating plans before presenting to user.
-tools: ["Read", "Grep", "Glob", "WebSearch", "WebFetch"]
+tools: ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: []
 model: opus
 memory: user

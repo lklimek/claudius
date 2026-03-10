@@ -1,7 +1,7 @@
 ---
 name: ux-designer
 description: Use when creating UI designs, defining interaction patterns, reviewing usability and accessibility, or validating plans before presenting to user.
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "WebSearch", "WebFetch"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["frontend-design"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]

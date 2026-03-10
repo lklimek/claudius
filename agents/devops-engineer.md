@@ -1,7 +1,7 @@
 ---
 name: devops-engineer
 description: Use for Docker, CI/CD, GitHub Actions, infrastructure config, build automation, deployment, or reviewing DevOps artifacts.
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
 skills: ["security-best-practices"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]
