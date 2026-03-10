@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.14.2] - 2026-03-10
+
+### Fixed
+
+- MCP config `Authorization` header used unsupported bash default-value syntax `${GH_TOKEN:-${GITHUB_TOKEN}}` — simplified to `${GH_TOKEN}`
+- Removed `GITHUB_TOKEN` fallback references from README (MCP config only supports simple `${VAR}` substitution)
+
 ## [1.14.0] - 2026-03-10
 
 ### Added
@@ -11,7 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - GitHub MCP server (remote HTTP) via `https://api.githubcopilot.com/mcp/` — centralized in `.mcp.json`
 - All agents inherit GitHub MCP from plugin-level config (readonly, all toolsets)
 - `claudius` gets inline read-write override with scoped toolsets
-- PAT auth via `GH_TOKEN` (preferred) or `GITHUB_TOKEN` (fallback) — no auth duplication in agent frontmatter
+- PAT auth via `GH_TOKEN` env var — no auth duplication in agent frontmatter
 - README setup guide with fine-grained PAT permissions table
 
 ### Changed

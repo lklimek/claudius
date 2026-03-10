@@ -79,17 +79,17 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 
 ### GitHub MCP Server
 
-All agents connect to the [GitHub MCP server](https://github.com/github/github-mcp-server) for direct GitHub API access (issues, PRs, code search, actions, etc.). This requires a GitHub Personal Access Token. The token is read from `GH_TOKEN` (preferred) or `GITHUB_TOKEN` as fallback.
+All agents connect to the [GitHub MCP server](https://github.com/github/github-mcp-server) for direct GitHub API access (issues, PRs, code search, actions, etc.). This requires a GitHub Personal Access Token set as `GH_TOKEN`.
 
 **Step 1 — Create a fine-grained PAT:**
 
-[→ Create a new fine-grained PAT with pre-selected permissions](https://github.com/settings/personal-access-tokens/new?name=Claudius+GitHub+MCP&actions=read&contents=write&discussions=read&issues=write&metadata=read&pull_requests=write)
+[→ Create a new fine-grained PAT with pre-selected permissions](https://github.com/settings/personal-access-tokens/new?name=Claudius+GitHub+MCP&actions=write&contents=write&discussions=read&issues=write&metadata=read&pull_requests=write)
 
 The link above pre-fills these **repository permissions**:
 
 | Permission | Access | Used for |
 |---|---|---|
-| **Actions** | Read-only | View workflow runs and logs |
+| **Actions** | Read and write | View workflow runs and logs, trigger workflows |
 | **Contents** | Read and write | Read code, push to branches |
 | **Discussions** | Read-only | Read repository discussions |
 | **Issues** | Read and write | Create issues, add comments |
@@ -119,8 +119,6 @@ Or export it in your shell profile (`~/.bashrc`, `~/.zshrc`):
 export GH_TOKEN="github_pat_..."
 ```
 
-> **Note:** `GH_TOKEN` takes precedence. If unset, `GITHUB_TOKEN` is used as fallback.
-
 **Step 3 — Verify:**
 
 Restart Claude Code and run `/mcp` — the `github` server should appear as connected.
@@ -144,7 +142,7 @@ Restart Claude Code and run `/mcp` — the `github` server should appear as conn
 
 ### ghsudo — Elevated GitHub Access (Optional)
 
-**What this does:** ghsudo adds a **two-token model** for GitHub access: your default `gh` token is read-only, and write operations require explicit human approval via a GUI dialog. This is **optional** — by default, Claudius uses your `gh` token directly for all operations, and the GitHub MCP server uses `GH_TOKEN` / `GITHUB_TOKEN`. Install ghsudo only if you want an extra approval gate on write operations.
+**What this does:** ghsudo adds a **two-token model** for GitHub access: your default `gh` token is read-only, and write operations require explicit human approval via a GUI dialog. This is **optional** — by default, Claudius uses your `gh` token directly for all operations, and the GitHub MCP server uses `GH_TOKEN`. Install ghsudo only if you want an extra approval gate on write operations.
 
 **How it works:**
 
