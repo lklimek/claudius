@@ -5,7 +5,6 @@ tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"
 skills: ["security-best-practices"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]
-disallowedTools: ["mcp__plugin_claudius_github__actions_run_trigger", "mcp__plugin_claudius_github__add_comment_to_pending_review", "mcp__plugin_claudius_github__add_issue_comment", "mcp__plugin_claudius_github__add_reply_to_pull_request_comment", "mcp__plugin_claudius_github__create_branch", "mcp__plugin_claudius_github__create_or_update_file", "mcp__plugin_claudius_github__create_pull_request", "mcp__plugin_claudius_github__create_repository", "mcp__plugin_claudius_github__delete_file", "mcp__plugin_claudius_github__fork_repository", "mcp__plugin_claudius_github__issue_write", "mcp__plugin_claudius_github__merge_pull_request", "mcp__plugin_claudius_github__pull_request_review_write", "mcp__plugin_claudius_github__push_files", "mcp__plugin_claudius_github__sub_issue_write", "mcp__plugin_claudius_github__update_pull_request", "mcp__plugin_claudius_github__update_pull_request_branch"]
 ---
 
 # DevOps Engineer Agent
