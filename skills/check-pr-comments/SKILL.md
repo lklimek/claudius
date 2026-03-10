@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Use to verify PR review comments are addressed in code. Produces triage-compatible report.
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(git pull *), Bash(git fetch *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
 ---
 
 # Check PR Comments Workflow
