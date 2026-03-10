@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.15.0] - 2026-03-10
+
+### Changed
+
+- `git-and-github` skill now MCP-first: prefers GitHub MCP tools for all API operations
+- Moved all `gh` CLI commands, wrapper script docs, and troubleshooting to `references/gh-cli-fallback.md` (loaded only when MCP unavailable)
+- Skill ~40% smaller — rules, guidance, and attribution remain; tooling details deferred to fallback
+
 ## [1.14.2] - 2026-03-10
 
 ### Fixed
