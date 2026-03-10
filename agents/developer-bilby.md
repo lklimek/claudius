@@ -1,15 +1,11 @@
 ---
 name: developer-bilby
 description: Use for code changes or language-specific code quality reviews in any language (Rust, Python, Go, TypeScript/JS, frontend).
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
 skills: ["coding-best-practices", "severity"]
 model: opus
-mcpServers:
-  plugin_memcan_brain:
-    type: http
-    url: "${MEMCAN_URL:-http://localhost:8190}/mcp"
-    headers:
-      Authorization: "Bearer ${MEMCAN_API_KEY}"
+mcpServers: ["plugin_memcan_brain", "github"]
+disallowedTools: ["mcp__plugin_claudius_github__actions_run_trigger", "mcp__plugin_claudius_github__add_comment_to_pending_review", "mcp__plugin_claudius_github__add_issue_comment", "mcp__plugin_claudius_github__add_reply_to_pull_request_comment", "mcp__plugin_claudius_github__create_branch", "mcp__plugin_claudius_github__create_or_update_file", "mcp__plugin_claudius_github__create_pull_request", "mcp__plugin_claudius_github__create_repository", "mcp__plugin_claudius_github__delete_file", "mcp__plugin_claudius_github__fork_repository", "mcp__plugin_claudius_github__issue_write", "mcp__plugin_claudius_github__merge_pull_request", "mcp__plugin_claudius_github__pull_request_review_write", "mcp__plugin_claudius_github__push_files", "mcp__plugin_claudius_github__sub_issue_write", "mcp__plugin_claudius_github__update_pull_request", "mcp__plugin_claudius_github__update_pull_request_branch"]
 ---
 
 # Bilby the Dev
