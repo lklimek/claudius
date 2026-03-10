@@ -10,6 +10,12 @@ mcpServers:
     url: "${MEMCAN_URL:-http://localhost:8190}/mcp"
     headers:
       Authorization: "Bearer ${MEMCAN_API_KEY}"
+  github:
+    type: http
+    url: "https://api.githubcopilot.com/mcp/"
+    headers:
+      Authorization: "Bearer ${GH_TOKEN:-${GITHUB_TOKEN}}"
+      X-MCP-Toolsets: "context,repos,issues,pull_requests,actions"
 ---
 
 # Claudius the Magnificent

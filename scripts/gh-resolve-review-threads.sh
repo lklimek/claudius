@@ -20,6 +20,17 @@ for id in "$@"; do
   fi
 done
 
+run_gh() {
+  if output=$(gh "$@" 2>&1); then
+    echo "$output"
+  elif command -v ghsudo >/dev/null 2>&1 && echo "$output" | grep -qiE '403|404|Resource not accessible'; then
+    ghsudo gh "$@"
+  else
+    echo "$output" >&2
+    return 1
+  fi
+}
+
 # Build a single mutation with aliased fields
 query="mutation {"
 i=0
@@ -29,4 +40,4 @@ for id in "$@"; do
 done
 query+=" }"
 
-ghsudo gh api graphql -f query="$query"
+run_gh api graphql -f query="$query"

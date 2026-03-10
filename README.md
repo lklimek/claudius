@@ -77,6 +77,54 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 
 > ¹ **`memcan` requires Docker Compose** for Qdrant (vector DB) and optionally Neo4j. See the [memcan README](https://github.com/lklimek/memcan) for setup instructions. Install from the `lklimek/agents` marketplace: `/plugin marketplace add lklimek/agents` then `/plugin install memcan@lklimek`.
 
+### GitHub MCP Server
+
+All agents connect to the [GitHub MCP server](https://github.com/github/github-mcp-server) for direct GitHub API access (issues, PRs, code search, actions, etc.). This requires a GitHub Personal Access Token. The token is read from `GH_TOKEN` (preferred) or `GITHUB_TOKEN` as fallback.
+
+Each agent gets only the toolsets it needs (via `X-MCP-Toolsets` header) to minimize context size. All agents except `claudius` run in read-only mode — writes go through `gh` CLI.
+
+**Step 1 — Create a fine-grained PAT:**
+
+[→ Create a new fine-grained Personal Access Token](https://github.com/settings/personal-access-tokens/new)
+
+Set the token expiration and repository access scope as needed, then grant these **repository permissions**:
+
+| Permission | Access | Used for |
+|---|---|---|
+| **Actions** | Read-only | View workflow runs and logs |
+| **Contents** | Read and write | Read code, push to branches |
+| **Discussions** | Read-only | Read repository discussions |
+| **Issues** | Read and write | Create issues, add comments |
+| **Metadata** | Read-only | Basic repository metadata (always required) |
+| **Pull requests** | Read and write | Create PRs, review, comment, resolve threads |
+
+> **Tip:** The GitHub MCP server auto-detects your token's permissions and hides tools you don't have access to. Start with the permissions above and add more if needed.
+
+**Step 2 — Configure the token:**
+
+Add `GH_TOKEN` to your Claude Code settings:
+
+```json
+// ~/.claude/settings.json
+{
+  "env": {
+    "GH_TOKEN": "github_pat_..."
+  }
+}
+```
+
+Or export it in your shell profile (`~/.bashrc`, `~/.zshrc`):
+
+```bash
+export GH_TOKEN="github_pat_..."
+```
+
+> **Note:** `GH_TOKEN` takes precedence. If unset, `GITHUB_TOKEN` is used as fallback.
+
+**Step 3 — Verify:**
+
+Restart Claude Code and run `/mcp` — the `github` server should appear as connected.
+
 ## Skills
 
 | Name | Description |
@@ -94,9 +142,9 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 | `merge-base` | Careful merge of remote base branch into current feature branch |
 | `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series |
 
-### ghsudo — Elevated GitHub Access
+### ghsudo — Elevated GitHub Access (Optional)
 
-**Why this exists:** Claude Code authenticates to GitHub via `gh` (GitHub CLI). By default, `gh auth login` sets a single token used for all operations — both reads and writes. That means Claude can push to any repo, merge PRs, or delete branches without asking. ghsudo replaces this with a **two-token model**: Claude's default token is read-only, and write operations require explicit human approval each time.
+**What this does:** ghsudo adds a **two-token model** for GitHub access: your default `gh` token is read-only, and write operations require explicit human approval via a GUI dialog. This is **optional** — by default, Claudius uses your `gh` token directly for all operations, and the GitHub MCP server uses `GH_TOKEN` / `GITHUB_TOKEN`. Install ghsudo only if you want an extra approval gate on write operations.
 
 **How it works:**
 

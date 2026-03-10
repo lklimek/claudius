@@ -34,9 +34,20 @@ if [[ ! -f "$json_file" ]]; then
   exit 1
 fi
 
+run_gh() {
+  if output=$(gh "$@" 2>&1); then
+    echo "$output"
+  elif command -v ghsudo >/dev/null 2>&1 && echo "$output" | grep -qiE '403|404|Resource not accessible'; then
+    ghsudo gh "$@"
+  else
+    echo "$output" >&2
+    return 1
+  fi
+}
+
 # Strip "event" field to enforce draft mode — omitting it makes GitHub create
 # a pending (draft) review that the user must publish manually.
 cleaned=$(jq 'del(.event)' "$json_file")
 
-echo "$cleaned" | ghsudo gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" \
+echo "$cleaned" | run_gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" \
   --method POST --input - --jq '.html_url'

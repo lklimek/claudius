@@ -35,12 +35,12 @@ Use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summar
 
 ## Pushing
 
-**Always use `ghsudo` for pushes** — ensures the correct write-access token is used:
-
 ```bash
-ghsudo git push
-ghsudo git push -u origin <branch>
+git push
+git push -u origin <branch>
 ```
+
+If a push fails with 403 or "Resource not accessible" and `ghsudo` is installed, retry through ghsudo (see [Elevated Permissions](#elevated-permissions-ghsudo--optional-fallback)).
 
 **Always ask the user for explicit confirmation before every push.** Never push automatically — even after committing or creating a PR. Even if the user agreed to push earlier, ask again before next push.
 
@@ -141,7 +141,7 @@ diff-anchors.py <file_path> [...]
   → "path → sha256". For diff URLs: ...files#diff-<SHA256>R<line>
 
 ghsudo [--org ORG] <cmd> | --setup <org> | --verify [org] | --revoke [org] | --list
-  → Per-org elevated token management (pip install ghsudo). See "Elevated Permissions" section below.
+  → Fallback: per-org elevated token management (pip install ghsudo). Used when commands fail with 403/404.
 ```
 
 For PR-level (non-diff) comments: `gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'`
@@ -168,9 +168,9 @@ Check for issue templates (`git ls-tree HEAD --name-only -r .github/ | grep -i i
 - Use HEREDOCs (`<<'EOF'`) for multi-line bodies
 - When using `gh api` (read-only only), prefer `--jq` over `| jq` — `--jq` is processed internally by `gh`, avoiding shell expansion issues (`!` triggers history expansion)
 
-## Elevated Permissions (ghsudo)
+## Elevated Permissions (ghsudo) — Optional Fallback
 
-When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo to request elevated write permissions. GitHub may return 404 instead of 403 for private resources when the token lacks sufficient permissions.
+If you use a **read-only default token** with `gh`, install [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) for write operations. When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo. GitHub may return 404 instead of 403 for private resources when the token lacks sufficient permissions.
 
 ```bash
 ghsudo <original-command-and-args>

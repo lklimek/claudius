@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.14.0] - 2026-03-10
+
+### Added
+
+- GitHub MCP server (remote HTTP) via `https://api.githubcopilot.com/mcp/` — centralized in `.mcp.json`
+- All agents inherit GitHub MCP from plugin-level config (readonly, all toolsets)
+- `claudius` gets inline read-write override with scoped toolsets
+- PAT auth via `GH_TOKEN` (preferred) or `GITHUB_TOKEN` (fallback) — no auth duplication in agent frontmatter
+- README setup guide with fine-grained PAT permissions table
+
+### Changed
+
+- `ghsudo` demoted from primary to optional fallback in `git-and-github` skill
+- Helper scripts (`gh-post-review.sh`, `gh-request-reviewer.sh`, `gh-resolve-review-threads.sh`) now try `gh` directly, fall back to `ghsudo` on 403/404
+- README ghsudo section reframed as optional
+
 ## [1.13.2] - 2026-03-09
 
 ### Changed

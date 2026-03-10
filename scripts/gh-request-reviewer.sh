@@ -33,5 +33,16 @@ if ! [[ "$reviewer" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\[bot\])?$ ]]; th
   exit 1
 fi
 
-ghsudo gh api "repos/${owner}/${repo}/pulls/${pr_number}/requested_reviewers" \
+run_gh() {
+  if output=$(gh "$@" 2>&1); then
+    echo "$output"
+  elif command -v ghsudo >/dev/null 2>&1 && echo "$output" | grep -qiE '403|404|Resource not accessible'; then
+    ghsudo gh "$@"
+  else
+    echo "$output" >&2
+    return 1
+  fi
+}
+
+run_gh api "repos/${owner}/${repo}/pulls/${pr_number}/requested_reviewers" \
   --method POST -f "reviewers[]=${reviewer}"
