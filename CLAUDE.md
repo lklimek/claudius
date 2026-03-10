@@ -62,6 +62,7 @@ Skills resolve relative paths from their base directory at invocation time.
 - Self-contained: each agent/skill works independently
 - Frontmatter `description`: state **when** to use, not just what it does
 - Prefer minimal tool sets; read-only agents omit Edit/Write
+- `allowed-tools` Bash globs must be as specific as possible — match exact script names (e.g., `Bash(*gh-resolve-review-threads.sh *)`) not generic patterns (e.g., `Bash(*gh-*.sh *)`)
 - Keep all descriptions and instructions concise — fewer tokens, same signal
 - Frontmatter values: single-line strings, no YAML folded/literal scalars (`>`, `|`). Use long lines instead of wrapping.
 

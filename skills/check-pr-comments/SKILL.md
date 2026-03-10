@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Use to verify PR review comments are addressed in code. Produces triage-compatible report.
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr *), Bash(*gh-*.sh *), Bash(git pull *), Bash(git fetch *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *)
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
 ---
 
 # Check PR Comments Workflow
@@ -10,7 +10,15 @@ When asked to check/triage/verify existing PR review comments, follow this workf
 
 ## 1. Fetch All Comments
 
-Fetch inline review comments, PR-level comments, and review summaries. See the **github** skill (`PR Review Comments` section) for the wrapper scripts.
+Use GitHub MCP tools to fetch all comment types:
+
+- **Review threads** (inline comments with resolution status): `pull_request_read` with `method: "get_review_comments"` — returns threads with `isResolved`, `isOutdated`, `isCollapsed` metadata and grouped comments.
+- **Review summaries**: `pull_request_read` with `method: "get_reviews"` — returns review state, body, and author.
+- **PR-level comments** (non-diff): `pull_request_read` with `method: "get_comments"` — returns general PR discussion.
+
+Paginate with `perPage` and `page` (for get_reviews/get_comments) or `perPage` and `after` cursor (for get_review_comments) to fetch all results.
+
+If GitHub MCP is unavailable, see [gh-cli-fallback.md](references/gh-cli-fallback.md) for `gh` CLI equivalents.
 
 ## 2. Checkout and Pull the PR Branch
 
@@ -91,7 +99,7 @@ Each review comment becomes one finding:
 - **Resolved** comments: `severity: "INFO"`, `verdict: "RESOLVED"`. `recommendation` describes what was done.
 - **Unresolved** comments: assessed severity (CRITICAL > HIGH > MEDIUM > LOW), `verdict: "UNRESOLVED"`. `recommendation` describes what still needs to be done.
 - Severity levels: see `severity` skill.
-- `thread_id`: from `gh-list-review-threads.sh` output. Needed for thread resolution in step 7.
+- `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 7.
 
 ### Numbering
 
@@ -119,6 +127,12 @@ The user can also invoke `triage-findings report.json` for interactive browser-b
 
 **Always ask the user for confirmation before resolving any threads.**
 
-After the report is presented and the user approves, resolve addressed review threads. See the **github** skill (`PR Review Comments > Resolving review threads` section) for the wrapper scripts.
+After the report is presented and the user approves, resolve addressed review threads using the wrapper script:
+
+```bash
+../../scripts/gh-resolve-review-threads.sh <thread_id> [thread_id ...]
+```
+
+Thread resolution has no MCP equivalent — the wrapper script uses a GraphQL mutation directly.
 
 Only resolve threads where verification confirms the issue is fixed. Never resolve threads that are only partially addressed.

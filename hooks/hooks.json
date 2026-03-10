@@ -1,3 +1,17 @@
 {
-  "hooks": {}
+  "description": "Claudius plugin hooks — GitHub write access control",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__plugin_claudius_github__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/block-github-writes.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
 }

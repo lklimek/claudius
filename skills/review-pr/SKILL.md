@@ -3,7 +3,7 @@ name: review-pr
 description: Use to review a PR for code quality, security, and correctness.
 agent: claudius
 context: fork
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr view *), Bash(gh pr comment *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage, mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_review_write, mcp__plugin_claudius_github__add_comment_to_pending_review
 ---
 
 # PR Audit Workflow
@@ -12,16 +12,22 @@ When asked to audit/review a PR, follow this workflow.
 
 ## 1. Gather PR Context
 
-Prefer local git commands over `gh api` for performance.
+Use GitHub MCP to fetch PR metadata:
+
+- **PR details**: `pull_request_read` with `method: "get"` — returns title, body, URL, base/head branches, number.
+- **Changed files**: `pull_request_read` with `method: "get_files"` — returns list of changed files with stats.
+- **PR diff**: `pull_request_read` with `method: "get_diff"` — returns the full diff.
+
+Use local git for commit history and detailed diffs:
 
 ```bash
-BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName)
-gh pr view --json number,title,body,url
-
+BASE_BRANCH=<baseRefName from PR details>
 git log $BASE_BRANCH..HEAD --oneline
 git diff $BASE_BRANCH...HEAD --stat
 git diff $BASE_BRANCH...HEAD
 ```
+
+If GitHub MCP is unavailable, see [gh-cli-fallback.md](references/gh-cli-fallback.md) for `gh` CLI equivalents.
 
 ## 2. Conduct the Review
 
@@ -94,8 +100,12 @@ yet in the local branch). Before constructing inline comments:
 
 #### Deduplicate before posting
 
-Before creating a new review, fetch existing reviews and their inline comments to avoid duplicates.
-See the **git-and-github** skill (`PR Review Comments` section) for the fetch commands.
+Before creating a new review, fetch existing reviews and inline comments to avoid duplicates:
+
+- **Existing reviews**: `pull_request_read` with `method: "get_reviews"`
+- **Existing inline comments**: `pull_request_read` with `method: "get_review_comments"` — returns threads with resolution status.
+
+If GitHub MCP is unavailable, use the wrapper scripts from [gh-cli-fallback.md](references/gh-cli-fallback.md).
 
 Drop any finding that already appears in an existing review body or inline comment (match by
 file:line and substance, not exact wording).
