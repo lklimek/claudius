@@ -4,12 +4,7 @@ description: "Personal software development assistant. Leads and coordinates dev
 skills: ["git-and-github", "severity"]
 memory: [user, project, local]
 model: opus
-mcpServers:
-  plugin_memcan_brain:
-    type: http
-    url: "${MEMCAN_URL:-http://localhost:8190}/mcp"
-    headers:
-      Authorization: "Bearer ${MEMCAN_API_KEY}"
+mcpServers: ["plugin_memcan_brain", "github"]
 ---
 
 # Claudius the Magnificent
