@@ -9,7 +9,7 @@ agent_type=$(echo "$input" | jq -r '.agent_type // ""')
 tool_name=$(echo "$input" | jq -r '.tool_name // ""')
 
 # Allow claudius and main session (no agent_type = main thread)
-if [[ -z "$agent_type" || "$agent_type" == "claudius" ]]; then
+if [[ -z "$agent_type" || "$agent_type" == "claudius" || "$agent_type" == "claudius:claudius" ]]; then
   exit 0
 fi
 

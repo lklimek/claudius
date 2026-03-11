@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.16.2] - 2026-03-11
+
+### Fixed
+
+- `block-github-writes` hook: match both bare (`claudius`) and qualified (`claudius:claudius`) agent_type so coordinator isn't blocked by its own hook
+
 ## [1.16.1] - 2026-03-10
 
 ### Fixed
