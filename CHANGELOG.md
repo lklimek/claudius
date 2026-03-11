@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-03-11
+
+### Added
+
+- `release` skill — universal release workflow that auto-detects project tech stack (Rust, Python, JS/TS, Claude Code plugins), validates version consistency across all version files, bumps version, updates changelog, commits, pushes, and creates GitHub release. User-invocable only (`disable-model-invocation: true`).
+
 ## [2.0.0] - 2026-03-11
 
 ### Changed
@@ -529,6 +535,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[2.1.0]: https://github.com/lklimek/claudius/compare/v2.0.0...v2.1.0
 [1.8.0]: https://github.com/lklimek/claudius/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/lklimek/claudius/compare/v1.6.4...v1.7.0
 [1.6.4]: https://github.com/lklimek/claudius/compare/v1.6.3...v1.6.4
