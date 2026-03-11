@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-03-11
+
+### Added
+
+- `dependabot-merge` skill — bulk-process open dependabot PRs: audit each dependency via `review-dependency`, post findings as comments, squash-merge if CI green, request rebase on conflicts or CI failures with watch loop (poll until rebase lands, then merge or report). User-invocable.
+
 ## [2.1.0] - 2026-03-11
 
 ### Added
@@ -535,6 +541,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[2.2.0]: https://github.com/lklimek/claudius/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/lklimek/claudius/compare/v2.0.0...v2.1.0
 [1.8.0]: https://github.com/lklimek/claudius/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/lklimek/claudius/compare/v1.6.4...v1.7.0
