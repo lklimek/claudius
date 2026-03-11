@@ -1,7 +1,7 @@
 ---
 name: qa-engineer
 description: Use for writing test plans, automated tests, manual test scenarios, edge case identification, or coverage analysis. Ensures assertion depth.
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__actions_list", "mcp__plugin_claudius_github__actions_get", "mcp__plugin_claudius_github__get_job_logs"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__actions_list", "mcp__plugin_claudius_github__actions_get", "mcp__plugin_claudius_github__get_job_logs"]
 skills: ["security-best-practices"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]

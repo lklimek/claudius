@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [2.3.1] - 2026-03-12
+
+### Added
+
+- Unified `mcp__plugin_memcan_brain__search` tool to all 9 agents with explicit tool lists — enables single-call search across all MemCan collections
+
 ## [2.3.0] - 2026-03-11
 
 ### Added
