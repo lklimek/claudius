@@ -15,6 +15,10 @@ Use `git` for repository operations (clone, fetch, commit, push, branch, merge).
 <sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
 ```
 
+## Before Starting Work
+
+Always pull the current branch (fast-forward only) before starting any work. If the pull fails due to diverged history, rebase when the conflict is trivial (few files, obvious resolution). Otherwise alert the user — never force-merge without explicit permission.
+
 ## Committing
 
 Create feature branches. NEVER commit to base branch.

@@ -9,7 +9,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0"],
+      "enum": ["1.0.0", "1.1.0", "2.0.0"],
       "description": "Schema version (SemVer). Renderers check this for compatibility."
     },
     "metadata": {
@@ -77,7 +77,7 @@
             "required": ["severity", "security", "project", "code_quality", "total"],
             "additionalProperties": false,
             "properties": {
-              "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] },
+              "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"], "description": "Label for display (string key, not numeric)" },
               "security": { "type": "integer", "minimum": 0 },
               "project": { "type": "integer", "minimum": 0 },
               "code_quality": { "type": "integer", "minimum": 0 },
@@ -187,8 +187,10 @@
   },
   "$defs": {
     "severity": {
-      "type": "string",
-      "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "Numeric severity: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO"
     },
     "finding": {
       "type": "object",

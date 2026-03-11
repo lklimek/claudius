@@ -179,7 +179,9 @@ class TriageHandler(BaseHTTPRequestHandler):
             with _lock:
                 report = _load_report()
             self._send_json(report)
-            log.debug("GET /api/report served in %.0fms", (time.monotonic() - t0) * 1000)
+            log.debug(
+                "GET /api/report served in %.0fms", (time.monotonic() - t0) * 1000
+            )
         elif self.path == "/api/status":
             with _lock:
                 report = _load_report()

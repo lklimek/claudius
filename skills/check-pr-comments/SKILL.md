@@ -55,7 +55,7 @@ This is the default end of the workflow. Steps 5-7 (structured report) are only 
 
 ## 5. Build Structured Report JSON
 
-Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v1.1.0).
+Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v2.0.0).
 
 ### Report structure
 
@@ -98,7 +98,7 @@ Each review comment becomes one finding:
 ```json
 {
   "id": "CMT-001",
-  "severity": "INFO for RESOLVED, assessed severity for UNRESOLVED",
+  "severity": 1,
   "title": "Short description of what the comment requests",
   "location": "path/to/file.rs:42-56",
   "description": "What the comment asked for (multi-line OK)",
@@ -111,9 +111,9 @@ Each review comment becomes one finding:
 }
 ```
 
-- **Resolved** comments: `severity: "INFO"`, `verdict: "RESOLVED"`. `recommendation` describes what was done.
-- **Unresolved** comments: assessed severity (CRITICAL > HIGH > MEDIUM > LOW), `verdict: "UNRESOLVED"`. `recommendation` describes what still needs to be done.
-- Severity levels: see `severity` skill.
+- **Resolved** comments: `severity: 1` (INFO), `verdict: "RESOLVED"`. `recommendation` describes what was done.
+- **Unresolved** comments: assessed numeric severity (5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW), `verdict: "UNRESOLVED"`. `recommendation` describes what still needs to be done.
+- Severity mapping: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO. See `severity` skill for definitions.
 - `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 8.
 
 ### Numbering

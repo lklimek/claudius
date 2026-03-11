@@ -22,7 +22,7 @@ def make_finding():
 
     def _make(
         *,
-        severity: str = "MEDIUM",
+        severity: int = 3,
         title: str = "Test finding",
         location: str = "src/main.rs:10-20",
         description: str = "A test finding",
@@ -71,7 +71,9 @@ def make_section():
 @pytest.fixture
 def schema_path():
     """Path to the review-report schema."""
-    return Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
+    return (
+        Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -217,27 +219,27 @@ class TestAssignIds:
         sections = [
             make_section(
                 category="security",
-                findings=[make_finding(severity="HIGH", title="SQL injection")],
+                findings=[make_finding(severity=4, title="SQL injection")],
             ),
             make_section(
                 category="project",
-                findings=[make_finding(severity="MEDIUM", title="Config issue")],
+                findings=[make_finding(severity=3, title="Config issue")],
             ),
             make_section(
                 category="code_quality",
-                findings=[make_finding(severity="LOW", title="Style")],
+                findings=[make_finding(severity=2, title="Style")],
             ),
             make_section(
                 category="dependencies",
-                findings=[make_finding(severity="HIGH", title="Vuln dep")],
+                findings=[make_finding(severity=4, title="Vuln dep")],
             ),
             make_section(
                 category="documentation",
-                findings=[make_finding(severity="INFO", title="Missing docs")],
+                findings=[make_finding(severity=1, title="Missing docs")],
             ),
             make_section(
                 category="pr_comments",
-                findings=[make_finding(severity="LOW", title="Stale comment")],
+                findings=[make_finding(severity=2, title="Stale comment")],
             ),
         ]
         cr.assign_ids(sections)
@@ -250,14 +252,14 @@ class TestAssignIds:
 
     def test_sorted_by_severity(self, make_finding, make_section):
         findings = [
-            make_finding(severity="LOW", title="Low"),
-            make_finding(severity="CRITICAL", title="Critical"),
-            make_finding(severity="HIGH", title="High"),
+            make_finding(severity=2, title="Low"),
+            make_finding(severity=5, title="Critical"),
+            make_finding(severity=4, title="High"),
         ]
         sections = [make_section(category="security", findings=findings)]
         cr.assign_ids(sections)
         sevs = [f["severity"] for f in sections[0]["findings"]]
-        assert sevs == ["CRITICAL", "HIGH", "LOW"]
+        assert sevs == [5, 4, 2]
 
     def test_code_fallback_no_original_id(self, make_finding, make_section):
         sections = [
@@ -293,17 +295,18 @@ class TestAssignIds:
         assert "original_id" not in sections[0]["findings"][0]
 
     def test_unknown_severity_no_crash(self, make_finding, make_section):
+        """A finding with an out-of-range severity still gets an ID assigned."""
         sections = [
             make_section(
                 category="security",
-                findings=[make_finding(severity="UNKNOWN")],
+                findings=[make_finding(severity=99)],
             ),
         ]
         cr.assign_ids(sections)
         assert sections[0]["findings"][0]["id"] == "SEC-001"
 
     def test_in_place_mutation_of_findings(self, make_finding, make_section):
-        f = make_finding(severity="HIGH")
+        f = make_finding(severity=4)
         sections = [make_section(category="security", findings=[f])]
         cr.assign_ids(sections)
         # The original finding object should have been mutated
@@ -324,14 +327,14 @@ class TestComputeStatistics:
             make_section(
                 category="security",
                 findings=[
-                    make_finding(severity="CRITICAL"),
-                    make_finding(severity="HIGH"),
-                    make_finding(severity="HIGH"),
+                    make_finding(severity=5),
+                    make_finding(severity=4),
+                    make_finding(severity=4),
                 ],
             ),
             make_section(
                 category="code_quality",
-                findings=[make_finding(severity="LOW")],
+                findings=[make_finding(severity=2)],
             ),
         ]
         stats = cr.compute_statistics(sections, [])
@@ -366,22 +369,22 @@ class TestComputeStatistics:
             make_section(
                 category="security",
                 findings=[
-                    make_finding(severity="HIGH"),
-                    make_finding(severity="HIGH"),
-                    make_finding(severity="CRITICAL"),
+                    make_finding(severity=4),
+                    make_finding(severity=4),
+                    make_finding(severity=5),
                 ],
             ),
             make_section(
                 category="project",
                 findings=[
-                    make_finding(severity="LOW"),
+                    make_finding(severity=2),
                 ],
             ),
             make_section(
                 category="code_quality",
                 findings=[
-                    make_finding(severity="MEDIUM"),
-                    make_finding(severity="MEDIUM"),
+                    make_finding(severity=3),
+                    make_finding(severity=3),
                 ],
             ),
         ]
@@ -413,47 +416,36 @@ class TestComputeStatistics:
 class TestGenerateRemediation:
     def _sections_with_severities(self, make_finding, make_section, severities):
         findings = [
-            make_finding(severity=s, fid=f"X-{i:03d}")
-            for i, s in enumerate(severities)
+            make_finding(severity=s, fid=f"X-{i:03d}") for i, s in enumerate(severities)
         ]
         return [make_section(category="security", findings=findings)]
 
     def test_critical_before_merge(self, make_finding, make_section):
-        sections = self._sections_with_severities(
-            make_finding, make_section, ["CRITICAL"]
-        )
+        sections = self._sections_with_severities(make_finding, make_section, [5])
         result = cr.generate_remediation(sections)
         bm = next(b for b in result if b["priority"] == "before_merge")
         assert bm["count"] == 1
 
     def test_high_before_merge(self, make_finding, make_section):
-        sections = self._sections_with_severities(
-            make_finding, make_section, ["HIGH"]
-        )
+        sections = self._sections_with_severities(make_finding, make_section, [4])
         result = cr.generate_remediation(sections)
         bm = next(b for b in result if b["priority"] == "before_merge")
         assert bm["count"] == 1
 
     def test_medium_before_production(self, make_finding, make_section):
-        sections = self._sections_with_severities(
-            make_finding, make_section, ["MEDIUM"]
-        )
+        sections = self._sections_with_severities(make_finding, make_section, [3])
         result = cr.generate_remediation(sections)
         bp = next(b for b in result if b["priority"] == "before_production")
         assert bp["count"] == 1
 
     def test_low_post_deployment(self, make_finding, make_section):
-        sections = self._sections_with_severities(
-            make_finding, make_section, ["LOW"]
-        )
+        sections = self._sections_with_severities(make_finding, make_section, [2])
         result = cr.generate_remediation(sections)
         pd = next(b for b in result if b["priority"] == "post_deployment")
         assert pd["count"] == 1
 
     def test_info_excluded(self, make_finding, make_section):
-        sections = self._sections_with_severities(
-            make_finding, make_section, ["INFO"]
-        )
+        sections = self._sections_with_severities(make_finding, make_section, [1])
         result = cr.generate_remediation(sections)
         for bucket in result:
             assert bucket["count"] == 0
@@ -474,11 +466,11 @@ class TestGenerateTopFindings:
             make_section(
                 category="security",
                 findings=[
-                    make_finding(severity="CRITICAL", fid="SEC-001"),
-                    make_finding(severity="HIGH", fid="SEC-002"),
-                    make_finding(severity="MEDIUM", fid="SEC-003"),
-                    make_finding(severity="LOW", fid="SEC-004"),
-                    make_finding(severity="INFO", fid="SEC-005"),
+                    make_finding(severity=5, fid="SEC-001"),
+                    make_finding(severity=4, fid="SEC-002"),
+                    make_finding(severity=3, fid="SEC-003"),
+                    make_finding(severity=2, fid="SEC-004"),
+                    make_finding(severity=1, fid="SEC-005"),
                 ],
             ),
         ]
@@ -493,22 +485,22 @@ class TestGenerateTopFindings:
             make_section(
                 category="security",
                 findings=[
-                    make_finding(severity="HIGH", fid="SEC-001"),
-                    make_finding(severity="CRITICAL", fid="SEC-002"),
+                    make_finding(severity=4, fid="SEC-001"),
+                    make_finding(severity=5, fid="SEC-002"),
                 ],
             ),
         ]
         top = cr.generate_top_findings(sections)
-        assert top[0]["severity"] == "CRITICAL"
-        assert top[1]["severity"] == "HIGH"
+        assert top[0]["severity"] == 5
+        assert top[1]["severity"] == 4
 
     def test_empty_when_no_critical_high(self, make_finding, make_section):
         sections = [
             make_section(
                 category="security",
                 findings=[
-                    make_finding(severity="MEDIUM", fid="SEC-001"),
-                    make_finding(severity="LOW", fid="SEC-002"),
+                    make_finding(severity=3, fid="SEC-001"),
+                    make_finding(severity=2, fid="SEC-002"),
                 ],
             ),
         ]
@@ -585,7 +577,7 @@ class TestScanIntentional:
 class TestValidateReport:
     def test_valid_report_returns_true(self):
         report = {
-            "schema_version": "1.1.0",
+            "schema_version": "2.0.0",
             "metadata": {"project": "test", "date": "2026-03-05"},
             "executive_summary": {"overall_assessment": "All good"},
             "summary_statistics": {
@@ -603,13 +595,13 @@ class TestValidateReport:
         assert cr._validate_report(report) is True
 
     def test_invalid_report_returns_false(self):
-        report = {"schema_version": "1.1.0"}  # missing required fields
+        report = {"schema_version": "2.0.0"}  # missing required fields
         result = cr._validate_report(report)
         assert result is False
 
     def test_returns_bool_type(self):
         report = {
-            "schema_version": "1.1.0",
+            "schema_version": "2.0.0",
             "metadata": {"project": "x", "date": "2026-01-01"},
             "executive_summary": {"overall_assessment": "ok"},
             "summary_statistics": {
@@ -635,7 +627,7 @@ class TestFlattenAgentReport:
                 "findings": [
                     {
                         "id": "SEC-001",
-                        "severity": "HIGH",
+                        "severity": 4,
                         "title": "SQL injection",
                         "tags": ["sql", "injection"],
                         "location": "src/db.rs:10-20",
@@ -654,7 +646,7 @@ class TestFlattenAgentReport:
         assert f["original_id"] == "SEC-001"
         assert f["category"] == "security"
         assert f["section_title"] == "Security Review"
-        assert f["severity"] == "HIGH"
+        assert f["severity"] == 4
         assert f["title"] == "SQL injection"
         assert f["tags"] == ["sql", "injection"]
         assert f["location"] == "src/db.rs:10-20"
@@ -674,7 +666,7 @@ class TestFlattenAgentReport:
                 "title": "CQ",
                 "findings": [
                     {
-                        "severity": "LOW",
+                        "severity": 2,
                         "title": "Minor issue",
                         "location": "f.py:1",
                         "description": "Desc",
@@ -698,8 +690,8 @@ class TestFlattenAgentReport:
         assert raw == []
         assert positives == []
 
-    def test_non_string_severity_skipped(self):
-        """Findings with non-string severity should be skipped by validation."""
+    def test_invalid_severity_skipped(self):
+        """Findings with out-of-range numeric severity should be skipped."""
         sections = [
             {
                 "category": "security",
@@ -716,7 +708,26 @@ class TestFlattenAgentReport:
             }
         ]
         raw, _ = cr._flatten_agent_report("agent-b", sections)
-        # With SEC-001 fix, invalid severity findings are skipped
+        assert len(raw) == 0
+
+    def test_string_severity_rejected(self):
+        """String severity values must be rejected — only integers 1-5 accepted."""
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [
+                    {
+                        "severity": "HIGH",
+                        "title": "String finding",
+                        "location": "f.rs:1",
+                        "description": "D",
+                        "recommendation": "R",
+                    }
+                ],
+            }
+        ]
+        raw, _ = cr._flatten_agent_report("agent-str", sections)
         assert len(raw) == 0
 
     def test_non_list_tags_handled_gracefully(self):
@@ -726,7 +737,7 @@ class TestFlattenAgentReport:
                 "title": "Sec",
                 "findings": [
                     {
-                        "severity": "MEDIUM",
+                        "severity": 3,
                         "title": "Tag issue",
                         "tags": "not-a-list",
                         "location": "f.rs:1",
@@ -749,7 +760,7 @@ class TestFlattenAgentReport:
                 "title": "Sec",
                 "findings": [
                     {
-                        "severity": "HIGH",
+                        "severity": 4,
                     }
                 ],
             }
@@ -765,7 +776,7 @@ class TestFlattenAgentReport:
                 "title": "Sec",
                 "findings": [
                     {
-                        "severity": "HIGH",
+                        "severity": 4,
                         "title": "",
                         "location": "f.rs:1",
                         "description": "D",
@@ -795,7 +806,7 @@ class TestCmdPrepare:
                 "findings": [
                     {
                         "id": "SEC-001",
-                        "severity": "HIGH",
+                        "severity": 4,
                         "title": "SQL injection",
                         "location": "src/db.rs:10-20",
                         "description": "Bad query",
@@ -875,7 +886,7 @@ class TestCmdAssemble:
                     "category": "security",
                     "findings": [
                         {
-                            "severity": "HIGH",
+                            "severity": 4,
                             "title": "SQL injection",
                             "location": "src/db.rs:10-20",
                             "description": "Bad query",
@@ -902,7 +913,7 @@ class TestCmdAssemble:
         assert rc == 0
         assert output.exists()
         report = json.loads(output.read_text())
-        assert report["schema_version"] == "1.1.0"
+        assert report["schema_version"] == "2.0.0"
         assert report["summary_statistics"]["total_findings"] == 1
 
     def test_missing_input_returns_2(self, tmp_path):
@@ -925,7 +936,7 @@ class TestCmdAssemble:
                     "category": "security",
                     "findings": [
                         {
-                            "severity": "INVALID_SEVERITY",
+                            "severity": 99,
                             "title": "T",
                             "location": "f:1",
                             "description": "D",
@@ -947,9 +958,7 @@ class TestCmdAssemble:
     def test_oversized_input_returns_2(self, tmp_path):
         big = tmp_path / "big.json"
         big.write_text("{" + " " * (8 * 1024 * 1024 + 1) + "}")
-        args = argparse.Namespace(
-            input=str(big), output=str(tmp_path / "out.json")
-        )
+        args = argparse.Namespace(input=str(big), output=str(tmp_path / "out.json"))
         rc = cr.cmd_assemble(args)
         assert rc == 2
 

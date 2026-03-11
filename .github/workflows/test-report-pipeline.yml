@@ -1,0 +1,36 @@
+name: Report Pipeline Tests
+
+on:
+  push:
+    paths:
+      - 'scripts/**'
+      - 'schemas/**'
+      - 'tests/fixtures/reports/**'
+      - 'tests/test_report_pipeline.sh'
+      - 'tests/test_consolidate_reports.py'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'schemas/**'
+      - 'tests/fixtures/reports/**'
+      - 'tests/test_report_pipeline.sh'
+      - 'tests/test_consolidate_reports.py'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install jsonschema jinja2 pytest
+
+      - name: Unit tests
+        run: python3 -m pytest tests/test_consolidate_reports.py -v
+
+      - name: Report pipeline (fixtures)
+        run: ./tests/test_report_pipeline.sh
