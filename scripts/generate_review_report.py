@@ -46,6 +46,20 @@ AMBER = "#E67E22"
 RED = "#C0392B"
 
 SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+SEV_LABELS: dict[int, str] = {
+    5: "CRITICAL",
+    4: "HIGH",
+    3: "MEDIUM",
+    2: "LOW",
+    1: "INFO",
+}
+
+
+def sev_label(value: int | str) -> str:
+    """Map numeric severity to label string. Pass-through if already a string."""
+    if isinstance(value, int):
+        return SEV_LABELS.get(value, "INFO")
+    return str(value)
 
 
 # ===================================================================
@@ -156,7 +170,7 @@ def render_markdown(data: dict[str, Any]) -> str:
         lines.append("")
         for tf in top[:5]:
             lines.append(
-                f"- **{tf['id']}** ({tf['severity']}): {tf['title']} \u2014 `{tf['location']}`"
+                f"- **{tf['id']}** ({sev_label(tf['severity'])}): {tf['title']} \u2014 `{tf['location']}`"
             )
         lines.append("")
 
@@ -179,7 +193,9 @@ def render_markdown(data: dict[str, Any]) -> str:
 
         for f in section.get("findings", []):
             tag_str = _finding_tag_suffix(f)
-            lines.append(f"### {f['id']} ({f['severity']}): {f['title']}{tag_str}")
+            lines.append(
+                f"### {f['id']} ({sev_label(f['severity'])}): {f['title']}{tag_str}"
+            )
             lines.append("")
             lines.append(f"- **Location**: `{f['location']}`")
             lines.append(f"- **Description**: {f['description']}")
@@ -401,7 +417,7 @@ details summary:hover{color:{{ ACCENT }}}
 {% for tf in top_findings %}
 <tr>
   <td><a href="#finding-{{ tf.id }}">{{ tf.id }}</a></td>
-  <td><span class="badge badge-{{ tf.severity }}">{{ tf.severity }}</span></td>
+  <td><span class="badge badge-{{ tf.severity|sev_label }}">{{ tf.severity|sev_label }}</span></td>
   <td>{{ tf.title }}</td>
   <td><code>{{ tf.location }}</code></td>
   {% if triage %}<td class="no-print"><select class="triage-action-top" data-finding-id="{{ tf.id }}">
@@ -438,11 +454,11 @@ details summary:hover{color:{{ ACCENT }}}
 <div class="report-toolbar no-print" id="reportToolbar">
   <select id="filterSeverity">
     <option value="">All Severities</option>
-    <option value="CRITICAL">Critical</option>
-    <option value="HIGH">High</option>
-    <option value="MEDIUM">Medium</option>
-    <option value="LOW">Low</option>
-    <option value="INFO">Info</option>
+    <option value="5">Critical</option>
+    <option value="4">High</option>
+    <option value="3">Medium</option>
+    <option value="2">Low</option>
+    <option value="1">Info</option>
   </select>
   <select id="filterCategory">
     <option value="">All Categories</option>
@@ -475,9 +491,9 @@ details summary:hover{color:{{ ACCENT }}}
 <summary>{{ sec.findings | length }} finding{{ "s" if sec.findings | length != 1 else "" }}</summary>
 
 {% for f in sec.findings %}
-<div class="finding finding-{{ f.severity }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ sec.category }}">
+<div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ sec.category }}">
   <h3>
-    <span class="badge badge-{{ f.severity }}">{{ f.severity }}</span>
+    <span class="badge badge-{{ f.severity|sev_label }}">{{ f.severity|sev_label }}</span>
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
   </h3>
@@ -705,8 +721,7 @@ details summary:hover{color:{{ ACCENT }}}
   let ascending = true;
   let currentSort = "";
 
-  const sevOrder = ["CRITICAL","HIGH","MEDIUM","LOW","INFO"];
-  const sevRank = {"CRITICAL":0,"HIGH":1,"MEDIUM":2,"LOW":3,"INFO":4};
+  const sevLabels = {5:"CRITICAL",4:"HIGH",3:"MEDIUM",2:"LOW",1:"INFO"};
   const sevColors = {{ sev_colors_json }};
   const catLabels = {"security":"Security","project":"Project Consistency",
     "code_quality":"Code Quality","documentation":"Documentation",
@@ -783,20 +798,22 @@ details summary:hover{color:{{ ACCENT }}}
     const dir = ascending ? 1 : -1;
 
     if (key === "severity") {
-      // Group by severity, ordered by sevOrder
+      // Group by numeric severity, ordered descending (5=CRITICAL first)
+      const sevNums = [5,4,3,2,1];
       const groups = new Map();
-      sevOrder.forEach(s => groups.set(s, []));
+      sevNums.forEach(n => groups.set(n, []));
       allFindings.forEach(f => {
-        const s = f.dataset.severity;
-        if (!groups.has(s)) groups.set(s, []);
-        groups.get(s).push(f);
+        const n = parseInt(f.dataset.severity, 10) || 1;
+        if (!groups.has(n)) groups.set(n, []);
+        groups.get(n).push(f);
       });
       container.innerHTML = "";
-      const order = ascending ? sevOrder : [...sevOrder].reverse();
-      order.forEach(sev => {
-        const items = groups.get(sev);
+      const order = ascending ? sevNums : [...sevNums].reverse();
+      order.forEach(num => {
+        const items = groups.get(num);
+        const label = sevLabels[num] || "UNKNOWN";
         if (items && items.length > 0) {
-          container.appendChild(buildSection(sev, items, sevColors[sev]));
+          container.appendChild(buildSection(label, items, sevColors[label]));
         }
       });
     } else if (key === "id") {
@@ -944,10 +961,9 @@ _TRIAGE_EXTRA_JS = r"""
 
   function applySort() {
     const key = sortSelect.value;
-    const sevRank = {"CRITICAL":0,"HIGH":1,"MEDIUM":2,"LOW":3,"INFO":4};
     const arr = Array.from(findings);
     arr.sort((a, b) => {
-      if (key === "severity") return (sevRank[a.dataset.severity]||9) - (sevRank[b.dataset.severity]||9);
+      if (key === "severity") return (parseInt(b.dataset.severity,10)||0) - (parseInt(a.dataset.severity,10)||0);
       if (key === "id") return a.dataset.findingId.localeCompare(b.dataset.findingId);
       if (key === "category") return (a.dataset.category||"").localeCompare(b.dataset.category||"");
       return 0;
@@ -1078,12 +1094,11 @@ def _build_html_context(
     findings_sections = data.get("findings", [])
     if triage:
         # Flatten all findings into a single list sorted by severity
-        sev_rank = {s: i for i, s in enumerate(SEV_ORDER)}
         all_findings = []
         for sec in findings_sections:
             for f in sec.get("findings", []):
                 all_findings.append(f)
-        all_findings.sort(key=lambda f: sev_rank.get(f.get("severity", "INFO"), 99))
+        all_findings.sort(key=lambda f: f.get("severity", 1), reverse=True)
         findings_sections = [
             {
                 "title": "All Findings (by severity)",
@@ -1193,6 +1208,7 @@ def render_html(data: dict[str, Any]) -> str:
     from jinja2 import Environment
 
     env = Environment(autoescape=True)
+    env.filters["sev_label"] = sev_label
     template = env.from_string(_HTML_TEMPLATE)
     ctx = _build_html_context(data, triage=False)
     _mark_safe_values(ctx)
@@ -1266,11 +1282,11 @@ def render_triage(data: dict[str, Any]) -> str:
   <button id="bulkApply">Apply to All Visible</button>
   <select id="filterSeverity">
     <option value="">All Severities</option>
-    <option value="CRITICAL">CRITICAL</option>
-    <option value="HIGH">HIGH</option>
-    <option value="MEDIUM">MEDIUM</option>
-    <option value="LOW">LOW</option>
-    <option value="INFO">INFO</option>
+    <option value="5">CRITICAL</option>
+    <option value="4">HIGH</option>
+    <option value="3">MEDIUM</option>
+    <option value="2">LOW</option>
+    <option value="1">INFO</option>
   </select>
   <select id="filterCategory">
     <option value="">All Categories</option>
@@ -1309,6 +1325,7 @@ def render_triage(data: dict[str, Any]) -> str:
     )
 
     env = Environment(autoescape=True)
+    env.filters["sev_label"] = sev_label
     template = env.from_string(triage_template)
     ctx = _build_html_context(data, triage=True)
     _mark_safe_values(ctx)
@@ -1384,7 +1401,8 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         plt.close(fig)
         return Image(buf, width=w, height=h)
 
-    def _badge(sev: str) -> Paragraph:
+    def _badge(sev: int | str) -> Paragraph:
+        sev = sev_label(sev)
         clr = SEV_COLORS.get(sev, "#7F8C8D")
         st = ParagraphStyle(
             f"B_{sev}",
@@ -1859,7 +1877,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
     # --- Finding renderers ---
     def render_finding(f: dict[str, Any]) -> KeepTogether:
         fid = f["id"]
-        sev = f["severity"]
+        sev = sev_label(f["severity"])
         title = f["title"]
         tags = f.get("tags", [])
         loc = f["location"]

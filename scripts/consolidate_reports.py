@@ -54,8 +54,15 @@ SCHEMA_PATH = (
     Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
 )
 
-SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
-SEV_RANK: dict[str, int] = {s: i for i, s in enumerate(SEV_ORDER)}
+SEV_LABELS: dict[int, str] = {
+    5: "CRITICAL",
+    4: "HIGH",
+    3: "MEDIUM",
+    2: "LOW",
+    1: "INFO",
+}
+SEV_NAMES: dict[str, int] = {v: k for k, v in SEV_LABELS.items()}
+SEV_ORDER: list[str] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 
 CATEGORY_PREFIX: dict[str, str] = {
     "security": "SEC-",
@@ -113,12 +120,14 @@ def _read_schema_version() -> str:
     """Read schema_version from the schema file, falling back to a default."""
     try:
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-        versions = schema.get("properties", {}).get("schema_version", {}).get("enum", [])
+        versions = (
+            schema.get("properties", {}).get("schema_version", {}).get("enum", [])
+        )
         if versions:
             return versions[-1]
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
         pass
-    return "1.1.0"
+    return "2.0.0"
 
 
 SCHEMA_VERSION = _read_schema_version()
@@ -328,7 +337,7 @@ def assign_ids(
         else:
             prefix = CATEGORY_PREFIX.get(cat, "CODE-")
 
-        findings.sort(key=lambda f: SEV_RANK.get(f.get("severity", "INFO"), len(SEV_ORDER)))
+        findings.sort(key=lambda f: f.get("severity", 1), reverse=True)
 
         for f in findings:
             category_counters[cat] += 1
@@ -347,24 +356,25 @@ def compute_statistics(
     severity_counts: dict[str, int] = {s: 0 for s in SEV_ORDER}
     categories = list(CATEGORY_PREFIX.keys())
     matrix_data: dict[str, dict[str, int]] = {
-        sev: {cat: 0 for cat in categories} for sev in SEV_ORDER
+        label: {cat: 0 for cat in categories} for label in SEV_ORDER
     }
 
     total = 0
     for _section, f in _iter_findings(sections):
         cat = _section.get("category", "code_quality")
-        sev = f.get("severity", "INFO")
-        severity_counts[sev] = severity_counts.get(sev, 0) + 1
-        if sev in matrix_data and cat in matrix_data[sev]:
-            matrix_data[sev][cat] += 1
+        sev_int = f.get("severity", 1)
+        label = SEV_LABELS.get(sev_int, "INFO")
+        severity_counts[label] = severity_counts.get(label, 0) + 1
+        if label in matrix_data and cat in matrix_data[label]:
+            matrix_data[label][cat] += 1
         total += 1
 
     matrix = []
-    for sev in SEV_ORDER:
-        row: dict[str, Any] = {"severity": sev}
+    for label in SEV_ORDER:
+        row: dict[str, Any] = {"severity": label}
         row_total = 0
         for cat in categories:
-            count = matrix_data[sev].get(cat, 0)
+            count = matrix_data[label].get(cat, 0)
             row[cat] = count
             row_total += count
         row["total"] = row_total
@@ -415,18 +425,22 @@ def generate_remediation(
     }
 
     for _section, f in _iter_findings(sections):
-        sev = f.get("severity", "INFO")
-        if sev == "INFO":
+        sev = f.get("severity", 1)
+        if sev == 1:
             continue
         fid = f.get("id", "UNKNOWN")
-        if sev in ("CRITICAL", "HIGH"):
+        if sev >= 4:
             bucket = "before_merge"
-        elif sev == "MEDIUM":
+        elif sev == 3:
             bucket = "before_production"
-        elif sev in SEV_RANK:
+        elif sev == 2:
             bucket = "post_deployment"
         else:
-            log.warning("Unknown severity '%s' in finding '%s', skipping remediation bucket", sev, fid)
+            log.warning(
+                "Unknown severity '%s' in finding '%s', skipping remediation bucket",
+                sev,
+                fid,
+            )
             continue
         buckets[bucket]["count"] += 1
         buckets[bucket]["finding_ids"].append(fid)
@@ -447,7 +461,7 @@ def generate_top_findings(
     """Extract CRITICAL and HIGH findings as top findings."""
     top: list[dict[str, Any]] = []
     for _section, f in _iter_findings(sections):
-        if f.get("severity") in ("CRITICAL", "HIGH"):
+        if f.get("severity", 1) >= 4:
             top.append(
                 {
                     "id": f["id"],
@@ -456,7 +470,7 @@ def generate_top_findings(
                     "location": f["location"],
                 }
             )
-    top.sort(key=lambda f: SEV_RANK.get(f["severity"], len(SEV_ORDER)))
+    top.sort(key=lambda f: f["severity"], reverse=True)
     return top
 
 
@@ -481,11 +495,23 @@ def _flatten_agent_report(
             )
 
         for f in section.get("findings", []):
-            severity = f.get("severity", "INFO")
-            if not isinstance(severity, str) or severity not in SEV_RANK:
+            raw_sev = f.get("severity", 1)
+            if isinstance(raw_sev, str):
+                severity = SEV_NAMES.get(raw_sev)
+                if severity is None:
+                    log.warning(
+                        "Skipping finding with invalid severity '%s' from agent '%s'",
+                        raw_sev,
+                        agent_name,
+                    )
+                    continue
+            elif isinstance(raw_sev, int) and 1 <= raw_sev <= 5:
+                severity = raw_sev
+            else:
                 log.warning(
                     "Skipping finding with invalid severity '%s' from agent '%s'",
-                    severity, agent_name,
+                    raw_sev,
+                    agent_name,
                 )
                 continue
 
@@ -504,7 +530,9 @@ def _flatten_agent_report(
                 log.warning(
                     "Skipping finding with empty required field(s) from agent '%s': "
                     "title=%r, location=%r",
-                    agent_name, title, location,
+                    agent_name,
+                    title,
+                    location,
                 )
                 continue
 

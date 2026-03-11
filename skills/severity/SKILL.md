@@ -37,9 +37,21 @@ that helps readers understand the codebase. No action required.
 *CVSS equivalent: None (0.0). Examples: well-structured error handling, good test coverage,
 clean separation of concerns, effective use of type system.*
 
+## Numeric Mapping
+
+Emit severity as an integer in finding JSON:
+
+| Value | Label    |
+|-------|----------|
+| 5     | CRITICAL |
+| 4     | HIGH     |
+| 3     | MEDIUM   |
+| 2     | LOW      |
+| 1     | INFO     |
+
 ## Scale
 
-**CRITICAL > HIGH > MEDIUM > LOW > INFO**
+**5 (CRITICAL) > 4 (HIGH) > 3 (MEDIUM) > 2 (LOW) > 1 (INFO)**
 
 ## Rules
 

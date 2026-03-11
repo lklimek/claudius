@@ -107,7 +107,7 @@ Each agent writes its output to the specified file path as valid JSON:
     "findings": [
       {
         "id": "PREFIX-001",
-        "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFO",
+        "severity": 5,
         "title": "Short finding title",
         "tags": ["A03 Injection", "CWE-79"],
         "location": "src/auth.rs:42-56",
@@ -121,7 +121,7 @@ Each agent writes its output to the specified file path as valid JSON:
 ]
 ```
 
-**Required finding fields**: `id`, `severity`, `title`, `location`, `description`, `recommendation`.
+**Required finding fields**: `id`, `severity` (integer: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO), `title`, `location`, `description`, `recommendation`.
 **Optional**: `tags`, `impact`.
 **Impact guidance**: assess end-user and developer experience impact, not just technical correctness.
 
