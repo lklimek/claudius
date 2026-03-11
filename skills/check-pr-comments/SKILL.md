@@ -1,6 +1,6 @@
 ---
 name: check-pr-comments
-description: Use to verify PR review comments are addressed in code. Produces triage-compatible report.
+description: Use to verify PR review comments are addressed in code. Optionally produces triage-compatible report.
 allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
 ---
 
@@ -9,6 +9,8 @@ allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view 
 When asked to check/triage/verify existing PR review comments, follow this workflow.
 
 ## 1. Fetch All Comments
+
+**ALWAYS fetch fresh comments from GitHub on every invocation.** Never assume you already have them or that there are no new ones -- comments may have just appeared.
 
 Use GitHub MCP tools to fetch all comment types:
 
@@ -38,7 +40,20 @@ For every inline comment, read the file at the referenced location and **verify 
 - A comment is only "resolved" if **all** of its sub-items are addressed
 - Verify the fix achieves the intended end-user or developer experience, not just technical correctness
 
-## 4. Build Structured Report JSON
+## 4. Present Summary
+
+Present a concise summary directly to the user:
+- Total comments checked, how many resolved vs unresolved
+- For each unresolved comment: file location, what was requested, what is still missing
+- For resolved comments: brief confirmation (no detail needed unless noteworthy)
+
+This is the default end of the workflow. Steps 5-7 (structured report) are only produced when the user explicitly requests it (e.g. "generate report", "produce report", "with report"). Step 8 (resolve threads) applies to both flows.
+
+---
+
+## Optional: Structured Report (on request only)
+
+## 5. Build Structured Report JSON
 
 Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v1.1.0).
 
@@ -99,13 +114,13 @@ Each review comment becomes one finding:
 - **Resolved** comments: `severity: "INFO"`, `verdict: "RESOLVED"`. `recommendation` describes what was done.
 - **Unresolved** comments: assessed severity (CRITICAL > HIGH > MEDIUM > LOW), `verdict: "UNRESOLVED"`. `recommendation` describes what still needs to be done.
 - Severity levels: see `severity` skill.
-- `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 7.
+- `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 8.
 
 ### Numbering
 
 Assign sequential IDs: `CMT-001`, `CMT-002`, etc. Order: unresolved first (by severity descending), then resolved.
 
-## 5. Validate Report
+## 6. Validate Report
 
 ```bash
 python3 ../../scripts/validate_report.py report.json
@@ -113,7 +128,7 @@ python3 ../../scripts/validate_report.py report.json
 
 If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid data.
 
-## 6. Render and Present
+## 7. Render and Present
 
 ```bash
 python3 ../../scripts/generate_review_report.py report.json --format md
@@ -123,11 +138,11 @@ Present the rendered markdown report to the user. Optionally generate HTML (`--f
 
 The user can also invoke `triage-findings report.json` for interactive browser-based triage of unresolved comments.
 
-## 7. Resolve Addressed Threads
+## 8. Resolve Addressed Threads
 
 **Always ask the user for confirmation before resolving any threads.**
 
-After the report is presented and the user approves, resolve addressed review threads using the wrapper script:
+After the summary (or report) is presented and the user approves, resolve addressed review threads using the wrapper script:
 
 ```bash
 ../../scripts/gh-resolve-review-threads.sh <thread_id> [thread_id ...]

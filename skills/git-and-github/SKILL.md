@@ -37,6 +37,10 @@ EOF
 )"
 ```
 
+## Changelog
+
+When editing `CHANGELOG.md`, follow [Keep a Changelog](https://keepachangelog.com/) format.
+
 ## Pushing
 
 If a push fails with 403 or "Resource not accessible" and `ghsudo` is installed, retry through ghsudo (see [Elevated Permissions](#elevated-permissions-ghsudo--optional-fallback)).
