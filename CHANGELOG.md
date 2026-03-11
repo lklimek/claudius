@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] - 2026-03-11
+
+### Changed
+
+- `check-pr-comments`: JSON report is now optional (only on explicit request); default flow presents concise inline summary
+- `check-pr-comments`: always fetch fresh comments from GitHub — never assume cached or absent
+- `git-and-github`: added Changelog section enforcing Keep a Changelog format
+
 ## [1.16.2] - 2026-03-11
 
 ### Fixed
