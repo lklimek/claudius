@@ -4,10 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
-## [1.17.0] - 2026-03-11
+## [2.0.0] - 2026-03-11
 
 ### Changed
 
+- **BREAKING**: GitHub MCP server is now a hard dependency — skills and agents require `https://api.githubcopilot.com/mcp/` with `GH_TOKEN` configured. `gh` CLI demoted to fallback (see `references/gh-cli-fallback.md` in affected skills).
 - `check-pr-comments`: JSON report is now optional (only on explicit request); default flow presents concise inline summary
 - `check-pr-comments`: always fetch fresh comments from GitHub — never assume cached or absent
 - `git-and-github`: added Changelog section enforcing Keep a Changelog format
