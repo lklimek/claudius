@@ -65,11 +65,11 @@ Flag tests that lack substantive assertions. Tests must verify actual logic and 
 - [ ] Commit messages follow project style
 - [ ] PR structure follows project template
 
-### Content Redundancy (agents & skills)
-- [ ] No content duplicated from a loaded skill (if a skill loads `git-and-github`, it must not repeat git commands)
-- [ ] No content duplicated from a referenced spec or doc (if referencing Keep a Changelog, don't reproduce the format)
+### Content Redundancy
+- [ ] No content duplicated from a dependency already loaded or referenced (module, library, config, doc)
+- [ ] No reproduction of information available at a referenced URL or spec
 - [ ] No well-known knowledge restated (standard CLI flags, language syntax, obvious conventions)
-- [ ] Each instruction exists in exactly one place — delegate to the source, don't inline it
+- [ ] Each piece of knowledge exists in exactly one place — delegate to the source, don't inline it
 
 ### Documentation
 - [ ] Public APIs have comprehensive documentation
