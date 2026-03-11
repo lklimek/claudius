@@ -143,6 +143,12 @@ unintended behavioral changes:
 - **Import/module resolution** — new upstream imports that shadow or conflict with local ones
 - **Test expectations** — tests that may now fail due to changed behavior from either side
 
+### Upstream attribution
+
+For conflicted files and files flagged under "Changes Requiring Attention", identify which upstream
+authors introduced the problematic changes. Only include authors whose changes directly caused
+conflicts or semantic issues — not every upstream contributor.
+
 ### Report format
 
 ```
@@ -154,12 +160,18 @@ unintended behavioral changes:
 ### Changes Requiring Attention
 - <file> — <what changed, potential impact>
 
+### Relevant Upstream Contributors
+| Author | Key Changes |
+|---|---|
+| @<github-handle> | <PR(s) that caused conflicts or semantic issues> |
+
 ### Recommended Follow-up
 - [ ] <action items, if any>
 ```
 
 Show safe changes first so the user can quickly confirm the routine stuff and focus attention on
 what matters. If the report is clean (risk ~0%), say so in one line and skip the sections.
+Only list contributors whose changes caused conflicts or semantic issues — skip unrelated authors.
 
 ## Error Recovery
 

@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] - 2026-03-11
+
+### Added
+
+- `merge-base`: upstream attribution section — identifies authors whose changes caused conflicts or semantic issues, with linked PRs
+
 ## [2.2.0] - 2026-03-11
 
 ### Added
