@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # Release
 
-Bump version, commit, push, and create a GitHub release. Works with any tech stack.
+Load `claudius:git-and-github` first — all commit, push, and PR conventions come from there.
 
 ## Arguments
 
@@ -17,41 +17,33 @@ Optional: `major`, `minor`, or `patch`. If omitted, auto-detect from git history
 
 ### 0. Pre-flight
 
-1. Verify working tree is clean (`git status --porcelain`). If dirty, stop and ask.
-2. If on a feature branch (not main/master), warn and ask whether to release from here or switch first.
+1. Working tree must be clean. If dirty, stop and ask.
+2. If on a feature branch, warn and ask whether to release from here or switch to main first.
 
 ### 1. Detect Project Stack
 
-Scan the repo root for version-carrying files. Check ALL of the following that exist:
+Scan repo for version-carrying files:
 
-| File | Tech | Version location |
-|---|---|---|
-| `Cargo.toml` (root or workspace) | Rust | `[package].version` or `[workspace.package].version` |
-| `Cargo.toml` (workspace members) | Rust | each member's `[package].version` (may use `workspace = true`) |
-| `pyproject.toml` | Python | `[project].version` or `[tool.poetry].version` |
-| `setup.py` / `setup.cfg` | Python (legacy) | `version=` kwarg or `[metadata].version` |
-| `package.json` (root) | JS/TS | `"version"` field |
-| `package.json` (workspaces) | JS/TS monorepo | each workspace's `"version"` (may be independently versioned) |
-| `lerna.json` | JS/TS monorepo | `"version"` (`"independent"` = per-package versioning) |
-| `.claude-plugin/plugin.json` | Claude Code plugin | `"version"` field |
-| `version.txt` / `VERSION` | Generic | entire file content |
+| File | Version location |
+|---|---|
+| `Cargo.toml` (root/workspace) | `[package].version` or `[workspace.package].version` |
+| `Cargo.toml` (workspace members) | each member's `[package].version` (may use `workspace = true`) |
+| `pyproject.toml` | `[project].version` or `[tool.poetry].version` |
+| `setup.py` / `setup.cfg` | `version=` kwarg or `[metadata].version` |
+| `package.json` (root + workspaces) | `"version"` field |
+| `lerna.json` | `"version"` (`"independent"` = per-package) |
+| `.claude-plugin/plugin.json` | `"version"` field |
+| `version.txt` / `VERSION` | entire file content |
 
-Also note lock files that need syncing:
-- `Cargo.lock` — run `cargo update --workspace` after bumping `Cargo.toml`
-- `package-lock.json` / `yarn.lock` / `pnpm-lock.yaml` — run the matching package manager's install/update
-
-**If no version files found**, stop and ask the user where the version lives.
+If no version files found, stop and ask.
 
 ### 2. Validate Version Consistency
 
-Collect all detected versions. Three outcomes:
+Collect all detected versions:
 
-1. **All identical** — proceed with that version as `{old}`.
-2. **Intentionally independent** — some ecosystems use independent versioning (Cargo workspace members with explicit versions, lerna `"independent"`, npm workspaces with different versions). If detected:
-   - List each component and its version
-   - Ask user: "These appear independently versioned. Which component(s) should I release?" or "Should I bump all to the same version?"
-   - Proceed only with confirmed scope
-3. **Unexpectedly inconsistent** — e.g., `plugin.json` says `2.0.0` but `package.json` says `1.9.0` in what should be a unified version. **Stop and ask.** Show the mismatch table and let the user decide how to resolve.
+1. **All identical** — proceed.
+2. **Intentionally independent** (Cargo workspace members with explicit versions, lerna `"independent"`, npm workspaces with different versions) — list each component + version, ask user which to release.
+3. **Unexpectedly inconsistent** — stop, show mismatch table, let user decide.
 
 ### 3. Determine New Version
 
@@ -60,111 +52,45 @@ Collect all detected versions. Three outcomes:
    git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --oneline --no-decorate
    ```
 
-2. **Investigate changes in detail.** Examine actual diffs — commit prefixes can be misleading:
-   ```bash
-   git diff $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --stat
-   ```
-   Read the full diff for commits touching public APIs, interfaces, or config formats. Breaking change signals by stack:
-   - **Rust**: removed/renamed public items, changed function signatures, MSRV bump, removed features
-   - **Python**: removed/renamed public functions/classes, changed function signatures, dropped Python version support
-   - **JS/TS**: removed/renamed exports, changed function signatures, dropped Node version support
-   - **Plugin**: removed/renamed agents or skills, changed frontmatter interfaces, removed components
-   - **Any**: changed config formats, removed CLI flags, changed data schemas
+2. **Investigate actual diffs** — commit prefixes can be misleading. Read full diffs for commits touching public APIs, interfaces, or config formats.
 
-3. If bump type was provided as argument, use it. Otherwise auto-detect:
+3. If bump type provided as argument, use it. Otherwise auto-detect:
    - **major**: breaking changes in diffs, `BREAKING CHANGE` in body, or type suffix `!`
    - **minor**: new features in diffs, or `feat:` commits
    - **patch**: only fixes, refactors, docs, CI
    - Default to `patch` if unclear
 
-4. Apply bump: `major` -> X+1.0.0, `minor` -> X.Y+1.0, `patch` -> X.Y.Z+1
-
-5. **Present analysis and ask for confirmation.** Show:
-   - Current version -> proposed version (bump type)
-   - Commit list with short descriptions
-   - Key changes from diff investigation
-   - Justification for bump type
-   - Version files that will be updated
-   - Post-bump commands that will run (lock file syncs, etc.)
-   - Options: proposed bump (recommended), alternative bumps, or abort
+4. **Ask for confirmation.** Show: current → proposed version, commit list, key diff findings, justification, files to update, post-bump commands. Options: proposed (recommended), alternatives, or abort.
 
 ### 4. Update Version Files
 
-Update ALL version files detected in Step 1 (within confirmed scope from Step 2).
-
-Then sync lock files:
-- **Rust**: `cargo update --workspace` (required — `cargo publish --locked` fails otherwise)
-- **JS/TS**: run the project's package manager (`npm install`, `yarn install`, or `pnpm install`) to sync lock file
-- **Python**: no lock file sync typically needed (but check for `poetry.lock` -> `poetry lock`)
+Update all version files (within confirmed scope from Step 2). Then sync lock files:
+- `Cargo.lock` → `cargo update --workspace`
+- `package-lock.json` / `yarn.lock` / `pnpm-lock.yaml` → run matching package manager install
+- `poetry.lock` → `poetry lock`
 
 ### 5. Generate Changelog Entry
 
-If `CHANGELOG.md` exists, prepend new entry after the header. If absent, create it.
-
-Format per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
-
-```markdown
-## [X.Y.Z] - YYYY-MM-DD
-
-### BREAKING
-- description (hash)
-
-### Added
-- description (hash)
-
-### Fixed
-- description (hash)
-
-### Changed
-- description (hash)
-```
-
-Commit-type mapping:
-
-| Commit prefix | Changelog section |
-|---|---|
-| `feat` | Added |
-| `fix` | Fixed |
-| `perf`, `refactor`, `docs` | Changed |
-| `chore`, `ci`, `build`, `test`, `style` | Other |
-| `BREAKING CHANGE` or `!` suffix | BREAKING |
-
-Omit empty sections. Strip type prefix and optional scope from descriptions. Non-conventional commits go in Changed.
-
-If the file has compare links at the bottom, add: `[X.Y.Z]: https://github.com/{owner}/{repo}/compare/v{old}...vX.Y.Z` (derive owner/repo from `git remote get-url origin`).
+If `CHANGELOG.md` exists, prepend new entry after header. If absent, create it. Format per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Map conventional commit types to sections. Omit empty sections. If compare links exist at bottom, add one for this version.
 
 ### 6. Commit and Push
 
-Stage all modified version files, lock files, and `CHANGELOG.md`:
-```bash
-git add {all_changed_files}
-git commit -m "chore: release v{new}"
-git push
-```
-
-Verify push succeeds before proceeding.
+Stage all modified version files, lock files, and `CHANGELOG.md`. Commit as `chore: release v{new}`. Push per `git-and-github` conventions. Verify push succeeds before proceeding.
 
 ### 7. Create GitHub Release
 
-Write the new changelog entry (just this version, not the full file) to a temp file, then:
+Write new changelog entry (this version only) to a temp file:
 ```bash
 gh release create v{new} --title "v{new}" --notes-file {changelog_temp_file}
 ```
 
-Print the release URL.
-
 ### 8. Summary
 
-Print:
-- Version: {old} -> {new}
-- Updated files (list)
-- Release URL
-- Triggered workflows (if known from CI config — e.g., publish to crates.io, npm, PyPI, Docker)
+Print: version change, updated files, release URL, triggered workflows (if known from CI config).
 
 ## Constraints
 
-- **User-only** — this skill must never be invoked by agents autonomously.
-- NEVER create the release before pushing — the tag must reference a remote commit.
-- NEVER skip lock file sync — downstream installs will break.
+- NEVER create the release before pushing — tag must reference a remote commit.
+- NEVER skip lock file sync.
 - If any step fails, stop and report. Do not continue with partial state.
 - If versions are inconsistent and user hasn't confirmed scope, do not proceed.
