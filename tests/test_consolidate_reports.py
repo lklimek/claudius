@@ -710,8 +710,8 @@ class TestFlattenAgentReport:
         raw, _ = cr._flatten_agent_report("agent-b", sections)
         assert len(raw) == 0
 
-    def test_string_severity_backward_compat(self):
-        """Legacy string severity values should be converted to integers."""
+    def test_string_severity_rejected(self):
+        """String severity values must be rejected — only integers 1-5 accepted."""
         sections = [
             {
                 "category": "security",
@@ -719,7 +719,7 @@ class TestFlattenAgentReport:
                 "findings": [
                     {
                         "severity": "HIGH",
-                        "title": "Legacy finding",
+                        "title": "String finding",
                         "location": "f.rs:1",
                         "description": "D",
                         "recommendation": "R",
@@ -727,9 +727,8 @@ class TestFlattenAgentReport:
                 ],
             }
         ]
-        raw, _ = cr._flatten_agent_report("agent-compat", sections)
-        assert len(raw) == 1
-        assert raw[0]["severity"] == 4
+        raw, _ = cr._flatten_agent_report("agent-str", sections)
+        assert len(raw) == 0
 
     def test_non_list_tags_handled_gracefully(self):
         sections = [

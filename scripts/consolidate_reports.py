@@ -61,8 +61,7 @@ SEV_LABELS: dict[int, str] = {
     2: "LOW",
     1: "INFO",
 }
-SEV_NAMES: dict[str, int] = {v: k for k, v in SEV_LABELS.items()}
-SEV_ORDER: list[str] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+SEV_ORDER: list[str] = list(SEV_LABELS.values())  # CRITICAL, HIGH, ... INFO
 
 CATEGORY_PREFIX: dict[str, str] = {
     "security": "SEC-",
@@ -495,22 +494,11 @@ def _flatten_agent_report(
             )
 
         for f in section.get("findings", []):
-            raw_sev = f.get("severity", 1)
-            if isinstance(raw_sev, str):
-                severity = SEV_NAMES.get(raw_sev)
-                if severity is None:
-                    log.warning(
-                        "Skipping finding with invalid severity '%s' from agent '%s'",
-                        raw_sev,
-                        agent_name,
-                    )
-                    continue
-            elif isinstance(raw_sev, int) and 1 <= raw_sev <= 5:
-                severity = raw_sev
-            else:
+            severity = f.get("severity", 1)
+            if not isinstance(severity, int) or not 1 <= severity <= 5:
                 log.warning(
                     "Skipping finding with invalid severity '%s' from agent '%s'",
-                    raw_sev,
+                    severity,
                     agent_name,
                 )
                 continue
