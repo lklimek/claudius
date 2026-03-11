@@ -68,7 +68,7 @@ Flag tests that lack substantive assertions. Tests must verify actual logic and 
 ### Content Redundancy
 - [ ] No content duplicated from a dependency already loaded or referenced (module, library, config, doc)
 - [ ] No reproduction of information available at a referenced URL or spec
-- [ ] No well-known knowledge restated (standard CLI flags, language syntax, obvious conventions)
+- [ ] No well-known knowledge restated — if an LLM would know it without being told, it doesn't belong (standard CLI flags, language syntax, common conventions, API basics)
 - [ ] Each piece of knowledge exists in exactly one place — delegate to the source, don't inline it
 
 ### Documentation
