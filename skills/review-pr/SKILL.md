@@ -12,22 +12,17 @@ When asked to audit/review a PR, follow this workflow.
 
 ## 1. Gather PR Context
 
+Load /claudius:git-and-github skill .
+
 Use GitHub MCP to fetch PR metadata:
 
 - **PR details**: `pull_request_read` with `method: "get"` — returns title, body, URL, base/head branches, number.
 - **Changed files**: `pull_request_read` with `method: "get_files"` — returns list of changed files with stats.
 - **PR diff**: `pull_request_read` with `method: "get_diff"` — returns the full diff.
 
-Use local git for commit history and detailed diffs:
+Use local git for commit history and detailed diffs.
 
-```bash
-BASE_BRANCH=<baseRefName from PR details>
-git log $BASE_BRANCH..HEAD --oneline
-git diff $BASE_BRANCH...HEAD --stat
-git diff $BASE_BRANCH...HEAD
-```
-
-If GitHub MCP is unavailable, see [gh-cli-fallback.md](references/gh-cli-fallback.md) for `gh` CLI equivalents.
+If GitHub MCP is unavailable, see [gh-cli-fallback.md](../git-and-github/references/pr-review.md) for `gh` CLI equivalents.
 
 ## 2. Conduct the Review
 
@@ -78,64 +73,9 @@ the review and waste the reviewer's time.
 Post as a draft review so the user can review and submit manually. For trivial changes, include
 edit suggestions using ```suggestion ``` blocks.
 
-#### Verify lines are within the GitHub diff before posting
+#### Posting inline comments
 
-The GitHub diff may differ from the local `git diff` (e.g., when the PR base includes commits not
-yet in the local branch). Before constructing inline comments:
-
-1. **Get the PR base SHA** that GitHub uses:
-   ```bash
-   ../../scripts/gh-pr-base-sha.sh <owner/repo> <number>
-   ```
-
-2. **Check each file's diff hunks** to confirm your comment lines are within them. Use the local
-   diff with the correct base:
-   ```bash
-   git diff <base-sha>...HEAD -- <file> | grep "^@@"
-   ```
-   A hunk `@@ -old,len +new,len @@` means new-file lines `new` through `new+len-1` are in the diff.
-
-3. **If a finding's line is outside the diff**, move it to Part A (the summary comment), not an
-   inline comment. GitHub rejects inline comments on lines outside the diff with HTTP 422.
-
-#### Deduplicate before posting
-
-Before creating a new review, fetch existing reviews and inline comments to avoid duplicates:
-
-- **Existing reviews**: `pull_request_read` with `method: "get_reviews"`
-- **Existing inline comments**: `pull_request_read` with `method: "get_review_comments"` — returns threads with resolution status.
-
-If GitHub MCP is unavailable, use the wrapper scripts from [gh-cli-fallback.md](references/gh-cli-fallback.md).
-
-Drop any finding that already appears in an existing review body or inline comment (match by
-file:line and substance, not exact wording).
-
-#### Draft mode
-
-Reviews are posted as **drafts** (pending) so the user can review and submit manually.
-The `gh-post-review.sh` wrapper enforces draft mode by stripping any `event` field from the input
-JSON. The `body` field can be minimal since the detailed summary is in Part A.
-
-```bash
-SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/XXXXXX)
-cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
-{
-  "commit_id": "<SHA>",
-  "body": "See summary comment for full audit report.",
-  "comments": [
-    {"path": "src/file.rs", "line": 123, "side": "RIGHT", "body": "Inline comment"}
-  ]
-}
-ENDJSON
-../../scripts/gh-post-review.sh <owner/repo> <number> "$SESSION_DIR/pr-review.json"
-```
-
-Rules:
-- The script strips `"event"` automatically — reviews are always posted as drafts
-- **Only actionable findings** (CRITICAL/HIGH/MEDIUM/LOW) become inline comments; INFO goes in Part A only
-- Inline comments only on lines **within the diff**; everything else goes in Part A
-- Use `side: "RIGHT"` for new code
-- Get commit SHA: `git rev-parse HEAD`
+See [gh-cli-fallback.md](../git-and-github/references/pr-review.md) for: verifying diff bounds (get base SHA, check hunks), deduplication (fetch existing reviews/comments first), and posting with `gh-post-review.sh`. The `body` field can be minimal since the detailed summary is in Part A.
 
 ## 4. Cleanup
 

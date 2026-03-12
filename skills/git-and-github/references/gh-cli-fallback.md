@@ -49,63 +49,9 @@ EOF
 )"
 ```
 
-## PR-Level Comments
-
-For PR-level (non-diff) comments:
-
-```bash
-gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'
-```
-
 ## Reviewing a PR
 
-**Never submit a final review (approve/request-changes). Always create draft reviews.** The user must publish the review themselves.
-
-**Always use wrapper scripts** (via `../../scripts/`) -- they handle pagination, filtering, and input validation.
-
-Create draft reviews by omitting the `"event"` field. `gh-post-review.sh` enforces this by stripping any `event` field:
-
-```bash
-cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
-{
-  "commit_id": "<SHA>",
-  "body": "Review summary.\n\n<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>",
-  "comments": [
-    {"path": "src/file.rs", "line": 42, "side": "RIGHT", "body": "Finding here."}
-  ]
-}
-ENDJSON
-../../scripts/gh-post-review.sh <owner/repo> <number> "$SESSION_DIR/pr-review.json"
-```
-
-## Wrapper Scripts
-
-All scripts are located at `../../scripts/` relative to this skill.
-
-```
-gh-fetch-review-comments.sh <owner/repo> <pr>
-  -> {id, path, line, original_line, body, user, in_reply_to_id, html_url}
-
-gh-fetch-reviews.sh <owner/repo> <pr>
-  -> {id, state, submitted_at, body, user}
-
-gh-post-review.sh <owner/repo> <pr> <json_file>
-  -> Posts draft review. Input: {commit_id, body, comments: [{path, line, side, body}]}
-
-gh-request-reviewer.sh <owner/repo> <pr> <reviewer>
-
-gh-list-review-threads.sh <owner/repo> <pr>
-  -> {id, isResolved, comments: [{databaseId, path, body}]}
-
-gh-resolve-review-threads.sh <thread_id> [thread_id ...]
-  -> Resolves all given threads in a single API call. Ask user before resolving.
-
-gh-pr-base-sha.sh <owner/repo> <pr>
-  -> Base commit SHA.
-
-diff-anchors.py <file_path> [...]
-  -> "path -> sha256". For diff URLs: ...files#diff-<SHA256>R<line>
-```
+See [pr-review.md](pr-review.md) for the full procedure: fetching PR context, deduplication, diff verification, and posting draft reviews (MCP-first, CLI fallback).
 
 ## Using `gh api`
 

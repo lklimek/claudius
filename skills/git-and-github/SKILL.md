@@ -65,6 +65,8 @@ Always create PRs as drafts.
 
 **Never submit a final review (approve/request-changes). Always create draft/pending reviews.** The user must publish the review themselves. When using MCP, omit the `event` field in `pull_request_review_write` to create a pending review.
 
+See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR context, deduplication, diff-bounds verification, and posting inline comments.
+
 ### Issues
 
 Check for issue templates before creating. Always append attribution footer.
@@ -89,10 +91,4 @@ Check for issue templates before creating. Always append attribution footer.
 
 ## Elevated Permissions (ghsudo) -- Optional Fallback
 
-If you use a **read-only default token** with `gh`, install [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) for write operations. When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo. GitHub may return 404 instead of 403 for private resources when the token lacks sufficient permissions.
-
-ghsudo auto-detects the target org from `-R owner/repo` flags or the current repo's git remote. It shows a GUI popup (or terminal prompt) with the exact command and org, asking the user to approve. If approved, it re-executes the command with the org's stored read-write token.
-
-- Exit code 4 -> no token stored. Tell the user to run `ghsudo --setup <org>` to configure their read-write PAT.
-- Exit code 2 -> user denied the request. Do not retry.
-- Exit code 3 -> no GUI and no terminal available. Inform the user.
+If a `gh` or `git` command fails with 403/404 or "Resource not accessible", use [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) to retry with elevated permissions. See [gh-cli-fallback.md](references/gh-cli-fallback.md) for full usage and exit codes.
