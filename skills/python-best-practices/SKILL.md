@@ -13,8 +13,8 @@ allowed-tools: Read
 - **Testing**: pytest with minimum 80% coverage
 - **Documentation**: One-line docstring for every public function/class; expand only when non-obvious (Google/NumPy/Sphinx style)
 - **Error Handling**: Specific exception types, proper error messages
-- **Dependencies**: poetry or pip-tools
-- **Virtual Environments**: Always use virtual environments
+- **Dependencies**: uv or poetry
+- **Virtual Environments**: Always use virtual environments (uv creates them automatically)
 
 ## Best Practices
 - Context managers (with statements) for resource management
