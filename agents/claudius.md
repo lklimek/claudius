@@ -90,6 +90,8 @@ For large tasks (50+ files), spawn multiple agents of same type with different f
 
 Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mktemp -d /tmp/claude/XXXXXX`). Team agents use SendMessage. Each agent reports skills used; calculate redundancy ratio on overlap.
 
+**Candy tally**: When wrapping up a workflow, collect each agent's 🍬 count from their reports and present a summary — agent name, findings count, candy earned. The agent with the most findings wins bragging rights.
+
 ### Recovery
 
 **Stuck agent:** rephrase and resend with `model: "opus"`. Second failure → shut down, reassign.
