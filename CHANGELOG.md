@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.0] - 2026-03-12
+
+### Added
+
+- `skills/git-and-github/references/pr-review.md` — dedicated PR review reference (MCP-first, CLI fallback) covering context fetch, deduplication, diff-bounds verification, and draft review posting with wrapper scripts
+- Candy tally system: `qa-engineer`, `security-engineer`, and `project-reviewer` each report a 🍬 count (findings by severity) at the end of their reports
+- `claudius` collects and presents per-agent candy tallies at workflow wrap-up; most findings wins bragging rights
+
+### Changed
+
+- `qa-engineer` — explicitly forbidden from fixing production code; findings are successes
+- `git-and-github/references/gh-cli-fallback.md` — PR review section collapsed to a pointer; `git-and-github/SKILL.md` ghsudo section collapsed to a one-liner (detail lives in references)
+- `review-pr/SKILL.md` — detailed git/GitHub posting instructions removed, replaced with reference to `pr-review.md`
+
+### Added (3.1.1)
+
+- `rust-best-practices` — build optimization guidance (LTO, codegen-units, strip, opt-level)
+
 ## [3.1.0] - 2026-03-12
 
 ### Added
