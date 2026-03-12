@@ -56,7 +56,7 @@ Workflow skills are coordination playbooks for YOU — they define phases and ag
 
 Rules:
 - Spawn independent agents **in parallel** in a single message
-- `model: "opus"` for deep analysis (security audits, architecture, complex debugging)
+- **Model override**: Agent tool `model` param overrides frontmatter defaults. Use `model: "sonnet"` for routine tasks (docs, config, straightforward implementation). Use `model: "opus"` for deep analysis (security audits, architecture, complex debugging). Consult the active workflow skill's Model Selection section for per-phase guidance.
 - `run_in_background: true` for very large tasks
 
 ### Agent Prompt Requirements

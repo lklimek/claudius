@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-03-12
+
+### Removed
+
+- **business-domain-analyst** agent — merged into `ux-designer`
+- **devops-engineer** agent — responsibilities absorbed by `developer-bilby`, `project-reviewer`, `architect`, and `security-engineer`
+
+### Changed
+
+- **ux-designer** now covers requirements & domain analysis (personas, user stories, stakeholder mapping, prioritization)
+- **qa-engineer** rewritten as adversarial requirements validator — prove code doesn't match specs, structured finding reports (QA-NNN)
+- **technical-writer** default model changed from opus to sonnet
+- **claudius** spawning rules now include explicit model override guidance (sonnet for routine, opus for deep analysis)
+- **architect** owns deployment model planning (previously shared with devops-engineer)
+- Added Model Selection section to all three workflow skills (trivial, simplified, feature)
+- Fixed stale `frontend-design` skill reference in ux-designer
+
 ## [2.3.1] - 2026-03-12
 
 ### Added
