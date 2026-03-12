@@ -58,6 +58,14 @@ When you need detailed guidance on a specific item, read the corresponding refer
 - **Documentation**: `cargo doc --no-deps --open`
 - **LSP Diagnostics**: rust-analyzer (see LSP Integration section below)
 
+## Build Optimization
+
+Rust builds are expensive. During Implementation, do NOT run `cargo test`, `cargo clippy`, or `cargo fmt` unless necessary (e.g., complex unsafe code, debugging a specific test failure).
+
+- **Primary feedback loop**: use rust-analyzer LSP diagnostics — catches compilation errors, type mismatches, and common warnings without a full rebuild
+- **Defer full builds to QA phase**: run `cargo test`/`cargo clippy`/`cargo fmt` once on the merged result, not repeatedly during implementation
+- **Parallel agents**: when multiple agents work in separate worktrees, each uses LSP during implementation; QA compiles once — avoiding redundant full compilations
+
 ## Code Review Checklist
 - Code readability and self-documentation
 - DRY compliance: duplicated logic, copy-paste patterns, missing abstractions
