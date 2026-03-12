@@ -54,14 +54,12 @@ Add the marketplace and install the plugin:
 |------|-------------|-------|
 | `claudius` | General-purpose coding assistant and team coordinator | _(all)_ |
 | `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
-| `business-domain-analyst` | Business requirements, stakeholder analysis, user stories, acceptance criteria | Read, Grep, Glob, WebSearch, WebFetch |
 | `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation verification | Read, Grep, Glob, Bash, Task |
 | `developer-bilby` | Code changes and reviews in any language (Rust, Python, Go, frontend) | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
-| `devops-engineer` | Docker, CI/CD pipelines, GitHub Actions, infrastructure configuration | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
 | `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash |
 | `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
 | `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash |
-| `ux-designer` | User flows, wireframes, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch |
+| `ux-designer` | Requirements, domain analysis, stakeholder mapping, UI flows, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch |
 
 ### Optional plugin dependencies
 

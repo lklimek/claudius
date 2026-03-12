@@ -25,6 +25,11 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 
 4. **Lessons Learned** — if anything noteworthy was learned, save via `memcan:lessons-learned` skill (if available). Default to global memories unless strictly project-specific. Report count of memories saved. Skip for truly trivial fixes.
 
+## Model Selection
+
+All phases use `model: "sonnet"`. Trivial fixes don't need deep reasoning.
+Escalate to opus only for debugging non-obvious test failures.
+
 ## TDD Discipline
 
 1. Tests derive from requirements, not from implementation.

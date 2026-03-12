@@ -29,7 +29,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 4. **Implementation** (per task) → `developer-bilby`
    Build env → implement until tests pass → self-review → iterate.
 
-5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer` + `devops-engineer`
+5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer`
    Docs, integration tests, code quality, security, dependency security, UX/DX audit,
    pass tests/formatter/linter.
 
@@ -42,6 +42,12 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
    Default to **global memories** (omit `project` param) unless the lesson is strictly project-specific.
    Skip if nothing noteworthy was learned. Quality over quantity.
    Report how many memories were saved at the end of this phase.
+
+## Model Selection
+
+Agent frontmatter defaults apply. Use `model: "sonnet"` to override for:
+- `technical-writer` — documentation is sonnet's strength
+- Escalate stuck agents to `model: "opus"` for complex debugging
 
 ## Subsequent Iterations
 

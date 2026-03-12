@@ -21,11 +21,11 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 
 ## Phases
 
-1. **Requirements** → `business-domain-analyst` + `ux-designer`
+1. **Requirements** → `ux-designer`
    Personas, domain knowledge, functional/non-functional requirements, user stories,
    data needs & processing rules, user journey, DX planning, UI mocks. Validate per persona. Iterate.
 
-2. **Architecture** → `architect` + `devops-engineer`
+2. **Architecture** → `architect`
    System layers and responsibilities (trace every layer), tool/tech selection,
    prefer reuse, guide code placement, deployment model, work decomposition into tasks.
 
@@ -36,7 +36,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 4. **Implementation** (per task) → `developer-bilby`
    Build env → implement until tests pass → self-review → iterate.
 
-5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer` + `devops-engineer`
+5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer`
    Docs (end-user/developer/deployment), integration tests, code quality, security,
    dependency security, UX/DX audit, pass tests/formatter/linter.
 
@@ -49,6 +49,11 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
    Default to **global memories** (omit `project` param) unless the lesson is strictly project-specific.
    Skip if nothing noteworthy was learned. Quality over quantity.
    Report how many memories were saved at the end of this phase.
+
+## Model Selection
+
+Default to `model: "opus"` — feature work involves complex decisions across all phases.
+Use `model: "sonnet"` for `technical-writer` and routine sub-tasks (straightforward implementation, config changes).
 
 ## Subsequent Iterations
 
