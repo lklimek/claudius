@@ -74,6 +74,17 @@ CSV columns: `chapter_id,chapter_name,section_id,section_name,req_id,req_descrip
 | Frameworks | Django_Security, Django_REST_Framework, Laravel, Symfony, Ruby_on_Rails, Nodejs_Security, NodeJS_Docker, DotNet_Security, Java_Security, C-Based_Toolchain_Hardening |
 | Payments and Microservices | Third_Party_Payment_Gateway_Integration, Microservices_Security, Microservices_based_Security_Arch_Doc |
 
+**Language-Specific Security Patterns** — `references/<language>-security-patterns.md`
+
+| File | Covers |
+|------|--------|
+| `python-security-patterns.md` | Injection, deserialization, SSRF, supply chain, XML/XXE, async |
+| `rust-security-patterns.md` | Unsafe soundness, FFI, async/concurrency, supply chain, archive traversal |
+| `go-security-patterns.md` | Parsing footguns, concurrency, SSRF, template injection, supply chain |
+| `typescript-security-patterns.md` | Prototype pollution, XSS/DOM, SSRF, supply chain, type coercion |
+
+Each file includes language-specific security scanner recommendations.
+
 ### Searching References
 
 Use `Grep` on `references/` for keywords or IDs. Use `Read` with `offset`/`limit` for targeted sections.

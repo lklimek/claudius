@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.1.0] - 2026-03-12
+
+### Added
+
+- Per-language security pattern references: `python-security-patterns.md`, `rust-security-patterns.md`, `go-security-patterns.md`, `typescript-security-patterns.md` — web-researched attack patterns with CVE citations, replacing monolithic `language-security-patterns.md`
+- Language-specific security scanner tables in each pattern file
+- Pattern index table in `security-best-practices` SKILL.md for discoverability
+
+### Removed
+
+- `language-security-patterns.md` — split into per-language files to reduce context loading
+
 ## [3.0.0] - 2026-03-12
 
 ### Removed
