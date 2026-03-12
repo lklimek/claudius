@@ -199,7 +199,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^(SEC|PROJ|CODE|RUST|PY|GO|FE|DOC|CMT|DEP)-\\d{3}$",
+          "pattern": "^(SEC|QA|PROJ|CODE|RUST|PY|GO|FE|DOC|CMT|DEP)-\\d{3}$",
           "description": "Finding ID with category prefix (SEC→security, PROJ→project, CODE/RUST/PY/GO/FE→code_quality, DOC→documentation, CMT→pr_comments, DEP→dependencies)"
         },
         "severity": { "$ref": "#/$defs/severity" },

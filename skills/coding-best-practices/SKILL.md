@@ -22,7 +22,7 @@ Only run formatting, linting, and tests right before committing (or when the use
 
 ## Code Review Output Format
 
-When invoked for code review, emit a JSON array of `finding_section` objects per `schemas/review-report.schema.json`. IDs are provisional (consolidation reassigns them).
+Use the `report-format` skill for output structure. IDs are provisional (consolidation reassigns them).
 
 ## Cross-Cutting Rules
 

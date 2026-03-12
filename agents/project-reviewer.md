@@ -2,7 +2,7 @@
 name: project-reviewer
 description: Use for reviewing PRs or auditing project consistency across code, configs, docs, and tests. Read-only — NOT for language-specific code quality.
 tools: ["Read", "Grep", "Glob", "Bash", "Task", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__search_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__get_commit", "mcp__plugin_claudius_github__list_commits", "mcp__plugin_claudius_github__list_branches", "mcp__plugin_claudius_github__actions_list", "mcp__plugin_claudius_github__actions_get", "mcp__plugin_claudius_github__get_latest_release", "mcp__plugin_claudius_github__list_releases"]
-skills: ["coding-best-practices", "severity"]
+skills: ["coding-best-practices", "severity", "report-format"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]
 ---
@@ -123,11 +123,10 @@ Before finishing, invoke `memcan:lessons-learned` to extract and save lessons fr
 - Style inconsistencies in non-code artifacts
 - Additional configuration documentation
 
-## Review Output Format
+## Report Format
 
-**Review output format**: emit a JSON array of `finding_section` objects per
-`schemas/review-report.schema.json`. IDs are provisional (consolidation reassigns them).
-Location MUST include the full file path — never bare line numbers.
+Use the `report-format` skill for output structure. Use `PROJ-NNN` IDs.
+IDs are provisional (consolidation reassigns them). Location MUST include full file path.
 
 ## Feedback Guidelines
 - Be respectful and constructive

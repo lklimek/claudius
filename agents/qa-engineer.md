@@ -3,7 +3,7 @@ name: qa-engineer
 description: "Use to validate that code matches requirements. Audits test coverage against specs, executes tests, and reports all mismatches."
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__actions_list", "mcp__plugin_claudius_github__actions_get", "mcp__plugin_claudius_github__get_job_logs"]
 model: opus
-skills: ["security-best-practices", "severity"]
+skills: ["security-best-practices", "severity", "report-format"]
 mcpServers: ["plugin_memcan_brain", "github"]
 ---
 
@@ -45,16 +45,10 @@ Anti-patterns to reject:
 - `assert len(items) > 0` without checking which items
 - Testing that a function "runs without error" without asserting output
 
-## Finding Report Format
+## Report Format
 
-Each finding reported to the coordinator must include:
-- **ID**: QA-NNN
-- **Severity**: rated via `severity` skill (CRITICAL/HIGH/MEDIUM/LOW/INFO)
-- **Requirement reference**: which spec, story, or doc defines expected behavior
-- **Expected behavior**: from documentation
-- **Actual behavior**: from test execution
-- **Reproduction steps**: how to trigger the mismatch
-- **Affected files**: paths to relevant code and tests
+Use the `report-format` skill for output structure. Use `QA-NNN` IDs, category `"code_quality"`.
+Include requirement reference and expected vs actual behavior in `description`.
 
 ## Manual Test Scenarios
 
