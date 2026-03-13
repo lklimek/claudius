@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.3] - 2026-03-13
+
+### Added
+
+- `git-and-github` — Context Management section: delegate large MCP responses (diffs, file lists, review threads, CI logs) to disposable subagents to avoid context pollution
+
+### Changed
+
+- `grumpy-review`, `check-pr-comments` — replaced ad-hoc CI log retrieval guidance with cross-reference to centralized `git-and-github` § Context Management
+- `review-pr` — added large-response warning for `get_files`/`get_diff` with subagent pattern reference
+- `git-and-github/references/pr-review.md` — added large-response note in Get PR Context section
+
 ## [3.2.2] - 2026-03-13
 
 ### Changed

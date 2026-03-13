@@ -84,6 +84,33 @@ Check for issue templates before creating. Always append attribution footer.
 7. **Check for PR/issue templates** before creating -- use them if they exist
 8. **Avoid `gh api`** -- prefer MCP tools or high-level `gh` subcommands. Use `gh api` only for read-only queries when no subcommand or MCP tool exists. Never use `gh api` for write operations.
 
+## Context Management — Large MCP Responses
+
+GitHub MCP tools can return 10k+ tokens (file lists, diffs, review threads, CI logs), polluting the calling agent's context window with data that's only needed briefly.
+
+**Solution**: Delegate large MCP operations to a disposable subagent via the Agent tool. The subagent calls the MCP tool, extracts what's needed, and returns only a concise summary. Its full context is discarded after completion.
+
+**Delegate these** (unbounded/large responses):
+- `pull_request_read` with `get_files` — file lists on large PRs
+- `pull_request_read` with `get_diff` — full PR diffs
+- `pull_request_read` with `get_review_comments` — PRs with many threads
+- `get_job_logs` — CI logs (10k+ tokens typical)
+- `list_*` and `search_*` operations with many results
+
+**Safe to call directly** (bounded data): single PR metadata (`get`), single issue, branch list, single commit.
+
+**Pattern**:
+```
+Agent(
+  subagent_type="Explore",
+  prompt="Fetch changed files for PR #123 in owner/repo using pull_request_read (get_files). Return only: file paths with +/- line counts and total stats."
+)
+```
+
+Use `Explore` for read-only extraction (has MCP tools, no Edit/Write). Use `general-purpose` when writes are needed.
+
+**Key principle**: Tell the subagent exactly what to extract and what format to return. Not "fetch PR data" but "fetch changed file list, return file paths with +/- line counts, total stats."
+
 ## Escaping and Formatting
 
 - Use HEREDOCs (`<<'EOF'`) for multi-line bodies

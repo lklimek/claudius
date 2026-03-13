@@ -20,6 +20,8 @@ Use GitHub MCP to fetch PR metadata:
 - **Changed files**: `pull_request_read` with `method: "get_files"` — returns list of changed files with stats.
 - **PR diff**: `pull_request_read` with `method: "get_diff"` — returns the full diff.
 
+**Note**: `get_files` and `get_diff` can return large responses on sizable PRs. Use the subagent delegation pattern from `git-and-github` skill § Context Management to avoid polluting your context.
+
 Use local git for commit history and detailed diffs.
 
 If GitHub MCP is unavailable, see [gh-cli-fallback.md](../git-and-github/references/pr-review.md) for `gh` CLI equivalents.

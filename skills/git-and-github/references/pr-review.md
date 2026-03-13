@@ -9,6 +9,8 @@ Prefer GitHub MCP (`mcp__plugin_claudius_github__*`) for all API operations. Use
 - `pull_request_read` with `method: "get_files"` — changed files with stats
 - `pull_request_read` with `method: "get_diff"` — full diff
 
+**Note**: `get_files` and `get_diff` may return large responses. See the parent skill's § Context Management for the subagent delegation pattern.
+
 **CLI fallback**:
 ```bash
 gh pr view --json number,title,body,url,baseRefName

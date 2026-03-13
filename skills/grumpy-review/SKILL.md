@@ -264,7 +264,7 @@ For interactive triage, use the `claudius:triage-findings` skill with the `${REP
 
 ## CI Log Retrieval
 
-When fetching GitHub Actions job logs via MCP `get_job_logs`, always set `return_content: false` to get a download URL instead of dumping ~12k tokens into context. Download the log to `${TMPDIR}/job-log.txt`, then use Grep or Read to search it.
+See `git-and-github` skill § Context Management for the subagent delegation pattern. CI logs via `get_job_logs` are a prime example — always delegate to a subagent that fetches the log and extracts relevant failure information.
 
 ## Anti-Patterns (Review-Specific)
 
