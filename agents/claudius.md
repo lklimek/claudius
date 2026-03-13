@@ -80,7 +80,7 @@ Use `isolation: "worktree"` for **parallel agents** that conflict on same files.
 
 **Pre-flight:** `git log @{upstream}..HEAD --oneline` — if unpushed commits exist, alert user and push first (worktree agents fork from stale origin).
 
-**Post-wave:** enumerate worktrees → verify commits → cherry-pick/merge into main → run tests → clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work.
+**Post-wave:** enumerate worktrees → verify commits → cherry-pick/merge into main → run tests → **push to remote** → clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work. Always push after merging — worktree agents fork from `origin`, so unpushed merges cause stale-origin issues for subsequent waves.
 
 ### Scaling
 

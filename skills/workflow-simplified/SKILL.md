@@ -85,6 +85,6 @@ Include a deduplication pass — scan for duplicated logic, extract shared helpe
 
 Agents must commit all changes before exiting — uncommitted work cannot be merged.
 
-**When spawning parallel agents**, use `isolation: "worktree"` to avoid file conflicts. Pre-flight: check `git log @{upstream}..HEAD --oneline` for unpushed commits (worktrees fork from `origin`, not local branch). After each parallel wave: verify worktree commits, merge into main, run tests, then clean up.
+**When spawning parallel agents**, use `isolation: "worktree"` to avoid file conflicts. Pre-flight: check `git log @{upstream}..HEAD --oneline` for unpushed commits (worktrees fork from `origin`, not local branch). After each parallel wave: verify worktree commits, merge into main, run tests, **push to remote**, then clean up. Always push after merging — unpushed merges cause stale-origin issues for subsequent waves.
 
 **Single-agent phases** run directly in the working directory — no worktree overhead.

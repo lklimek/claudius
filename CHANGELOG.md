@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.4] - 2026-03-13
+
+### Changed
+
+- Worktree orchestration: always push to remote after merging worktree agent work into main (prevents stale-origin for subsequent waves)
+
 ## [3.2.3] - 2026-03-13
 
 ### Added
