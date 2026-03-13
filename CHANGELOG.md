@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.1] - 2026-03-13
+
+### Changed
+
+- `grumpy-review` — report output uses `${REPORT_DIR:-.}/report.json` instead of relative `report.json` (fixes CI artifact upload failures)
+- `grumpy-review` — added `Bash(mkdir *)` to `allowed-tools` (fixes permission denial in fork context)
+- `grumpy-review` — agent prompt requirements now include CI context constraints (MemCan/WebSearch unavailability) and file output rules (Write tool, not cat heredocs)
+- `grumpy-review`, `check-pr-comments` — added CI Log Retrieval section: `get_job_logs` with `return_content: false` to avoid context bloat
+- `claudius` agent — temp dir pattern changed from `/tmp/claude/XXXXXX` to `/tmp/claudius-XXXXXX` (avoids compound-command permission denials)
+- `claudius` agent — Skills Reference: added `dependabot-merge`, clarified `lessons-learned` as memcan plugin skill
+- `settings.example.json` — added `consolidate_reports.py`, `jq`, `/tmp/claudius-*` cleanup permissions
+
+### Fixed
+
+- CI review workflow (`dash-evo-tool`): added 10 missing shell script permissions to `--allowedTools`, removed `Bash(grep *)` (agents should use Grep tool), added `jq`, documented `issues: write` rationale
+
 ## [3.2.0] - 2026-03-12
 
 ### Added

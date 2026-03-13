@@ -83,6 +83,7 @@
       "Bash(*diff-anchors.py *)",
       "Bash(*validate_report.py *)",
       "Bash(*generate_review_report.py *)",
+      "Bash(*consolidate_reports.py *)",
       "Bash(*triage_server.py *)",
       "Bash(ghsudo *)",
       "Bash(ghsudo --verify *)",
@@ -95,8 +96,10 @@
 
       "Bash(fuser -k */tcp)",
 
+      "Bash(jq *)",
       "Bash(mktemp *)",
-      "Bash(rm -rf /tmp/claude/*)"
+      "Bash(rm -rf /tmp/claude/*)",
+      "Bash(rm -rf /tmp/claudius-*)"
     ],
     "deny": [
       "Bash(git push*--force*)",

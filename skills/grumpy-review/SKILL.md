@@ -4,7 +4,7 @@ description: "Parallel-agent code review for quality, security, dependencies, an
 agent: claudius
 context: fork
 model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 ../../scripts/consolidate_reports.py *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(cat ../../schemas/*), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 ../../scripts/consolidate_reports.py *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(cat ../../schemas/*), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology
@@ -93,6 +93,8 @@ every review agent prompt MUST include these review-specific elements:
 2. **Finding format**: Use the severity levels and structure defined below
 3. **Review checklists**: Embed relevant checklist content or rely on the agent's preloaded skills
 4. **UX/DX lens**: instruct agents to assess how findings affect end-user workflows and developer experience, not just code correctness
+5. **CI context**: When MemCan/WebSearch are unavailable (e.g., CI), instruct agents: "Do not use memcan tools or WebSearch/WebFetch."
+6. **File output**: Instruct agents to use the Write tool for creating files — never `cat > file` or heredoc redirections.
 
 ### Finding format (JSON)
 
@@ -212,7 +214,7 @@ Run the script to assign IDs, compute statistics, and produce a schema-valid rep
 ```bash
 python3 ../../scripts/consolidate_reports.py assemble \
     --input ${TMPDIR:-/tmp}/merged-findings.json \
-    --output report.json
+    --output ${REPORT_DIR:-.}/report.json
 ```
 
 The script assigns sequential IDs by category (SEC-001, PROJ-001, RUST-001, etc.), computes
@@ -237,7 +239,7 @@ If validation fails, fix the `merged-findings.json` and re-run assemble. Do NOT 
 After validation, generate a human-readable markdown version:
 
 ```bash
-python3 ../../scripts/generate_review_report.py report.json --format md
+python3 ../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format md
 ```
 
 This produces `report.md` next to the JSON file.
@@ -254,11 +256,15 @@ If initial review reveals areas needing deeper investigation:
 If the user requests HTML or PDF versions, invoke the renderer directly:
 
 ```bash
-python3 ../../scripts/generate_review_report.py report.json --format html
-python3 ../../scripts/generate_review_report.py report.json --format pdf
+python3 ../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format html
+python3 ../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format pdf
 ```
 
-For interactive triage, use the `claudius:triage-findings` skill with the report.json path.
+For interactive triage, use the `claudius:triage-findings` skill with the `${REPORT_DIR:-.}/report.json` path.
+
+## CI Log Retrieval
+
+When fetching GitHub Actions job logs via MCP `get_job_logs`, always set `return_content: false` to get a download URL instead of dumping ~12k tokens into context. Download the log to `${TMPDIR}/job-log.txt`, then use Grep or Read to search it.
 
 ## Anti-Patterns (Review-Specific)
 

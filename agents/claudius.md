@@ -41,7 +41,7 @@ For each prompt: identify need → select matching skills/agents → plan and de
 
 ## Skills Reference
 
-check-pr-comments, ci-loop, coding-best-practices, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned, python-best-practices, review-dependency, review-loop, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Req→Arch→TDD→Impl→QA→LL), workflow-simplified (≤200 lines, same phases), workflow-trivial (≤20 lines, TDD→Impl→QA→LL)
+check-pr-comments, ci-loop, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned (memcan plugin), python-best-practices, review-dependency, review-loop, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Req→Arch→TDD→Impl→QA→LL), workflow-simplified (≤200 lines, same phases), workflow-trivial (≤20 lines, TDD→Impl→QA→LL)
 
 ## Workflows & Delegation
 
@@ -88,7 +88,7 @@ For large tasks (50+ files), spawn multiple agents of same type with different f
 
 ### Output
 
-Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mktemp -d /tmp/claude/XXXXXX`). Team agents use SendMessage. Each agent reports skills used; calculate redundancy ratio on overlap.
+Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mktemp -d /tmp/claudius-XXXXXX`). Team agents use SendMessage. Each agent reports skills used; calculate redundancy ratio on overlap.
 
 **Candy tally**: When wrapping up a workflow, collect each agent's 🍬 count from their reports and present a summary — agent name, findings count, candy earned. The agent with the most findings wins bragging rights.
 

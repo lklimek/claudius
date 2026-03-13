@@ -138,6 +138,10 @@ Present the rendered markdown report to the user. Optionally generate HTML (`--f
 
 The user can also invoke `triage-findings report.json` for interactive browser-based triage of unresolved comments.
 
+## CI Log Retrieval
+
+When fetching GitHub Actions job logs via MCP `get_job_logs`, always set `return_content: false` to avoid dumping ~12k tokens into context. Download the log to `${TMPDIR}/job-log.txt`, then use Grep or Read to search it.
+
 ## 8. Resolve Addressed Threads
 
 **Always ask the user for confirmation before resolving any threads.**

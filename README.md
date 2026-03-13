@@ -205,7 +205,7 @@ See [ghsudo on GitHub](https://github.com/lklimek/ghsudo) for full documentation
 
 ### Recommended permissions
 
-The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively — which defeats the purpose of autonomous operation.
+The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`, `grumpy-review`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively — which defeats the purpose of autonomous operation.
 
 Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
 
