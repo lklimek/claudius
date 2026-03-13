@@ -4,7 +4,7 @@ description: "Parallel-agent code review for quality, security, dependencies, an
 agent: claudius
 context: fork
 model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 ../../scripts/consolidate_reports.py *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(cat ../../schemas/*), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 ../../scripts/consolidate_reports.py *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology

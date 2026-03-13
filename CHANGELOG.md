@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.2] - 2026-03-13
+
+### Changed
+
+- `grumpy-review` — removed `Bash(cat ../../schemas/*)` from `allowed-tools` (agents use Read tool; `cat` inside `$(...)` command substitution doesn't need its own permission)
+
 ## [3.2.1] - 2026-03-13
 
 ### Changed
