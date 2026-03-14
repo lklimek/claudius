@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.5] - 2026-03-14
+
+### Changed
+
+- Worktree orchestration: inject base commit hash (`git merge --ff-only <hash>`) into worktree agent prompts so they sync to correct local HEAD instead of stale origin
+
 ## [3.2.4] - 2026-03-13
 
 ### Changed

@@ -69,6 +69,7 @@ Agents have NO conversation history. Every prompt MUST include:
 5. **UX/DX context**: desired end-user/developer experience
 6. **Change visibility**: tell agents to check `git diff` AND `git status` (or provide explicit paths). Haiku agents miss changes with only `git diff HEAD`.
 7. For baseline comparisons: how to see what changed (`git diff`, `git show`)
+8. **Worktree base sync**: for `isolation: "worktree"` agents, include the HEAD commit hash and `git merge --ff-only <hash>` instruction as first action
 
 ### MemCan Context Injection
 
@@ -79,6 +80,8 @@ Before spawning, search MemCan (`memcan:recall`) and inject key findings into ag
 Use `isolation: "worktree"` for **parallel agents** that conflict on same files. Single-agent tasks work in main directory.
 
 **Pre-flight:** `git log @{upstream}..HEAD --oneline` — if unpushed commits exist, alert user and push first (worktree agents fork from stale origin).
+
+**Base commit injection:** Before spawning worktree agents, capture `git rev-parse HEAD` as `$BASE_COMMIT`. Include in every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <commit-hash>"` — substitute the actual hash. This works because worktrees share the object store.
 
 **Post-wave:** enumerate worktrees → verify commits → cherry-pick/merge into main → run tests → **push to remote** → clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work. Always push after merging — worktree agents fork from `origin`, so unpushed merges cause stale-origin issues for subsequent waves.
 
