@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.6] - 2026-03-14
+
+### Changed
+
+- `rust-best-practices` — added dedicated Error Handling section: `thiserror` with typed enums only (no `anyhow`/`eyre`), `Display`/`Debug` separation, granular variants over generic strings, `#[from]`/`#[source]` patterns, anti-patterns list. Inspired by dash-evo-tool conventions.
+
 ## [3.2.5] - 2026-03-14
 
 ### Changed
