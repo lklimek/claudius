@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.8] - 2026-03-15
+
+### Changed
+
+- `rust-best-practices` — added Cargo Command Hygiene rules: (1) replace `cargo check` with `cargo clippy` everywhere, (2) never pre-compile before `build`/`clippy`/`test`, (3) capture full cargo output instead of re-running with different truncation. Based on analysis of 1,082 redundant cargo executions across 2 days.
+
 ## [3.2.7] - 2026-03-14
 
 ### Changed

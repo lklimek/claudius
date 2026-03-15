@@ -94,8 +94,8 @@ pub enum MyError {
 - Don't use Arc<Mutex<T>> when RefCell or channels would work
 
 ## Code Quality Tools
+- **Compilation + Linting**: `cargo clippy --all-features --all-targets -- -D warnings` (replaces `cargo check` — never use `cargo check`)
 - **Formatting**: `cargo fmt`
-- **Linting**: `cargo clippy --all-features --all-targets -- -D warnings`
 - **Testing**: `cargo test --all-features --workspace`
 - **Security**: `cargo audit`
 - **Coverage**: cargo-tarpaulin or cargo-llvm-cov
@@ -104,11 +104,13 @@ pub enum MyError {
 
 ## Build Optimization
 
-Rust builds are expensive. During Implementation, do NOT run `cargo test`, `cargo clippy`, or `cargo fmt` unless necessary (e.g., complex unsafe code, debugging a specific test failure).
+Rust builds are expensive. `cargo build`, `cargo clippy`, and `cargo test` all compile the code — never chain them or run one as a pre-check for another.
 
-- **Primary feedback loop**: use rust-analyzer LSP diagnostics — catches compilation errors, type mismatches, and common warnings without a full rebuild
-- **Defer full builds to QA phase**: run `cargo test`/`cargo clippy`/`cargo fmt` once on the merged result, not repeatedly during implementation
-- **Parallel agents**: when multiple agents work in separate worktrees, each uses LSP during implementation; QA compiles once — avoiding redundant full compilations
+- **Use LSP as primary feedback loop** — rust-analyzer catches errors without a full rebuild
+- **Defer builds to QA phase** — don't run `cargo test`/`cargo clippy`/`cargo fmt` after every edit
+- **Never use `cargo check`** — `cargo clippy` is a strict superset (compilation + lints)
+- **Never pre-compile** — `cargo check && cargo test` or `cargo clippy && cargo build` wastes a full compile cycle; run the target command directly
+- **Capture output with `tee`** — see `coding-best-practices` § Build & Test Output Capture
 
 ## Code Review Checklist
 - Code readability and self-documentation
