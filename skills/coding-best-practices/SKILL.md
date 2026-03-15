@@ -22,7 +22,7 @@ Only run formatting, linting, and tests right before committing (or when the use
 
 ## Build & Test Output Capture
 
-Never re-run a build, test, or lint command just to see more of its output. Capture full output on the first run using `tee`: `<command> 2>&1 | tee /tmp/build-output.txt | tail -80`. If the visible tail is insufficient, read the temp file — do not re-execute the command.
+Never re-run a build, test, or lint command just to see more of its output. Capture full output on the first run using `tee`: `<command> 2>&1 | tee "$(mktemp /tmp/build-XXXXXX.txt)" | tail -80`. If the visible tail is insufficient, read the temp file — do not re-execute the command.
 
 ## Code Review Output Format
 
