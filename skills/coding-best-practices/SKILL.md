@@ -20,6 +20,13 @@ Steps 3-5 of every developer workflow (after build environment and prior art che
 
 Only run formatting, linting, and tests right before committing (or when the user explicitly asks). Don't run them after every edit — it wastes time and tokens.
 
+## Build & Test Output Capture
+
+Never re-run a build, test, or lint command just to see more of its output. Instead, capture full output on the first run:
+- `cargo clippy 2>&1 | tee /tmp/cargo-output.txt | tail -80`
+- `npm test 2>&1 | tee /tmp/test-output.txt | tail -80`
+- If the visible tail is insufficient, read the temp file — do not re-execute the command
+
 ## Code Review Output Format
 
 Use the `report-format` skill for output structure. IDs are provisional (consolidation reassigns them).
