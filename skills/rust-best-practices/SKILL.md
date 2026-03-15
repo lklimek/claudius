@@ -123,9 +123,9 @@ These rules eliminate redundant compilations. Every cargo subcommand that compil
 - ✅ `cargo test` — compiles and runs tests in one step
 - ✅ `cargo clippy` — compiles and lints in one step
 
-**Rule 3 — Capture full cargo output; never re-run to see more.** Do not pipe cargo output through `tail -N` or `head -N` and then re-run with a different truncation to see different parts of the output. Each re-run triggers a compilation lock and incremental-check overhead. Instead:
-- Run cargo without output truncation, or with a generous limit (e.g., `2>&1 | tail -200`)
-- If output was truncated by the tool, scroll or request the full result — do not re-execute the command
+**Rule 3 — Capture full cargo output to a file; never re-run to see more.** Do not pipe cargo output through `tail -N` or `head -N` and then re-run with a different truncation to see different parts of the output. Each re-run triggers a compilation lock and incremental-check overhead. Instead:
+- Redirect output to a temp file: `cargo clippy 2>&1 | tee /tmp/cargo-output.txt | tail -80` — this shows the tail immediately while preserving full output for later review via `Read` or `head`/`grep`
+- If the visible output is insufficient, read the temp file — do not re-execute the cargo command
 
 ## Code Review Checklist
 - Code readability and self-documentation
