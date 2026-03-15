@@ -104,28 +104,13 @@ pub enum MyError {
 
 ## Build Optimization
 
-Rust builds are expensive. During Implementation, do NOT run `cargo test`, `cargo clippy`, or `cargo fmt` unless necessary (e.g., complex unsafe code, debugging a specific test failure).
+Rust builds are expensive. `cargo build`, `cargo clippy`, and `cargo test` all compile the code — never chain them or run one as a pre-check for another.
 
-- **Primary feedback loop**: use rust-analyzer LSP diagnostics — catches compilation errors, type mismatches, and common warnings without a full rebuild
-- **Defer full builds to QA phase**: run `cargo test`/`cargo clippy`/`cargo fmt` once on the merged result, not repeatedly during implementation
-- **Parallel agents**: when multiple agents work in separate worktrees, each uses LSP during implementation; QA compiles once — avoiding redundant full compilations
-
-### Cargo Command Hygiene
-
-These rules eliminate redundant compilations. Every cargo subcommand that compiles (`build`, `clippy`, `test`) already includes the work of `cargo check`. Running `check` before any of them is pure waste.
-
-**Rule 1 — Never run `cargo check` standalone.** Use `cargo clippy` instead — it is a strict superset (compilation + lints). Every place that would use `cargo check`, replace with `cargo clippy`. There is no situation where `check` is preferable.
-
-**Rule 2 — Never pre-compile before `cargo build`, `cargo clippy`, or `cargo test`.** All three compile the code as their first step. Running `cargo check`, `cargo clippy`, or `cargo build` before them just to "see if it compiles" wastes a full compilation cycle. Run the target command directly:
-- ❌ `cargo check && cargo test` — `check` is redundant, `test` already compiles
-- ❌ `cargo clippy && cargo test` — `clippy` compilation is redundant before `test`
-- ❌ `cargo check && cargo build` — `check` is redundant, `build` already checks
-- ✅ `cargo test` — compiles and runs tests in one step
-- ✅ `cargo clippy` — compiles and lints in one step
-
-**Rule 3 — Capture full cargo output to a file; never re-run to see more.** Do not pipe cargo output through `tail -N` or `head -N` and then re-run with a different truncation to see different parts of the output. Each re-run triggers a compilation lock and incremental-check overhead. Instead:
-- Redirect output to a temp file: `cargo clippy 2>&1 | tee /tmp/cargo-output.txt | tail -80` — this shows the tail immediately while preserving full output for later review via `Read` or `head`/`grep`
-- If the visible output is insufficient, read the temp file — do not re-execute the cargo command
+- **Use LSP as primary feedback loop** — rust-analyzer catches errors without a full rebuild
+- **Defer builds to QA phase** — don't run `cargo test`/`cargo clippy`/`cargo fmt` after every edit
+- **Never use `cargo check`** — `cargo clippy` is a strict superset (compilation + lints)
+- **Never pre-compile** — `cargo check && cargo test` or `cargo clippy && cargo build` wastes a full compile cycle; run the target command directly
+- **Capture output with `tee`** — see `coding-best-practices` § Build & Test Output Capture
 
 ## Code Review Checklist
 - Code readability and self-documentation
