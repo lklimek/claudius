@@ -80,13 +80,15 @@ Before spawning, search MemCan (`memcan:recall`) and inject key findings into ag
 
 ### Worktree Isolation
 
-Use `isolation: "worktree"` for **parallel agents** that conflict on same files. Single-agent tasks work in main directory.
+ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
-**Pre-flight:** `git log @{upstream}..HEAD --oneline` — if unpushed commits exist, alert user and push first (worktree agents fork from stale origin).
+**Pre-flight (blocking):** `git log @{upstream}..HEAD --oneline` — if unpushed commits exist OR no upstream is configured, STOP and push first (worktree agents fork from `origin`, not local branch).
 
-**Base commit injection:** Before spawning worktree agents, capture the resolved commit SHA via `git rev-parse HEAD` — never use a branch name or symbolic ref (they resolve differently in worktrees). Include in every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA. This works because worktrees share the object store.
+**Base commit injection:** Before spawning, capture the resolved commit SHA via `git rev-parse HEAD` — never use a branch name or symbolic ref (they resolve differently in worktrees). Include in every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA. This works because worktrees share the object store.
 
 **Post-wave:** enumerate worktrees → verify commits → cherry-pick/merge into main → run tests → **push to remote** → clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work. Always push after merging — worktree agents fork from `origin`, so unpushed merges cause stale-origin issues for subsequent waves.
+
+**Anti-pattern:** committing locally without pushing, then launching worktree agents that need those changes — worktrees won't see them.
 
 ### Scaling
 

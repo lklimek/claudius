@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.3.0] - 2026-03-17
+
+### Changed
+
+- Mandate worktree isolation for ALL spawned agents, not just parallel ones
+- Make worktree pre-flight check blocking — STOP and push before launching agents if unpushed commits exist
+
 ## [3.2.11] - 2026-03-17
 
 ### Fixed

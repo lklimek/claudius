@@ -49,6 +49,12 @@ Verify the change doesn't introduce or miss existing duplication.
 
 Agents must commit all changes before exiting — uncommitted work cannot be merged.
 
-**When spawning parallel agents**, use `isolation: "worktree"` to avoid file conflicts. Pre-flight: check `git log @{upstream}..HEAD --oneline` for unpushed commits (worktrees fork from `origin`, not local branch). Before spawning, capture the resolved commit SHA (from `git rev-parse HEAD`), never a branch name or symbolic ref, and include `git merge --ff-only <sha>` in each agent's prompt so worktrees sync to correct base. After each parallel wave: verify worktree commits, merge into main, run tests, **push to remote**, then clean up. Always push after merging — unpushed merges cause stale-origin issues for subsequent waves.
+ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
-**Single-agent phases** run directly in the working directory — no worktree overhead.
+**Pre-flight (blocking):** Run `git log @{upstream}..HEAD --oneline`. If unpushed commits exist OR no upstream is configured, STOP — push first, then launch agents (worktrees fork from `origin`, not local branch).
+
+Before spawning, capture the resolved commit SHA (from `git rev-parse HEAD`), never a branch name or symbolic ref, and include `git merge --ff-only <sha>` in each agent's prompt so worktrees sync to correct base.
+
+After each wave: verify worktree commits, merge into main, run tests, **push to remote**, then clean up. Always push after merging — unpushed merges cause stale-origin issues for subsequent waves.
+
+**Anti-pattern:** committing locally then launching worktree agents that need those changes — worktrees won't see them until pushed.
