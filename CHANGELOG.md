@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.4.0] - 2026-03-17
+
+### Fixed
+
+- Replace broken `../../scripts/` relative paths with `${CLAUDE_SKILL_DIR}/../../scripts/` in all skills and reference docs — fixes script-not-found errors when agents run in worktrees or project directories
+- Use path-agnostic globs in `allowed-tools` frontmatter for reliable tool permission matching
+
+### Changed
+
+- Update CLAUDE.md bundled file references convention to document `${CLAUDE_SKILL_DIR}` and clarify `${CLAUDE_PLUGIN_ROOT}` scope
+
 ## [3.3.1] - 2026-03-17
 
 ### Added

@@ -4,7 +4,7 @@ description: "Parallel-agent code review for quality, security, dependencies, an
 agent: claudius
 context: fork
 model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(python3 ../../scripts/consolidate_reports.py *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology
@@ -164,7 +164,7 @@ Run the consolidation script to flatten all agent reports, detect duplicate cand
 scan for INTENTIONAL comments:
 
 ```bash
-python3 ../../scripts/consolidate_reports.py prepare \
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py prepare \
     security-engineer:${TMPDIR:-/tmp}/security-findings.json \
     project-reviewer:${TMPDIR:-/tmp}/project-findings.json \
     developer-bilby:${TMPDIR:-/tmp}/rust-findings.json \
@@ -212,7 +212,7 @@ or `remediation_override` to a JSON array to override auto-generation, or `null`
 Run the script to assign IDs, compute statistics, and produce a schema-valid report:
 
 ```bash
-python3 ../../scripts/consolidate_reports.py assemble \
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py assemble \
     --input ${TMPDIR:-/tmp}/merged-findings.json \
     --output ${REPORT_DIR:-.}/report.json
 ```
@@ -229,7 +229,7 @@ The assemble step already validates and blocks output on failure, but you can re
 manually (e.g., after hand-editing the report):
 
 ```bash
-python3 ../../scripts/validate_report.py report.json
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py report.json
 ```
 
 If validation fails, fix the `merged-findings.json` and re-run assemble. Do NOT skip validation.
@@ -239,7 +239,7 @@ If validation fails, fix the `merged-findings.json` and re-run assemble. Do NOT 
 After validation, generate a human-readable markdown version:
 
 ```bash
-python3 ../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format md
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format md
 ```
 
 This produces `report.md` next to the JSON file.
@@ -256,8 +256,8 @@ If initial review reveals areas needing deeper investigation:
 If the user requests HTML or PDF versions, invoke the renderer directly:
 
 ```bash
-python3 ../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format html
-python3 ../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format pdf
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format html
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format pdf
 ```
 
 For interactive triage, use the `claudius:triage-findings` skill with the `${REPORT_DIR:-.}/report.json` path.

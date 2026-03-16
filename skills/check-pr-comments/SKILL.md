@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Use to verify PR review comments are addressed in code. Optionally produces triage-compatible report.
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(python3 ../../scripts/validate_report.py *), Bash(python3 ../../scripts/generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
 ---
 
 # Check PR Comments Workflow
@@ -123,7 +123,7 @@ Assign sequential IDs: `CMT-001`, `CMT-002`, etc. Order: unresolved first (by se
 ## 6. Validate Report
 
 ```bash
-python3 ../../scripts/validate_report.py report.json
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py report.json
 ```
 
 If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid data.
@@ -131,7 +131,7 @@ If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid d
 ## 7. Render and Present
 
 ```bash
-python3 ../../scripts/generate_review_report.py report.json --format md
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py report.json --format md
 ```
 
 Present the rendered markdown report to the user. Optionally generate HTML (`--format html`) for richer display.
@@ -149,7 +149,7 @@ See `git-and-github` skill § Context Management for the subagent delegation pat
 After the summary (or report) is presented and the user approves, resolve addressed review threads using the wrapper script:
 
 ```bash
-../../scripts/gh-resolve-review-threads.sh <thread_id> [thread_id ...]
+${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <thread_id> [thread_id ...]
 ```
 
 Thread resolution has no MCP equivalent — the wrapper script uses a GraphQL mutation directly.
