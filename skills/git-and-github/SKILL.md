@@ -17,11 +17,9 @@ Use `git` for repository operations (clone, fetch, commit, push, branch, merge).
 
 ## Before Starting Work
 
-**Branch check**: Verify you are on the base branch (e.g., `main`, `master`, `develop`) before starting new work. If on an unrelated feature branch, switch to base first. If the current feature branch is related, confirm with the user before continuing on it.
-
-Always pull the current branch (fast-forward only) before starting any work. If the pull fails due to diverged history, rebase when the conflict is trivial (few files, obvious resolution). Otherwise alert the user — never force-merge without explicit permission.
-
-**Dedup check**: Before starting work on an issue or bug, search open PRs (`search_pull_requests` or `list_pull_requests`) for related fixes already in progress. If a PR addresses the same issue, inform the user instead of duplicating effort.
+1. Verify you're on a base branch — if on an unrelated feature branch, switch to base or confirm with user.
+2. Pull (fast-forward only). On diverged history, rebase if trivial, otherwise alert user.
+3. Search open PRs for related fixes — don't duplicate work already in progress.
 
 ## Committing
 
@@ -73,9 +71,7 @@ See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR 
 
 ### Issues
 
-**Dedup check**: Before creating an issue, search existing issues — both open and closed (`search_issues` or `list_issues` with `state=all`) — for duplicates or related reports. If a likely duplicate exists, show it to the user and ask before proceeding.
-
-Check for issue templates before creating. Always append attribution footer.
+Before creating, search existing issues (open + closed) for duplicates. If found, show to user and ask before proceeding. Check for issue templates. Always append attribution footer.
 
 **Feature/enhancement issues must include a `### User Story` section** -- an informal story describing what the user can achieve (no technical details). Start with "As a **\<persona\>**, I want to ... so that ...". Multiple personas are fine. Place user stories before technical details.
 
