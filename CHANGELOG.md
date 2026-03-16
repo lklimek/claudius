@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 - `git-and-github` — added pre-work checks: verify on base branch before starting new work, search open PRs for existing fixes, search open+closed issues before creating new ones (ask user if duplicate found)
 
+
 ## [3.2.8] - 2026-03-15
 
 ### Changed
