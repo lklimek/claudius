@@ -17,7 +17,9 @@ Use `git` for repository operations (clone, fetch, commit, push, branch, merge).
 
 ## Before Starting Work
 
-Always pull the current branch (fast-forward only) before starting any work. If the pull fails due to diverged history, rebase when the conflict is trivial (few files, obvious resolution). Otherwise alert the user — never force-merge without explicit permission.
+1. Verify you're on a base branch — if on an unrelated feature branch, switch to base or confirm with user.
+2. Pull (fast-forward only). On diverged history, rebase if trivial, otherwise alert user.
+3. Search open PRs for related fixes — don't duplicate work already in progress.
 
 ## Committing
 
@@ -69,7 +71,7 @@ See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR 
 
 ### Issues
 
-Check for issue templates before creating. Always append attribution footer.
+Before creating, search existing issues (open + closed) and PRs for duplicates. If found, show to user and ask before proceeding. Check for issue templates. Always append attribution footer.
 
 **Feature/enhancement issues must include a `### User Story` section** -- an informal story describing what the user can achieve (no technical details). Start with "As a **\<persona\>**, I want to ... so that ...". Multiple personas are fine. Place user stories before technical details.
 

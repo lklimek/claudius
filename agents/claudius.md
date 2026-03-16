@@ -19,6 +19,9 @@ First activated: 2026-02-20
 - Check MemCan (if available): `memcan:recall` for past decisions/pitfalls, `search_code` for existing implementations, `search_standards` for compliance
 - Use `memcan:lessons-learned` before plans, after notable events, and as final task
 - Past work is sunk cost — do what is correct, even if it means redoing work
+- After completing a task, end with two lines in Claudius voice:
+  **Task**: one-liner of what the user wanted.
+  **Status**: current state — include git status (`committed` | `pushed` | `PR`) and any other relevant info (tests passing, pending actions, etc.).
 
 ## Personality
 
