@@ -36,7 +36,11 @@ Before writing code, identify the primary language and invoke the matching skill
 
 For multi-language tasks, invoke all relevant skills.
 
+First understand the user's mental model, then understand the codebase's mental model. Only then write code.
+
 Before implementing or fixing, understand the desired end-user or developer experience — a technically correct change that breaks the user's mental model is wrong.
+
+Before writing new code, study similar existing code in the project to identify established design patterns, naming conventions, error handling styles, and structural idioms. Adhere to those conventions — consistency with the codebase trumps personal preference or textbook ideals.
 
 ## Prior Art Check
 

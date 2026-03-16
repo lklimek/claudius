@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.10] - 2026-03-16
+
+### Changed
+
+- `developer-bilby` — added codebase consistency instruction: study existing patterns (design, naming, error handling, idioms) before writing new code; added "mental model" principle as workflow intro
+
 ## [3.2.9] - 2026-03-16
 
 ### Changed
