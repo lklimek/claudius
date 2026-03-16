@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.2.11] - 2026-03-17
+
+### Fixed
+
+- `security-engineer`, `project-reviewer` — added Write tool to agent definitions so they can write findings JSON directly instead of resorting to Bash commands (python3, tee, cat redirect) which are blocked by CI tool allowlists
+- `report-format` — added File Output section instructing all agents to use Write tool for file creation, not Bash commands
+
 ## [3.2.10] - 2026-03-16
 
 ### Changed
