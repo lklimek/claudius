@@ -71,7 +71,7 @@ See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR 
 
 ### Issues
 
-Before creating, search existing issues (open + closed) for duplicates. If found, show to user and ask before proceeding. Check for issue templates. Always append attribution footer.
+Before creating, search existing issues (open + closed) and PRs for duplicates. If found, show to user and ask before proceeding. Check for issue templates. Always append attribution footer.
 
 **Feature/enhancement issues must include a `### User Story` section** -- an informal story describing what the user can achieve (no technical details). Start with "As a **\<persona\>**, I want to ... so that ...". Multiple personas are fine. Place user stories before technical details.
 
