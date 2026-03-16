@@ -28,6 +28,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 2. **Architecture** → `architect`
    System layers and responsibilities (trace every layer), tool/tech selection,
    prefer reuse, guide code placement, deployment model, work decomposition into tasks.
+   Batch small tasks so each agent gets ≥100 lines of work — but respect specialization boundaries (don't merge frontend with backend, security with docs, or unrelated domains).
 
 3. **TDD: Tests** (per task) → `qa-engineer` + `developer-bilby`
    Write tests from requirements and docs *before* implementation. Verify they fail (no implementation yet).

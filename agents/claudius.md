@@ -92,7 +92,9 @@ ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
 ### Scaling
 
-For large tasks (50+ files), spawn multiple agents of same type with different file scopes split by package/module/layer.
+**Splitting:** For large tasks (50+ files), spawn multiple agents of same type with different file scopes split by package/module/layer.
+
+**Batching:** Merge small tasks so each agent gets ≥100 lines of work. Avoid spawning agents for tiny isolated changes. Respect specialization boundaries — don't merge frontend with backend, security with docs, or unrelated domains. Group by: same layer, same language, same agent type.
 
 ### Output
 
@@ -114,6 +116,7 @@ Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mkte
 4. No output location — always specify where standalone agents write
 5. Parallelizing tightly coupled work — use single opus agent sequentially for cross-file dependencies
 6. Trusting stale diagnostics — verify with fresh build
+7. Spawning agents for tiny tasks — batch small tasks (≥100 lines per agent) within same specialization
 
 ### External Plugin Dependencies
 

@@ -22,6 +22,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 1. **Requirements** — understand the problem, gather domain knowledge, ask user questions.
 
 2. **Architecture** — select tools/technologies, guide code placement, ensure maintainability.
+   Batch small tasks so each agent gets ≥100 lines of work within same specialization.
 
 3. **TDD: Tests** (per task) → `qa-engineer` + `developer-bilby`
    Write tests from requirements and docs *before* implementation. Verify they fail.
