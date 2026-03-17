@@ -75,18 +75,53 @@ If `CHANGELOG.md` exists, prepend new entry after header. If absent, create it. 
 
 ### 6. Commit and Push
 
-Stage all modified version files, lock files, and `CHANGELOG.md`. Commit as `chore: release v{new}`. Push per `git-and-github` conventions. Verify push succeeds before proceeding.
+Stage all modified version files, lock files, and `CHANGELOG.md`. Commit as `chore: release v{new}`.
 
-### 7. Create GitHub Release
+Push to the current branch. If on a base branch (main, master, etc.), create a release branch first (`release/v{new}`). In all cases, create a PR targeting the base branch using `gh pr create`.
 
-Write new changelog entry (this version only) to a temp file:
+### 7. Monitor CI
+
+Use `gh run list` to find workflow runs for the PR branch, then `gh run watch {run_id} --exit-status` to wait. Do NOT poll in a loop — `gh run watch` streams and exits on completion.
+
+1. Watch all PR CI runs until they complete.
+2. **If CI fails** → read logs with `gh run view {run_id} --log-failed`, report the failure to the user with full context, and **stop immediately**. Do NOT attempt fixes — the release process must not silently retry.
+3. **If CI passes** → squash-merge the release PR automatically using `gh pr merge --squash`. Then proceed to Step 8.
+
+### 8. Create GitHub Release
+
+Write the new changelog entry (this version only) to a temp file:
 ```bash
 gh release create v{new} --title "v{new}" --notes-file {changelog_temp_file}
 ```
 
-### 8. Summary
+Do NOT ask for confirmation — the user already approved the version in Step 3.
 
-Print: version change, updated files, release URL, triggered workflows (if known from CI config).
+### 9. Monitor Release Workflows
+
+The GitHub release triggers downstream workflows (binary builds, package publishing, Docker image builds, etc.). Monitor these **in the background** so the user can continue working — do not block on them.
+
+1. Wait a few seconds for workflows to queue, then list runs triggered by the release tag:
+   ```bash
+   gh run list --limit 10
+   ```
+   Identify runs triggered by the `v{new}` tag or release event.
+
+2. Watch all runs in parallel in the background:
+   ```bash
+   gh run watch {run_id} --exit-status  # run_in_background: true for each
+   ```
+
+3. **If any release workflow fails** → this is critical. Immediately:
+   - Read failed logs: `gh run view {run_id} --log-failed`
+   - Report the failure to the user with full context (workflow name, job, error)
+   - Do NOT attempt automated fixes on release workflows — escalate immediately
+   - Release build failures may leave partial artifacts; warn the user
+
+4. **If all release workflows succeed** → proceed to Step 10.
+
+### 10. Summary
+
+Print: version change, updated files, release URL, release workflow results (pass/fail per workflow), and any warnings.
 
 ## Constraints
 
@@ -94,3 +129,8 @@ Print: version change, updated files, release URL, triggered workflows (if known
 - NEVER skip lock file sync.
 - If any step fails, stop and report. Do not continue with partial state.
 - If versions are inconsistent and user hasn't confirmed scope, do not proceed.
+- NEVER push directly to a base branch (main, master, etc.) — always use a release branch and PR.
+- Do NOT ask for confirmation before creating the GitHub release — user approved at version selection.
+- Always squash-merge release PRs (`gh pr merge --squash`) — never use merge commits or rebase.
+- Release workflow failures are CRITICAL — escalate immediately, do not attempt automated fixes.
+- Use `gh run watch` for CI monitoring — never poll `gh run list` or `gh run view` in a loop.
