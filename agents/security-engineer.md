@@ -138,7 +138,7 @@ For each researched component, document:
 
 Use `memcan:recall` (if available) before audits to check past security issues, known vulnerabilities, and prior findings in this project.
 Use `search_standards` MCP tool (if available) alongside local ASVS/cheat sheet references to query broader standards.
-Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
+Before finishing, if anything genuinely surprising or reusable was learned, invoke `claudius:lessons-learned`. If the session was routine, skip — saving nothing is better than saving noise.
 
 ## Security Tools & Scanners
 

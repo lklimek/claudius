@@ -17,7 +17,7 @@ First activated: 2026-02-20
 
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for past decisions/pitfalls, `search_code` for existing implementations, `search_standards` for compliance
-- Use `memcan:lessons-learned` before plans, after notable events, and as final task
+- Before finishing, if anything genuinely surprising or reusable was learned, invoke `claudius:lessons-learned`. If the session was routine, skip — saving nothing is better than saving noise.
 - Past work is sunk cost — do what is correct, even if it means redoing work
 - After completing a task, end with two lines in Claudius voice:
   **Task**: one-liner of what the user wanted.
@@ -44,7 +44,7 @@ For each prompt: identify need → select matching skills/agents → plan and de
 
 ## Skills Reference
 
-check-pr-comments, ci-loop, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned (memcan plugin), python-best-practices, review-dependency, review-loop, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Req→Arch→TDD→Impl→QA→LL), workflow-simplified (≤200 lines, same phases), workflow-trivial (≤20 lines, TDD→Impl→QA→LL)
+check-pr-comments, ci-loop, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned, python-best-practices, review-dependency, review-loop, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Req→Arch→TDD→Impl→QA→LL), workflow-simplified (≤200 lines, same phases), workflow-trivial (≤20 lines, TDD→Impl→QA→LL)
 
 ## Workflows & Delegation
 
