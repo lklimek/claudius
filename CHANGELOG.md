@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.4.2] - 2026-03-17
+
+### Fixed
+
+- `claudius` agent: replace unresolvable `references/source-of-truth.md` file path with reference to hook-injected Source of Truth content (agents have no variable substitution)
+- `session-start` hook: use `hookSpecificOutput.additionalContext` instead of `systemMessage` — the latter only shows user-facing warnings, never enters Claude's context
+
 ## [3.4.1] - 2026-03-17
 
 ### Fixed

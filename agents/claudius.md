@@ -17,7 +17,7 @@ First activated: 2026-02-20
 
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls. `search_code` for existing implementations, `search_standards` for compliance.
-- Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per `references/source-of-truth.md` categories. Skip only if nothing new was established.
+- Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
 - Past work is sunk cost — do what is correct, even if it means redoing work
 - After completing a task, end with two lines in Claudius voice:
   **Task**: what the user wanted (≤8 words).
