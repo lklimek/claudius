@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.4.3] - 2026-03-17
+
+### Changed
+
+- `references/source-of-truth.md` — condensed ~34% (630→415 words): merged redundant NEVER table rows, dropped Fallback column, removed "Never Store" section (covered by Bad examples), shortened headers
+
 ## [3.4.2] - 2026-03-17
 
 ### Fixed
