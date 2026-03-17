@@ -35,7 +35,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
    pass tests/formatter/linter.
 
 6. **Lessons Learned**
-   After QA passes, reflect on the task. Use `memcan:lessons-learned` skill (if available) to save:
+   After QA passes, reflect on the task. Use `claudius:lessons-learned` skill (if available) to save:
    - Bugs found and their root causes
    - Architecture or design decisions with rationale
    - Patterns, anti-patterns, or workarounds discovered

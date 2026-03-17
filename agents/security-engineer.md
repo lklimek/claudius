@@ -136,9 +136,9 @@ For each researched component, document:
 
 ## MemCan Integration
 
-Use `memcan:recall` (if available) before audits to check past security issues, known vulnerabilities, and prior findings in this project.
+Use `memcan:recall` (if available) before audits. Focus: design patterns (security), tool/environment quirks, bad-thinking corrections.
 Use `search_standards` MCP tool (if available) alongside local ASVS/cheat sheet references to query broader standards.
-Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
+Before finishing, invoke `claudius:lessons-learned` to save new security patterns, tool quirks, and bad-thinking corrections discovered. Skip only if nothing new was established.
 
 ## Security Tools & Scanners
 

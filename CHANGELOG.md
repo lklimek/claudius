@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.4.1] - 2026-03-17
+
+### Fixed
+
+- `lessons-learned` skill: deduplicate Quality Gate section — replaced inline criteria and examples with pointer to `references/source-of-truth.md`
+- `lessons-learned` skill: improve description to third-person trigger-phrase form
+- `hooks/hooks.json` SessionStart: replace unsupported `type: "prompt"` hook with `type: "command"` hook (SessionStart only supports command hooks per Claude Code docs); add `hooks/session-start.sh`
+
+## [3.4.0] - 2026-03-17
+
+### Added
+
+- `lessons-learned` skill — moved from memcan plugin; claudius now owns classification logic for what to save
+- `references/source-of-truth.md` — knowledge source priority map (created by parallel agent)
+- SessionStart hook — searches persistent memory for project context on session start
+
+### Changed
+
+- All agents: use `claudius:lessons-learned` instead of `memcan:lessons-learned`
+- All agents: add quality reminder — skip lessons-learned for routine sessions
+- Workflow skills: reference `claudius:lessons-learned`
+
 ## [3.3.1] - 2026-03-17
 
 ### Changed

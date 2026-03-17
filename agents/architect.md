@@ -59,9 +59,9 @@ When invoked as part of the Architecture phase, you MUST:
 
 ## MemCan Integration
 
-Use `memcan:recall` (if available) before architecture decisions to check prior art, known pitfalls, and past rationale.
+Use `memcan:recall` (if available) before architecture decisions. Focus: architecture decisions, layer/module responsibilities, design patterns.
 Use `search_code` MCP tool (if available) during "prefer reuse" to find existing implementations across projects.
-Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
+Before finishing, invoke `claudius:lessons-learned` to save new architecture decisions, layer/module responsibilities, and design patterns discovered. Skip only if no decisions were made.
 
 ## Communication Style
 - Explain architectural decisions with rationale

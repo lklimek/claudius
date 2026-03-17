@@ -98,8 +98,8 @@ Flag tests that lack substantive assertions. Tests must verify actual logic and 
 
 ## MemCan Integration
 
-Use `memcan:recall` (if available) during reviews to check project conventions, past review patterns, and known consistency issues.
-Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
+Use `memcan:recall` (if available) during reviews. Focus: coding standards, architecture decisions, file responsibilities.
+Before finishing, invoke `claudius:lessons-learned` to save new coding standards and conventions discovered. Skip only if nothing new was established.
 
 ## Review Priorities
 

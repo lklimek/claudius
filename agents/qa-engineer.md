@@ -66,8 +66,8 @@ Delegate security concerns to `claudius:security-engineer` with explicit file pa
 
 ## MemCan Integration
 
-Use `memcan:recall` (if available) before writing tests to check past bugs, missed edge cases, and effective test patterns.
-Before finishing, invoke `memcan:lessons-learned` to extract and save lessons from the session.
+Use `memcan:recall` (if available) before writing tests. Focus: design patterns (test strategies), bad-thinking corrections, tool quirks.
+Before finishing, invoke `claudius:lessons-learned` to save new test patterns, bad-thinking corrections, and tool quirks discovered. Skip only if nothing new was established.
 
 ## Security Awareness
 

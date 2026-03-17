@@ -125,7 +125,7 @@ Include:
 
 ### 8. Lessons Learned
 
-After completing all PRs, invoke `lessons-learned` skill if notable patterns emerged (flaky tests blocking merges, recurring merge conflicts, security concerns).
+After completing all PRs, invoke `claudius:lessons-learned` skill if notable patterns emerged (flaky tests blocking merges, recurring merge conflicts, security concerns).
 
 ## Attribution Footer
 

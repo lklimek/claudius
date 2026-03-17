@@ -23,7 +23,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 
 3. **QA** — pass tests, formatter, linter.
 
-4. **Lessons Learned** — if anything noteworthy was learned, save via `memcan:lessons-learned` skill (if available). Default to global memories unless strictly project-specific. Report count of memories saved. Skip for truly trivial fixes.
+4. **Lessons Learned** — if anything noteworthy was learned, save via `claudius:lessons-learned` skill (if available). Default to global memories unless strictly project-specific. Report count of memories saved. Skip for truly trivial fixes.
 
 ## Model Selection
 
