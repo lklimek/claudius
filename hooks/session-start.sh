@@ -11,5 +11,5 @@ if [[ -f "$SOT" ]]; then
 fi
 
 jq -n --arg sot "$SOT_CONTENT" '{
-  systemMessage: ("## Knowledge Source Priorities\n\n" + $sot + "\n\nIf persistent memory tools are available (memcan), search for project context using the categories above. Use `memcan:recall` skill. If memcan is unavailable, skip silently.")
+  systemMessage: ("## Knowledge Source Priorities\n\n" + $sot + "\n\n## Memory Actions\n\n**On session start**: If persistent memory tools are available (memcan), search for project context using the categories above. Use `memcan:recall` skill. If memcan is unavailable, skip silently.\n\n**Invoke `claudius:lessons-learned`** when any of these occur:\n- Architecture decision made or changed\n- Coding standard established or clarified\n- Wrong approach corrected (bad-thinking pattern)\n- Non-obvious tool/environment quirk discovered\n- User states a preference or convention\n- Plan changes direction\n- Session ends with new knowledge worth preserving\n\nDo NOT invoke for routine work with no new decisions or corrections.")
 }'
