@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.3.1] - 2026-03-17
+
+### Changed
+
+- `check-pr-comments` — step 4 now requires Claude's per-comment assessment: adequacy verdict for resolved comments, priority recommendation for unresolved ones, and explicit disagreement with reviewer when warranted
+
 ## [3.3.0] - 2026-03-17
 
 ### Changed

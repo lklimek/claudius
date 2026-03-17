@@ -44,8 +44,10 @@ For every inline comment, read the file at the referenced location and **verify 
 
 Present a concise summary directly to the user:
 - Total comments checked, how many resolved vs unresolved
-- For each unresolved comment: file location, what was requested, what is still missing
-- For resolved comments: brief confirmation (no detail needed unless noteworthy)
+- For **each comment**, include Claude's assessment:
+  - **Resolved**: confirm the fix is adequate, or flag remaining concerns if the resolution is technically present but semantically incomplete. State whether you agree the original comment was valid.
+  - **Unresolved**: state your recommendation (priority and suggested approach). If you disagree with the reviewer's concern, say so with a brief reason.
+- Lead with unresolved comments, then resolved
 
 This is the default end of the workflow. Steps 5-7 (structured report) are only produced when the user explicitly requests it (e.g. "generate report", "produce report", "with report"). Step 8 (resolve threads) applies to both flows.
 
