@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.3.0] - 2026-03-17
+
+### Changed
+
+- Mandate worktree isolation for ALL spawned agents, not just parallel ones
+- Make worktree pre-flight check blocking — STOP and push before launching agents if unpushed commits exist
+- Task batching guidance: merge small tasks so each agent gets ≥100 lines of work within same specialization
+- Update CLAUDE.md bundled file references convention to document `${CLAUDE_SKILL_DIR}` and clarify `${CLAUDE_PLUGIN_ROOT}` scope
+
+### Fixed
+
+- Replace broken `../../scripts/` relative paths with `${CLAUDE_SKILL_DIR}/../../scripts/` in all skills and reference docs — fixes script-not-found errors when agents run in worktrees or project directories
+- Use path-agnostic globs in `allowed-tools` frontmatter for reliable tool permission matching
+
 ## [3.2.11] - 2026-03-17
 
 ### Fixed

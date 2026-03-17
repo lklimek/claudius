@@ -81,9 +81,9 @@ Agents may add context to `description` and `tags` per their domain:
 
 | Tool | Purpose | Usage |
 |------|---------|-------|
-| `scripts/validate_report.py` | Validate report JSON against schema | `python scripts/validate_report.py report.json` |
-| `scripts/consolidate_reports.py` | Merge multiple agent reports, deduplicate findings | `python scripts/consolidate_reports.py agent1.json agent2.json -o consolidated.json` |
-| `scripts/generate_review_report.py` | Render consolidated report as Markdown/HTML | `python scripts/generate_review_report.py consolidated.json` |
+| `scripts/validate_report.py` | Validate report JSON against schema | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py report.json` |
+| `scripts/consolidate_reports.py` | Merge multiple agent reports, deduplicate findings | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py agent1.json agent2.json -o consolidated.json` |
+| `scripts/generate_review_report.py` | Render consolidated report as Markdown/HTML | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py consolidated.json` |
 
 ## Full Report Envelope
 

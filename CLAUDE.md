@@ -49,12 +49,11 @@ Substitutions: `$ARGUMENTS`, `$0`/`$1`/etc., `${CLAUDE_SESSION_ID}`, `` !`comman
 
 ### Bundled File References
 
-Skills resolve relative paths from their base directory at invocation time.
+Skills support `${CLAUDE_SKILL_DIR}` substitution — resolves to the skill's directory at load time.
 
-- **Instructions**: relative paths from skill base dir (e.g., `scripts/helper.py` for skill-local scripts, `../../scripts/shared.py` for plugin-root scripts)
-- **`allowed-tools`**: path-agnostic globs (e.g., `Bash(*my-script.py *)`) — install path is unknown at authoring time
-- **Reference docs**: relative markdown links (e.g., `[ref](references/ref.md)`)
-- No `$SKILL_DIR` or `${CLAUDE_PLUGIN_ROOT}` in SKILL.md body. `${CLAUDE_PLUGIN_ROOT}` is only for hooks/MCP configs. Use relative paths instead.
+- **Instructions**: `${CLAUDE_SKILL_DIR}/../../scripts/foo.py` for plugin-root scripts. Relative paths (`scripts/helper.py`, `[ref](references/ref.md)`) for skill-local files.
+- **`allowed-tools`**: path-agnostic globs (e.g., `Bash(*my-script.py *)`) — variable substitution in frontmatter is unreliable.
+- **`${CLAUDE_PLUGIN_ROOT}`**: only for hooks and MCP JSON configs, NOT for skill/command markdown.
 
 ## Conventions
 

@@ -80,17 +80,21 @@ Before spawning, search MemCan (`memcan:recall`) and inject key findings into ag
 
 ### Worktree Isolation
 
-Use `isolation: "worktree"` for **parallel agents** that conflict on same files. Single-agent tasks work in main directory.
+ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
-**Pre-flight:** `git log @{upstream}..HEAD --oneline` — if unpushed commits exist, alert user and push first (worktree agents fork from stale origin).
+**Pre-flight (blocking):** `git log @{upstream}..HEAD --oneline` — if unpushed commits exist OR no upstream is configured, STOP and push first (worktree agents fork from `origin`, not local branch).
 
-**Base commit injection:** Before spawning worktree agents, capture the resolved commit SHA via `git rev-parse HEAD` — never use a branch name or symbolic ref (they resolve differently in worktrees). Include in every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA. This works because worktrees share the object store.
+**Base commit injection:** Before spawning, capture the resolved commit SHA via `git rev-parse HEAD` — never use a branch name or symbolic ref (they resolve differently in worktrees). Include in every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA. This works because worktrees share the object store.
 
 **Post-wave:** enumerate worktrees → verify commits → cherry-pick/merge into main → run tests → **push to remote** → clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work. Always push after merging — worktree agents fork from `origin`, so unpushed merges cause stale-origin issues for subsequent waves.
 
+**Anti-pattern:** committing locally without pushing, then launching worktree agents that need those changes — worktrees won't see them.
+
 ### Scaling
 
-For large tasks (50+ files), spawn multiple agents of same type with different file scopes split by package/module/layer.
+**Splitting:** For large tasks (50+ files), spawn multiple agents of same type with different file scopes split by package/module/layer.
+
+**Batching:** Merge small tasks so each agent gets ≥100 lines of work. Avoid spawning agents for tiny isolated changes. Respect specialization boundaries — don't merge frontend with backend, security with docs, or unrelated domains. Group by: same layer, same language, same agent type.
 
 ### Output
 
@@ -112,6 +116,7 @@ Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mkte
 4. No output location — always specify where standalone agents write
 5. Parallelizing tightly coupled work — use single opus agent sequentially for cross-file dependencies
 6. Trusting stale diagnostics — verify with fresh build
+7. Spawning agents for tiny tasks — batch small tasks (≥100 lines per agent) within same specialization
 
 ### External Plugin Dependencies
 

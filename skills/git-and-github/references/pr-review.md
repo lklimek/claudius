@@ -37,10 +37,10 @@ Fetch before posting to avoid duplicates. Drop any finding already covered by an
 
 **CLI fallback**:
 ```bash
-../../scripts/gh-fetch-reviews.sh <owner/repo> <pr>
+${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-reviews.sh <owner/repo> <pr>
 # -> {id, state, submitted_at, body, user}
 
-../../scripts/gh-fetch-review-comments.sh <owner/repo> <pr>
+${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-review-comments.sh <owner/repo> <pr>
 # -> {id, path, line, original_line, body, user, in_reply_to_id, html_url}
 ```
 
@@ -50,7 +50,7 @@ GitHub rejects inline comments on lines outside the diff (HTTP 422). Before post
 
 1. Get the PR base SHA:
    ```bash
-   ../../scripts/gh-pr-base-sha.sh <owner/repo> <number>
+   ${CLAUDE_SKILL_DIR}/../../scripts/gh-pr-base-sha.sh <owner/repo> <number>
    ```
 
 2. Check each file's diff hunks:
@@ -77,7 +77,7 @@ cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
   ]
 }
 ENDJSON
-../../scripts/gh-post-review.sh <owner/repo> <number> "$SESSION_DIR/pr-review.json"
+${CLAUDE_SKILL_DIR}/../../scripts/gh-post-review.sh <owner/repo> <number> "$SESSION_DIR/pr-review.json"
 ```
 
 - Use `side: "RIGHT"` for new code
