@@ -7,23 +7,15 @@ description: "Use when extracting learnings, saving lessons, or capturing reusab
 
 Extract, qualify, and persist reusable knowledge from the current session.
 
+## Source of Truth
+
+!`cat ${CLAUDE_SKILL_DIR}/../../references/source-of-truth.md`
+
 ## Phase 1 — Gather
 
-Scan the conversation for items worth remembering. Categories (see `${CLAUDE_SKILL_DIR}/../../references/source-of-truth.md` for the authoritative priority map):
-
-- Architecture decisions & rationale
-- Coding standards & conventions (not already in linters)
-- Design patterns (error handling, module structure, etc.)
-- Bad-thinking corrections (wrong approach -> corrected, e.g., returning String as error when typed errors are standard)
-- Tool/environment quirks & workarounds
-- User preferences
-- Layer/module/file responsibilities
+Scan the conversation for items worth remembering. Use the categories, quality gate, and examples from the Source of Truth above.
 
 Collect as a numbered list. Search existing knowledge (`memcan:recall`) and drop duplicates.
-
-### Quality Gate
-
-Every candidate MUST pass the quality gate in `${CLAUDE_SKILL_DIR}/../../references/source-of-truth.md`. Reject anything that fails any criterion.
 
 **Tone**: factual, third-person, present tense. Pattern: "[Subject]: [what/what to do] — [why/context]"
 
