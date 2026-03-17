@@ -3,7 +3,10 @@
 # SessionStart only supports command hooks (not prompt hooks).
 set -euo pipefail
 
-jq -n '{
-  systemMessage: "If persistent memory tools are available (memcan), search for project context: architecture decisions, coding conventions, known pitfalls, pending TODOs. Use `memcan:recall` skill. If memcan is unavailable, skip silently."
+# Resolve source-of-truth path relative to plugin root
+SOT="${CLAUDE_PLUGIN_ROOT}/references/source-of-truth.md"
+
+jq -n --arg sot "$SOT" '{
+  systemMessage: ("Read `" + $sot + "` for knowledge source priorities. Then, if persistent memory tools are available (memcan), search for project context using categories from that file. Use `memcan:recall` skill. If memcan is unavailable, skip silently.")
 }'
 exit 0
