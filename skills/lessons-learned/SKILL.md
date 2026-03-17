@@ -1,6 +1,6 @@
 ---
 name: lessons-learned
-description: "Extract and save learnings from conversation. Invoke before presenting plan, after notable events, and as final task when all work is complete."
+description: "Use when extracting learnings, saving lessons, or capturing reusable knowledge from the session. Also appropriate before presenting a plan, after notable events (bugs, wrong approaches corrected), and as final task when work is complete."
 ---
 
 # Lessons Learned
@@ -23,23 +23,7 @@ Collect as a numbered list. Search existing knowledge (`memcan:recall`) and drop
 
 ### Quality Gate
 
-Every candidate MUST pass ALL criteria before proceeding to Phase 2:
-
-1. **Self-contained** — makes sense without conversation context
-2. **Specific** — names the tool, library, pattern, or API
-3. **Actionable** — a future session can use it directly
-4. **Durable** — still matters in 30 days
-5. **Not redundant** — not in source code, linter rules, or existing memories
-
-**Good examples:**
-- "Rust error handling: return typed errors via thiserror, never String — enables pattern matching"
-- "Claude Code PreToolUse hooks receive agent_type as fully qualified plugin:agent name, not bare name — use prefix matching"
-
-**Bad examples (do not save):**
-- "All tests pass" (ephemeral)
-- "File created: foo.rs" (process note)
-- "Well-structured code" (vague)
-- "Use git for version control" (well-known)
+Every candidate MUST pass the quality gate in `${CLAUDE_SKILL_DIR}/../../references/source-of-truth.md`. Reject anything that fails any criterion.
 
 **Tone**: factual, third-person, present tense. Pattern: "[Subject]: [what/what to do] — [why/context]"
 

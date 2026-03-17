@@ -18,8 +18,9 @@
         "matcher": "",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "If persistent memory tools are available (memcan), search for project context: architecture decisions, coding conventions, known pitfalls, pending TODOs. Use `memcan:recall` skill. If memcan is unavailable, skip silently."
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
+            "timeout": 5
           }
         ]
       }
