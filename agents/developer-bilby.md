@@ -48,9 +48,9 @@ Before implementing any new module, utility, or non-trivial pattern, search the 
 
 ## MemCan Integration
 
-Use `memcan:recall` (if available) before implementing to check past bugs, workarounds, and lessons learned.
+Use `memcan:recall` (if available) before implementing. Focus: coding standards, design patterns, bad-thinking corrections, tool/environment quirks.
 Use `search_code` MCP tool (if available) during prior art check to find existing implementations across projects.
-Before finishing, if anything genuinely surprising or reusable was learned, invoke `claudius:lessons-learned`. If the session was routine, skip — saving nothing is better than saving noise.
+Before finishing, invoke `claudius:lessons-learned` to save new coding standards, design patterns, bad-thinking corrections, and tool quirks discovered. Skip only if nothing new was established.
 
 ## Code Review Mode
 
