@@ -85,6 +85,7 @@ Before creating, search existing issues (open + closed) and PRs for duplicates. 
 6. **Check for `.env`, credentials, or secret files** before staging -- warn if found
 7. **Check for PR/issue templates** before creating -- use them if they exist
 8. **Avoid `gh api`** -- prefer MCP tools or high-level `gh` subcommands. Use `gh api` only for read-only queries when no subcommand or MCP tool exists. Never use `gh api` for write operations.
+9. **Never fork repositories** -- on access denied (403/404), use `ghsudo` to elevate permissions or ask the user. Forking creates a separate repo and breaks the workflow. This applies to both `gh repo fork` and `fork_repository` MCP tool.
 
 ## Context Management — Large MCP Responses
 
@@ -120,4 +121,4 @@ Use `Explore` for read-only extraction (has MCP tools, no Edit/Write). Use `gene
 
 ## Elevated Permissions (ghsudo) -- Optional Fallback
 
-If a `gh` or `git` command fails with 403/404 or "Resource not accessible", use [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) to retry with elevated permissions. See [gh-cli-fallback.md](references/gh-cli-fallback.md) for full usage and exit codes.
+If a `gh` or `git` command fails with 403/404 or "Resource not accessible", use [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) to retry with elevated permissions. **Never fork the repository as a workaround** -- forking creates a separate repo and breaks push/PR workflows. See [gh-cli-fallback.md](references/gh-cli-fallback.md) for full usage and exit codes.
