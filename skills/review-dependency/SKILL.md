@@ -63,7 +63,7 @@ Check if there are commonly confused packages with similar names that may pollut
 
 ## 3. Security Audit of the Library
 
-Spawn a `security-engineer` agent to review the cloned library source at `$SESSION_DIR/<package-name>`.
+Spawn a `security-engineer-smythe` agent to review the cloned library source at `$SESSION_DIR/<package-name>`.
 
 ### Scope
 - **Primary**: All changes between old and new version (the diff)
@@ -91,7 +91,7 @@ Include: file:line references, CWE IDs where applicable, impact, and remediation
 
 ## 4. Vulnerability Research
 
-Spawn an `architect` agent in parallel with step 3. The agent must:
+Spawn an `architect-nagatha` agent in parallel with step 3. The agent must:
 
 - Query all major vulnerability databases listed in step 2c
 - Search the library's issue tracker for security-related discussions and responsible disclosures

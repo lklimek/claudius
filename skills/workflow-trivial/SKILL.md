@@ -18,6 +18,10 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 ## Phases
 
 1. **TDD: Tests** — write/update tests first from requirements, verify they fail.
+  Write test cases for each task. Tests must be derived from requirements and documentation, not from implementation.
+  Tests encode expected behavior — they are the executable spec.
+  This phase MUST be completed before moving to implementation.
+  Tests should fail at the start of implementation.
 
 2. **Implementation** → `developer-bilby` — build env if needed, implement until tests pass.
 

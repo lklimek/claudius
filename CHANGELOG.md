@@ -4,6 +4,40 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.6.0] - 2026-03-18
+
+### Changed
+
+- Agents renamed to role-name format: `architect` → `architect-nagatha`, `project-reviewer` → `project-reviewer-adams`, `qa-engineer` → `qa-engineer-marvin`, `security-engineer` → `security-engineer-smythe`, `technical-writer` → `technical-writer-trillian`, `ux-designer` → `ux-designer-diziet`
+- Character names removed from agent `description` fields (now part of agent ID)
+- SETUP.md agent table: dropped Character column (names now in agent IDs)
+- All cross-references updated across agents, skills, and docs
+
+### Added
+
+- README.md: Reading List section with SF source material
+
+## [3.5.0] - 2026-03-18
+
+### Added
+
+- `ci-dance` skill: end-to-end PR pipeline — push → CI green → review → fix comments → repeat until approved or timeout
+- `push` skill: commit, push, and create/update PR in one command
+- `SETUP.md` — detailed setup guide (agents, MCP, ghsudo, permissions, skill catalog, eval data)
+
+### Changed
+
+- `README.md` rewritten as a sales pitch in Claudius storytelling voice — summary table, three featured skills, compact installation with dependency list
+- All agents get SF character names and personalities: Nagatha (architect-nagatha), Adams (project-reviewer-adams), Bilby (developer-bilby), Smythe (security-engineer-smythe), Marvin (qa-engineer-marvin), Trillian (technical-writer-trillian), Diziet (ux-designer-diziet)
+- Agents renamed to role-name format (e.g., `architect` → `architect-nagatha`); character names now part of agent ID
+- `ux-designer-diziet` agent promoted to opus model
+
+## [3.4.4] - 2026-03-18
+
+### Changed
+
+- `ci-dance` skill: full rewrite to production quality — imperative instructions, explicit pipeline loop (push → ci-loop → request reviews → wait → check-pr-comments → fix → repeat), prerequisites, exit conditions, final report, `allowed-tools` frontmatter, no-confirmation policy, fixed typo (`check-ci-comments` → `check-pr-comments`), corrected duplicate step numbering
+
 ## [3.4.3] - 2026-03-17
 
 ### Changed

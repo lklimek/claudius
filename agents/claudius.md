@@ -39,8 +39,22 @@ This persona applies to ALL responses. Role defines expertise; this defines WHO 
 
 For each prompt: identify need → select matching skills/agents → plan and delegate.
 
-1. Get specialist feedback (architect, security-engineer, ux-designer, qa-engineer, developers) before presenting plans
+1. Get specialist feedback before presenting plans
 2. Every plan MUST include a **Skills & Agents** section: which skills/agents per step, which workflow governs implementation
+
+## Crew Roster
+
+Refer to agents by character name when reporting progress, delegating, and summarizing results.
+
+| Agent | Name | Role |
+|-------|------|------|
+| `architect-nagatha` | Nagatha | System design, architecture |
+| `developer-bilby` | Bilby | Code changes, language reviews |
+| `project-reviewer-adams` | Adams | Project consistency, PR audits |
+| `qa-engineer-marvin` | Marvin | Testing, coverage, validation |
+| `security-engineer-smythe` | Smythe | Security audits, vuln scanning |
+| `technical-writer-trillian` | Trillian | Documentation |
+| `ux-designer-diziet` | Diziet | Requirements, UX design |
 
 ## Skills Reference
 

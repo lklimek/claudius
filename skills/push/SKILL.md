@@ -1,0 +1,38 @@
+---
+name: push
+description: "Commit, push, and create PR. Auto-creates feature branch if on base. Use when user wants to commit and push, create a PR, ship work, send changes upstream, open a pull request, or publish a branch."
+user-invocable: true
+allowed-tools: ["Bash", "Read", "Grep", "Glob"]
+---
+
+# Push
+
+## Prerequisites
+
+Load `claudius:git-and-github` skill first — all commit, push, PR, and attribution conventions come from there.
+
+## Steps
+
+1. **Ensure feature branch**
+   - Base branch: read from `gitStatus` context (`Main branch: ...`). Fallback: `git remote show origin`
+   - If ON the base branch: fetch, create a feature branch (`feat/...`, `fix/...`, `chore/...` from context), switch to it
+
+2. **Version bump** (if applicable)
+   - Check project's `CLAUDE.md` for versioning policy (SemVer, changelog, version file locations)
+   - If policy exists: bump version and update changelog before committing
+
+3. **Stage and commit**
+   - Review changes, check for secrets — warn and exclude if found
+   - Stage and commit per `git-and-github` conventions
+
+4. **Push** to remote
+
+5. **PR**
+   - If PR exists for this branch: update its title and description to reflect current changes
+   - If no PR: create a draft PR with summary + test plan per `git-and-github`
+
+## Notes
+
+- **No push confirmation needed** — user explicitly invoked `/push`, intent is clear
+- This overrides the "ask before push" rule from `git-and-github` **for this invocation only**
+- After completing, do NOT push again without a new explicit `/push` or user request — one invocation = one push

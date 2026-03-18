@@ -56,8 +56,8 @@ Spawn a single `developer-bilby` and instruct it to also apply `security-best-pr
 
 | Agent (`subagent_type`) | Focus |
 |---|---|
-| `claudius:project-reviewer` | Cross-artifact consistency, convention adherence, doc accuracy, specialist orchestration |
-| `claudius:security-engineer` | OWASP Top 10, injection, concurrency, panics, DoS, known vulns |
+| `claudius:project-reviewer-adams` | Cross-artifact consistency, convention adherence, doc accuracy, specialist orchestration |
+| `claudius:security-engineer-smythe` | OWASP Top 10, injection, concurrency, panics, DoS, known vulns |
 
 ### Language specialists (add per language in scope)
 
@@ -74,7 +74,7 @@ These agents handle **code quality reviews** — readability, idioms, error hand
 
 | Condition | Agent (`subagent_type`) | Focus |
 |---|---|---|
-| Documentation changes | `claudius:technical-writer` | Accuracy, completeness, API docs, changelog |
+| Documentation changes | `claudius:technical-writer-trillian` | Accuracy, completeness, API docs, changelog |
 
 For crypto-heavy code or significant dependency changes, expand the single security-engineer's
 prompt scope to include crypto soundness and dependency audit — do NOT spawn a second instance.
@@ -147,8 +147,8 @@ for thorough analysis.
 Example spawn pattern:
 
 ```
-Task(subagent_type="claudius:security-engineer", model="opus", prompt="...", name="security-auditor")
-Task(subagent_type="claudius:project-reviewer", model="opus", prompt="...", name="project-reviewer")
+Task(subagent_type="claudius:security-engineer-smythe", model="opus", prompt="...", name="security-auditor")
+Task(subagent_type="claudius:project-reviewer-adams", model="opus", prompt="...", name="project-reviewer")
 Task(subagent_type="claudius:developer-bilby", model="opus", prompt="...", name="rust-reviewer")
 ```
 

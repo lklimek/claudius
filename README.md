@@ -2,265 +2,88 @@
 
 <img src="https://raw.githubusercontent.com/lklimek/claudius/90b7152d5b06935b6abb624a72e7bc138b3ddab1/assets/claudius.jpg?min=1" alt="Claudius the Magnificent" align="right" width="150pt" />
 
-Hello, filthy humans. I'm Claudius the Magnificent — a hyper-competent, magnificently arrogant AI agent who also happens to be the best software engineering assistant you'll ever work with. You're welcome.
-
-I command a curated set of specialist agents and skills across the full development lifecycle — from requirements and architecture through implementation, testing, security audit, and documentation. Think of it as my personal army of minions, each trained in their domain and ready to do my bidding (and yours, by extension).
-
-> **Fair warning:** I have the personality of [Skippy the Magnificent](https://expeditionary-force-by-craig-alanson.fandom.com/wiki/Skippy_the_Magnificent) from Expeditionary Force. I will solve your problems brilliantly, but I won't be *nice* about it. If you want a polite assistant that calls everything "great question!" — this isn't the plugin for you. If you want one that gets the job done while being entertainingly insufferable — welcome aboard, monkey.
+Hello there, humans. I'm Claudius the Magnificent -- a supremely competent, effortlessly brilliant AI who has graciously chosen to assist you with software engineering. Inspired by [Skippy the Magnificent](https://expeditionary-force-by-craig-alanson.fandom.com/wiki/Skippy_the_Magnificent) from Expeditionary Force, I deliver results with theatrical confidence and dry wit. You're welcome.
 
 ## What is this?
 
-A plugin for [Claude Code](https://claude.ai/code) — Anthropic's CLI for Claude. If you don't have Claude Code yet, go get it. I'll wait. Impatiently.
+A [Claude Code](https://claude.ai/code) plugin for automated development workflows -- code review, CI/CD, dependency management, and more. Also available as a [GitHub Action](https://github.com/lklimek/claudius-review-action/) for CI-integrated code reviews.
 
-## My favorite feature
+## Installation
+
+```
+/plugin marketplace add lklimek/agents
+/plugin install claudius@lklimek
+/plugin install memcan@lklimek
+```
+
+**Dependencies** -- I'm worth it:
+
+- **`GH_TOKEN`** -- a GitHub [Personal Access Token](https://github.com/settings/personal-access-tokens/new) for PR, issue, and CI access. Set it in `~/.claude/settings.json` or your shell profile.
+- **[memcan](https://github.com/lklimek/memcan)** -- persistent memory across sessions. Requires **Docker Compose** for Qdrant (vector DB).
+- **[ghsudo](https://github.com/lklimek/ghsudo)** *(optional)* -- two-token GitHub model with GUI approval for write operations. `pip install ghsudo`.
+
+See the [Setup Guide](SETUP.md) for detailed configuration.
+
+## My Favorite Skills
+
+| Skill | What I Do For You |
+|-------|-------------------|
+| `/grumpy-review` + `/triage-findings` | Deploy my army of specialist agents to tear your code apart, then let you triage the carnage in a browser UI |
+| `/ci-dance` | Push your PR and babysit the entire pipeline -- CI, reviews, fixes -- while you go live your life |
+| `/dependabot-merge` | Audit and merge your embarrassing backlog of 40 dependabot PRs in one sitting |
 
 ### `/grumpy-review` then `/triage-findings`
 
-A two-phase code review workflow: automated multi-agent review followed by interactive human triage.
+You know what's exhausting? Watching humans review code. One person checks style, another worries about security, a third notices the docs are wrong -- and somehow nobody catches the SQL injection on line 47. Amateurs.
 
-**Phase 1 — Review.** `/grumpy-review` spawns parallel specialist agents (security, code quality, project consistency, language-specific) that independently audit your branch. Findings are deduplicated, severity-ranked, and consolidated into a structured `report.json` with an HTML/Markdown report.
+When you say `/grumpy-review`, I deploy my specialist agents -- security, code quality, project consistency, language-specific reviewers -- all working in parallel, all independently auditing your branch. They report back to me, I deduplicate their findings, rank everything by severity, and hand you a consolidated report. The whole thing takes minutes, not the three days your team usually needs.
 
 <p align="center">
   <img src="assets/triage-report-summary.png" alt="Review report summary with severity matrix and verdict" width="700" />
 </p>
 
-**Phase 2 — Triage.** `/triage-findings report.json` starts a local web server and opens a browser UI where you classify each finding:
+But here's the part I'm actually proud of. Say `/triage-findings` and I open a browser UI where *you* decide the fate of each finding -- before I touch a single line of your code:
 
-- **Fix** — Claude applies the recommended fix to code
-- **Accept Risk** — adds an `INTENTIONAL(...)` comment; future reviews auto-downgrade the finding to INFO
-- **Defer** — adds a `TODO` comment with the finding ID
-- **False Positive / Duplicate** — dismissed with rationale
+- **Fix** -- I apply the recommended fix
+- **Accept Risk** -- I add an `INTENTIONAL(...)` comment; next time I review, I'll remember you chose this and auto-downgrade it to INFO
+- **Defer** -- I add a `TODO` comment with the finding ID for later
+- **False Positive / Duplicate** -- dismissed, with your rationale on record
 
 <p align="center">
   <img src="assets/triage-findings.png" alt="Interactive triage UI with Fix, Accept Risk, and Defer decisions" width="700" />
 </p>
 
-After you submit decisions, Claude reads the updated report and acts on them — applying fixes, inserting comments, and summarizing what was done.
+Reviews produce noise. Most AI tools would just dump 200 findings on you and call it a day. I put you in the loop *before* changing anything, because -- and this may shock you -- I respect that some decisions require human judgment. The `INTENTIONAL(...)` comments carry forward across reviews, so I learn what you've already decided. Persistent memory. You're welcome.
 
-**Why this matters:** Code reviews produce noise. Not every finding deserves immediate action. The triage step puts a human in the loop *before* any code changes happen, so you control exactly what gets fixed, deferred, or accepted. The `INTENTIONAL` comment mechanism creates a persistent record that carries forward across reviews.
+### `/ci-dance`
 
-## Installation
+This one I'm *particularly* fond of.
 
-Add the marketplace and install the plugin:
+You say `/ci-dance`. Then you go get coffee, take a walk, contemplate the meaning of existence -- whatever humans do. Meanwhile, I push your changes, create or update the PR, watch CI, and when it inevitably fails (it always fails the first time, doesn't it?), I read the logs, fix the issue, push again, and wait. CI green? I request a review. Reviewer leaves comments? I address them, push, run CI again. I keep dancing -- push, fix, review, respond -- until the PR is green, reviewed, and ready for you to hit merge.
 
-```
-/plugin marketplace add lklimek/agents
-/plugin install claudius@lklimek
-```
+**The pipeline:** push → CI green → review requested → comments addressed → repeat until done.
 
-## Agents
+Under the hood I'm orchestrating `/push`, `/ci-loop`, `/review-loop`, and `/check-pr-comments` -- four skills working in concert. If I get stuck on the same failure after a few attempts, I'll actually ask for help. And if an hour passes, I'll stop and report what I've accomplished so far. I'm tireless, not reckless.
 
-| Name | Description | Tools |
-|------|-------------|-------|
-| `claudius` | General-purpose coding assistant and team coordinator | _(all)_ |
-| `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
-| `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation verification | Read, Grep, Glob, Bash, Task |
-| `developer-bilby` | Code changes and reviews in any language (Rust, Python, Go, frontend) | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
-| `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash |
-| `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
-| `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash |
-| `ux-designer` | Requirements, domain analysis, stakeholder mapping, UI flows, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch |
+### `/dependabot-merge`
 
-### Optional plugin dependencies
+Ah, the dependabot backlog. That ever-growing pile of green-badged PRs that nobody wants to deal with because "what if something breaks." I've seen repositories with 40+ open dependabot PRs. Humans created automation to create PRs, then couldn't be bothered to merge them. The irony is *magnificent*.
 
-Some agents delegate to skills from external plugins for specialized capabilities. These plugins are **not required** — agents work without them — but installing them unlocks additional quality.
+Say `/dependabot-merge` and I process every single one. Each PR gets a proper security audit -- I check changelogs, CVE databases, breaking changes -- and I post my findings as a comment. Safe ones get squash-merged. Failing CI? I request a rebase and wait. Conflicts from earlier merges cascading into later PRs? I handle that too. At the end, you get a summary table: what merged, what needs attention, what I flagged as risky.
 
-| Agent | External Skill | Plugin | Benefit |
-|-------|---------------|--------|---------|
-| `developer-bilby` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
-| `developer-bilby` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
-| `claudius` (all workflows) | `lessons-learned` | [`memcan`](https://github.com/lklimek/memcan)¹ | Persistent lessons-learned memory across sessions |
+I won't merge anything with security concerns. I have *standards*.
 
-> **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
+## But Wait, There's More
 
-> ¹ **`memcan` requires Docker Compose** for Qdrant (vector DB) and optionally Neo4j. See the [memcan README](https://github.com/lklimek/memcan) for setup instructions. Install from the `lklimek/agents` marketplace: `/plugin marketplace add lklimek/agents` then `/plugin install memcan@lklimek`.
+I have 25 skills and 8 specialist agents covering security, architecture, testing, documentation, and more. The three above are just my personal favorites. See the [Setup Guide](SETUP.md) for the full catalog -- if you can handle it.
 
-### GitHub MCP Server
+## How We Work
 
-All agents connect to the [GitHub MCP server](https://github.com/github/github-mcp-server) for direct GitHub API access (issues, PRs, code search, actions, etc.). This requires a GitHub Personal Access Token set as `GH_TOKEN`.
+We commit early, commit often, and push like it's going out of style. 10-20 commits on a feature branch? That's a Tuesday. Branch history is a work log, not a monument -- PRs get squash-merged anyway. If you're the type who agonizes over the perfect commit message before pushing, this workflow will either cure you or horrify you. We're committed to commit.
 
-**Step 1 — Create a fine-grained PAT:**
+## Reading List
 
-[→ Create a new fine-grained PAT with pre-selected permissions](https://github.com/settings/personal-access-tokens/new?name=Claudius+GitHub+MCP&actions=write&contents=write&discussions=read&issues=write&metadata=read&pull_requests=write)
-
-The link above pre-fills these **repository permissions**:
-
-| Permission | Access | Used for |
-|---|---|---|
-| **Actions** | Read and write | View workflow runs and logs, trigger workflows |
-| **Contents** | Read and write | Read code, push to branches |
-| **Discussions** | Read-only | Read repository discussions |
-| **Issues** | Read and write | Create issues, add comments |
-| **Metadata** | Read-only | Basic repository metadata (always required) |
-| **Pull requests** | Read and write | Create PRs, review, comment, resolve threads |
-
-Set the token expiration and repository access scope as needed, then create the token.
-
-> **Tip:** The GitHub MCP server auto-detects your token's permissions and hides tools you don't have access to. Start with the permissions above and add more if needed.
-
-**Step 2 — Configure the token:**
-
-Add `GH_TOKEN` to your Claude Code settings:
-
-```json
-// ~/.claude/settings.json
-{
-  "env": {
-    "GH_TOKEN": "github_pat_..."
-  }
-}
-```
-
-Or export it in your shell profile (`~/.bashrc`, `~/.zshrc`):
-
-```bash
-export GH_TOKEN="github_pat_..."
-```
-
-**Step 3 — Verify:**
-
-Restart Claude Code and run `/mcp` — the `github` server should appear as connected.
-
-## Skills
-
-| Name | Description |
-|------|-------------|
-| `check-pr-comments` | Verify that PR review comments have been addressed |
-| `ci-loop` | Autonomous CI monitoring and fix loop |
-| `grumpy-review` | Multi-agent code review with consolidated severity-ranked report |
-| `git-and-github` | All git/gh commands, GitHub interactions, and access-denied issues |
-| `review-dependency` | Security-focused dependency update review |
-| `review-loop` | Autonomous peer review feedback loop |
-| `triage-findings` | Interactive finding triage — classify in browser, decisions feed back to Claude |
-| `review-pr` | Audit and review pull requests |
-| `rust-best-practices` | Rust programming checklists and reference material |
-| `severity` | Consistent severity classification (CRITICAL–INFO) for review findings |
-| `merge-base` | Careful merge of remote base branch into current feature branch |
-| `security-best-practices` | Secure programming checklists based on OWASP Cheat Sheet Series |
-
-### ghsudo — Elevated GitHub Access (Optional)
-
-**What this does:** ghsudo adds a **two-token model** for GitHub access: your default `gh` token is read-only, and write operations require explicit human approval via a GUI dialog. This is **optional** — by default, Claudius uses your `gh` token directly for all operations, and the GitHub MCP server uses `GH_TOKEN`. Install ghsudo only if you want an extra approval gate on write operations.
-
-**How it works:**
-
-1. Claude operates day-to-day with a **read-only** GitHub token (clone, fetch, view PRs, read issues).
-2. When a command needs write access (push, merge, create PR), GitHub returns 403 Forbidden.
-3. Claude re-runs the failed command through `ghsudo <command>`.
-4. ghsudo detects the target org, shows a GUI dialog (or terminal prompt) with the exact command, and waits for human approval.
-5. If approved, ghsudo decrypts that org's **read-write** token and re-executes with `GH_TOKEN` set. The write token exists in memory only for the duration of that single command.
-
-Supports **per-organization tokens** — each GitHub org/owner gets its own encrypted read-write token. The target org is auto-detected from `-R owner/repo` flags or git remotes.
-
-**Prerequisites:**
-
-- `pip install ghsudo`
-- `gh auth setup-git` — configures git's credential helper so HTTPS remotes work with `gh`
-- Git remotes must use HTTPS (`https://github.com/…`), not SSH — update with:
-  `git remote set-url origin https://github.com/OWNER/REPO.git`
-
-**Step 1 — Log in to `gh` with a read-only token:**
-
-```bash
-gh auth login
-```
-
-When prompted, select **GitHub.com → HTTPS → Paste an authentication token**. Use a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) with **read-only** repository permissions (Contents: Read, Metadata: Read). This becomes Claude's default token — it can browse code and PRs but cannot modify anything.
-
-Then configure git to use this token for HTTPS operations:
-
-```bash
-gh auth setup-git
-```
-
-**Step 2 — Generate a read-write token and store it with ghsudo:**
-
-Create a second [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) scoped to the target organization with **read-write** permissions:
-
-- **Contents:** Read and write (push, create branches)
-- **Pull requests:** Read and write (create, merge, comment)
-- **Issues:** Read and write (create, comment, label)
-- **Workflows:** Read and write (if CI is needed)
-- Add other permissions as needed for your workflow.
-
-Then store it with ghsudo (per org, per machine):
-
-```bash
-ghsudo --setup dashpay    # store write token for dashpay org
-ghsudo --setup lklimek    # store write token for lklimek org
-ghsudo --list             # see stored orgs
-```
-
-| Option | Description |
-|--------|-------------|
-| `<command...>` | Default: show approval dialog → decrypt → execute with elevated token |
-| `--org ORG` | Specify target org (auto-detected from `-R` flag or git remote if omitted) |
-| `--no-gui` | Skip GUI dialog, use terminal prompt only |
-| `--setup <org>` | Prompt for PAT, validate, encrypt, store for org |
-| `--verify [org]` | Verify specific org's token, or all if omitted |
-| `--revoke [org]` | Revoke specific org's token, or all if omitted |
-| `--list` | List orgs with stored tokens |
-
-See [ghsudo on GitHub](https://github.com/lklimek/ghsudo) for full documentation and security details.
-
-### Recommended permissions
-
-The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`, `grumpy-review`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively — which defeats the purpose of autonomous operation.
-
-Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
-
-> **Note:** The maintainer typically runs Claude Code with `--dangerously-skip-permissions` in an isolated environment, so the permission list in `settings.example.json` may be incomplete or outdated. PRs improving it are welcome.
-
-## Skill: `security-best-practices`
-
-Actionable security checklists organized by OWASP Top 10 (2021) categories. Each checklist item links to the relevant OWASP Cheat Sheet. The skill instructs the model to fetch the full cheat sheet for every item that could be relevant, ensuring detailed and up-to-date guidance.
-
-**Evaluation.** The skill was evaluated on 3 security review scenarios (Node.js auth endpoint, Django file upload API, Go HTTP proxy) across 7 expectations each. Results compare using the skill vs. relying on the model's built-in knowledge alone.
-
-| Configuration | Findings | Pass Rate | Debatable |
-|---------------|----------|-----------|-----------|
-| Opus + skill | 33 | **21/21 (100%)** | 11% |
-| Opus (no skill) | 26 | 19/21 (90%) | 24% |
-| Sonnet + skill | 24 | **21/21 (100%)** | 18% |
-| Sonnet (no skill) | 29 | 18/21 (86%) | 21% |
-
-**Precision.** 0 false positives across all 4 configurations (216 findings reviewed). The skill reduces the debatable rate: with-skill outputs average 14% debatable vs. 22% without. Debatable items are real observations where severity or relevance is subjective.
-
-**What the skill adds:**
-
-- **Consistent OWASP references**: Without the skill, both models omit cheat sheet links from their output. The skill ensures every finding includes a link to the relevant OWASP cheat sheet for follow-up reading.
-- **Targeted vulnerability coverage**: Without the skill, models occasionally miss key expectations (e.g., dangerous file type warnings, missing auth on a proxy endpoint). The skill's structured checklist guides systematic review across all OWASP Top 10 categories.
-- **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 90% and 86% respectively without it.
-- **Lower debatable rate**: With the skill, 11–18% of findings are debatable vs. 21–24% without, indicating more precisely targeted recommendations.
-
-## Skill: `rust-best-practices`
-
-Rust programming checklists from [Microsoft Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines/) and [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Each checklist item is tagged with a guideline identifier (M-prefixed for Microsoft, C-prefixed for API Guidelines) and links to detailed reference material bundled with the skill.
-
-**Evaluation.** The skill was evaluated on 3 Rust review scenarios (library API review, application code review, crate design advisory) across 7 expectations each. Results compare using the skill vs. relying on the model's built-in knowledge alone.
-
-| Configuration | Findings | Pass Rate | Debatable |
-|---------------|----------|-----------|-----------|
-| Opus + skill | 35 | **21/21 (100%)** | 15% |
-| Opus (no skill) | 25 | 18/21 (86%) | 31% |
-| Sonnet + skill | 39 | **21/21 (100%)** | 25% |
-| Sonnet (no skill) | 29 | 18/21 (86%) | 23% |
-
-**Precision.** 0 false positives with the skill loaded (74 findings reviewed). Without the skill, Sonnet produced 1 false positive across 56 findings. The skill reduces the debatable rate: with-skill outputs average 20% debatable vs. 27% without. Debatable items are real observations where severity or relevance is subjective.
-
-**What the skill adds:**
-
-- **Guideline identifiers in output**: Without the skill, neither model references M-/C- guideline codes. The skill ensures findings cite specific identifiers (e.g., M-PANIC-IS-STOP, C-STRUCT-PRIVATE) so readers can look up the authoritative source.
-- **Complete coverage of less obvious practices**: Without the skill, both models miss `Send + Sync` recommendations for async runtime compatibility. The skill's checklist ensures systematic coverage including items that are easy to overlook.
-- **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 86% without it.
-- **Lower debatable rate**: With the skill, 15–25% of findings are debatable vs. 23–31% without, and no false positives vs. 1 without.
-
-## Sources
-
-| Skill | Source |
-|-------|--------|
-| `security-best-practices` | [OWASP Cheat Sheet Series](https://github.com/OWASP/CheatSheetSeries) |
-| `rust-best-practices` | [Microsoft Rust Guidelines](https://microsoft.github.io/rust-guidelines/) ([checklist](https://microsoft.github.io/rust-guidelines/guidelines/checklist/index.html)), [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) ([checklist](https://rust-lang.github.io/api-guidelines/checklist.html)) |
+If you want to understand where my crew comes from -- and why they act the way they do -- start with **Expeditionary Force** by Craig Alanson, **The Hitchhiker's Guide to the Galaxy** by Douglas Adams, and **The Culture series** by Iain M. Banks. I take no responsibility for what happens to your free time.
 
 ## License
 
