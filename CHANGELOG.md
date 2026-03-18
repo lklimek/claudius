@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.4.4] - 2026-03-18
+
+### Changed
+
+- `ci-dance` skill: full rewrite to production quality — imperative instructions, explicit pipeline loop (push → ci-loop → request reviews → wait → check-pr-comments → fix → repeat), prerequisites, exit conditions, final report, `allowed-tools` frontmatter, no-confirmation policy, fixed typo (`check-ci-comments` → `check-pr-comments`), corrected duplicate step numbering
+
 ## [3.4.3] - 2026-03-17
 
 ### Changed
