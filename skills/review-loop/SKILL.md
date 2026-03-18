@@ -17,13 +17,15 @@ Autonomous loop for addressing peer review feedback on a pull request. Repeats u
 
 - A pull request already exists on GitHub
 - Changes are pushed to the remote branch
-- The reviewer is specified (default: `copilot`)
+- The reviewer is specified (default: `@copilot`)
 
 ## Loop Steps
 
 ### 1. Request review
 
 Request review from the specified reviewer. See the **github** skill (`PR Review Comments > Requesting reviewers` section) for the wrapper script.
+
+> **Note:** `@copilot` reviewer syntax requires `gh` ≥ 2.88.0. If requesting review fails, check `gh --version` and escalate to the user if upgrade is needed.
 
 ### 2. Wait for review completion
 

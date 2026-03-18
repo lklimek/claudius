@@ -29,6 +29,11 @@ fi
 
 # GitHub usernames: alphanumeric and hyphens, 1-39 chars, no leading/trailing hyphen
 # Also allow [bot] suffix for app accounts (e.g. "dependabot[bot]")
+# Also allow @copilot (virtual reviewer, requires gh >= 2.88.0)
+if [[ "$reviewer" == "@copilot" ]]; then
+  gh pr edit "${owner_repo}#${pr_number}" --add-reviewer @copilot
+  exit $?
+fi
 if ! [[ "$reviewer" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\[bot\])?$ ]]; then
   echo "Error: invalid reviewer format" >&2
   exit 1
@@ -45,5 +50,7 @@ run_gh() {
   fi
 }
 
+# NOTE: For @copilot reviews, use `gh pr edit --add-reviewer @copilot` instead
+# (requires gh >= 2.88.0). The REST API does not support virtual reviewers.
 run_gh api "repos/${owner}/${repo}/pulls/${pr_number}/requested_reviewers" \
   --method POST -f "reviewers[]=${reviewer}"

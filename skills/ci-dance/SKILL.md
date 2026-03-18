@@ -31,9 +31,11 @@ Invoke `/ci-loop` to monitor CI, diagnose failures, apply fixes, and push until 
 After CI is green, request reviews and label the PR. Skip gracefully on any errors (reviewer not available, label doesn't exist).
 
 ```bash
-gh pr edit --add-reviewer copilot-pull-request-reviewer || true
+gh pr edit --add-reviewer @copilot || true
 gh pr edit --add-label claudius-review || true
 ```
+
+> **Note:** `@copilot` reviewer syntax requires `gh` ≥ 2.88.0. If this fails, check `gh --version` and escalate to the user if upgrade is needed.
 
 ### 4. Wait for Reviews
 
