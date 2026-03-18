@@ -10,9 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 - Added ERR trap to all 7 `gh-*.sh` wrapper scripts for diagnosable failure messages with file and line context
 - Documented sandbox requirement (`dangerouslyDisableSandbox: true`) for thread resolution in `check-pr-comments` step 8
-- `@copilot` reviewer syntax in `ci-dance` and `review-loop` (requires `gh` ≥ 2.88.0), with version escalation notes
-- `gh-request-reviewer.sh` fast-path for `@copilot` via `gh pr edit` (REST API doesn't support virtual reviewers)
 - Safety rule: never fork repositories on access denied — use `ghsudo` or ask user (`git-and-github` skill + `gh-cli-fallback.md`)
+
+### Changed
+
+- `gh-request-reviewer.sh` rewritten: uses `gh pr edit --add-reviewer` for all reviewer types (users, bots, `@copilot`), supports multiple reviewers, removed REST API and ghsudo wrapper
+- `@copilot` reviewer syntax and `gh` ≥ 2.88.0 requirement centralized in `git-and-github` skill (§ Requesting Reviewers)
+- `ci-dance` and `review-loop` reference `git-and-github` instead of inline version notes
+- `review-loop` now requires `git-and-github` skill in prerequisites
 
 ## [3.6.0] - 2026-03-18
 

@@ -119,6 +119,16 @@ Use `Explore` for read-only extraction (has MCP tools, no Edit/Write). Use `gene
 - Use HEREDOCs (`<<'EOF'`) for multi-line bodies
 - When using `gh api` (read-only only), prefer `--jq` over `| jq` -- `--jq` is processed internally by `gh`, avoiding shell expansion issues (`!` triggers history expansion)
 
+## Requesting Reviewers
+
+Use `gh-request-reviewer.sh` for all reviewer requests — supports multiple reviewers and `@copilot`:
+
+```bash
+gh-request-reviewer.sh <owner/repo> <pr_number> <reviewer> [reviewer ...]
+```
+
+`@copilot` reviewer syntax requires `gh` ≥ 2.88.0. If requesting review fails, check `gh --version` and escalate to the user if upgrade is needed.
+
 ## Elevated Permissions (ghsudo) -- Optional Fallback
 
 If a `gh` or `git` command fails with 403/404 or "Resource not accessible", use [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) to retry with elevated permissions. **Never fork the repository as a workaround** -- forking creates a separate repo and breaks push/PR workflows. See [gh-cli-fallback.md](references/gh-cli-fallback.md) for full usage and exit codes.

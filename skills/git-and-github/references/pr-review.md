@@ -95,7 +95,7 @@ gh-fetch-reviews.sh <owner/repo> <pr>
 gh-post-review.sh <owner/repo> <pr> <json_file>
   -> Posts draft review. Input: {commit_id, body, comments: [{path, line, side, body}]}
 
-gh-request-reviewer.sh <owner/repo> <pr> <reviewer>
+gh-request-reviewer.sh <owner/repo> <pr> <reviewer> [reviewer ...]
 
 gh-list-review-threads.sh <owner/repo> <pr>
   -> {id, isResolved, comments: [{databaseId, path, body}]}

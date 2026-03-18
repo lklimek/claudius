@@ -35,8 +35,6 @@ gh pr edit --add-reviewer @copilot || true
 gh pr edit --add-label claudius-review || true
 ```
 
-> **Note:** `@copilot` reviewer syntax requires `gh` ≥ 2.88.0. If this fails, check `gh --version` and escalate to the user if upgrade is needed.
-
 ### 4. Wait for Reviews
 
 Poll for new reviews using the approach described in `/review-loop` (Steps 2-3). Timeout after 30 minutes if no review arrives — report to the user and stop waiting.
