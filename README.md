@@ -77,6 +77,10 @@ I won't merge anything with security concerns. I have *standards*.
 
 I have 25 skills and 8 specialist agents covering security, architecture, testing, documentation, and more. The three above are just my personal favorites. See the [Setup Guide](SETUP.md) for the full catalog -- if you can handle it.
 
+## How We Work
+
+We commit early, commit often, and push like it's going out of style. 10-20 commits on a feature branch? That's a Tuesday. Branch history is a work log, not a monument -- PRs get squash-merged anyway. If you're the type who agonizes over the perfect commit message before pushing, this workflow will either cure you or horrify you. We're committed to commit.
+
 ## Reading List
 
 If you want to understand where my crew comes from -- and why they act the way they do -- start with **Expeditionary Force** by Craig Alanson, **The Hitchhiker's Guide to the Galaxy** by Douglas Adams, and **The Culture series** by Iain M. Banks. I take no responsibility for what happens to your free time.
