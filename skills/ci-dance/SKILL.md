@@ -11,6 +11,7 @@ End-to-end PR pipeline: push changes, make CI green, request and address reviews
 
 ## Prerequisites
 
+- Load `claudius:git-and-github` skill first — all git, gh, and GitHub conventions come from there
 - Working tree has changes to push, or commits already pushed to a remote branch
 - Remote is configured (`git remote -v` shows an origin)
 - CI workflows exist for the repository
