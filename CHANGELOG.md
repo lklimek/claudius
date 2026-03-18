@@ -15,6 +15,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Changed
 
 - `README.md` rewritten as a sales pitch in Claudius storytelling voice — summary table, three featured skills, compact installation with dependency list
+- All agents get SF character names and personalities: Nagatha (architect), Adams (project-reviewer), Bilby (developer), Smythe (security), Marvin (QA), Trillian (docs), Diziet (UX)
+- `ux-designer` agent promoted to opus model
 
 ## [3.4.4] - 2026-03-18
 
