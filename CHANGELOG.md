@@ -4,11 +4,17 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
-## [3.4.5] - 2026-03-18
+## [3.5.0] - 2026-03-18
+
+### Added
+
+- `ci-dance` skill: end-to-end PR pipeline — push → CI green → review → fix comments → repeat until approved or timeout
+- `push` skill: commit, push, and create/update PR in one command
+- `SETUP.md` — detailed setup guide (agents, MCP, ghsudo, permissions, skill catalog, eval data)
 
 ### Changed
 
-- Split documentation into `README.md` (sales pitch) and `SETUP.md` (detailed manual) -- README focuses on featured skills and installation, SETUP.md contains full agent catalog, skill catalog, GitHub MCP setup, ghsudo, permissions, and eval data
+- `README.md` rewritten as a sales pitch in Claudius storytelling voice — summary table, three featured skills, compact installation with dependency list
 
 ## [3.4.4] - 2026-03-18
 
