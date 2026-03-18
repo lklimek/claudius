@@ -84,8 +84,9 @@ Before creating, search existing issues (open + closed) and PRs for duplicates. 
 5. **Never skip hooks** (`--no-verify`) unless explicitly requested
 6. **Check for `.env`, credentials, or secret files** before staging -- warn if found
 7. **Check for PR/issue templates** before creating -- use them if they exist
-8. **Avoid `gh api`** -- prefer MCP tools or high-level `gh` subcommands. Use `gh api` only for read-only queries when no subcommand or MCP tool exists. Never use `gh api` for write operations. Exception: `gh api graphql` for mutations with no MCP/CLI equivalent (e.g., thread resolution) — these require `dangerouslyDisableSandbox: true` on the Bash tool call.
+8. **Avoid `gh api`** -- prefer MCP tools or high-level `gh` subcommands. Use `gh api` only for read-only queries when no subcommand or MCP tool exists. Never use `gh api` for write operations. Exception: `gh api graphql` for mutations with no MCP/CLI equivalent (e.g., thread resolution).
 9. **Never fork repositories** -- on access denied (403/404), use `ghsudo` to elevate permissions or ask the user. Forking creates a separate repo and breaks the workflow. This applies to both `gh repo fork` and `fork_repository` MCP tool.
+10. **Sandbox and `gh`/`ghsudo` CLI** -- all `gh` and `ghsudo` commands make network calls and require `dangerouslyDisableSandbox: true` on the Bash tool call. Without it, the sandbox blocks network access and commands fail silently or with cryptic errors. If `gh` fails unexpectedly, check sandbox mode first. MCP tools (`mcp__plugin_claudius_github__*`) are not affected — they bypass the sandbox.
 
 ## Context Management — Large MCP Responses
 
