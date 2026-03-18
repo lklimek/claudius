@@ -31,8 +31,10 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
    Batch small tasks so each agent gets ≥100 lines of work — but respect specialization boundaries (don't merge frontend with backend, security with docs, or unrelated domains).
 
 3. **TDD: Tests** (per task) → `qa-engineer` + `developer-bilby`
-   Write tests from requirements and docs *before* implementation. Verify they fail (no implementation yet).
+   Write test cases for each task. Tests must be derived from requirements and documentation, not from implementation.
    Tests encode expected behavior — they are the executable spec.
+   This phase MUST be completed before moving to implementation.
+   Tests should fail at the start of implementation.
 
 4. **Implementation** (per task) → `developer-bilby`
    Build env → implement until tests pass → self-review → iterate.
