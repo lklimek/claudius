@@ -74,15 +74,22 @@ claude --plugin-dir /home/ubuntu/git/claudius   # local testing
 claude plugin validate .                         # validate manifest
 ```
 
+## Git Workflow
+
+Commit early, commit often, push frequently. 10-20 commits on a feature branch is normal — branch history is a work log, not a monument. PRs are squash-merged, so individual commit polish doesn't matter.
+
+- **Commit freely** — don't batch unrelated changes, don't agonize over message perfection
+- **Push after every logical step** — keeps remote in sync, enables worktree agents
+- **Never amend, never force-push** — new commits only
+- **Version bump + changelog once per PR**, not per commit — do it when the work is done
+
 ## Versioning
 
-Bump version in `plugin.json` before each commit. Follow [SemVer 2](https://semver.org/).
+Follow [SemVer 2](https://semver.org/). Bump version in `plugin.json` and update `CHANGELOG.md` ([Keep a Changelog](https://keepachangelog.com/) format) once before finalizing the PR.
 
 - **Major** (x.0.0): breaking changes to agent/skill interfaces, removed components, incompatible frontmatter changes
 - **Minor** (0.x.0): new agents/skills, new frontmatter fields, significant behavior changes
 - **Patch** (0.0.x): bug fixes, doc corrections, minor wording changes
-
-Update `CHANGELOG.md` with every version bump. Follow [Keep a Changelog](https://keepachangelog.com/) format.
 
 ## Required Skills (plugin-dev)
 
