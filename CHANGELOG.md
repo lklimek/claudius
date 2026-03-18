@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.6.1] - 2026-03-18
+
+### Fixed
+
+- Added ERR trap to all 7 `gh-*.sh` wrapper scripts for diagnosable failure messages with file and line context
+- Documented sandbox requirement (`dangerouslyDisableSandbox: true`) for thread resolution in `check-pr-comments` step 8
+
 ## [3.6.0] - 2026-03-18
 
 ### Changed

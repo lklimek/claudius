@@ -5,6 +5,7 @@
 #
 # Output: the base SHA (single line)
 set -euo pipefail
+trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
 if [[ $# -ne 2 ]]; then
   echo "Usage: $0 <owner/repo> <pr_number>" >&2

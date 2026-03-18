@@ -148,6 +148,8 @@ See `git-and-github` skill § Context Management for the subagent delegation pat
 
 **Always ask the user for confirmation before resolving any threads.**
 
+**Note:** Thread resolution uses `gh api graphql` via the wrapper script, which requires `dangerouslyDisableSandbox: true` on the Bash tool call. The orchestrator must use sandbox-disabled mode for this step.
+
 After the summary (or report) is presented and the user approves, resolve addressed review threads using the wrapper script:
 
 ```bash

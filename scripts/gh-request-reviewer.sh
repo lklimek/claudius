@@ -3,6 +3,7 @@
 #
 # Usage: gh-request-reviewer.sh <owner/repo> <pr_number> <reviewer>
 set -euo pipefail
+trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
 if [[ $# -ne 3 ]]; then
   echo "Usage: $0 <owner/repo> <pr_number> <reviewer>" >&2

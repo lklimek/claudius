@@ -5,6 +5,7 @@
 #
 # Output: JSON objects with id, path, line, original_line, body, user, in_reply_to_id, html_url
 set -euo pipefail
+trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
 if [[ $# -ne 2 ]]; then
   echo "Usage: $0 <owner/repo> <pr_number>" >&2

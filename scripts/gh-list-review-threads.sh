@@ -5,6 +5,7 @@
 #
 # Output: JSON with thread id, isResolved, and first comment's databaseId, path, body
 set -euo pipefail
+trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
 if [[ $# -ne 2 ]]; then
   echo "Usage: $0 <owner/repo> <pr_number>" >&2
