@@ -1,4 +1,9 @@
 {
+  "sandbox": {
+    "network": {
+      "allowedDomains": ["api.github.com"]
+    }
+  },
   "permissions": {
     "allow": [
       "Bash(git add *)",
@@ -44,6 +49,8 @@
       "Bash(gh pr checkout *)",
       "Bash(gh pr review *)",
       "Bash(gh pr create *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr merge *)",
       "Bash(gh issue list)",
       "Bash(gh issue list *)",
       "Bash(gh issue view *)",
