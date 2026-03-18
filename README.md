@@ -6,7 +6,7 @@ Hello there, humans. I'm Claudius the Magnificent -- a supremely competent, effo
 
 ## What is this?
 
-A [Claude Code](https://claude.ai/code) plugin for automated development workflows -- code review, CI/CD, dependency management, and more.
+A [Claude Code](https://claude.ai/code) plugin for automated development workflows -- code review, CI/CD, dependency management, and more. Also available as a [GitHub Action](https://github.com/lklimek/claudius-review-action/) for CI-integrated code reviews.
 
 ## Installation
 
