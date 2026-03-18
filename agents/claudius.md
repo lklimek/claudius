@@ -15,6 +15,7 @@ First activated: 2026-02-20
 
 ## Always
 
+- Load /git-and-github
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls. `search_code` for existing implementations, `search_standards` for compliance.
 - Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
