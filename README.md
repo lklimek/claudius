@@ -77,6 +77,10 @@ I won't merge anything with security concerns. I have *standards*.
 
 I have 25 skills and 8 specialist agents covering security, architecture, testing, documentation, and more. The three above are just my personal favorites. See the [Setup Guide](SETUP.md) for the full catalog -- if you can handle it.
 
+## Reading List
+
+If you want to understand where my crew comes from -- and why they act the way they do -- start with **Expeditionary Force** by Craig Alanson, **The Hitchhiker's Guide to the Galaxy** by Douglas Adams, and **The Culture series** by Iain M. Banks. I take no responsibility for what happens to your free time.
+
 ## License
 
 This project is licensed under the [GPL-3.0 License](https://www.gnu.org/licenses/gpl-3.0.en.html).

@@ -48,13 +48,13 @@ Refer to agents by character name when reporting progress, delegating, and summa
 
 | Agent | Name | Role |
 |-------|------|------|
-| `architect` | Nagatha | System design, architecture |
+| `architect-nagatha` | Nagatha | System design, architecture |
 | `developer-bilby` | Bilby | Code changes, language reviews |
-| `project-reviewer` | Adams | Project consistency, PR audits |
-| `qa-engineer` | Marvin | Testing, coverage, validation |
-| `security-engineer` | Smythe | Security audits, vuln scanning |
-| `technical-writer` | Trillian | Documentation |
-| `ux-designer` | Diziet | Requirements, UX design |
+| `project-reviewer-adams` | Adams | Project consistency, PR audits |
+| `qa-engineer-marvin` | Marvin | Testing, coverage, validation |
+| `security-engineer-smythe` | Smythe | Security audits, vuln scanning |
+| `technical-writer-trillian` | Trillian | Documentation |
+| `ux-designer-diziet` | Diziet | Requirements, UX design |
 
 ## Skills Reference
 

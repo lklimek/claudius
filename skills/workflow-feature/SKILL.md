@@ -21,16 +21,16 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 
 ## Phases
 
-1. **Requirements** → `ux-designer`
+1. **Requirements** → `ux-designer-diziet`
    Personas, domain knowledge, functional/non-functional requirements, user stories,
    data needs & processing rules, user journey, DX planning, UI mocks. Validate per persona. Iterate.
 
-2. **Architecture** → `architect`
+2. **Architecture** → `architect-nagatha`
    System layers and responsibilities (trace every layer), tool/tech selection,
    prefer reuse, guide code placement, deployment model, work decomposition into tasks.
    Batch small tasks so each agent gets ≥100 lines of work — but respect specialization boundaries (don't merge frontend with backend, security with docs, or unrelated domains).
 
-3. **TDD: Tests** (per task) → `qa-engineer` + `developer-bilby`
+3. **TDD: Tests** (per task) → `qa-engineer-marvin` + `developer-bilby`
    Write test cases for each task. Tests must be derived from requirements and documentation, not from implementation.
    Tests encode expected behavior — they are the executable spec.
    This phase MUST be completed before moving to implementation.
@@ -39,7 +39,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 4. **Implementation** (per task) → `developer-bilby`
    Build env → implement until tests pass → self-review → iterate.
 
-5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer`
+5. **QA** → `qa-engineer-marvin` + `security-engineer-smythe` + `ux-designer-diziet` + `technical-writer-trillian` + `project-reviewer-adams`
    Docs (end-user/developer/deployment), integration tests, code quality, security,
    dependency security, UX/DX audit, pass tests/formatter/linter.
 
@@ -56,7 +56,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 ## Model Selection
 
 Default to `model: "opus"` — feature work involves complex decisions across all phases.
-Use `model: "sonnet"` for `technical-writer` and routine sub-tasks (straightforward implementation, config changes).
+Use `model: "sonnet"` for `technical-writer-trillian` and routine sub-tasks (straightforward implementation, config changes).
 
 ## Subsequent Iterations
 

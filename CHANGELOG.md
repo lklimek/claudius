@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.6.0] - 2026-03-18
+
+### Changed
+
+- Agents renamed to role-name format: `architect` → `architect-nagatha`, `project-reviewer` → `project-reviewer-adams`, `qa-engineer` → `qa-engineer-marvin`, `security-engineer` → `security-engineer-smythe`, `technical-writer` → `technical-writer-trillian`, `ux-designer` → `ux-designer-diziet`
+- Character names removed from agent `description` fields (now part of agent ID)
+- SETUP.md agent table: dropped Character column (names now in agent IDs)
+- All cross-references updated across agents, skills, and docs
+
+### Added
+
+- README.md: Reading List section with SF source material
+
 ## [3.5.0] - 2026-03-18
 
 ### Added
@@ -15,8 +28,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Changed
 
 - `README.md` rewritten as a sales pitch in Claudius storytelling voice — summary table, three featured skills, compact installation with dependency list
-- All agents get SF character names and personalities: Nagatha (architect), Adams (project-reviewer), Bilby (developer), Smythe (security), Marvin (QA), Trillian (docs), Diziet (UX)
-- `ux-designer` agent promoted to opus model
+- All agents get SF character names and personalities: Nagatha (architect-nagatha), Adams (project-reviewer-adams), Bilby (developer-bilby), Smythe (security-engineer-smythe), Marvin (qa-engineer-marvin), Trillian (technical-writer-trillian), Diziet (ux-designer-diziet)
+- Agents renamed to role-name format (e.g., `architect` → `architect-nagatha`); character names now part of agent ID
+- `ux-designer-diziet` agent promoted to opus model
 
 ## [3.4.4] - 2026-03-18
 

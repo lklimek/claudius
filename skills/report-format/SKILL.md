@@ -55,15 +55,15 @@ When writing findings to a file, ALWAYS use the Write tool — never use Bash co
 
 | Prefix | Category | Used by |
 |--------|----------|---------|
-| `SEC-` | security | security-engineer |
-| `QA-` | code_quality | qa-engineer |
-| `PROJ-` | project | project-reviewer |
+| `SEC-` | security | security-engineer-smythe |
+| `QA-` | code_quality | qa-engineer-marvin |
+| `PROJ-` | project | project-reviewer-adams |
 | `CODE-` | code_quality | developer-bilby (generic) |
 | `RUST-` | code_quality | developer-bilby (Rust) |
 | `PY-` | code_quality | developer-bilby (Python) |
 | `GO-` | code_quality | developer-bilby (Go) |
 | `FE-` | code_quality | developer-bilby (frontend) |
-| `DOC-` | documentation | technical-writer |
+| `DOC-` | documentation | technical-writer-trillian |
 | `CMT-` | pr_comments | check-pr-comments |
 | `DEP-` | dependencies | review-dependency |
 

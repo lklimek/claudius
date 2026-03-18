@@ -24,7 +24,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 2. **Architecture** — select tools/technologies, guide code placement, ensure maintainability.
    Batch small tasks so each agent gets ≥100 lines of work within same specialization.
 
-3. **TDD: Tests** (per task) → `qa-engineer` + `developer-bilby`
+3. **TDD: Tests** (per task) → `qa-engineer-marvin` + `developer-bilby`
    Write test cases for each task. Tests must be derived from requirements and documentation, not from implementation.
    Tests encode expected behavior — they are the executable spec.
    This phase MUST be completed before moving to implementation.
@@ -33,7 +33,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 4. **Implementation** (per task) → `developer-bilby`
    Build env → implement until tests pass → self-review → iterate.
 
-5. **QA** → `qa-engineer` + `security-engineer` + `ux-designer` + `technical-writer` + `project-reviewer`
+5. **QA** → `qa-engineer-marvin` + `security-engineer-smythe` + `ux-designer-diziet` + `technical-writer-trillian` + `project-reviewer-adams`
    Docs, integration tests, code quality, security, dependency security, UX/DX audit,
    pass tests/formatter/linter.
 
@@ -50,7 +50,7 @@ These are MCP tools on the MemCan server. Use them if available. Skip silently i
 ## Model Selection
 
 Agent frontmatter defaults apply. Use `model: "sonnet"` to override for:
-- `technical-writer` — documentation is sonnet's strength
+- `technical-writer-trillian` — documentation is sonnet's strength
 - Escalate stuck agents to `model: "opus"` for complex debugging
 
 ## Subsequent Iterations

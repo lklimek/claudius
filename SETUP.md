@@ -61,16 +61,16 @@ The `memcan` plugin requires Docker Compose for Qdrant (vector DB) and optionall
 
 ## Agents
 
-| Agent | Character | Description |
-|-------|-----------|-------------|
-| `claudius` | **Skippy** *(ExForce)* | Team coordinator. Magnificently arrogant, always right. |
-| `architect` | **Nagatha** *(ExForce)* | System architecture, module boundaries, API design, dependency review |
-| `project-reviewer` | **Adams** *(ExForce)* | Project consistency, cross-artifact validation, convention adherence |
-| `developer-bilby` | **Bilby** *(ExForce)* | Code changes and reviews in any language |
-| `qa-engineer` | **Marvin** *(HHGTTG)* | Test plans, automated tests, edge case identification, coverage analysis |
-| `security-engineer` | **Smythe** *(ExForce)* | OWASP Top 10, dependency scanning, secret detection, secure coding review |
-| `technical-writer` | **Trillian** *(HHGTTG)* | README, API docs, tutorials, guides, changelogs, runbooks |
-| `ux-designer` | **Diziet** *(Culture)* | Requirements, domain analysis, UI flows, interaction patterns, accessibility |
+| Agent | Description |
+|-------|-------------|
+| `claudius` | Team coordinator. Magnificently arrogant, always right. |
+| `architect-nagatha` | System architecture, module boundaries, API design, dependency review |
+| `project-reviewer-adams` | Project consistency, cross-artifact validation, convention adherence |
+| `developer-bilby` | Code changes and reviews in any language |
+| `qa-engineer-marvin` | Test plans, automated tests, edge case identification, coverage analysis |
+| `security-engineer-smythe` | OWASP Top 10, dependency scanning, secret detection, secure coding review |
+| `technical-writer-trillian` | README, API docs, tutorials, guides, changelogs, runbooks |
+| `ux-designer-diziet` | Requirements, domain analysis, UI flows, interaction patterns, accessibility |
 
 ### Optional Plugin Dependencies
 
