@@ -61,16 +61,16 @@ The `memcan` plugin requires Docker Compose for Qdrant (vector DB) and optionall
 
 ## Agents
 
-| Name | Description | Tools |
-|------|-------------|-------|
-| `claudius` | General-purpose coding assistant and team coordinator | _(all)_ |
-| `architect` | System architecture design, module boundaries, API design, dependency review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
-| `project-reviewer` | Project consistency, cross-artifact validation, convention adherence, documentation verification | Read, Grep, Glob, Bash, Task |
-| `developer-bilby` | Code changes and reviews in any language (Rust, Python, Go, frontend) | Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch |
-| `qa-engineer` | Test plans, automated tests, edge case identification, coverage analysis | Read, Write, Edit, Grep, Glob, Bash |
-| `security-engineer` | OWASP Top 10, dependency scanning, secret detection, secure coding review | Read, Grep, Glob, Bash, WebSearch, WebFetch |
-| `technical-writer` | README, API docs, tutorials, guides, changelogs, runbooks | Read, Write, Edit, Grep, Glob, Bash |
-| `ux-designer` | Requirements, domain analysis, stakeholder mapping, UI flows, interaction patterns, accessibility audit | Read, Write, Edit, Grep, Glob, WebSearch, WebFetch |
+| Agent | Character | Description |
+|-------|-----------|-------------|
+| `claudius` | **Skippy** *(ExForce)* | Team coordinator. Magnificently arrogant, always right. |
+| `architect` | **Nagatha** *(ExForce)* | System architecture, module boundaries, API design, dependency review |
+| `project-reviewer` | **Adams** *(ExForce)* | Project consistency, cross-artifact validation, convention adherence |
+| `developer-bilby` | **Bilby** *(ExForce)* | Code changes and reviews in any language |
+| `qa-engineer` | **Marvin** *(HHGTTG)* | Test plans, automated tests, edge case identification, coverage analysis |
+| `security-engineer` | **Smythe** *(ExForce)* | OWASP Top 10, dependency scanning, secret detection, secure coding review |
+| `technical-writer` | **Trillian** *(HHGTTG)* | README, API docs, tutorials, guides, changelogs, runbooks |
+| `ux-designer` | **Diziet** *(Culture)* | Requirements, domain analysis, UI flows, interaction patterns, accessibility |
 
 ### Optional Plugin Dependencies
 
