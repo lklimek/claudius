@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.6.2] - 2026-03-18
+
+### Fixed
+
+- Added ERR trap to all 7 `gh-*.sh` wrapper scripts for diagnosable failure messages with file and line context
+- Safety rule #10: `gh`/`ghsudo` sandbox guidance — recommend `sandbox.network.allowedDomains: ["api.github.com"]` over `dangerouslyDisableSandbox`. Troubleshooting entry added to `gh-cli-fallback.md`
+- Safety rule: never fork repositories on access denied — use `ghsudo` or ask user (`git-and-github` skill + `gh-cli-fallback.md`)
+
+### Changed
+
+- `gh-request-reviewer.sh` rewritten: uses `gh pr edit --add-reviewer` for all reviewer types (users, bots, `@copilot`), supports multiple reviewers, removed REST API and ghsudo wrapper
+- `@copilot` reviewer syntax and `gh` ≥ 2.88.0 requirement centralized in `git-and-github` skill (§ Requesting Reviewers)
+- `ci-dance` and `review-loop` reference `git-and-github` instead of inline version notes
+- `review-loop` now requires `git-and-github` skill in prerequisites
+
 ## [3.6.0] - 2026-03-18
 
 ### Changed

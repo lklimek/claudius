@@ -84,7 +84,9 @@ Before creating, search existing issues (open + closed) and PRs for duplicates. 
 5. **Never skip hooks** (`--no-verify`) unless explicitly requested
 6. **Check for `.env`, credentials, or secret files** before staging -- warn if found
 7. **Check for PR/issue templates** before creating -- use them if they exist
-8. **Avoid `gh api`** -- prefer MCP tools or high-level `gh` subcommands. Use `gh api` only for read-only queries when no subcommand or MCP tool exists. Never use `gh api` for write operations.
+8. **Avoid `gh api`** -- prefer MCP tools or high-level `gh` subcommands. Use `gh api` only for read-only queries when no subcommand or MCP tool exists. Never use `gh api` for write operations. Exception: `gh api graphql` for mutations with no MCP/CLI equivalent (e.g., thread resolution).
+9. **Never fork repositories** -- on access denied (403/404), use `ghsudo` to elevate permissions or ask the user. Forking creates a separate repo and breaks the workflow. This applies to both `gh repo fork` and `fork_repository` MCP tool.
+10. **Sandbox and `gh`/`ghsudo` CLI** -- these commands need network access to `api.github.com`. The recommended fix is adding `"api.github.com"` to `sandbox.network.allowedDomains` in `settings.json` — this lets `gh` work inside the sandbox without disabling it. If that's not configured and `gh` fails with network errors, use `dangerouslyDisableSandbox: true` on the Bash tool call as a fallback. MCP tools (`mcp__plugin_claudius_github__*`) bypass the sandbox and are unaffected.
 
 ## Context Management — Large MCP Responses
 
@@ -118,6 +120,16 @@ Use `Explore` for read-only extraction (has MCP tools, no Edit/Write). Use `gene
 - Use HEREDOCs (`<<'EOF'`) for multi-line bodies
 - When using `gh api` (read-only only), prefer `--jq` over `| jq` -- `--jq` is processed internally by `gh`, avoiding shell expansion issues (`!` triggers history expansion)
 
+## Requesting Reviewers
+
+Use `gh-request-reviewer.sh` for all reviewer requests — supports multiple reviewers and `@copilot`:
+
+```bash
+gh-request-reviewer.sh <owner/repo> <pr_number> <reviewer> [reviewer ...]
+```
+
+`@copilot` reviewer syntax requires `gh` ≥ 2.88.0. If requesting review fails, check `gh --version` and escalate to the user if upgrade is needed.
+
 ## Elevated Permissions (ghsudo) -- Optional Fallback
 
-If a `gh` or `git` command fails with 403/404 or "Resource not accessible", use [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) to retry with elevated permissions. See [gh-cli-fallback.md](references/gh-cli-fallback.md) for full usage and exit codes.
+If a `gh` or `git` command fails with 403/404 or "Resource not accessible", use [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) to retry with elevated permissions. **Never fork the repository as a workaround** -- forking creates a separate repo and breaks push/PR workflows. See [gh-cli-fallback.md](references/gh-cli-fallback.md) for full usage and exit codes.

@@ -15,15 +15,16 @@ Autonomous loop for addressing peer review feedback on a pull request. Repeats u
 
 ## Prerequisites
 
+- Load `claudius:git-and-github` skill first — all git, gh, and GitHub conventions come from there
 - A pull request already exists on GitHub
 - Changes are pushed to the remote branch
-- The reviewer is specified (default: `copilot`)
+- The reviewer is specified (default: `@copilot`)
 
 ## Loop Steps
 
 ### 1. Request review
 
-Request review from the specified reviewer. See the **github** skill (`PR Review Comments > Requesting reviewers` section) for the wrapper script.
+Request review from the specified reviewer. See the `git-and-github` skill (§ Requesting Reviewers) for the wrapper script and `@copilot` requirements.
 
 ### 2. Wait for review completion
 

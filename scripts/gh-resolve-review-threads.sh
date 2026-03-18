@@ -6,6 +6,7 @@
 # Thread IDs are GraphQL node IDs from gh-list-review-threads.sh output.
 # All threads are resolved in a single GraphQL call using aliased mutations.
 set -euo pipefail
+trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <thread_id> [thread_id ...]" >&2

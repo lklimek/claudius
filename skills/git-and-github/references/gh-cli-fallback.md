@@ -69,7 +69,7 @@ git ls-tree HEAD --name-only -r .github/ | grep -i issue_template
 
 ## Elevated Permissions (ghsudo) -- Optional Fallback
 
-If you use a **read-only default token** with `gh`, install [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) for write operations. When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo. GitHub may return 404 instead of 403 for private resources when the token lacks sufficient permissions.
+If you use a **read-only default token** with `gh`, install [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) for write operations. When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo. **Never fork the repository** — forking creates a separate repo and breaks push/PR workflows. GitHub may return 404 instead of 403 for private resources when the token lacks sufficient permissions.
 
 ```bash
 ghsudo <original-command-and-args>
@@ -89,4 +89,5 @@ ghsudo auto-detects the target org from `-R owner/repo` flags or the current rep
 
 ## Troubleshooting
 
+* `gh` fails with network/connection errors -> sandbox is blocking `api.github.com`. Fix: add `"api.github.com"` to `sandbox.network.allowedDomains` in `settings.json`. Fallback: use `dangerouslyDisableSandbox: true` on the Bash tool call.
 * `gh` command fails with "Projects (classic)" GraphQL error -> `gh` version is outdated, upgrade needed.

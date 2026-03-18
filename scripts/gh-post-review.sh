@@ -6,6 +6,7 @@
 # The json_file must contain a JSON object with commit_id, body, and comments array.
 # The script enforces draft mode by stripping any "event" field from the input.
 set -euo pipefail
+trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
 if [[ $# -ne 3 ]]; then
   echo "Usage: $0 <owner/repo> <pr_number> <json_file>" >&2
