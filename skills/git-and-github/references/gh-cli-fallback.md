@@ -89,4 +89,5 @@ ghsudo auto-detects the target org from `-R owner/repo` flags or the current rep
 
 ## Troubleshooting
 
+* `gh` fails with network/connection errors -> sandbox is blocking `api.github.com`. Fix: add `"api.github.com"` to `sandbox.network.allowedDomains` in `settings.json`. Fallback: use `dangerouslyDisableSandbox: true` on the Bash tool call.
 * `gh` command fails with "Projects (classic)" GraphQL error -> `gh` version is outdated, upgrade needed.

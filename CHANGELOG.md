@@ -9,7 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Fixed
 
 - Added ERR trap to all 7 `gh-*.sh` wrapper scripts for diagnosable failure messages with file and line context
-- Safety rule #10: all `gh`/`ghsudo` CLI commands require `dangerouslyDisableSandbox: true` (network access); MCP tools unaffected. `check-pr-comments` references it
+- Safety rule #10: `gh`/`ghsudo` sandbox guidance — recommend `sandbox.network.allowedDomains: ["api.github.com"]` over `dangerouslyDisableSandbox`. Troubleshooting entry added to `gh-cli-fallback.md`
 - Safety rule: never fork repositories on access denied — use `ghsudo` or ask user (`git-and-github` skill + `gh-cli-fallback.md`)
 
 ### Changed
