@@ -9,7 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Fixed
 
 - Added ERR trap to all 7 `gh-*.sh` wrapper scripts for diagnosable failure messages with file and line context
-- Documented sandbox requirement (`dangerouslyDisableSandbox: true`) for thread resolution in `check-pr-comments` step 8
+- `dangerouslyDisableSandbox: true` requirement for `gh api graphql` centralized in `git-and-github` safety rule #8; `check-pr-comments` references it
 - Safety rule: never fork repositories on access denied — use `ghsudo` or ask user (`git-and-github` skill + `gh-cli-fallback.md`)
 
 ### Changed
