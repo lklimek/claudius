@@ -37,7 +37,7 @@ query="mutation {"
 i=0
 for id in "$@"; do
   query+=" t${i}: resolveReviewThread(input: {threadId: \"${id}\"}) { thread { isResolved } }"
-  ((i++))
+  ((i++)) || true
 done
 query+=" }"
 
