@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.6.4] - 2026-03-19
+
+### Fixed
+
+- `gh-resolve-review-threads.sh`: `((i++))` evaluated to false (exit code 1) when `i=0`, causing `set -e` to kill the script on the first thread. Changed to `((i++)) || true`.
+
+### Added
+
+- `git-and-github` skill: guidance on formatting multi-line PR bodies with GitHub MCP tools — use real newlines, not `\n` escape sequences.
+
 ## [3.6.3] - 2026-03-19
 
 ### Changed

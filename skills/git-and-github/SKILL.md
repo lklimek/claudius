@@ -120,6 +120,10 @@ Use `Explore` for read-only extraction (has MCP tools, no Edit/Write). Use `gene
 - Use HEREDOCs (`<<'EOF'`) for multi-line bodies
 - When using `gh api` (read-only only), prefer `--jq` over `| jq` -- `--jq` is processed internally by `gh`, avoiding shell expansion issues (`!` triggers history expansion)
 
+### GitHub MCP PR Body Formatting
+
+When passing a `body` parameter to `create_pull_request` or `update_pull_request` MCP tools, use actual multi-line strings — NOT `\n` escape sequences on a single line. MCP tools pass the string directly to the API; `\n` renders as literal backslash-n on GitHub instead of a newline.
+
 ## Requesting Reviewers
 
 Use `gh-request-reviewer.sh` for all reviewer requests — supports multiple reviewers and `@copilot`:
