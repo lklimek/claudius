@@ -14,6 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 - `git-and-github` skill: guidance on formatting multi-line PR bodies with GitHub MCP tools — use real newlines, not `\n` escape sequences.
 
+
 ## [3.6.3] - 2026-03-19
 
 ### Changed
