@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.6.3] - 2026-03-19
+
+### Changed
+
+- Agent voice directives: replaced generic "Communication Style" sections with character-specific Voice rules ensuring each agent writes in their personality across all output (PR comments, review findings, reports, GitHub comments)
+- Adams feedback guidelines rewritten to match his no-nonsense character while preserving conventional comment prefixes
+
 ## [3.6.2] - 2026-03-18
 
 ### Fixed
