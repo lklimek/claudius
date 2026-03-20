@@ -120,3 +120,4 @@ On exit (any condition), report:
 - Do not duplicate sub-skill logic — delegate to `/push`, `/ci-loop`, `/check-pr-comments`
 - When sub-skills have confirmation steps, skip them — this skill's invocation is the blanket confirmation
 - Give GitHub ~5 seconds after push before listing new workflow runs
+- **Not for GitHub Actions** — this skill pushes commits that trigger CI, so running it inside a workflow causes concurrency cancellation loops. Use from CLI only.
