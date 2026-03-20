@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - `ci-dance`: 10-min minimum review wait (was 30-min), 15-min max wait
 - `ci-dance`: expanded `allowed-tools` with `gh run *`, review scripts, and MCP tools for full autonomy
 - `ci-dance`: explicit sub-skill confirmation override in unattended mode
+- `ci-dance`: review wait 15–45 min (was 10–15 min), total timeout 120 min (was 60 min) — calibrated from dashpay/dash-evo-tool Claudius review data (median 29 min)
 
 ## [3.6.4] - 2026-03-19
 

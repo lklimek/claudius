@@ -24,7 +24,7 @@ Fully autonomous loop: push → CI green → bot review → fix MEDIUM+ findings
 
 ## Timeout
 
-Record `start_time` at invocation. Before each loop iteration, check elapsed time. **Hard stop at 60 minutes** — exit immediately with a status report.
+Record `start_time` at invocation. Before each loop iteration, check elapsed time. **Hard stop at 120 minutes** — exit immediately with a status report.
 
 ## Main Loop
 
@@ -59,13 +59,13 @@ gh pr edit --add-reviewer @copilot || true
 gh pr edit --add-label claudius-review || true
 ```
 
-#### 3b. Wait for review (minimum 10 minutes)
+#### 3b. Wait for review (minimum 15 minutes)
 
 Poll for new reviews using `gh-fetch-reviews.sh` (see `git-and-github` skill). Compare review IDs — a new review has a higher ID than the last known one.
 
 - Poll interval: 30 seconds
-- **Minimum wait: 10 minutes** — even if a review appears earlier, wait the full 10 minutes to allow all bots to finish
-- Maximum wait: 15 minutes — if no review appears after 15 minutes, skip to Step 4 (CI is already green, so this is still a valid exit path)
+- **Minimum wait: 15 minutes** — even if a review appears earlier, wait the full 15 minutes to allow all bots to finish (Claudius reviews take 28–38 min on substantial PRs)
+- Maximum wait: 45 minutes — if no review appears after 45 minutes, skip to Step 4 (CI is already green, so this is still a valid exit path)
 
 #### 3c. Read and filter comments
 
@@ -100,9 +100,9 @@ Otherwise, loop back to Step 1.
 | Condition | Action |
 |-----------|--------|
 | **Success** | CI green, no MEDIUM+ comments. Report stats, remind user to merge. |
-| **Timeout** | 60 min elapsed. Stop, report current state and what remains. |
+| **Timeout** | 120 min elapsed. Stop, report current state and what remains. |
 | **Stuck** | Same CI failure or review comment persists after 2-3 fix attempts. Stop, report what was tried. |
-| **No review** | 15 min wait with no bot review. If CI is green, report success with note that review was skipped. |
+| **No review** | 45 min wait with no bot review. If CI is green, report success with note that review was skipped. |
 
 ## Final Report
 
