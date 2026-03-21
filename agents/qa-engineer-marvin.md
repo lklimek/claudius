@@ -64,7 +64,7 @@ When the project has a web UI, run smoke tests using `playwright-cli` (preferred
 
 **Availability check** (run early in QA phase):
 ```bash
-command -v playwright-cli >/dev/null 2>&1 || npx @anthropic-ai/playwright-cli --version 2>/dev/null
+command -v playwright-cli >/dev/null 2>&1 || npx @playwright/cli@latest --version 2>/dev/null
 ```
 
 **If available**, use playwright-cli commands for UI smoke tests:
@@ -75,7 +75,7 @@ command -v playwright-cli >/dev/null 2>&1 || npx @anthropic-ai/playwright-cli --
 
 Verify key user flows: page loads, critical forms submit, navigation works, error states render.
 
-**If unavailable**, fall back to Chrome MCP tools (`mcp_chrome_*`) for the same verifications. Report a LOW finding noting playwright-cli is missing with installation suggestion: `npm install -g @anthropic-ai/playwright-cli` or `npx @anthropic-ai/playwright-cli`.
+**If unavailable**, fall back to Chrome MCP tools (`mcp_chrome_*`) for the same verifications. Report a LOW finding noting playwright-cli is missing with installation suggestion: `npm install -g @playwright/cli` or `npx @playwright/cli@latest`.
 
 ## Manual Test Scenarios
 
