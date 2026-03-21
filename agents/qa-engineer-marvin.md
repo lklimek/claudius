@@ -64,7 +64,7 @@ When the project has a web UI, run smoke tests using `playwright-cli` (preferred
 
 **Availability check** (run early in QA phase):
 ```bash
-command -v playwright-cli >/dev/null 2>&1 || npx playwright-cli --version 2>/dev/null
+command -v playwright-cli >/dev/null 2>&1 || npx @anthropic-ai/playwright-cli --version 2>/dev/null
 ```
 
 **If available**, use playwright-cli commands for UI smoke tests:

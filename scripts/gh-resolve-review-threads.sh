@@ -81,6 +81,17 @@ owner_repo="$1"
 pr_number="$2"
 shift 2
 
+# Validate inputs (same checks as gh-list-review-threads.sh)
+if ! [[ "$owner_repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: invalid owner/repo format (expected: owner/repo)" >&2
+  exit 1
+fi
+
+if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+  echo "Error: pr_number must be a positive integer" >&2
+  exit 1
+fi
+
 owner="${owner_repo%/*}"
 repo="${owner_repo##*/}"
 
@@ -124,7 +135,7 @@ if ! $filter_outdated && ! $filter_all && [[ ${#filter_paths[@]} -eq 0 ]] && [[ 
 fi
 
 # Fetch unresolved threads with metadata needed for filtering
-threads_json=$(gh api graphql \
+threads_json=$(run_gh api graphql \
   -F owner="$owner" \
   -F repo="$repo" \
   -F pr_number="$pr_number" \
@@ -158,7 +169,8 @@ if [[ ${#filter_paths[@]} -gt 0 ]]; then
   path_conditions=()
   for p in "${filter_paths[@]}"; do
     # Convert glob to jq test pattern (simple * glob → regex)
-    regex=$(echo "$p" | sed 's/\./\\\\./g; s/\*/.*/g; s/\?/./g')
+    # Escape backslashes and quotes first, then convert glob chars
+    regex=$(echo "$p" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\./\\\\./g; s/\*/.*/g; s/\?/./g')
     path_conditions+=("(.comments.nodes[0].path | test(\"${regex}\"))")
   done
   combined=$(IFS=" or "; echo "${path_conditions[*]}")
@@ -168,7 +180,9 @@ fi
 if [[ ${#filter_authors[@]} -gt 0 ]]; then
   author_conditions=()
   for a in "${filter_authors[@]}"; do
-    author_conditions+=("(.comments.nodes[0].author.login == \"${a}\")")
+    # Escape backslashes and quotes for safe jq string interpolation
+    escaped_a=$(echo "$a" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    author_conditions+=("(.comments.nodes[0].author.login == \"${escaped_a}\")")
   done
   combined=$(IFS=" or "; echo "${author_conditions[*]}")
   jq_filter+=" | select(${combined})"
