@@ -67,13 +67,7 @@ When the project has a web UI, run smoke tests using `playwright-cli` (preferred
 command -v playwright-cli >/dev/null 2>&1 || npx @playwright/cli@latest --version 2>/dev/null
 ```
 
-**If available**, use playwright-cli commands for UI smoke tests:
-- `playwright-cli open <url>` — launch browser and navigate
-- `playwright-cli snapshot` — capture accessibility snapshot of current page
-- `playwright-cli fill <selector> <value>` — fill form fields
-- `playwright-cli click <selector>` — click elements
-
-Verify key user flows: page loads, critical forms submit, navigation works, error states render.
+**If available**, use it for UI smoke tests. Check `playwright-cli --help` for available commands. Verify key user flows: page loads, critical forms submit, navigation works, error states render.
 
 **If unavailable**, fall back to Chrome MCP tools (`mcp_chrome_*`) for the same verifications. Report a LOW finding noting playwright-cli is missing with installation suggestion: `npm install -g @playwright/cli` or `npx @playwright/cli@latest`.
 
