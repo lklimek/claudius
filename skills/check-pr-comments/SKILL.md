@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Use to verify PR review comments are addressed in code. Optionally produces triage-compatible report.
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment, mcp__plugin_claudius_github__add_issue_comment
 ---
 
 # Check PR Comments Workflow
@@ -40,6 +40,10 @@ For every inline comment, read the file at the referenced location and **verify 
 - A comment is only "resolved" if **all** of its sub-items are addressed
 - Verify the fix achieves the intended end-user or developer experience, not just technical correctness
 
+**Classify each comment's author:**
+- **Bot**: username ends with `[bot]` (e.g. `dependabot[bot]`) or the GitHub API returns `type: "Bot"` for the author
+- **Human**: all other authors
+
 ## 4. Present Summary
 
 Present a concise summary directly to the user:
@@ -48,6 +52,7 @@ Present a concise summary directly to the user:
   - **Resolved**: confirm the fix is adequate, or flag remaining concerns if the resolution is technically present but semantically incomplete. State whether you agree the original comment was valid.
   - **Unresolved**: state your recommendation (priority and suggested approach). If you disagree with the reviewer's concern, say so with a brief reason.
 - Lead with unresolved comments, then resolved
+- Include the **author type** (bot/human) and the **planned action** (auto-resolve, reply, etc.) for each comment
 
 This is the default end of the workflow. Steps 5-7 (structured report) are only produced when the user explicitly requests it (e.g. "generate report", "produce report", "with report"). Step 8 (resolve threads) applies to both flows.
 
@@ -106,6 +111,7 @@ Each review comment becomes one finding:
   "description": "What the comment asked for (multi-line OK)",
   "recommendation": "What was done (RESOLVED) or what to do (UNRESOLVED)",
   "reviewer": "github-username",
+  "author_type": "bot | human",
   "comment_id": 12345678,
   "comment_url": "https://github.com/<owner>/<repo>/pull/<number>/files#r<commentId>",
   "thread_id": "GraphQL-node-ID-for-thread-resolution",
@@ -144,16 +150,28 @@ The user can also invoke `triage-findings report.json` for interactive browser-b
 
 See `git-and-github` skill § Context Management for the subagent delegation pattern. CI logs via `get_job_logs` are a prime example — always delegate to a subagent that fetches the log and extracts relevant failure information.
 
-## 8. Resolve Addressed Threads
+## 8. Resolve and Reply to Threads
 
-**Always ask the user for confirmation before resolving any threads.**
+Apply the following matrix **without asking for confirmation**, except where noted:
 
-After the summary (or report) is presented and the user approves, resolve addressed review threads using the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
+| Author | Status | Action |
+|--------|--------|--------|
+| Bot | Fixed | Auto-resolve the thread (no confirmation needed) |
+| Bot | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
+| Human | Fixed | Post a reply explaining what was done. Do NOT resolve. |
+| Human | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
+
+**NEVER auto-resolve human-created threads** unless the user gives explicit per-invocation permission (e.g. "resolve all fixed threads" or "resolve human threads too"). Even when fully fixed, the human reviewer should resolve their own threads.
+
+**Posting replies:**
+- Inline review thread replies: `mcp__plugin_claudius_github__add_reply_to_pull_request_comment` (use `comment_id` from the thread's first comment)
+- PR-level comment replies: `mcp__plugin_claudius_github__add_issue_comment`
+- Keep replies concise: what was done, what remains, reference to relevant commit if applicable
+
+**Resolving bot threads** (fixed only) using the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
 
 ```bash
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <thread_id> [thread_id ...]
 ```
 
-Thread resolution has no MCP equivalent — the wrapper script uses a GraphQL mutation directly.
-
-Only resolve threads where verification confirms the issue is fixed. Never resolve threads that are only partially addressed.
+Thread resolution has no MCP equivalent — the wrapper script uses a GraphQL mutation directly. Never resolve threads that are only partially addressed.
