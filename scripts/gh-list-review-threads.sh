@@ -3,7 +3,7 @@
 #
 # Usage: gh-list-review-threads.sh <owner/repo> <pr_number>
 #
-# Output: JSON with thread id, isResolved, and first comment's databaseId, path, body
+# Output: JSON with thread id, isResolved, isOutdated, and first comment's databaseId, path, body, author
 set -euo pipefail
 trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
@@ -40,8 +40,9 @@ gh api graphql \
             nodes {
               id
               isResolved
+              isOutdated
               comments(first: 1) {
-                nodes { databaseId path body }
+                nodes { databaseId path body author { login } }
               }
             }
           }

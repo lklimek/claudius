@@ -132,6 +132,7 @@ Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mkte
 5. Parallelizing tightly coupled work — use single opus agent sequentially for cross-file dependencies
 6. Trusting stale diagnostics — verify with fresh build
 7. Spawning agents for tiny tasks — batch small tasks (≥100 lines per agent) within same specialization
+8. Auto-deleting data on errors — NEVER delete databases, wipe volumes, or destroy data without explicit user confirmation (see CLAUDE.md Safety section)
 
 ### External Plugin Dependencies
 

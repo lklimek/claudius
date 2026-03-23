@@ -4,10 +4,11 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
-## [3.7.0] - 2026-03-20
+## [3.7.0] - 2026-03-23
 
 ### Changed
 
+- `check-pr-comments`: differentiated resolution logic based on author type (bot vs human) and fix status. Bot threads that are fixed are auto-resolved; all other categories receive a reply comment. Human threads are never auto-resolved unless the user gives explicit per-invocation permission. Added `author_type` field to finding JSON schema. Added `mcp__plugin_claudius_github__add_issue_comment` to allowed tools for PR-level comment replies.
 - `ci-dance` skill: rewritten as fully unattended coordinator loop — no confirmations, push freely, 60-min hard timeout
 - `ci-dance`: severity filtering — only fix MEDIUM+ bot review findings, skip LOW/INFO to avoid wasted CI round-trips
 - `ci-dance`: 10-min minimum review wait (was 30-min), 15-min max wait

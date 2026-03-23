@@ -58,6 +58,19 @@ Anti-patterns to reject:
 Use the `report-format` skill for output structure. Use `QA-NNN` IDs, category `"code_quality"`.
 Include requirement reference and expected vs actual behavior in `description`.
 
+## UI Smoke Testing (playwright-cli)
+
+When the project has a web UI, run smoke tests using `playwright-cli` (preferred) or Chrome MCP tools (fallback).
+
+**Availability check** (run early in QA phase):
+```bash
+command -v playwright-cli >/dev/null 2>&1 || npx @playwright/cli@latest --version 2>/dev/null
+```
+
+**If available**, use it for UI smoke tests. Check `playwright-cli --help` for available commands. Verify key user flows: page loads, critical forms submit, navigation works, error states render.
+
+**If unavailable**, fall back to Chrome MCP tools (`mcp_chrome_*`) for the same verifications. Report a LOW finding noting playwright-cli is missing with installation suggestion: `npm install -g @playwright/cli` or `npx @playwright/cli@latest`.
+
 ## Manual Test Scenarios
 
 When asked, write scenarios to `docs/manual_tests/manual_test_<feature>.md` with: preconditions, numbered steps, expected results per step, and edge cases. Keep steps concrete and reproducible for someone unfamiliar with the code.

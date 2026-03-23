@@ -95,6 +95,16 @@ Before modifying plugin components, load the matching `plugin-dev` skill from [c
 - After creating/modifying an agent → run `plugin-dev:agent-creator` or `plugin-dev:skill-reviewer` to validate
 - After modifying plugin components → ALWAYS run `plugin-dev:plugin-validator` to check structure before finishing
 
+## Safety: Destructive Data Operations
+
+**NEVER** delete databases, wipe Docker volumes, drop tables, or perform any irreversible data loss without explicit user confirmation — even in dev environments. When a data-related error occurs (migration checksum mismatch, schema conflict, corrupt state):
+
+1. **Present the problem** — explain what happened and why
+2. **Offer options** — reset DB, revert migration, manual fix, or other recovery paths
+3. **Wait for explicit user choice** — never auto-select the destructive option
+
+This applies to all agents. Automated crash-loop recovery must never silently destroy data.
+
 ## Temporary Files
 
 Use `tmp/` (gitignored) for eval workspaces and transient artifacts.
