@@ -52,6 +52,8 @@ If nothing to commit or push, proceed to Step 2.
 
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
+**Isolation**: Each stream runs in its own **git worktree** (`isolation: "worktree"` when spawning agents). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
+
 Before fixing any finding, a stream must **claim** it via the inter-stream claim file (see Inter-Stream Communication below). If another stream already claimed the same location, skip it.
 
 #### CI Stream
@@ -97,10 +99,11 @@ Example: `ci|src/main.rs:42|unused import` or `review|lib/auth.ts:17|missing nul
 
 After all three streams complete:
 
-1. All streams have committed their fixes independently
-2. Verify no conflicting edits (two streams editing the same lines despite claim coordination)
-3. If conflicts exist, resolve them — prefer the more comprehensive fix
-4. The merged working tree is ready for the next push
+1. Enumerate worktree branches — collect commits from each stream's worktree
+2. Cherry-pick each stream's commits into the main working branch
+3. If cherry-pick conflicts (two streams edited overlapping lines despite claim coordination), resolve — prefer the more comprehensive fix
+4. Clean up worktrees (`git worktree remove` + `prune`)
+5. The merged working tree is ready for the next push
 
 ### Step 4: Resolve Threads
 
