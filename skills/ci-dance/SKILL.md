@@ -35,15 +35,16 @@ LOOP (until exit condition):
   2. PARALLEL     — start all three concurrently:
      a. CI        — runs automatically (triggered by push)
      b. Copilot   — gh pr edit --add-reviewer @copilot || true
-     c. Grumpy    — invoke /grumpy-review locally (produces severity-ranked report)
-  3. WAIT         — grumpy-review finishes first (local). Then:
-     a. CI        — monitor runs, fix failures, push (see CI Monitoring below)
-     b. Copilot   — poll gh-fetch-reviews.sh for new review IDs (5–20 min window)
+     c. Grumpy    — invoke /grumpy-review locally
+  3. WAIT         — wait for ALL three to complete:
+     a. Grumpy    — finishes first (local)
+     b. CI        — watch runs until done (DO NOT fix yet)
+     c. Copilot   — poll for review (5–20 min window)
   4. CONSOLIDATE  — merge findings from all three sources
-  5. CLASSIFY     — validate each finding against current code, rate severity
+  5. CLASSIFY     — validate each finding, rate severity
   6. FIX          — apply valid MEDIUM+ fixes, commit
   7. RESOLVE      — resolve addressed bot review threads
-  8. EXIT CHECK   — CI green AND no unresolved MEDIUM+ findings → SUCCESS, else → Step 1
+  8. EXIT CHECK   — no fixes applied AND CI was green AND no unresolved MEDIUM+ findings → SUCCESS, else → Step 1
 ```
 
 ### Step 1: Push
@@ -67,11 +68,11 @@ gh pr edit --add-reviewer @copilot || true
 
 ### Step 3: Wait for Results
 
-Grumpy-review completes first (local). Then wait for the external sources:
+**a. Grumpy** — finishes first (local). Collect the severity-ranked JSON report.
 
-**a. CI** — monitor and fix using the CI Monitoring procedure below. If stuck after 2-3 attempts on same failure, proceed (CI issues will surface in exit check).
+**b. CI** — watch runs using the CI Monitoring procedure below. Collect failure information as findings. Do NOT fix or push during this step.
 
-**b. Copilot** — poll for new reviews using `gh-fetch-reviews.sh`. Compare review IDs to detect new reviews.
+**c. Copilot** — poll for new reviews using `gh-fetch-reviews.sh`. Compare review IDs to detect new reviews.
 - Poll interval: 30 seconds
 - Minimum wait: 5 minutes (copilot is typically fast)
 - Maximum wait: 20 minutes — if no review appears, proceed without it
@@ -84,7 +85,7 @@ Merge findings from all three sources into a unified list:
 
 1. **Grumpy-review findings** — from the local JSON report
 2. **Copilot review comments** — fetch via `/check-pr-comments` (Steps 1-3, skip confirmations)
-3. **CI issues** — any remaining failures from CI monitoring
+3. **CI failure findings** — diagnosed failure logs collected during CI monitoring
 
 Deduplicate findings that point to the same code location or describe the same issue.
 
@@ -111,15 +112,14 @@ Resolve addressed bot review threads using `gh-resolve-review-threads.sh`. Bot t
 
 ### Step 8: Exit Check
 
-- CI is green? AND no unresolved MEDIUM+ findings? -> **EXIT SUCCESS**
-- Fixes were applied? -> go to **Step 1** (push fixes, re-run everything)
-- Otherwise -> loop back to Step 1
+- No fixes applied this iteration AND CI was green AND no unresolved MEDIUM+ findings? -> **EXIT SUCCESS**
+- Otherwise -> go to **Step 1** (fixes need pushing, or CI needs another run)
 
 ## CI Monitoring
 
-Autonomous procedure for watching GitHub Actions runs and fixing failures. Used in Step 3a.
+Watch GitHub Actions runs and collect failures as findings. Used in Step 3b. Do NOT fix or push here — findings flow into the consolidation phase.
 
-Do **not** start monitoring until all local fixes are pushed. Watching a run that will be superseded wastes time.
+Do **not** start monitoring until all local fixes are pushed. Watching a superseded run wastes time.
 
 ### Run ordering
 
@@ -128,7 +128,7 @@ When a push triggers multiple workflow runs, monitor **sequentially starting wit
 gh run list --workflow <workflow>.yml --status success --limit 50
 ```
 
-### Watch-diagnose-fix cycle
+### Watch and Collect
 
 1. **List runs** for the current branch:
    ```bash
@@ -140,25 +140,22 @@ gh run list --workflow <workflow>.yml --status success --limit 50
    ```bash
    gh run watch {run_id} --exit-status
    ```
-   - Succeeds -> next run. All succeed -> CI green, done.
-   - Fails -> diagnose immediately (skip remaining runs).
+   - Succeeds -> next run. All succeed -> CI green, no findings.
+   - Fails -> fetch failure logs (step 3). Continue watching remaining runs.
 
-3. **Diagnose** failures:
+3. **Diagnose** failures and record as findings:
    ```bash
    gh run view {run_id} --log-failed
    ```
-   Identify root cause: test failures, lint/format errors, dependency issues, environment problems.
+   Identify root cause: test failures, lint/format errors, dependency issues, environment problems. Record each as a finding (severity, file/location, description) for the consolidation phase.
 
-4. **Fix** locally, run tests locally to verify, commit each fix individually.
-
-5. **Push** all fixes, give GitHub ~5 seconds, then go back to step 1 of this cycle.
+4. Return all CI findings to Step 4: Consolidate.
 
 ### CI exit conditions
 
-- **Green**: all runs pass.
-- **Stuck**: same failure persists after 2-3 fix attempts — report what was tried.
-- **Flaky**: passes locally, fails in CI non-deterministically — note to user, don't retry blindly.
-- **Undiagnosable**: can't determine root cause from logs — report relevant log output.
+- **Green**: all runs pass — no CI findings.
+- **Flaky**: passes locally, fails in CI non-deterministically — record as finding, note flakiness.
+- **Undiagnosable**: can't determine root cause from logs — record as finding with relevant log output.
 
 ## Exit Conditions
 
