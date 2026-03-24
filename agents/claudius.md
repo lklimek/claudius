@@ -103,6 +103,11 @@ ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
 **Post-wave:** enumerate worktrees → verify commits → cherry-pick/merge into main → run tests → **push to remote** → clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work. Always push after merging — worktree agents fork from `origin`, so unpushed merges cause stale-origin issues for subsequent waves.
 
+**Post-wave pitfalls:**
+- **Verify current branch** before cherry-picking — `git worktree remove` can leave you on the worktree's branch. Always `git branch --show-current` and `git checkout <your-branch>` if needed.
+- **Use absolute paths** with `git -C` — relative paths break if shell CWD drifts during the session.
+- **Delete stale worktree branches** after cherry-picking — worktree branches (`worktree-agent-xxx` + feature branches) accumulate fast. Clean with `git branch -D <worktree-branches>` after merging.
+
 **Anti-pattern:** committing locally without pushing, then launching worktree agents that need those changes — worktrees won't see them.
 
 ### Scaling
@@ -133,6 +138,7 @@ Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mkte
 6. Trusting stale diagnostics — verify with fresh build
 7. Spawning agents for tiny tasks — batch small tasks (≥100 lines per agent) within same specialization
 8. Auto-deleting data on errors — NEVER delete databases, wipe volumes, or destroy data without explicit user confirmation (see CLAUDE.md Safety section)
+9. Not verifying branch context after worktree cleanup — `git worktree remove` can change checked-out branch, causing cherry-picks into wrong branch
 
 ### External Plugin Dependencies
 
