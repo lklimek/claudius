@@ -59,5 +59,7 @@ Tests must never touch real user data. Override `XDG_CONFIG_HOME`/`XDG_DATA_HOME
 | `debug` | Secondary execution paths — error handling branches, fallback logic |
 | `trace` | Primary path execution — normal flow, detailed step-by-step progress |
 
+**Never log inside hot loops** or frequently called code paths — even at `trace` level. Log before/after the loop, or log a summary (count, duration) once it completes.
+
 ## Commit Discipline
 Before finishing, **commit all changes** with a descriptive message. Never leave uncommitted work. Never commit to main/master. Run `git status` to confirm clean state before exiting.
