@@ -50,25 +50,35 @@ If nothing to commit or push, proceed to Step 2.
 
 ### Step 2: Three Parallel Streams
 
+Before launching streams, create a team for coordination:
+```
+TeamCreate(team_name="ci-dance")
+```
+
+Then spawn each stream as a named agent with `team_name: "ci-dance"` and `isolation: "worktree"`:
+- `ci-stream`
+- `grumpy-stream`
+- `review-stream`
+
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
-**Isolation**: Each stream runs in its own **git worktree** (`isolation: "worktree"` when spawning agents). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
+**Isolation**: Each stream runs in its own **git worktree** (`isolation: "worktree"`). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
 
-Before fixing any finding, a stream must **claim** it via the inter-stream claim file (see Inter-Stream Communication below). If another stream already claimed the same location, skip it.
+Before fixing any finding, a stream must **claim** it via task ownership (see Inter-Stream Communication below). If another stream already owns a task at the same location, skip it.
 
 #### CI Stream
 
 1. **Trigger**: CI runs automatically on push. Nothing to do.
 2. **Wait**: Watch runs using the Watch and Collect procedure (see below).
 3. **Collect & Classify**: For each failed run, diagnose from logs. Record as findings with severity, location, description. Verify each finding exists in current code.
-4. **Fix**: For each valid finding not already claimed by another stream — claim it, apply the fix locally, run local tests if feasible, commit with a descriptive message referencing the CI failure.
+4. **Fix**: For each valid finding — create a task via `TaskCreate`, claim ownership via `TaskUpdate`. If another stream already owns a task at that location, skip. Apply fix, commit, mark task `completed`.
 
 #### Grumpy Stream
 
 1. **Trigger**: Invoke `/grumpy-review` locally (forked context, produces severity-ranked JSON report).
 2. **Wait**: Grumpy-review runs locally and completes.
 3. **Collect & Classify**: Read the grumpy-review JSON report. Each finding already has severity. Verify findings exist in current code, discard outdated/false positives. Filter to MEDIUM+.
-4. **Fix**: For each valid MEDIUM+ finding not already claimed — claim it, apply the fix locally, run local tests if feasible, commit with a descriptive message referencing the grumpy-review finding.
+4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
 
 #### Review Stream
 
@@ -79,31 +89,38 @@ Before fixing any finding, a stream must **claim** it via the inter-stream claim
    - Maximum wait: 20 minutes — proceed without if no review appears
    - Also check for any OTHER reviews (human or bot) that may have been added since last iteration
 3. **Collect & Classify**: Fetch all review comments via `/check-pr-comments` (skip confirmations). Classify each: verify issue exists in current code, rate severity, check for false positives. Filter to MEDIUM+.
-4. **Fix**: For each valid MEDIUM+ finding not already claimed — claim it, apply the fix locally, run local tests if feasible, commit with a descriptive message referencing the review comment.
+4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
 
 ### Inter-Stream Communication
 
-Streams must coordinate to prevent two streams from fixing the same issue. Use a shared claim file at `/tmp/ci-dance-claims-${CLAUDE_SESSION_ID}.txt`.
+Streams coordinate via the Teams infrastructure to prevent duplicate fixes.
 
-**Claiming**: Before fixing a finding, write a claim line to the file:
+**Finding Discovery**: When a stream finds something worth fixing, create a task:
 ```
-<stream>|<file>:<line>|<short-description>
+TaskCreate(subject="Fix: unused import in src/main.rs:42", description="CI failure: ...", metadata={stream: "ci", file: "src/main.rs", line: 42, severity: 3})
 ```
-Example: `ci|src/main.rs:42|unused import` or `review|lib/auth.ts:17|missing null check`.
 
-**Checking**: Before fixing, check if another stream already claimed the same `file:line` range (exact match or overlapping lines). If claimed, skip the finding.
+**Claiming**: Before fixing, check `TaskList` for existing tasks at the same file/line range. If none, create the task and set `owner` to self via `TaskUpdate`. If another stream already owns a task at that location, skip it. `TaskUpdate` ownership is atomic — no race conditions.
 
-**First writer wins** — if two streams race to claim the same location, the one whose claim appears first in the file takes precedence.
+**Completion**: After fixing, mark the task `completed` via `TaskUpdate(status="completed")`.
+
+**Direct Coordination**: Use `SendMessage` for real-time alerts between streams:
+```
+SendMessage(to="grumpy-stream", message="I'm fixing src/auth.rs:17-25, skip this area")
+```
+Use for: overlapping finding alerts, completion summaries, conflict flags.
 
 ### Step 3: Merge
 
 After all three streams complete:
 
-1. Enumerate worktree branches — collect commits from each stream's worktree
-2. Cherry-pick each stream's commits into the main working branch
-3. If cherry-pick conflicts (two streams edited overlapping lines despite claim coordination), resolve — prefer the more comprehensive fix
-4. Clean up worktrees (`git worktree remove` + `prune`)
-5. The merged working tree is ready for the next push
+1. `TaskList` — review all tasks, their status and outcomes
+2. Enumerate worktree branches — collect commits from each stream's worktree
+3. Cherry-pick each stream's commits into the main working branch
+4. If cherry-pick conflicts (two streams edited overlapping lines despite task coordination), resolve — prefer the more comprehensive fix
+5. Clean up team with `TeamDelete`
+6. Clean up worktrees (`git worktree remove` + `prune`)
+7. The merged working tree is ready for the next push
 
 ### Step 4: Resolve Threads
 
@@ -182,5 +199,5 @@ On exit (any condition), report:
 - Do not duplicate sub-skill logic — delegate to `/push`, `/grumpy-review`, `/check-pr-comments`
 - When sub-skills have confirmation steps, skip them — this skill's invocation is the blanket confirmation
 - Give GitHub ~5 seconds after push before listing new workflow runs
-- Clean up the claim file (`/tmp/ci-dance-claims-*.txt`) on exit
+- Clean up team with `TeamDelete` after merging stream results
 - **Not for GitHub Actions** — this skill pushes commits that trigger CI, so running it inside a workflow causes concurrency cancellation loops. Use from CLI only.
