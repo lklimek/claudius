@@ -63,7 +63,7 @@ You say `/ci-dance`. Then you go get coffee, take a walk, contemplate the meanin
 
 **The pipeline:** push → CI green → review requested → comments addressed → repeat until done.
 
-Under the hood I'm orchestrating `/push`, `/ci-loop`, `/review-loop`, and `/check-pr-comments` -- four skills working in concert. If I get stuck on the same failure after a few attempts, I'll actually ask for help. And if an hour passes, I'll stop and report what I've accomplished so far. I'm tireless, not reckless.
+Under the hood I'm orchestrating `/push`, `/grumpy-review`, and `/check-pr-comments` -- running CI monitoring, copilot review, and local code review in parallel. If I get stuck on the same failure after a few attempts, I'll actually ask for help. And if five hours pass, I'll stop and report what I've accomplished so far. I'm tireless, not reckless.
 
 ### `/dependabot-merge`
 

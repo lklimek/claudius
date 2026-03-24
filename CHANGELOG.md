@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.8.1] - 2026-03-24
+
+### Added
+
+- `coding-best-practices`: added `## Logging Levels` section — quick-reference table for error/warn/info/debug/trace with Rust `tracing` crate requirement
+- `rust-best-practices`: updated Logging entry to reference `coding-best-practices § Logging Levels` and enforce `tracing` over `log`
+
+## [3.8.0] - 2026-03-24
+
+### Changed
+
+- `ci-dance`: redesigned as parallel review pipeline — CI, copilot, and local `/grumpy-review` run concurrently instead of sequentially
+- `ci-dance`: removed `claudius-review` label dependency — grumpy-review runs locally in the session, no GitHub label needed
+- `ci-dance`: added consolidation step that merges findings from grumpy-review, copilot, and CI into a unified view
+- `ci-dance`: added validation/classification gate — verify findings exist in current code and are real before fixing
+- `ci-dance`: timeout increased to 300 minutes (configurable via `timeout=N` argument)
+- `ci-dance`: copilot wait window reduced to 5–20 min (was 15–45 min) — copilot reviews are fast
+- `ci-dance`: removed `Bash(gh label *)` from allowed-tools
+- `ci-dance`: merged `ci-loop` skill inline — CI monitoring logic now lives directly in ci-dance, `ci-loop` removed
+
 ## [3.7.0] - 2026-03-23
 
 ### Changed

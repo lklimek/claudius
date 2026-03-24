@@ -1,13 +1,14 @@
 ---
 name: ci-dance
 description: "This skill should be used when the user says 'ci-dance', 'make the PR green', 'ship this and fix CI', 'push and handle reviews', or wants end-to-end PR pipeline automation."
+argument-hint: "timeout=300"
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh label *), Bash(gh run *), Bash(git *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-request-reviewer.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bash(git *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-request-reviewer.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
 ---
 
 # CI Dance — Unattended PR Pipeline
 
-Fully autonomous loop: push → CI green → bot review → fix MEDIUM+ findings → push → repeat. No confirmations, no user interaction until done or stuck.
+Fully autonomous loop: push, run three parallel streams (CI, grumpy-review, copilot review) where each stream independently fixes its own findings, merge code fixes, repeat. No confirmations, no user interaction until done or stuck.
 
 ## Prerequisites
 
@@ -18,22 +19,27 @@ Fully autonomous loop: push → CI green → bot review → fix MEDIUM+ findings
 ## Unattended Mode
 
 - **No confirmations** — invocation implies full consent to push, fix, and re-push
-- **Override sub-skill confirmations** — when invoking `/ci-loop`, `/push`, `/review-loop`, or `/check-pr-comments`, skip their "ask user" steps. This skill's invocation is the confirmation
+- **Override sub-skill confirmations** — when invoking `/push`, `/grumpy-review`, or `/check-pr-comments`, skip their "ask user" steps. This skill's invocation is the confirmation
 - **Push freely** — commit and push fixes without asking
 - **NEVER merge** — merging is always the user's responsibility
 
 ## Timeout
 
-Record `start_time` at invocation. Before each loop iteration, check elapsed time. **Hard stop at 120 minutes** — exit immediately with a status report.
+Parse `$ARGUMENTS` for `timeout=N` (minutes). Default: **300 minutes**. Record `start_time` at invocation. Before each loop iteration, check elapsed time — hard stop on timeout.
 
 ## Main Loop
 
 ```
-LOOP (until exit condition met):
-  1. PUSH        — commit, push, create/update PR
-  2. CI          — watch runs, fix failures, push fixes, repeat until green
-  3. REVIEW      — request bot review, wait, read comments, fix MEDIUM+, push
-  4. CHECK EXIT  — if CI green AND no MEDIUM+ comments → SUCCESS
+LOOP (until exit condition):
+  1. PUSH           — /push: commit, push, create/update PR
+  2. THREE STREAMS  — run in parallel, each is COMPLETE: trigger → wait → collect & classify → FIX
+     ├── CI Stream       — watch runs → diagnose failures → fix code
+     ├── Grumpy Stream   — /grumpy-review → read findings → fix code
+     └── Review Stream   — request copilot + read all reviews → fix code
+     ↕ Streams communicate to CLAIM findings and avoid duplicate fixes
+  3. MERGE          — combine code fixes from all streams into working tree
+  4. RESOLVE        — resolve addressed bot review threads
+  5. EXIT CHECK     — no fixes applied AND CI green AND no MEDIUM+ findings → SUCCESS
 ```
 
 ### Step 1: Push
@@ -42,67 +48,139 @@ Invoke `/push` to commit staged/unstaged changes, push, and create or update the
 
 If nothing to commit or push, proceed to Step 2.
 
-### Step 2: Make CI Green
+### Step 2: Three Parallel Streams
 
-Invoke `/ci-loop` to monitor all workflow runs, diagnose failures, apply fixes, and push. Skip its user confirmation step.
-
-- If CI passes → proceed to Step 3
-- If stuck after 2-3 attempts on same failure → EXIT STUCK
-- Check timeout before each fix-push cycle
-
-### Step 3: Bot Review
-
-#### 3a. Request review
-
-```bash
-gh pr edit --add-reviewer @copilot || true
-gh pr edit --add-label claudius-review || true
+Before launching streams, create a team for coordination:
+```
+TeamCreate(team_name="ci-dance")
 ```
 
-#### 3b. Wait for review (minimum 15 minutes)
+Then spawn each stream as a named agent with `team_name: "ci-dance"` and `isolation: "worktree"`:
+- `ci-stream`
+- `grumpy-stream`
+- `review-stream`
 
-Poll for new reviews using `gh-fetch-reviews.sh` (see `git-and-github` skill). Compare review IDs — a new review has a higher ID than the last known one.
+All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
-- Poll interval: 30 seconds
-- **Minimum wait: 15 minutes** — even if a review appears earlier, wait the full 15 minutes to allow all bots to finish (Claudius reviews take 28–38 min on substantial PRs)
-- Maximum wait: 45 minutes — if no review appears after 45 minutes, skip to Step 4 (CI is already green, so this is still a valid exit path)
+**Isolation**: Each stream runs in its own **git worktree** (`isolation: "worktree"`). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
 
-#### 3c. Read and filter comments
+Before fixing any finding, a stream must **claim** it via task ownership (see Inter-Stream Communication below). If another stream already owns a task at the same location, skip it.
 
-Fetch inline comments from the latest review using `/check-pr-comments` workflow (Steps 1-3). Skip its confirmation steps.
+#### CI Stream
 
-**Severity filter**: only act on findings rated **MEDIUM (3) or above**. Ignore LOW and INFO findings — they are not worth a CI round-trip.
+1. **Trigger**: CI runs automatically on push. Nothing to do.
+2. **Wait**: Watch runs using the Watch and Collect procedure (see below).
+3. **Collect & Classify**: For each failed run, diagnose from logs. Record as findings with severity, location, description. Verify each finding exists in current code.
+4. **Fix**: For each valid finding — create a task via `TaskCreate`, claim ownership via `TaskUpdate`. If another stream already owns a task at that location, skip. Apply fix, commit, mark task `completed`.
 
-For each MEDIUM+ finding:
-1. Verify the issue exists in current code (skip if already fixed or outdated)
-2. Apply the fix locally
-3. Run local tests if feasible
-4. Commit with descriptive message
+#### Grumpy Stream
 
-If **no MEDIUM+ actionable comments** remain → proceed to Step 4.
+1. **Trigger**: Invoke `/grumpy-review` locally (forked context, produces severity-ranked JSON report).
+2. **Wait**: Grumpy-review runs locally and completes.
+3. **Collect & Classify**: Read the grumpy-review JSON report. Each finding already has severity. Verify findings exist in current code, discard outdated/false positives. Filter to MEDIUM+.
+4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
 
-If fixes were applied → go back to **Step 1** (push fixes, re-run CI, re-review).
+#### Review Stream
 
-#### 3d. Resolve addressed threads
+1. **Trigger**: Request copilot review: `gh pr edit --add-reviewer @copilot || true`
+2. **Wait**: Poll for new reviews using `gh-fetch-reviews.sh`. Compare review IDs to detect new ones.
+   - Poll interval: 30 seconds
+   - Minimum wait: 5 minutes
+   - Maximum wait: 20 minutes — proceed without if no review appears
+   - Also check for any OTHER reviews (human or bot) that may have been added since last iteration
+3. **Collect & Classify**: Fetch all review comments via `/check-pr-comments` (skip confirmations). Classify each: verify issue exists in current code, rate severity, check for false positives. Filter to MEDIUM+.
+4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
 
-After fixing comments, resolve the corresponding review threads using `gh-resolve-review-threads.sh`. Do not ask — unattended mode.
+### Inter-Stream Communication
 
-### Step 4: Exit Check
+Streams coordinate via the Teams infrastructure to prevent duplicate fixes.
 
-- CI is green? ✓
-- No unresolved MEDIUM+ review comments? ✓
-- → **EXIT SUCCESS**
+**Finding Discovery**: When a stream finds something worth fixing, create a task:
+```
+TaskCreate(subject="Fix: unused import in src/main.rs:42", description="CI failure: ...", metadata={stream: "ci", file: "src/main.rs", line: 42, severity: 3})
+```
 
-Otherwise, loop back to Step 1.
+**Claiming**: Before fixing, check `TaskList` for existing tasks at the same file/line range. If none, create the task and set `owner` to self via `TaskUpdate`. If another stream already owns a task at that location, skip it. `TaskUpdate` ownership is atomic — no race conditions.
+
+**Completion**: After fixing, mark the task `completed` via `TaskUpdate(status="completed")`.
+
+**Direct Coordination**: Use `SendMessage` for real-time alerts between streams:
+```
+SendMessage(to="grumpy-stream", message="I'm fixing src/auth.rs:17-25, skip this area")
+```
+Use for: overlapping finding alerts, completion summaries, conflict flags.
+
+### Step 3: Merge
+
+After all three streams complete:
+
+1. `TaskList` — review all tasks, their status and outcomes
+2. Enumerate worktree branches — collect commits from each stream's worktree
+3. Cherry-pick each stream's commits into the main working branch
+4. If cherry-pick conflicts (two streams edited overlapping lines despite task coordination), resolve — prefer the more comprehensive fix
+5. Clean up team with `TeamDelete`
+6. Clean up worktrees (`git worktree remove` + `prune`)
+7. The merged working tree is ready for the next push
+
+### Step 4: Resolve Threads
+
+Resolve addressed bot review threads using `gh-resolve-review-threads.sh`. Bot threads only, per existing convention. Do not ask — unattended mode.
+
+### Step 5: Exit Check
+
+- No fixes applied this iteration AND CI was green AND no unresolved MEDIUM+ findings? -> **EXIT SUCCESS**
+- Otherwise -> go to **Step 1** (push fixes, re-run everything)
+
+## Watch and Collect (CI Sub-Procedure)
+
+Sub-procedure for CI Stream steps 2-3 (Wait and Collect). Watch GitHub Actions runs and collect failures as findings. Fixing happens in CI Stream step 4, not here.
+
+Do **not** start watching until all local fixes are pushed. Watching a superseded run wastes time.
+
+### Run Ordering
+
+When a push triggers multiple workflow runs, watch **sequentially starting with the fastest**. Check historical durations:
+```bash
+gh run list --workflow <workflow>.yml --status success --limit 50
+```
+
+### Procedure
+
+1. **List runs** for the current branch:
+   ```bash
+   gh run list --branch "$(git branch --show-current)" --limit 10
+   ```
+   Identify runs triggered by the latest push. Order by expected duration (shortest first).
+
+2. **Watch** each run sequentially:
+   ```bash
+   gh run watch {run_id} --exit-status
+   ```
+   - Succeeds -> next run. All succeed -> CI green, no findings.
+   - Fails -> fetch failure logs (step 3). Continue watching remaining runs.
+
+3. **Diagnose** failures and record as findings:
+   ```bash
+   gh run view {run_id} --log-failed
+   ```
+   Identify root cause: test failures, lint/format errors, dependency issues, environment problems. Record each as a finding (severity, file/location, description).
+
+4. Return all CI findings to the CI Stream.
+
+### CI Exit Conditions
+
+- **Green**: all runs pass — no CI findings.
+- **Flaky**: passes locally, fails in CI non-deterministically — record as finding, note flakiness.
+- **Undiagnosable**: can't determine root cause from logs — record as finding with relevant log output.
 
 ## Exit Conditions
 
 | Condition | Action |
 |-----------|--------|
-| **Success** | CI green, no MEDIUM+ comments. Report stats, remind user to merge. |
-| **Timeout** | 120 min elapsed. Stop, report current state and what remains. |
-| **Stuck** | Same CI failure or review comment persists after 2-3 fix attempts. Stop, report what was tried. |
-| **No review** | 45 min wait with no bot review. If CI is green, report success with note that review was skipped. |
+| **Success** | CI green, no MEDIUM+ findings. Report stats, remind user to merge. |
+| **Timeout** | Time limit elapsed. Stop, report current state and what remains. |
+| **Stuck** | Same failure or finding persists after 2-3 fix attempts. Stop, report what was tried. |
+| **No review** | 20 min wait with no bot review. If CI is green, report success noting review was skipped. |
 
 ## Final Report
 
@@ -111,13 +189,15 @@ On exit (any condition), report:
 - **Outcome**: success / timeout / stuck / no-review
 - **CI iterations**: how many CI fix-push cycles
 - **Review iterations**: how many review-fix-push cycles
+- **Findings**: total found, fixed, skipped (with severity breakdown)
 - **Unresolved**: any remaining issues (with severity)
 - **PR URL**: for easy access
 
 ## Notes
 
-- Track loop counters (ci_iterations, review_iterations) for the final report
-- Do not duplicate sub-skill logic — delegate to `/push`, `/ci-loop`, `/check-pr-comments`
+- Track loop counters (ci_iterations, review_iterations, findings_fixed, findings_skipped) for the final report
+- Do not duplicate sub-skill logic — delegate to `/push`, `/grumpy-review`, `/check-pr-comments`
 - When sub-skills have confirmation steps, skip them — this skill's invocation is the blanket confirmation
 - Give GitHub ~5 seconds after push before listing new workflow runs
+- Clean up team with `TeamDelete` after merging stream results
 - **Not for GitHub Actions** — this skill pushes commits that trigger CI, so running it inside a workflow causes concurrency cancellation loops. Use from CLI only.
