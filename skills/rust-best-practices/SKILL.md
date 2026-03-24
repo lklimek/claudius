@@ -37,7 +37,7 @@ When you need detailed guidance on a specific item, read the corresponding refer
 - **Async**: tokio with async/await
 - **Serialization**: serde with derive macros
 - **CLI**: clap for argument parsing
-- **Logging**: tracing or log with env_logger
+- **Logging**: `tracing` crate (see coding-best-practices § Logging Levels)
 - **Testing**: cargo test, proptest for property-based testing
 - **Benchmarking**: criterion for performance benchmarks
 
