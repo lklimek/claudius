@@ -155,7 +155,7 @@ See [ghsudo on GitHub](https://github.com/lklimek/ghsudo) for full documentation
 
 ## Recommended Permissions
 
-The autonomous skills (`ci-loop`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`, `grumpy-review`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively -- which defeats the purpose of autonomous operation.
+The autonomous skills (`ci-dance`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`, `grumpy-review`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively -- which defeats the purpose of autonomous operation.
 
 Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
 
@@ -166,8 +166,7 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | Name | Description |
 |------|-------------|
 | `check-pr-comments` | Verify that PR review comments have been addressed |
-| `ci-dance` | End-to-end PR pipeline -- push, CI, review, fix, repeat until green and approved |
-| `ci-loop` | Autonomous CI monitoring and fix loop |
+| `ci-dance` | End-to-end PR pipeline -- push, CI monitoring, parallel reviews, fix, repeat until green |
 | `coding-best-practices` | Universal rules for TDD, self-review, quality timing, review format, security |
 | `dependabot-merge` | Bulk-process dependabot PRs -- audit, comment, merge safe ones, rebase failures |
 | `frontend-best-practices` | Frontend best practices -- TypeScript, React/Vue/Svelte, CSS, accessibility, testing |
