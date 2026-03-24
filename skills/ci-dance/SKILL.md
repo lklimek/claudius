@@ -8,7 +8,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bas
 
 # CI Dance — Unattended PR Pipeline
 
-Fully autonomous loop: push, run CI + copilot + grumpy-review in parallel, consolidate findings, fix MEDIUM+ issues, repeat. No confirmations, no user interaction until done or stuck.
+Fully autonomous loop: push, run three parallel streams (CI, grumpy-review, copilot review) each following trigger-wait-collect, merge findings, fix MEDIUM+ issues, repeat. No confirmations, no user interaction until done or stuck.
 
 ## Prerequisites
 
@@ -31,20 +31,15 @@ Parse `$ARGUMENTS` for `timeout=N` (minutes). Default: **300 minutes**. Record `
 
 ```
 LOOP (until exit condition):
-  1. PUSH         — /push: commit, push, create/update PR
-  2. PARALLEL     — start all three concurrently:
-     a. CI        — runs automatically (triggered by push)
-     b. Copilot   — gh pr edit --add-reviewer @copilot || true
-     c. Grumpy    — invoke /grumpy-review locally
-  3. WAIT         — wait for ALL three to complete:
-     a. Grumpy    — finishes first (local)
-     b. CI        — watch runs until done (DO NOT fix yet)
-     c. Copilot   — poll for review (5–20 min window)
-  4. CONSOLIDATE  — merge findings from all three sources
-  5. CLASSIFY     — validate each finding, rate severity
-  6. FIX          — apply valid MEDIUM+ fixes, commit
-  7. RESOLVE      — resolve addressed bot review threads
-  8. EXIT CHECK   — no fixes applied AND CI was green AND no unresolved MEDIUM+ findings → SUCCESS, else → Step 1
+  1. PUSH           — /push: commit, push, create/update PR
+  2. THREE STREAMS  — run in parallel, each: trigger → wait → collect & classify
+     ├── CI Stream
+     ├── Grumpy Stream
+     └── Review Stream
+  3. MERGE          — combine classified findings from all streams, deduplicate
+  4. FIX            — apply valid MEDIUM+ fixes, commit
+  5. RESOLVE        — resolve addressed bot review threads
+  6. EXIT CHECK     — no fixes applied AND CI green AND no MEDIUM+ findings → SUCCESS
 ```
 
 ### Step 1: Push
@@ -53,82 +48,72 @@ Invoke `/push` to commit staged/unstaged changes, push, and create or update the
 
 If nothing to commit or push, proceed to Step 2.
 
-### Step 2: Parallel Review Start
+### Step 2: Three Parallel Streams
 
-Kick off all three review sources concurrently:
+All three streams run concurrently. Each follows the same lifecycle: **trigger (if needed) → wait → collect & classify findings**.
 
-**a. CI** — triggered automatically by the push. Do nothing yet.
+#### CI Stream
 
-**b. Copilot** — request review:
-```bash
-gh pr edit --add-reviewer @copilot || true
-```
+1. **Trigger**: CI runs automatically on push. Nothing to do.
+2. **Wait**: Watch runs using the Watch and Collect procedure (see below). Do NOT fix.
+3. **Collect & Classify**: For each failed run, diagnose from logs. Record as findings with severity, location, description. Verify each finding exists in current code.
 
-**c. Grumpy Review** — invoke `/grumpy-review` locally. This runs in the current session as a forked context and produces a consolidated severity-ranked JSON report.
+#### Grumpy Stream
 
-### Step 3: Wait for Results
+1. **Trigger**: Invoke `/grumpy-review` locally (forked context, produces severity-ranked JSON report).
+2. **Wait**: Grumpy-review runs locally and completes.
+3. **Collect & Classify**: Read the grumpy-review JSON report. Each finding already has severity. Verify findings exist in current code, discard outdated/false positives.
 
-**a. Grumpy** — finishes first (local). Collect the severity-ranked JSON report.
+#### Review Stream
 
-**b. CI** — watch runs using the CI Monitoring procedure below. Collect failure information as findings. Do NOT fix or push during this step.
+1. **Trigger**: Request copilot review: `gh pr edit --add-reviewer @copilot || true`
+2. **Wait**: Poll for new reviews using `gh-fetch-reviews.sh`. Compare review IDs to detect new ones.
+   - Poll interval: 30 seconds
+   - Minimum wait: 5 minutes
+   - Maximum wait: 20 minutes — proceed without if no review appears
+   - Also check for any OTHER reviews (human or bot) that may have been added since last iteration
+3. **Collect & Classify**: Fetch all review comments via `/check-pr-comments` (skip confirmations). Classify each: verify issue exists in current code, rate severity, check for false positives. Only flag MEDIUM (3)+ for action.
 
-**c. Copilot** — poll for new reviews using `gh-fetch-reviews.sh`. Compare review IDs to detect new reviews.
-- Poll interval: 30 seconds
-- Minimum wait: 5 minutes (copilot is typically fast)
-- Maximum wait: 20 minutes — if no review appears, proceed without it
+### Step 3: Merge
 
-Check timeout before each wait cycle.
+After all three streams complete:
 
-### Step 4: Consolidate
+1. Combine all classified findings into a unified list
+2. Deduplicate — findings pointing to the same code location or describing the same issue
+3. Present unified severity-ranked findings list
 
-Merge findings from all three sources into a unified list:
+### Step 4: Fix
 
-1. **Grumpy-review findings** — from the local JSON report
-2. **Copilot review comments** — fetch via `/check-pr-comments` (Steps 1-3, skip confirmations)
-3. **CI failure findings** — diagnosed failure logs collected during CI monitoring
-
-Deduplicate findings that point to the same code location or describe the same issue.
-
-### Step 5: Classify
-
-For each finding in the consolidated list:
-
-1. **Verify** — check the issue exists in current code (skip if already fixed or outdated)
-2. **Validate** — confirm the finding is real (false positives exist, especially from automated reviewers)
-3. **Rate severity** — only act on **MEDIUM (3) or above**. Skip LOW and INFO — not worth a CI round-trip.
-
-### Step 6: Fix
-
-For each valid MEDIUM+ finding:
+For each valid MEDIUM+ finding from the merged list:
 1. Apply the fix locally
 2. Run local tests if feasible
 3. Commit with descriptive message
 
-If no actionable findings remain, proceed to Step 7.
+If no actionable findings, proceed to Step 5.
 
-### Step 7: Resolve Threads
+### Step 5: Resolve Threads
 
 Resolve addressed bot review threads using `gh-resolve-review-threads.sh`. Bot threads only, per existing convention. Do not ask — unattended mode.
 
-### Step 8: Exit Check
+### Step 6: Exit Check
 
 - No fixes applied this iteration AND CI was green AND no unresolved MEDIUM+ findings? -> **EXIT SUCCESS**
-- Otherwise -> go to **Step 1** (fixes need pushing, or CI needs another run)
+- Otherwise -> go to **Step 1** (push fixes, re-run everything)
 
-## CI Monitoring
+## Watch and Collect (CI Sub-Procedure)
 
-Watch GitHub Actions runs and collect failures as findings. Used in Step 3b. Do NOT fix or push here — findings flow into the consolidation phase.
+Sub-procedure of the CI Stream. Watch GitHub Actions runs and collect failures as findings. Do NOT fix or push here — findings flow back to the CI Stream's collect phase.
 
-Do **not** start monitoring until all local fixes are pushed. Watching a superseded run wastes time.
+Do **not** start watching until all local fixes are pushed. Watching a superseded run wastes time.
 
-### Run ordering
+### Run Ordering
 
-When a push triggers multiple workflow runs, monitor **sequentially starting with the fastest**. Check historical durations:
+When a push triggers multiple workflow runs, watch **sequentially starting with the fastest**. Check historical durations:
 ```bash
 gh run list --workflow <workflow>.yml --status success --limit 50
 ```
 
-### Watch and Collect
+### Procedure
 
 1. **List runs** for the current branch:
    ```bash
@@ -147,11 +132,11 @@ gh run list --workflow <workflow>.yml --status success --limit 50
    ```bash
    gh run view {run_id} --log-failed
    ```
-   Identify root cause: test failures, lint/format errors, dependency issues, environment problems. Record each as a finding (severity, file/location, description) for the consolidation phase.
+   Identify root cause: test failures, lint/format errors, dependency issues, environment problems. Record each as a finding (severity, file/location, description).
 
-4. Return all CI findings to Step 4: Consolidate.
+4. Return all CI findings to the CI Stream.
 
-### CI exit conditions
+### CI Exit Conditions
 
 - **Green**: all runs pass — no CI findings.
 - **Flaky**: passes locally, fails in CI non-deterministically — record as finding, note flakiness.
