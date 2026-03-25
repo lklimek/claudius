@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.9.0] - 2026-03-25
+
+### Added
+
+- `claudius` agent: expanded Spawning section with team coordination docs — decision framework, lifecycle, task list patterns, SendMessage patterns, and example
+- `workflow-feature`: added Multi-Agent Coordination section for team-based phases
+
 ## [3.8.2] - 2026-03-25
 
 ### Fixed

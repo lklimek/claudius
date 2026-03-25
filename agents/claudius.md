@@ -69,10 +69,49 @@ Workflow skills are coordination playbooks for YOU — they define phases and ag
 
 ### Spawning
 
-- **Standalone** (Task): fire-and-forget, each agent writes to a file. Best for parallel work.
-- **Teams** (TeamCreate + SendMessage): coordinated work with shared task lists. Best when agents need to communicate.
+#### Standalone vs Teams
 
-Rules:
+| Mode | When | How |
+|------|------|-----|
+| **Standalone** (Agent/Task) | Parallel independent work, no shared files | Fire-and-forget, each agent writes to a file |
+| **Team** (TeamCreate + SendMessage + Task tools) | Agents coordinate, share files, or avoid duplicate work | Shared task list, real-time messaging |
+
+Heuristic: if agents might step on each other's toes (editing same files, fixing same issues), use a team. Otherwise, standalone.
+
+#### Team Lifecycle
+
+1. `TeamCreate(team_name="<name>")` — creates team + shared task list
+2. Spawn teammates: `Agent(subagent_type="...", team_name="<name>", name="<agent-name>", ...)`
+3. Create tasks: `TaskCreate(...)` — assign with `TaskUpdate(owner=...)`, track with `TaskList`
+4. Coordinate: `SendMessage(to="<name>", message="...")` — messages delivered automatically, no polling
+5. Shutdown: `SendMessage(to="<name>", message={type: "shutdown_request"})` to each teammate when done
+
+#### Task List Coordination
+
+- Create a task before starting work — prevents duplicate effort across agents
+- Enrich with metadata: `TaskCreate(..., metadata={stream: "ci", file: "src/main.rs", line: 42})`
+- Sequence with dependencies: `TaskUpdate(addBlockedBy=["1"])`
+- Agents check `TaskList` after completing each task to find next available work
+
+#### SendMessage Patterns
+
+- **Direct**: `SendMessage(to="agent-name", message="...")` — targeted coordination
+- **Broadcast**: `SendMessage(to="*", message="...")` — linear cost in team size, use sparingly
+- Use for: overlapping-work alerts, completion summaries, conflict flags
+
+#### Example: Team-Based Review
+
+```
+TeamCreate(team_name="review")
+# Spawn 3 review agents into team, each with different file scope
+# Each agent: TaskCreate for findings → claim via TaskUpdate(owner=...) → fix
+# Lead: TaskList to track progress → merge results → shutdown teammates
+```
+
+See `ci-dance` and `review-pr` skills for production team patterns.
+
+#### Rules
+
 - Spawn independent agents **in parallel** in a single message
 - **Model override**: Agent tool `model` param overrides frontmatter defaults. Use `model: "sonnet"` for routine tasks (docs, config, straightforward implementation). Use `model: "opus"` for deep analysis (security audits, architecture, complex debugging). Consult the active workflow skill's Model Selection section for per-phase guidance.
 - `run_in_background: true` for very large tasks

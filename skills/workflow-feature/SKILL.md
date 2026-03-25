@@ -91,6 +91,10 @@ Iterate until no issues above LOW remain.
 
 Every workflow must include a deduplication pass — scan for duplicated logic, extract shared helpers, eliminate copy-paste. Do this during Implementation self-review and QA code quality checks.
 
+## Multi-Agent Coordination
+
+For phases with multiple agents on shared files (TDD, Implementation, QA), use teams (`TeamCreate` + `SendMessage` + Task tools) to prevent duplicate work and conflicts. See the Claudius agent's Spawning section for team patterns.
+
 ## Commit Discipline
 
 Agents must commit all changes before exiting — uncommitted work cannot be merged.
