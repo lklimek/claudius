@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.8.2] - 2026-03-25
+
+### Fixed
+
+- `ci-dance`: main loop exits after 1 iteration instead of continuing — added explicit state initialization, mandatory continuation guard, iteration logging, and fresh-results emphasis per iteration
+
 ## [3.8.1] - 2026-03-24
 
 ### Added
