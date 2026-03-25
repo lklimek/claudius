@@ -27,28 +27,50 @@ Fully autonomous loop: push, run three parallel streams (CI, grumpy-review, copi
 
 Parse `$ARGUMENTS` for `timeout=N` (minutes). Default: **300 minutes**. Record `start_time` at invocation. Before each loop iteration, check elapsed time — hard stop on timeout.
 
+## State Initialization
+
+Before entering the loop, initialize:
+```
+iteration = 0
+start_time = now()
+ci_iterations = 0, review_iterations = 0, findings_fixed = 0, findings_skipped = 0
+```
+
 ## Main Loop
 
+**REPEAT UNCONDITIONALLY** until an exit condition in Step 5 explicitly triggers EXIT:
+
 ```
-LOOP (until exit condition):
+  iteration += 1
+  Log: "=== CI Dance: Iteration {iteration} starting ==="
+
   1. PUSH           — /push: commit, push, create/update PR
   2. THREE STREAMS  — run in parallel, each is COMPLETE: trigger → wait → collect & classify → FIX
-     ├── CI Stream       — watch runs → diagnose failures → fix code
-     ├── Grumpy Stream   — /grumpy-review → read findings → fix code
-     └── Review Stream   — request copilot + read all reviews → fix code
+     ├── CI Stream       — watch NEW runs from LATEST push → diagnose → fix
+     ├── Grumpy Stream   — FRESH /grumpy-review on current code → fix
+     └── Review Stream   — request copilot + check for NEW reviews → fix
      ↕ Streams communicate to CLAIM findings and avoid duplicate fixes
   3. MERGE          — combine code fixes from all streams into working tree
   4. RESOLVE        — resolve addressed bot review threads
-  5. EXIT CHECK     — no fixes applied AND CI green AND no MEDIUM+ findings → SUCCESS
+  5. EXIT CHECK     — three outcomes:
+     → EXIT SUCCESS: no fixes applied AND CI green AND no MEDIUM+ findings
+     → EXIT TIMEOUT/STUCK: time limit or repeated failure
+     → CONTINUE: fixes were applied — MUST return to Step 1
 ```
 
+**MANDATORY CONTINUATION**: If Step 5 does not trigger EXIT SUCCESS or EXIT TIMEOUT/STUCK, you MUST execute Step 1 again. Stopping after one iteration is a bug. The loop continues until an explicit exit.
+
 ### Step 1: Push
+
+Log: `"--- Iteration {iteration}: Step 1 — Push ---"`
 
 Invoke `/push` to commit staged/unstaged changes, push, and create or update the PR. Skip user confirmation per unattended mode.
 
 If nothing to commit or push, proceed to Step 2.
 
 ### Step 2: Three Parallel Streams
+
+**Fresh results required**: On iteration 2+, every stream must operate on the LATEST state. CI Stream watches runs from the most recent push (not cached results). Grumpy Stream runs a new `/grumpy-review` against current code. Review Stream checks for new reviews since the last iteration.
 
 Before launching streams, create a team for coordination:
 ```
@@ -128,8 +150,14 @@ Resolve addressed bot review threads using `gh-resolve-review-threads.sh`. Bot t
 
 ### Step 5: Exit Check
 
-- No fixes applied this iteration AND CI was green AND no unresolved MEDIUM+ findings? -> **EXIT SUCCESS**
-- Otherwise -> go to **Step 1** (push fixes, re-run everything)
+Log: `"--- Iteration {iteration}: Step 5 — Exit Check ---"`
+
+Evaluate **exactly one** outcome:
+
+1. **EXIT SUCCESS** — No fixes applied this iteration AND CI was green AND no unresolved MEDIUM+ findings. Log `"=== CI Dance: EXIT SUCCESS after {iteration} iterations ==="`. Proceed to Final Report.
+2. **EXIT TIMEOUT** — Elapsed time exceeds timeout. Log `"=== CI Dance: EXIT TIMEOUT after {iteration} iterations ==="`. Proceed to Final Report.
+3. **EXIT STUCK** — Same failure persists after 2-3 fix attempts. Log `"=== CI Dance: EXIT STUCK after {iteration} iterations ==="`. Proceed to Final Report.
+4. **CONTINUE** — Fixes were applied, or CI was not green, or unresolved findings remain. Log `"=== CI Dance: Iteration {iteration} complete, continuing to iteration {iteration+1} ==="`. **You MUST return to Step 1 now.** Do NOT stop, do NOT generate the Final Report, do NOT consider the task complete.
 
 ## Watch and Collect (CI Sub-Procedure)
 
@@ -195,7 +223,6 @@ On exit (any condition), report:
 
 ## Notes
 
-- Track loop counters (ci_iterations, review_iterations, findings_fixed, findings_skipped) for the final report
 - Do not duplicate sub-skill logic — delegate to `/push`, `/grumpy-review`, `/check-pr-comments`
 - When sub-skills have confirmation steps, skip them — this skill's invocation is the blanket confirmation
 - Give GitHub ~5 seconds after push before listing new workflow runs
