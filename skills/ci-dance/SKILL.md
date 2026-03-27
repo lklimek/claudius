@@ -154,10 +154,10 @@ Log: `"--- Iteration {iteration}: Step 5 — Exit Check ---"`
 
 Evaluate **exactly one** outcome:
 
-1. **EXIT SUCCESS** — No fixes applied this iteration AND CI was green AND no unresolved MEDIUM+ findings. Log `"=== CI Dance: EXIT SUCCESS after {iteration} iterations ==="`. Proceed to Final Report.
+1. **EXIT SUCCESS** — ALL three streams completed with zero fixes applied this iteration AND CI was green AND no unresolved MEDIUM+ findings from any stream (CI, Grumpy, Review). Log `"=== CI Dance: EXIT SUCCESS after {iteration} iterations ==="`. Proceed to Final Report.
 2. **EXIT TIMEOUT** — Elapsed time exceeds timeout. Log `"=== CI Dance: EXIT TIMEOUT after {iteration} iterations ==="`. Proceed to Final Report.
 3. **EXIT STUCK** — Same failure persists after 2-3 fix attempts. Log `"=== CI Dance: EXIT STUCK after {iteration} iterations ==="`. Proceed to Final Report.
-4. **CONTINUE** — Fixes were applied, or CI was not green, or unresolved findings remain. Log `"=== CI Dance: Iteration {iteration} complete, continuing to iteration {iteration+1} ==="`. **You MUST return to Step 1 now.** Do NOT stop, do NOT generate the Final Report, do NOT consider the task complete.
+4. **CONTINUE** — Any stream applied fixes, or CI was not green, or any stream has unresolved MEDIUM+ findings. Log `"=== CI Dance: Iteration {iteration} complete, continuing to iteration {iteration+1} ==="`. **You MUST return to Step 1 now.** Do NOT stop, do NOT generate the Final Report, do NOT consider the task complete.
 
 ## Watch and Collect (CI Sub-Procedure)
 

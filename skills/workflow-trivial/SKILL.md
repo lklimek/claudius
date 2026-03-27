@@ -1,49 +1,60 @@
 ---
 name: workflow-trivial
-description: "Use for typos or single-line fixes (≤20 lines). Phases: TDD → Implementation → QA → Lessons Learned."
+description: "Use for typos or single-line fixes (≤20 lines). Same mandatory phase order (Planning→Impl→QA→LL), minimal ceremony. Auto-retry on failure."
 ---
 
 # Trivial Workflow
 
 Use for typos, single-line fixes (≤20 lines), no new dependencies/files.
 
+Same mandatory phase order, minimal ceremony. Phases are SEQUENTIAL — never skip, merge, reorder, or run phases in parallel. Within a phase, tasks may be combined.
+
 ## Before You Start
 
-Search project and global memories for relevant context before planning or dispatching agents:
-1. `search_memories(query="<topic>", project="<repo>")` — discover what past sessions learned about this area
-2. `get_memories(memory_id="<id>")` — read full details of relevant memories found in step 1
+Search project and global memories for relevant context:
+1. `search_memories(query="<topic>", project="<repo>")`
+2. `get_memories(memory_id="<id>")`
 
-These are MCP tools on the MemCan server. Use them if available. Skip silently if not.
+MemCan MCP tools. Use if available, skip silently if not.
 
-## Phases
+## Phase 1: Planning (Lightweight)
 
-1. **TDD: Tests** — write/update tests first from requirements, verify they fail.
-  Write test cases for each task. Tests must be derived from requirements and documentation, not from implementation.
-  Tests encode expected behavior — they are the executable spec.
-  This phase MUST be completed before moving to implementation.
-  Tests should fail at the start of implementation.
+Single agent invocation combining all planning concerns:
 
-2. **Implementation** → `developer-bilby` — build env if needed, implement until tests pass.
+**Requirements + Test Case Spec + Dev Plan** — understand the fix, write 1-3 test case specifications (description + expected outcome), identify the change location.
 
-3. **QA** — pass tests, formatter, linter.
+No separate UX or architecture sub-phases needed for trivial fixes.
 
-4. **Lessons Learned** — if anything noteworthy was learned, save via `claudius:lessons-learned` skill (if available). Default to global memories unless strictly project-specific. Report count of memories saved. Skip for truly trivial fixes.
+## Phase 2: Implementation → `developer-bilby`
+
+1. Write/update tests from the test case spec — must fail initially
+2. Implement until tests pass
+3. Format, lint, commit
+
+### TDD Discipline
+
+1. Tests derive from the test case spec, not from implementation.
+2. Tests must fail before implementation begins.
+3. If a test matches the spec, the *code* is wrong.
+
+## Phase 3: QA
+
+Pass tests, formatter, linter. Verify the fix delivers the intended experience, not just passes tests.
+
+## Phase 4: Lessons Learned
+
+If anything noteworthy was learned, save via `claudius:lessons-learned`. Default to global memories. Skip for truly trivial fixes. Report count saved.
+
+## Failure & Auto-Retry
+
+1. QA fails → return to Implementation with failure report
+2. Implementation fails → return to Planning with failure report
+3. Do NOT wait for user acceptance unless a decision is required
+4. Max 2 retries before escalating to user
 
 ## Model Selection
 
-All phases use `model: "sonnet"`. Trivial fixes don't need deep reasoning.
-Escalate to opus only for debugging non-obvious test failures.
-
-## TDD Discipline
-
-1. Tests derive from requirements, not from implementation.
-2. Tests must fail before implementation begins.
-3. If a test fails post-implementation and matches documented behavior, the *code* is wrong.
-
-## QA Gate
-
-No task is done until QA passes. Formatting, linting, and test passing are not optional.
-Fixes must deliver the intended end-user and developer experience, not just pass tests.
+All phases use `model: "sonnet"`. Escalate to opus only for debugging non-obvious failures.
 
 ## Code Deduplication
 

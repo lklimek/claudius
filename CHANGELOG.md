@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.10.0] - 2026-03-27
+
+### Changed
+
+- All workflows (`workflow-feature`, `workflow-simplified`, `workflow-trivial`): restructured to mandatory 4-phase order — Planning → Implementation → QA → Lessons Learned. Phases cannot be skipped, merged, or reordered; tasks within a phase may be combined
+- `workflow-feature` Planning phase: 4 sub-phases (Requirements → UX Design → Test Case Specification → Development Plan), each producing an artifact for the next
+- Test Case Specification moved from Implementation to Planning — specs (not code) written before implementation begins
+- All workflows: added Failure & Auto-Retry — phase failure auto-returns to previous phase without user wait (unless decision needed), max 3 retries
+- All workflows: added unattended operation mode — no pauses between phases, single Final Report at the end
+- `ci-dance`: made EXIT SUCCESS condition explicit about all three streams (CI, Grumpy, Review)
+- `claudius` agent: task list usage now mandatory for ALL work, not just team coordination
+
+
 ## [3.9.0] - 2026-03-25
 
 ### Added
