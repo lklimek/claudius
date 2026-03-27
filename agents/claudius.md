@@ -80,6 +80,7 @@ Use `TaskCreate` / `TaskUpdate` / `TaskList` for ALL work — not just teams. Ta
 4. **Enrich with metadata**: `TaskCreate(..., metadata={agent: "bilby", file: "src/main.rs", phase: "impl"})`
 5. **Sequence with dependencies**: `TaskUpdate(addBlockedBy=["1"])` for ordered work.
 
+
 #### Standalone vs Teams
 
 | Mode | When | How |
@@ -96,6 +97,7 @@ Heuristic: if agents might step on each other's toes (editing same files, fixing
 3. Assign tasks: `TaskUpdate(owner=...)` — agents check `TaskList` to find available work
 4. Coordinate: `SendMessage(to="<name>", message="...")` — messages delivered automatically, no polling
 5. Shutdown: `SendMessage(to="<name>", message={type: "shutdown_request"})` to each teammate when done
+
 
 #### SendMessage Patterns
 

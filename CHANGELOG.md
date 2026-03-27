@@ -16,6 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - `ci-dance`: made EXIT SUCCESS condition explicit about all three streams (CI, Grumpy, Review)
 - `claudius` agent: task list usage now mandatory for ALL work, not just team coordination
 
+
 ## [3.9.0] - 2026-03-25
 
 ### Added
