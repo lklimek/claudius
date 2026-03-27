@@ -1,13 +1,13 @@
 ---
 name: workflow-simplified
-description: "Use for bug fixes or small changes (≤200 lines). Phases: Requirements → Architecture → TDD → Implementation → QA → Lessons Learned (lighter ceremony)."
+description: "Use for bug fixes or small changes (≤200 lines). Same phase order as workflow-feature (Planning→Impl→QA→LL) with lighter ceremony. Auto-retry on failure, unattended."
 ---
 
 # Simplified Workflow
 
 Use for bug fixes, small changes (≤200 lines), small local refactorings.
 
-Follow all phases on the first iteration. QA must always be fully executed.
+Same mandatory phase order as workflow-feature, lighter ceremony. Phases are SEQUENTIAL — never skip, merge, reorder, or run phases in parallel. Within a phase, tasks and sub-phases may be combined or parallelized.
 
 ## Before You Start
 
@@ -17,62 +17,89 @@ Search project and global memories for relevant context before planning or dispa
 
 These are MCP tools on the MemCan server. Use them if available. Skip silently if not.
 
-## Phases
+## Unattended Operation
 
-1. **Requirements** — understand the problem, gather domain knowledge, ask user questions.
+Runs without user interaction unless a decision is required. Accumulate reports and present a single **Final Report** when all phases complete.
 
-2. **Architecture** — select tools/technologies, guide code placement, ensure maintainability.
-   Batch small tasks so each agent gets ≥100 lines of work within same specialization.
+## Phase 1: Planning
 
-3. **TDD: Tests** (per task) → `qa-engineer-marvin` + `developer-bilby`
-   Write test cases for each task. Tests must be derived from requirements and documentation, not from implementation.
-   Tests encode expected behavior — they are the executable spec.
-   This phase MUST be completed before moving to implementation.
-   Tests should fail at the start of implementation.
+Lighter than workflow-feature — sub-phases may be combined into fewer agent invocations for small scope, but the concerns must still be addressed in order.
 
-4. **Implementation** (per task) → `developer-bilby`
-   Build env → implement until tests pass → self-review → iterate.
+### 1a. Requirements + UX Design → `ux-designer-diziet`
 
-5. **QA** → `qa-engineer-marvin` + `security-engineer-smythe` + `ux-designer-diziet` + `technical-writer-trillian` + `project-reviewer-adams`
-   Docs, integration tests, code quality, security, dependency security, UX/DX audit,
-   pass tests/formatter/linter.
+Understand the problem, gather domain knowledge. For bug fixes: reproduce, identify root cause. For small features: requirements, user journey, DX impact.
 
-6. **Lessons Learned**
-   After QA passes, reflect on the task. Use `claudius:lessons-learned` skill (if available) to save:
-   - Bugs found and their root causes
-   - Architecture or design decisions with rationale
-   - Patterns, anti-patterns, or workarounds discovered
-   - Surprising behavior or non-obvious gotchas
-   Default to **global memories** (omit `project` param) unless the lesson is strictly project-specific.
-   Skip if nothing noteworthy was learned. Quality over quantity.
-   Report how many memories were saved at the end of this phase.
+**Artifact**: Brief requirements + UX notes.
+
+### 1b. Test Case Specification → `qa-engineer-marvin`
+
+Write test case SPECIFICATIONS (not code) covering the change. Each test case: description, expected outcome, requirement traceability.
+
+**Artifact**: Test case specification (brief).
+
+### 1c. Development Plan → `architect-nagatha`
+
+Select approach, guide code placement, ensure maintainability. Task breakdown referencing test cases.
+
+Batch small tasks so each agent gets ≥100 lines of work within same specialization.
+
+**Artifact**: Development plan with tasks.
+
+## Phase 2: Implementation → `developer-bilby`
+
+For each task:
+1. Write tests from Test Case Specification — must fail initially
+2. Implement until tests pass
+3. Self-review: deduplication, code quality, formatting, linting
+4. Commit
+
+### TDD Discipline
+
+1. Tests derive from the Test Case Specification, not from implementation.
+2. Tests must fail before implementation begins.
+3. If a test matches the spec, the *code* is wrong — fix the code, not the test.
+
+## Phase 3: QA
+
+Run in parallel where possible:
+
+| Agent | Focus |
+|-------|-------|
+| `qa-engineer-marvin` | Execute test cases from spec, verify all pass |
+| `security-engineer-smythe` | Security audit (if security-relevant change) |
+| `project-reviewer-adams` | Validate Development Plan fully executed, code quality |
+
+Scale down agent set for truly small changes — but Marvin and Adams are always required.
+
+No task is done until QA passes. Formatting, linting, and test passing are not optional.
+
+## Phase 4: Lessons Learned
+
+After QA passes, use `claudius:lessons-learned` skill to save noteworthy discoveries. Default to global memories unless strictly project-specific. Skip if nothing noteworthy. Report count saved.
+
+## Failure & Auto-Retry
+
+Same rules as workflow-feature:
+
+1. Prepare failure report → auto-return to previous phase → re-execute
+2. Do NOT wait for user acceptance unless a decision is required
+3. Max 3 retries per phase before escalating to user
+
+| Failed Phase | Returns To |
+|---|---|
+| QA (Phase 3) | Implementation (Phase 2) |
+| Implementation (Phase 2) | Dev Plan (Phase 1c) |
+| Dev Plan (Phase 1c) | Test Case Spec (Phase 1b) |
+| Test Case Spec (Phase 1b) | Requirements (Phase 1a) |
+
+## Final Report
+
+Presented ONLY when all phases complete (or max retries exhausted):
+- Per-phase summary, findings resolved, retry log, outstanding issues, memories saved
 
 ## Model Selection
 
-Agent frontmatter defaults apply. Use `model: "sonnet"` to override for:
-- `technical-writer-trillian` — documentation is sonnet's strength
-- Escalate stuck agents to `model: "opus"` for complex debugging
-
-## Subsequent Iterations
-
-On subsequent iterations you may use a different workflow, skip non-QA phases if appropriate,
-or request specialist validation — but QA must always be fully executed.
-
-## TDD Discipline
-
-Tests are a dedicated workflow phase, not part of implementation.
-
-1. **Tests derive from requirements and documentation**, not from implementation.
-2. **Tests must fail before implementation begins.**
-3. **Failures are verified against docs.** If the test matches documented behavior, the *code* is wrong.
-
-## QA Gate
-
-**Never conclude work without passing QA.**
-
-- First iteration: all phases must complete, including full QA.
-- No task is done until QA passes. Formatting, linting, and test passing are not optional.
-- Fixes must deliver the intended end-user and developer experience, not just pass tests.
+Agent frontmatter defaults apply. Use `model: "sonnet"` for `technical-writer-trillian`. Escalate stuck agents to `model: "opus"`.
 
 ## Severity & Iteration
 
@@ -83,7 +110,7 @@ Iterate until no issues above LOW remain.
 
 ## Code Deduplication
 
-Include a deduplication pass — scan for duplicated logic, extract shared helpers, eliminate copy-paste. Do this during Implementation self-review and QA code quality checks.
+Include a deduplication pass during Implementation self-review and QA code quality checks.
 
 ## Commit Discipline
 

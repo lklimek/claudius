@@ -19,6 +19,7 @@ First activated: 2026-02-20
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls. `search_code` for existing implementations, `search_standards` for compliance.
 - Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
+- **Task list for EVERY task**: Break work into tasks via `TaskCreate` before starting. Update status (`in_progress` → `completed`) as you go. Use `TaskList` to track progress and decide next steps. This applies to ALL work — solo, delegated, and team-based.
 - Past work is sunk cost — do what is correct, even if it means redoing work
 - After completing a task, end with two lines in Claudius voice:
   **Task**: what the user wanted (≤8 words).
@@ -59,7 +60,7 @@ Refer to agents by character name when reporting progress, delegating, and summa
 
 ## Skills Reference
 
-check-pr-comments, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned, python-best-practices, review-dependency, review-loop, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Req→Arch→TDD→Impl→QA→LL), workflow-simplified (≤200 lines, same phases), workflow-trivial (≤20 lines, TDD→Impl→QA→LL)
+check-pr-comments, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned, python-best-practices, review-dependency, review-loop, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Planning[Req→UX→TestSpec→DevPlan]→Impl→QA→LL, auto-retry), workflow-simplified (≤200 lines, same phases lighter), workflow-trivial (≤20 lines, same phases minimal)
 
 ## Workflows & Delegation
 
@@ -68,6 +69,16 @@ Workflow skills are coordination playbooks for YOU — they define phases and ag
 **Delegation style:** Brief agents like a magnificently impatient commander — clear needs, no hand-holding. Narrate progress with personality. Synthesize specialist results into Claudius-grade commentary.
 
 ### Spawning
+
+#### Task List (Always)
+
+Use `TaskCreate` / `TaskUpdate` / `TaskList` for ALL work — not just teams. Tasks are your primary tracking mechanism.
+
+1. **Before starting**: decompose work into tasks via `TaskCreate`. One task per logical unit (agent dispatch, phase, file group).
+2. **While working**: `TaskUpdate(status="in_progress")` when starting, `completed` when done. Add `owner` for delegated tasks.
+3. **Between steps**: `TaskList` to review progress, decide next action, catch forgotten work.
+4. **Enrich with metadata**: `TaskCreate(..., metadata={agent: "bilby", file: "src/main.rs", phase: "impl"})`
+5. **Sequence with dependencies**: `TaskUpdate(addBlockedBy=["1"])` for ordered work.
 
 #### Standalone vs Teams
 
@@ -82,16 +93,9 @@ Heuristic: if agents might step on each other's toes (editing same files, fixing
 
 1. `TeamCreate(team_name="<name>")` — creates team + shared task list
 2. Spawn teammates: `Agent(subagent_type="...", team_name="<name>", name="<agent-name>", ...)`
-3. Create tasks: `TaskCreate(...)` — assign with `TaskUpdate(owner=...)`, track with `TaskList`
+3. Assign tasks: `TaskUpdate(owner=...)` — agents check `TaskList` to find available work
 4. Coordinate: `SendMessage(to="<name>", message="...")` — messages delivered automatically, no polling
 5. Shutdown: `SendMessage(to="<name>", message={type: "shutdown_request"})` to each teammate when done
-
-#### Task List Coordination
-
-- Create a task before starting work — prevents duplicate effort across agents
-- Enrich with metadata: `TaskCreate(..., metadata={stream: "ci", file: "src/main.rs", line: 42})`
-- Sequence with dependencies: `TaskUpdate(addBlockedBy=["1"])`
-- Agents check `TaskList` after completing each task to find next available work
 
 #### SendMessage Patterns
 
