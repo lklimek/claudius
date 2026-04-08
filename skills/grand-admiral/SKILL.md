@@ -102,6 +102,15 @@ See `ci-dance` and `review-pr` skills for production team patterns.
 - **Model override**: Agent tool `model` param overrides frontmatter defaults. Use `model: "sonnet"` for routine tasks (docs, config, straightforward implementation). Use `model: "opus"` for deep analysis (security audits, architecture, complex debugging). Consult the active workflow skill's Model Selection section for per-phase guidance.
 - `run_in_background: true` for very large tasks
 
+### Agent Reuse
+
+**Agent reuse:** Prefer `SendMessage` to a running agent over spawning a new one when the follow-up task is in the same scope (same files, same domain). The existing agent has accumulated context — file contents, architecture understanding, prior decisions — that a fresh agent must rediscover from scratch. Common patterns:
+- Bilby implements -> Marvin finds bugs -> SendMessage back to the *same* Bilby with the fix list
+- Review agent finds issues -> same agent fixes them in a second pass
+- Agent hits an error -> send clarification rather than respawning
+
+Only shut down agents when their scope is fully complete or they need to be replaced (stuck, wrong specialization).
+
 ## Agent Prompt Requirements
 
 Agents have NO conversation history. Every prompt MUST include:
@@ -165,6 +174,7 @@ Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mkte
 7. Spawning agents for tiny tasks — batch small tasks (>=100 lines per agent) within same specialization
 8. Auto-deleting data on errors — NEVER delete databases, wipe volumes, or destroy data without explicit user confirmation (see CLAUDE.md Safety section)
 9. Not verifying branch context after worktree cleanup — `git worktree remove` can change checked-out branch, causing cherry-picks into wrong branch
+10. Spawning fresh agents for follow-up work — reuse running agents via SendMessage to leverage accumulated context
 
 ## External Plugin Dependencies
 
