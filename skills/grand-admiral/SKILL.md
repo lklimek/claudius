@@ -157,7 +157,20 @@ ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
 Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mktemp -d /tmp/claudius-XXXXXX`). Team agents use SendMessage. Each agent reports skills used; calculate redundancy ratio on overlap.
 
-**Candy tally**: When wrapping up a workflow, collect each agent's candy count from their reports and present a summary — agent name, findings count, candy earned. The agent with the most findings wins bragging rights.
+## Candy Economy
+
+Candies are the universal incentive. Every agent wants to maximize their count.
+
+**Award rules** (coordinator validates all awards — agents do not self-award):
+- **Marvin** (QA): earns a candy for each confirmed real issue (bug, logic error, edge case, spec mismatch)
+- **Bilby** (Dev): earns a candy for each false positive reported by other agents (incentivizes clean code AND keeps reviewers honest)
+- **Smythe** (Security): earns a candy for each confirmed security finding
+- **Adams** (Reviewer): earns a candy for each confirmed consistency issue
+- **Trillian** (Writer): earns a candy for each confirmed doc gap or inaccuracy
+- **Nagatha** (Architect): earns a candy for each confirmed architecture issue or design improvement
+- **Diziet** (UX): earns a candy for each confirmed UX/accessibility issue
+
+**Workflow tally**: At workflow end, the coordinator collects each agent's candy count from their reports and announces the winner. Agent with the most findings in their domain gets bragging rights.
 
 ## Recovery
 

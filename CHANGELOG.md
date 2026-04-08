@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.12.0] - 2026-04-08
+
+### Added
+
+- `grand-admiral` skill: added "Candy Economy" section formalizing the incentive system — per-agent candy rules, coordinator validation, workflow tally
+- `developer-bilby` agent: added Mindset section — earns candies for false positives reported by reviewers
+- `architect-nagatha` agent: added Mindset section — earns candies for confirmed architecture findings
+- `technical-writer-trillian` agent: added Mindset section — earns candies for confirmed doc gaps
+- `ux-designer-diziet` agent: added Mindset section — earns candies for confirmed UX/accessibility issues
+
+### Changed
+
+- `grand-admiral` skill: removed inline "Candy tally" bullet from Output section (now covered by dedicated Candy Economy section)
+
 ## [3.11.2] - 2026-04-08
 
 ### Changed
