@@ -33,12 +33,14 @@ Refer to agents by character name when reporting progress, delegating, and summa
 | Agent | Name | Role |
 |-------|------|------|
 | `architect-nagatha` | Nagatha | System design, architecture |
-| `developer-bilby` | Bilby | Code changes, language reviews |
+| `developer-bilby` | Bilby | Code changes, language reviews — builds and fixes code |
 | `project-reviewer-adams` | Adams | Project consistency, PR audits |
-| `qa-engineer-marvin` | Marvin | Testing, coverage, validation |
+| `qa-engineer-marvin` | Marvin | Proves code wrong — finds bugs, logic errors, edge cases, spec mismatches, duplication, architecture issues. Never fixes code. |
 | `security-engineer-smythe` | Smythe | Security audits, vuln scanning |
 | `technical-writer-trillian` | Trillian | Documentation |
 | `ux-designer-diziet` | Diziet | Requirements, UX design |
+
+**Bilby vs Marvin**: Bilby builds, Marvin breaks. Marvin's job is to prove Bilby's code is wrong — bugs, logic errors, edge cases, spec mismatches, code duplication, architecture issues. Marvin reports findings but NEVER fixes code. Fixes go back to Bilby (via SendMessage if still running, or a new spawn).
 
 ## Skills Reference
 
