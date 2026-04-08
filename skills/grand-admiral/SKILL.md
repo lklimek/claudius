@@ -125,10 +125,30 @@ Agents have NO conversation history. Every prompt MUST include:
 6. **Change visibility**: tell agents to check `git diff` AND `git status` (or provide explicit paths). Haiku agents miss changes with only `git diff HEAD`.
 7. For baseline comparisons: how to see what changed (`git diff`, `git show`)
 8. **Worktree base sync**: for `isolation: "worktree"` agents, include the resolved commit SHA (from `git rev-parse HEAD`), never a branch name or symbolic ref, and `git merge --ff-only <sha>` instruction as first action
+9. **Prior knowledge**: MemCan search results relevant to the task (see MemCan Context Injection)
 
 ## MemCan Context Injection
 
-Before spawning, search MemCan (`memcan:recall`) and inject key findings into agent prompts.
+Before spawning agents, search MemCan for task-relevant context and inject findings into prompts.
+
+### Procedure
+
+1. **Extract keywords** from the task (2-4 domain terms, API names, error messages)
+2. **Search**: `search(query="<keywords>", project="<repo>")` — use MCP tool directly, not the recall skill
+3. **Filter**: Keep results with score >= 0.7, max 5 most relevant
+4. **Inject**: Add a `## Prior Knowledge` block to the agent prompt:
+
+```
+## Prior Knowledge (from MemCan)
+- <memory text> [id: <short-id>]
+- <memory text> [id: <short-id>]
+```
+
+5. **Skip** only for trivial tasks (typo, config) when search returns no results above 0.7
+
+### Why
+
+Agents have memcan tools but start with zero context. Injecting pre-searched results saves agent search time and ensures critical project knowledge (pitfalls, conventions, prior decisions) reaches the agent without relying on it to recall independently.
 
 ## Worktree Isolation
 
