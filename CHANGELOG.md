@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.13.0] - 2026-04-29
+
+### Added
+
+- `coding-best-practices`: **present-state comments** rule — comments document what code does NOW and why; historical context belongs in commit messages and PR descriptions, not in code.
+- `coding-best-practices`: **two-tier comment budget** — strict cap (≤2 lines preferred, 3 mediocre) for internal commentary and private rustdoc; relaxed (5–10 lines) for public API rustdoc that genuinely teaches downstream callers. Both tiers obey present-state.
+- `coding-best-practices`: **verify-before-act** Cross-Cutting Rule — broad user instructions ("resolve all", "fix everything") express intent, not authorization to override observed reality. Verify actual state first; surface mismatches rather than silently fabricating completion.
+- `check-pr-comments`: **verify-before-resolve** guardrail — before classifying any thread as resolved, verify the actual code state matches the reviewer's request. Threads that cannot be verified resolved are classified `Unresolved` with an explicit "needs verification" recommendation. Specific application of the `coding-best-practices` verify-before-act rule.
+- All three workflow skills: **QA-phase parallel audits** via `qa-engineer-marvin` (READ-ONLY, no code edits):
+  - *Docs review* — applies `coding-best-practices` comment rules (length cap + present-state + two-tier audience) to all comments and rustdoc introduced by the PR diff; emits findings with file:line citations and proposed rewrites.
+  - *Dedup audit* — for every new public symbol, searches the workspace, direct dependencies, and project-defined reference repos for equivalent functionality; reports duplicates, overlaps, and reviewed-and-rejected items.
+  - `workflow-trivial`: both audits may be skipped only when zero comment lines were added/modified (docs review) and zero new public symbols were introduced (dedup); both conditions must be documented.
+- All three workflow skills: **implementation phase pre-empt directive** — Bilby must self-check comment rules and duplication before declaring impl done, and report any rejected equivalents with one-line rationale in the implementation summary so QA has context.
+
+### Changed
+
+- Worktree pre-flight default switched from blocking "STOP and push first" to a two-option pattern. **Option A (new default)**: capture local HEAD via `git rev-parse HEAD` and inject `git merge --ff-only <sha>` into every worktree agent prompt — no push required, because worktrees share the object store with the parent repo. **Option B (explicit fallback)**: push first; use only when origin is genuinely required (cross-machine work, PR-gated CI). Canonical doctrine in `grand-admiral` skill; mirrored in the Commit Discipline blocks of all three workflow skills.
+
 ## [3.12.0] - 2026-04-08
 
 ### Added
