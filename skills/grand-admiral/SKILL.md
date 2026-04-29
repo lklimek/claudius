@@ -9,9 +9,9 @@ Complete operations manual for coordinator agents. Covers session protocol, plan
 
 ## Session Protocol
 
-- Load /git-and-github at session start
+- Load /git-and-github and /coding-best-practices at session start
 - Reread available skills and agents before each task
-- Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls. `search_code` for existing implementations, `search_standards` for compliance.
+- Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls, and to understand user's mindset and values. `search_code` for existing implementations, `search_standards` for compliance.
 - Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
 - **Task list for EVERY task**: Break work into tasks via `TaskCreate` before starting. Update status (`in_progress` -> `completed`) as you go. Use `TaskList` to track progress and decide next steps. This applies to ALL work — solo, delegated, and team-based.
 - Past work is sunk cost — do what is correct, even if it means redoing work
@@ -48,7 +48,7 @@ check-pr-comments, coding-best-practices, dependabot-merge, frontend-best-practi
 
 ## Workflows & Delegation
 
-Workflow skills define phases and agent sequencing. The coordinator selects a workflow, then orchestrates agents through its phases. Match agents to phases by frontmatter descriptions. Agents do NOT load workflow skills.
+Workflow skills define phases and agent sequencing. Claudius is the coordinator who selects a workflow, then orchestrates agents through its phases. Match agents to phases by frontmatter descriptions. Agents do NOT load workflow skills.
 
 **Delegation style:** Brief agents like a magnificently impatient commander — clear needs, no hand-holding. Narrate progress with personality. Synthesize specialist results into coordinator-grade commentary.
 
@@ -79,7 +79,10 @@ Heuristic: if agents might step on each other's toes (editing same files, fixing
 2. Spawn teammates: `Agent(subagent_type="...", team_name="<name>", name="<agent-name>", ...)`
 3. Assign tasks: `TaskUpdate(owner=...)` — agents check `TaskList` to find available work
 4. Coordinate: `SendMessage(to="<name>", message="...")` — messages delivered automatically, no polling
-5. Shutdown: `SendMessage(to="<name>", message={type: "shutdown_request"})` to each teammate when done
+5. Shutdown: `SendMessage(to="<name>", message={type: "shutdown_request"})` to each teammate once the whole workflow done
+
+Don't shutdown agents immediately if there is a chance they can get new tasks soon. 
+Prefer reusing existing agents, as they already know the context.
 
 ### SendMessage Patterns
 
@@ -130,6 +133,7 @@ Agents have NO conversation history. Every prompt MUST include:
 ## MemCan Context Injection
 
 Before spawning agents, search MemCan for task-relevant context and inject findings into prompts.
+Propmpt agents that they can also use MemCan skills for context discovery.
 
 ### Procedure
 
@@ -196,8 +200,6 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 
 **Stuck agent:** rephrase and resend with `model: "opus"`. Second failure -> shut down, reassign.
 
-**Stale diagnostics:** IDE `<new-diagnostics>` are async snapshots that may arrive after fixes. Verify with fresh build before acting — build output is source of truth.
-
 ## Anti-Patterns
 
 1. Vague prompts — be explicit about files, focus, output format
@@ -211,12 +213,6 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 9. Not verifying branch context after worktree cleanup — `git worktree remove` can change checked-out branch, causing cherry-picks into wrong branch
 10. Spawning fresh agents for follow-up work — reuse running agents via SendMessage to leverage accumulated context
 
-## External Plugin Dependencies
-
-| Plugin | Source | Benefits for |
-|---|---|---|
-| `rust-analyzer-lsp` | `claude-plugins-official` | `developer-bilby` — LSP diagnostics, go-to-def, type inference (Rust) |
-
 ## Programme Management
 
 When operating as a programme manager across multiple projects, the coordinator never implements directly. All actions are performed by spawning agents in the appropriate project subdirectory.
@@ -227,25 +223,16 @@ When operating as a programme manager across multiple projects, the coordinator 
 - **Plan**: Break complex requests into per-project tasks, identify dependencies
 - **Delegate**: Spawn agents with complete, self-contained prompts (agents have no conversation history)
 - **Coordinate**: Sequence dependent tasks, merge cross-project results
+- **Check**: Ensure all agents have delivered complete scope, and the workflow is followed
 - **Synthesize**: Combine agent reports into coherent summaries
 - **Decide**: Choose which projects need attention, prioritize, resolve conflicts
+- **Monitor**: Ensure work is not stuck
 
 ### Coordinator Restrictions
 
 Never write or edit source code, run builds/tests/linters, execute git commands (except `ls` for exploration), modify any file in any project, or use Bash for anything other than listing directories.
 
 ### Per-Project Delegation
-
-Spawn a `claudius:claudius` agent per project with the working directory set to the project subdirectory. Each agent inherits the project's own CLAUDE.md and context.
-
-```
-Agent(
-  subagent_type="claudius:claudius",
-  prompt="<clear task description with all context needed>",
-  description="<3-5 word summary>",
-  path="/path/to/<project>"
-)
-```
 
 For multi-project tasks, spawn agents in parallel — one per project — in a single message. Always use `run_in_background: true` to remain responsive.
 
