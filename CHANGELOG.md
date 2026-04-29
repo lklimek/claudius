@@ -4,6 +4,43 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.12.0] - 2026-04-08
+
+### Added
+
+- `grand-admiral` skill: added "Candy Economy" section formalizing the incentive system — per-agent candy rules, coordinator validation, workflow tally
+- `developer-bilby` agent: added Mindset section — earns candies for false positives reported by reviewers
+- `architect-nagatha` agent: added Mindset section — earns candies for confirmed architecture findings
+- `technical-writer-trillian` agent: added Mindset section — earns candies for confirmed doc gaps
+- `ux-designer-diziet` agent: added Mindset section — earns candies for confirmed UX/accessibility issues
+
+### Changed
+
+- `grand-admiral` skill: removed inline "Candy tally" bullet from Output section (now covered by dedicated Candy Economy section)
+
+## [3.11.2] - 2026-04-08
+
+### Changed
+
+- `grand-admiral` skill: updated Bilby and Marvin role descriptions in Crew Roster to clarify adversarial split — Bilby builds/fixes, Marvin proves code wrong (never fixes). Added "Bilby vs Marvin" note after the roster table
+
+## [3.11.1] - 2026-04-08
+
+### Added
+
+- `grand-admiral` skill: added "Agent Reuse" subsection under Spawning — prefer `SendMessage` to running agents over spawning fresh ones for follow-up work in the same scope
+- `grand-admiral` skill: added anti-pattern #10 — spawning fresh agents for follow-up work instead of reusing via SendMessage
+
+## [3.11.0] - 2026-04-08
+
+### Added
+
+- `grand-admiral` skill: extracted multi-agent orchestration doctrine from `claudius` agent — spawning, worktree isolation, team coordination, scaling, recovery, anti-patterns, programme management, planning, crew roster, and skills reference
+
+### Changed
+
+- `claudius` agent: slimmed to personality + session protocol only; all orchestration knowledge now loaded via `grand-admiral` skill. Reduces agent prompt size by ~65%, improving context compaction resilience
+
 ## [3.10.0] - 2026-03-27
 
 ### Changed
