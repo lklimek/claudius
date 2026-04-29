@@ -158,9 +158,19 @@ Agents have memcan tools but start with zero context. Injecting pre-searched res
 
 ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
-**Pre-flight (blocking):** `git log @{upstream}..HEAD --oneline` — if unpushed commits exist OR no upstream is configured, STOP and push first (worktree agents fork from `origin`, not local branch).
+**Pre-flight — pick one of two options:**
 
-**Base commit injection:** Before spawning, capture the resolved commit SHA via `git rev-parse HEAD` — never use a branch name or symbolic ref (they resolve differently in worktrees). Include in every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA. This works because worktrees share the object store.
+**Option A (default — local-SHA injection, no push required):**
+1. Capture the resolved local commit SHA: `git rev-parse HEAD` (never a branch name or symbolic ref — they resolve differently in worktrees).
+2. Inject the SHA into every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA.
+3. This works because worktrees share the object store with the parent repo — unpushed commits ARE reachable by SHA, just not by branch ref.
+
+**Option B (fallback — push first):**
+1. Run `git log @{upstream}..HEAD --oneline`. If unpushed commits exist OR no upstream is configured, push first.
+2. Worktrees then fork cleanly from `origin/<branch>`.
+3. Use this option only when origin is genuinely required (cross-machine work, PR-gated CI, sharing across sessions).
+
+**Why Option A is the default**: minimizes pushes (especially in unattended/auto mode where push approval is friction), keeps work local until ready to share, plays nicely with the global "never push without explicit permission" rule.
 
 **Post-wave:** enumerate worktrees -> verify commits -> cherry-pick/merge into main -> run tests -> **push to remote** -> clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work. Always push after merging — worktree agents fork from `origin`, so unpushed merges cause stale-origin issues for subsequent waves.
 

@@ -59,6 +59,11 @@ Execute the Development Plan task by task. For each task:
 3. Self-review: deduplication, code quality, formatting, linting
 4. Commit
 
+**Pre-empt the QA audits before declaring impl done:**
+1. **Self-check comment rules** — every comment block written or modified must satisfy `coding-best-practices` Cross-Cutting Rules: length cap (≤2 preferred, 3 mediocre), present-state only, two-tier audience (strict for internal, liberal for public API rustdoc).
+2. **Self-check duplication** — for every helper, parser, signer, fetch loop, atomic-write, etc. introduced, briefly grep the workspace, direct dependencies (Cargo.toml-listed crates' public APIs), and any project-defined reference repos for an existing equivalent before rolling a new one. If found and `pub`, use it. If `pub(crate)`, propose promoting it. If only partially overlaps, document the rationale for the new copy.
+3. **Report rejected equivalents** — list any candidate equivalent considered and rejected, with one-line rationale, in the implementation summary so QA has context.
+
 Multiple Bilby agents may run in parallel on independent tasks. Use teams for shared-file tasks.
 
 ### TDD Discipline
@@ -76,10 +81,19 @@ Separate agent per concern — run in parallel:
 | Agent | Focus |
 |-------|-------|
 | `qa-engineer-marvin` | Execute test cases from spec, verify all pass, coverage gaps |
+| `qa-engineer-marvin` | **Docs review (read-only)** — apply `coding-best-practices` Cross-Cutting Rules (length cap + present-state + two-tier audience) to all comments and rustdoc introduced by the PR diff. Emit findings with file:line citations and proposed rewrites. NO code edits. Report path: `/tmp/claudius-<scope>-docs-report.md`. |
+| `qa-engineer-marvin` | **Dedup audit (read-only)** — for every new public function, type, trait, and module introduced by the PR, search the workspace, direct dependencies (Cargo.toml-listed crates' public APIs), and project-defined reference repos for equivalent functionality. Emit findings: high-confidence duplicates, partial overlaps, and reviewed-and-rejected items, each with `file:line` citations on both sides. NO code edits. Report path: `/tmp/claudius-<scope>-dedup-report.md`. |
 | `security-engineer-smythe` | Security audit, dependency security |
 | `ux-designer-diziet` | UX/DX audit against UX specification |
 | `technical-writer-trillian` | End-user, developer, deployment docs |
 | `project-reviewer-adams` | Validate Development Plan fully executed, code quality |
+
+**Both audits are READ-ONLY by mandate** — emphasize this in the agent prompt template. Findings go to the lead, who decides follow-up:
+- Trivial fixes can land in the same PR via a separate commit
+- Substantial refactors land as follow-up PRs
+- Findings the lead judges as wrong-call go in a "rejected with rationale" section of the report
+
+To skip any audit, the lead must document the reason in the QA report.
 
 QA validates TWO things:
 1. **Test Case Specification coverage** — every test case from Phase 1c passes or has a justified exception
@@ -155,10 +169,18 @@ Agents must commit all changes before exiting — uncommitted work cannot be mer
 
 ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
-**Pre-flight (blocking):** Run `git log @{upstream}..HEAD --oneline`. If unpushed commits exist OR no upstream is configured, STOP — push first, then launch agents (worktrees fork from `origin`, not local branch).
+**Pre-flight — pick one of two options** (canonical doctrine in `grand-admiral` skill):
 
-Before spawning, capture the resolved commit SHA (from `git rev-parse HEAD`), never a branch name or symbolic ref, and include `git merge --ff-only <sha>` in each agent's prompt so worktrees sync to correct base.
+**Option A (default — local-SHA injection, no push required):**
+1. Capture the resolved local commit SHA: `git rev-parse HEAD` (never a branch name or symbolic ref — they resolve differently in worktrees).
+2. Inject the SHA into every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA.
+3. This works because worktrees share the object store with the parent repo — unpushed commits ARE reachable by SHA, just not by branch ref.
 
-After each wave: verify worktree commits, merge into main, run tests, **push to remote**, then clean up. Always push after merging — unpushed merges cause stale-origin issues for subsequent waves.
+**Option B (fallback — push first):**
+1. Run `git log @{upstream}..HEAD --oneline`. If unpushed commits exist OR no upstream is configured, push first.
+2. Worktrees then fork cleanly from `origin/<branch>`.
+3. Use this option only when origin is genuinely required (cross-machine work, PR-gated CI, sharing across sessions).
 
-**Anti-pattern:** committing locally then launching worktree agents that need those changes — worktrees won't see them until pushed.
+**Why Option A is the default**: minimizes pushes (especially in unattended/auto mode where push approval is friction), keeps work local until ready to share, plays nicely with the global "never push without explicit permission" rule.
+
+After each wave: verify worktree commits, merge into main, run tests, push to remote when ready to share, then clean up.
