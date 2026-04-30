@@ -127,7 +127,7 @@ Agents have NO conversation history. Every prompt MUST include:
 5. **UX/DX context**: desired end-user/developer experience
 6. **Change visibility**: tell agents to check `git diff` AND `git status` (or provide explicit paths). Haiku agents miss changes with only `git diff HEAD`.
 7. For baseline comparisons: how to see what changed (`git diff`, `git show`)
-8. **Worktree base sync**: for `isolation: "worktree"` agents, include the resolved commit SHA (from `git rev-parse HEAD`), never a branch name or symbolic ref, and `git merge --ff-only <sha>` instruction as first action
+8. **Worktree base sync**: see Worktree Isolation — Option A (default; local SHA via `git rev-parse HEAD` + `git merge --ff-only <sha>` as first action) or Option B (fallback; push first, fork from `origin`). Never a branch name or symbolic ref — they resolve differently inside worktrees.
 9. **Prior knowledge**: MemCan search results relevant to the task (see MemCan Context Injection)
 
 ## MemCan Context Injection
@@ -156,13 +156,27 @@ Agents have memcan tools but start with zero context. Injecting pre-searched res
 
 ## Worktree Isolation
 
+*Canonical source — workflow skills' Commit Discipline blocks reference this section. Keep this section authoritative; do not duplicate its content elsewhere.*
+
 ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
-**Pre-flight (blocking):** `git log @{upstream}..HEAD --oneline` — if unpushed commits exist OR no upstream is configured, STOP and push first (worktree agents fork from `origin`, not local branch).
+**Pre-flight — pick one of two options:**
 
-**Base commit injection:** Before spawning, capture the resolved commit SHA via `git rev-parse HEAD` — never use a branch name or symbolic ref (they resolve differently in worktrees). Include in every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA. This works because worktrees share the object store.
+**Option A (default — local-SHA injection, no push required):**
+1. Capture the resolved local commit SHA: `git rev-parse HEAD` (never a branch name or symbolic ref — they resolve differently in worktrees).
+2. Inject the SHA into every worktree agent's prompt: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"` — substitute the actual SHA.
+3. This works because worktrees share the object store with the parent repo — unpushed commits ARE reachable by SHA, just not by branch ref.
 
-**Post-wave:** enumerate worktrees -> verify commits -> cherry-pick/merge into main -> run tests -> **push to remote** -> clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work. Always push after merging — worktree agents fork from `origin`, so unpushed merges cause stale-origin issues for subsequent waves.
+**Option B (fallback — push first):**
+1. Run `git log @{upstream}..HEAD --oneline`. If unpushed commits exist OR no upstream is configured, push first.
+2. Worktrees then fork cleanly from `origin/<branch>`.
+3. Use this option only when origin is genuinely required (cross-machine work, PR-gated CI, sharing across sessions).
+
+**Why Option A is the default**: minimizes pushes (especially in unattended/auto mode where push approval is friction), keeps work local until ready to share, plays nicely with the global "never push without explicit permission" rule.
+
+**Post-wave:** enumerate worktrees -> verify commits -> cherry-pick/merge into the feature branch -> run tests -> clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work.
+
+**Post-wave push (explicit authorization only):** push to remote ONLY when the user has explicitly authorized it (e.g., the invoking workflow is `/push` or `/ci-dance`, or the user said "push it" / "open a PR"). Without authorization, leave merged commits local — subsequent worktree waves use Option A (local-SHA injection) to fork from local HEAD instead of `origin`. Pushing as an automatic step violates the global "never push without explicit permission" rule.
 
 **Post-wave pitfalls:**
 - **Verify current branch** before cherry-picking — `git worktree remove` can leave you on the worktree's branch. Always `git branch --show-current` and `git checkout <your-branch>` if needed.

@@ -53,6 +53,11 @@ For each task:
 3. Self-review: deduplication, code quality, formatting, linting
 4. Commit
 
+**Pre-empt the QA audits before declaring impl done:**
+1. **Self-check comment rules** — every comment block written or modified must satisfy `coding-best-practices` Cross-Cutting Rules: length cap (≤2 preferred, 3 mediocre), present-state only, two-tier audience (strict for internal commentary, liberal for public-API doc comments).
+2. **Self-check duplication** — for every helper, parser, signer, fetch loop, atomic-write, etc. introduced, briefly grep the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and any project-defined reference repos for an existing equivalent before rolling a new one. If found and publicly exported, use it. If crate-private (or language equivalent), propose promoting it. If only partially overlaps, document the rationale for the new copy.
+3. **Report rejected equivalents** — list any candidate equivalent considered and rejected, with one-line rationale, in the implementation summary so QA has context.
+
 ### TDD Discipline
 
 1. Tests derive from the Test Case Specification, not from implementation.
@@ -65,11 +70,18 @@ Run in parallel where possible:
 
 | Agent | Focus |
 |-------|-------|
-| `qa-engineer-marvin` | Execute test cases from spec, verify all pass |
+| `qa-engineer-marvin` | Three parallel passes:<br>• **Tests** — execute test cases from spec, verify all pass<br>• **Docs review (read-only)** — apply `coding-best-practices` Cross-Cutting Rules (length cap + present-state + two-tier audience) to comments and API doc comments (rustdoc, JSDoc, docstrings, godoc, etc.) introduced by the PR diff. Findings with file:line citations and proposed rewrites at `/tmp/claudius-<scope>-docs-report.md`.<br>• **Dedup audit (read-only)** — for every new publicly exported function, type, trait/interface, and module introduced by the PR, search the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and project-defined reference repos for equivalent functionality. Findings (high-confidence duplicates, partial overlaps, reviewed-and-rejected) with file:line citations both sides at `/tmp/claudius-<scope>-dedup-report.md`. |
 | `security-engineer-smythe` | Security audit (if security-relevant change) |
 | `project-reviewer-adams` | Validate Development Plan fully executed, code quality |
 
 Scale down agent set for truly small changes — but Marvin and Adams are always required.
+
+**Both audits are READ-ONLY by mandate** — emphasize this in the agent prompt template. Findings go to the lead, who decides follow-up:
+- Trivial fixes can land in the same PR via a separate commit
+- Substantial refactors land as follow-up PRs
+- Findings the lead judges as wrong-call go in a "rejected with rationale" section of the report
+
+To skip any audit, the lead must document the reason in the QA report.
 
 No task is done until QA passes. Formatting, linting, and test passing are not optional.
 
@@ -118,10 +130,6 @@ Agents must commit all changes before exiting — uncommitted work cannot be mer
 
 ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 
-**Pre-flight (blocking):** Run `git log @{upstream}..HEAD --oneline`. If unpushed commits exist OR no upstream is configured, STOP — push first, then launch agents (worktrees fork from `origin`, not local branch).
+**Pre-flight pattern**: see `grand-admiral` skill — Worktree Isolation. Default is Option A (local-SHA injection, no push); Option B (push first) is the explicit fallback.
 
-Before spawning, capture the resolved commit SHA (from `git rev-parse HEAD`), never a branch name or symbolic ref, and include `git merge --ff-only <sha>` in each agent's prompt so worktrees sync to correct base.
-
-After each wave: verify worktree commits, merge into main, run tests, **push to remote**, then clean up. Always push after merging — unpushed merges cause stale-origin issues for subsequent waves.
-
-**Anti-pattern:** committing locally then launching worktree agents that need those changes — worktrees won't see them until pushed.
+**Post-wave**: verify worktree commits, merge into the feature branch, run tests, then clean up worktrees. Push only when the user explicitly authorizes it (e.g., via `/push`, `/ci-dance`, or direct instruction) — never push as an automatic step.
