@@ -4,9 +4,19 @@
 Long-text finding fields (``description``, ``impact``, ``recommendation``,
 executive summary text) are rendered as Markdown in HTML and PDF outputs.
 Markdown output passes the source through verbatim (Markdown in, Markdown out).
+HTML output is sanitised via ``bleach`` so untrusted Markdown cannot inject
+``<script>`` or other active content.
 
 Requires ``markdown >= 3.4`` and ``beautifulsoup4 >= 4.10`` for HTML/PDF rendering
 (install via ``pip install -r scripts/requirements.txt``).
+
+Known limitations (open follow-ups):
+  - PDF Unicode: emoji and non-Latin scripts (Arabic, CJK) render as black
+    tofu (squares) because Helvetica core fonts lack glyphs. Workaround: use
+    Latin text in long-text fields, or wait for a PDF font-embedding pass.
+  - PDF malformed Markdown: an unclosed code fence in a description silently
+    swallows subsequent paragraphs in PDF output. HTML output degrades
+    gracefully (the literal fence survives as text).
 """
 
 from __future__ import annotations
@@ -109,28 +119,49 @@ def _finding_tag_suffix(finding: dict[str, Any]) -> str:
 # ===================================================================
 # Markdown rendering for long-text fields (description / impact / etc.)
 # ===================================================================
-# Long-text fields carry Markdown markup (bold, headings, code, lists, links).
-# HTML output renders them via the Jinja filter ``markdown``; PDF output
-# renders them via ``render_markdown_to_reportlab``, which walks the parsed
-# HTML tree and emits ReportLab Paragraph mini-XML.
 
 # Heading -> font size (pt) for ReportLab. Matches PDF body sizing.
 _RL_HEADING_SIZES = {"h1": 14, "h2": 13, "h3": 12, "h4": 11, "h5": 10, "h6": 10}
+
+# Allowlist for bleach sanitisation of Markdown-produced HTML. Covers tags
+# the ``markdown`` library emits with ``fenced_code`` + ``tables``; anything
+# else (script, iframe, on* handlers, javascript: URIs) is stripped.
+_HTML_ALLOWED_TAGS = {
+    "p", "strong", "em", "code", "pre",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li",
+    "a", "br", "blockquote", "hr",
+    "table", "thead", "tbody", "tr", "th", "td",
+}
+_HTML_ALLOWED_ATTRS = {"a": ["href", "title"]}
+_HTML_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 
 
 def render_markdown_to_html(s: str) -> Any:
     """Render a Markdown string to safe HTML for Jinja2 templates.
 
-    Returns a ``markupsafe.Markup`` so the template does not double-escape.
-    Empty / whitespace-only input returns an empty Markup.
+    Output is sanitised via ``bleach`` against an allowlist of standard
+    Markdown-produced tags; raw ``<script>``, ``<iframe>``, ``on*`` handlers,
+    and ``javascript:`` URIs are stripped. Returns a ``markupsafe.Markup`` so
+    the template does not double-escape. Empty / whitespace-only input returns
+    an empty Markup.
     """
     from markupsafe import Markup
+    import bleach as _bleach
     import markdown as _markdown_lib
 
     if not s or not s.strip():
         return Markup("")
     md = _markdown_lib.Markdown(extensions=["fenced_code", "tables"])
-    return Markup(md.convert(s))
+    raw_html = md.convert(s)
+    safe_html = _bleach.clean(
+        raw_html,
+        tags=_HTML_ALLOWED_TAGS,
+        attributes=_HTML_ALLOWED_ATTRS,
+        protocols=_HTML_ALLOWED_PROTOCOLS,
+        strip=True,
+    )
+    return Markup(safe_html)
 
 
 def _rl_inline(node: Any) -> str:
@@ -525,7 +556,7 @@ details summary:hover{color:{{ ACCENT }}}
 
 <!-- Executive Summary -->
 <h2 id="summary">Executive Summary</h2>
-<div class="exec-summary"><strong>{{ executive_summary.overall_assessment | markdown }}</strong></div>
+<div class="exec-summary"><strong>{{ executive_summary.overall_assessment }}</strong></div>
 {% if executive_summary.summary_text %}<div class="exec-summary">{{ executive_summary.summary_text | markdown }}</div>{% endif %}
 
 <div class="kpi-row">

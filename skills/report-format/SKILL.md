@@ -56,11 +56,11 @@ These fields are **Markdown** by default — agents emit Markdown markup, render
 - `recommendation`
 - `executive_summary.summary_text`, `executive_summary.verdict_text`
 
-Use `**bold**`, `## headings`, `` `code spans` ``, fenced code blocks, lists, and `[links](url)` to structure long-form content. Single-line fields (`title`, `severity`, `category`, `location`, etc.) stay plain text.
+Use Markdown — renderers handle formatting; you write content. Single-line fields (`title`, `severity`, `category`, `location`, etc.) stay plain text.
 
-**For agents**: write descriptions as essays — `## Section headings`, `**bold callouts**`, `` `code references` ``, fenced code for snippets, lists for enumeration. Renderers handle formatting; you write content.
+**Markdown style for agents**: separate lists, code blocks, and headings from preceding text with a blank line (CommonMark requires this for parsing).
 
-**For consumers**: parse long-text fields as CommonMark Markdown. Reference renderer: `scripts/generate_review_report.py` — HTML uses the `markdown` Python package, PDF walks the parsed HTML to ReportLab mini-XML. Markdown output passes through verbatim.
+**For consumers**: parse long-text fields as CommonMark Markdown. Reference renderer: `scripts/generate_review_report.py` — HTML uses the `markdown` Python package sanitised through `bleach`, PDF walks the parsed HTML to ReportLab mini-XML. Markdown output passes through verbatim.
 
 ## File Output
 

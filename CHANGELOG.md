@@ -934,6 +934,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[3.14.0]: https://github.com/lklimek/claudius/compare/v3.13.0...v3.14.0
 [3.13.0]: https://github.com/lklimek/claudius/compare/v3.12.0...v3.13.0
 [2.2.0]: https://github.com/lklimek/claudius/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/lklimek/claudius/compare/v2.0.0...v2.1.0
