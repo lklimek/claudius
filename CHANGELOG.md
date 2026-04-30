@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.14.0] - 2026-04-30
+
+### Added
+
+- `scripts/generate_review_report.py`: HTML and PDF outputs render long-text finding fields (`description`, `impact`, `recommendation`, executive summary `summary_text`/`verdict_text`) as Markdown — bold, italic, headings (h1-h6 size-mapped in PDF), inline code, fenced code blocks, ordered/unordered lists, line breaks, and links. Markdown output (`--format md`) is unchanged (Markdown source passes through verbatim).
+- `scripts/generate_review_report.py`: new helpers `render_markdown_to_html` (Jinja filter) and `render_markdown_to_reportlab` (BeautifulSoup tree walker emitting ReportLab mini-XML).
+- HTML CSS: rules targeting Markdown rendered inside `<dd>` and `.exec-summary` (heading sizes, code/pre styling, list spacing).
+- `scripts/requirements.txt`: declares `markdown >= 3.4` and `beautifulsoup4 >= 4.10` (plus the existing `jinja2`, `reportlab`, `jsonschema`).
+- `skills/report-format`: new "Long-Text Field Format" section documenting Markdown as the default for `description`/`impact`/`recommendation`/executive summary fields.
+- `schemas/review-report.schema.json`: long-text field `description` keywords now annotate the Markdown subset and reference the canonical renderer.
+
+### Fixed
+
+- `scripts/generate_review_report.py`: `**bold**`, `## headings`, `` `code` ``, lists, and line breaks no longer render as literal characters in HTML and PDF reports — multi-paragraph essays now show paragraph separation, headings, and inline formatting.
+
 ## [3.13.0] - 2026-04-29
 
 ### Added
@@ -919,6 +934,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[3.14.0]: https://github.com/lklimek/claudius/compare/v3.13.0...v3.14.0
 [3.13.0]: https://github.com/lklimek/claudius/compare/v3.12.0...v3.13.0
 [2.2.0]: https://github.com/lklimek/claudius/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/lklimek/claudius/compare/v2.0.0...v2.1.0

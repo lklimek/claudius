@@ -44,10 +44,10 @@
       "required": ["overall_assessment"],
       "additionalProperties": false,
       "properties": {
-        "overall_assessment": { "type": "string", "description": "1-2 sentence overall assessment" },
-        "summary_text": { "type": "string", "description": "Expanded summary paragraph" },
-        "verdict_text": { "type": "string", "description": "Final verdict" },
-        "verdict_action": { "type": "string", "description": "Recommended action (e.g., 'Approve with conditions')" }
+        "overall_assessment": { "type": "string", "description": "1-2 sentence overall assessment (plain text)" },
+        "summary_text": { "type": "string", "description": "Expanded summary paragraph. Markdown-formatted: may contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
+        "verdict_text": { "type": "string", "description": "Final verdict. Markdown-formatted: may contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
+        "verdict_action": { "type": "string", "description": "Recommended action, e.g., 'Approve with conditions' (plain text)" }
       }
     },
     "summary_statistics": {
@@ -210,9 +210,9 @@
           "description": "Classification tags (OWASP, CWE, Rust best-practice IDs, etc.)"
         },
         "location": { "type": "string", "minLength": 1, "description": "file:start_line-end_line" },
-        "description": { "type": "string", "minLength": 1 },
-        "impact": { "type": "string" },
-        "recommendation": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1, "description": "Markdown-formatted description of the finding. May contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
+        "impact": { "type": "string", "description": "Markdown-formatted impact statement. Same Markdown subset as description." },
+        "recommendation": { "type": "string", "minLength": 1, "description": "Markdown-formatted remediation guidance. Same Markdown subset as description." },
         "reviewer": { "type": "string", "description": "GitHub username of the comment author" },
         "comment_id": { "type": "integer", "description": "GitHub REST API comment database ID" },
         "comment_url": { "type": "string", "format": "uri", "pattern": "^https?://", "description": "Direct URL to the review comment on GitHub (https/http only)" },

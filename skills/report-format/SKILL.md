@@ -47,6 +47,21 @@ Agents emit a JSON array of `finding_section` objects:
 
 **Optional**: `tags` (OWASP, CWE, etc.), `impact` (what could go wrong).
 
+## Long-Text Field Format
+
+These fields are **Markdown** by default — agents emit Markdown markup, renderers parse it as CommonMark:
+
+- `description`
+- `impact`
+- `recommendation`
+- `executive_summary.summary_text`, `executive_summary.verdict_text`
+
+Use Markdown — renderers handle formatting; you write content. Single-line fields (`title`, `severity`, `category`, `location`, etc.) stay plain text.
+
+**Markdown style for agents**: separate lists, code blocks, and headings from preceding text with a blank line (CommonMark requires this for parsing).
+
+**For consumers**: parse long-text fields as CommonMark Markdown. Reference renderer: `scripts/generate_review_report.py` — HTML uses the `markdown` Python package sanitised through `bleach`, PDF walks the parsed HTML to ReportLab mini-XML. Markdown output passes through verbatim.
+
 ## File Output
 
 When writing findings to a file, ALWAYS use the Write tool — never use Bash commands like `cat > file`, `tee`, heredoc redirects, or inline `python3` scripts for file creation. The Write tool is allowed in all CI environments; Bash file-writing commands are typically blocked by tool allowlists.

@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
-"""Unified renderer: converts a review report JSON into md, html, triage, or pdf."""
+"""Unified renderer: converts a review report JSON into md, html, triage, or pdf.
+
+Long-text finding fields (``description``, ``impact``, ``recommendation``,
+executive summary text) are rendered as Markdown in HTML and PDF outputs.
+Markdown output passes the source through verbatim (Markdown in, Markdown out).
+HTML output is sanitised via ``bleach`` so untrusted Markdown cannot inject
+``<script>`` or other active content.
+
+Requires ``markdown >= 3.4`` and ``beautifulsoup4 >= 4.10`` for HTML/PDF rendering
+(install via ``pip install -r scripts/requirements.txt``).
+
+Known limitations (open follow-ups):
+  - PDF Unicode: emoji and non-Latin scripts (Arabic, CJK) render as black
+    tofu (squares) because Helvetica core fonts lack glyphs. Workaround: use
+    Latin text in long-text fields, or wait for a PDF font-embedding pass.
+  - PDF malformed Markdown: an unclosed code fence in a description silently
+    swallows subsequent paragraphs in PDF output. HTML output degrades
+    gracefully (the literal fence survives as text).
+"""
 
 from __future__ import annotations
 
@@ -96,6 +114,145 @@ def _finding_tag_suffix(finding: dict[str, Any]) -> str:
     if tags:
         return " \u2014 " + ", ".join(tags)
     return ""
+
+
+# ===================================================================
+# Markdown rendering for long-text fields (description / impact / etc.)
+# ===================================================================
+
+# Heading -> font size (pt) for ReportLab. Matches PDF body sizing.
+_RL_HEADING_SIZES = {"h1": 14, "h2": 13, "h3": 12, "h4": 11, "h5": 10, "h6": 10}
+
+# Allowlist for bleach sanitisation of Markdown-produced HTML. Covers tags
+# the ``markdown`` library emits with ``fenced_code`` + ``tables``; anything
+# else (script, iframe, on* handlers, javascript: URIs) is stripped.
+_HTML_ALLOWED_TAGS = {
+    "p", "strong", "em", "code", "pre",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li",
+    "a", "br", "blockquote", "hr",
+    "table", "thead", "tbody", "tr", "th", "td",
+}
+_HTML_ALLOWED_ATTRS = {"a": ["href", "title"]}
+_HTML_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+
+
+def render_markdown_to_html(s: str) -> Any:
+    """Render a Markdown string to safe HTML for Jinja2 templates.
+
+    Output is sanitised via ``bleach`` against an allowlist of standard
+    Markdown-produced tags; raw ``<script>``, ``<iframe>``, ``on*`` handlers,
+    and ``javascript:`` URIs are stripped. Returns a ``markupsafe.Markup`` so
+    the template does not double-escape. Empty / whitespace-only input returns
+    an empty Markup.
+    """
+    from markupsafe import Markup
+    import bleach as _bleach
+    import markdown as _markdown_lib
+
+    if not s or not s.strip():
+        return Markup("")
+    md = _markdown_lib.Markdown(extensions=["fenced_code", "tables"])
+    raw_html = md.convert(s)
+    safe_html = _bleach.clean(
+        raw_html,
+        tags=_HTML_ALLOWED_TAGS,
+        attributes=_HTML_ALLOWED_ATTRS,
+        protocols=_HTML_ALLOWED_PROTOCOLS,
+        strip=True,
+    )
+    return Markup(safe_html)
+
+
+def _rl_inline(node: Any) -> str:
+    """Render a BeautifulSoup node's children as ReportLab inline mini-XML."""
+    from bs4 import NavigableString
+
+    parts: list[str] = []
+    for child in node.children:
+        if isinstance(child, NavigableString):
+            parts.append(xml_escape(str(child)))
+            continue
+        name = child.name
+        if name in ("strong", "b"):
+            parts.append(f"<b>{_rl_inline(child)}</b>")
+        elif name in ("em", "i"):
+            parts.append(f"<i>{_rl_inline(child)}</i>")
+        elif name == "code":
+            parts.append(f'<font name="Courier">{_rl_inline(child)}</font>')
+        elif name == "br":
+            parts.append("<br/>")
+        elif name == "a":
+            href = child.get("href", "")
+            safe_href = xml_escape(href, {chr(34): "&quot;"})
+            parts.append(
+                f'<link href="{safe_href}" color="{ACCENT}">{_rl_inline(child)}</link>'
+            )
+        else:
+            # Unknown inline element -- fall through to its children's text.
+            parts.append(_rl_inline(child))
+    return "".join(parts)
+
+
+def _rl_block(node: Any) -> list[tuple[str, str]]:
+    """Convert a top-level block node into a list of (kind, body) tuples.
+
+    ``kind`` is one of: ``"para"`` (regular Paragraph), ``"h1".."h6"``,
+    or ``"pre"`` (code block). List items expand into one ``"para"`` per
+    item with a bullet/number prefix. ``body`` is ReportLab mini-XML.
+    """
+    name = (node.name or "").lower()
+    if name in _RL_HEADING_SIZES:
+        return [(name, f"<b>{_rl_inline(node)}</b>")]
+    if name == "p":
+        return [("para", _rl_inline(node))]
+    if name == "pre":
+        # Render code blocks verbatim in monospace, preserving newlines as <br/>.
+        text = node.get_text()
+        text = xml_escape(text).replace("\n", "<br/>")
+        return [("pre", f'<font name="Courier">{text}</font>')]
+    if name in ("ul", "ol"):
+        items: list[tuple[str, str]] = []
+        ordered = name == "ol"
+        for idx, li in enumerate(node.find_all("li", recursive=False), start=1):
+            marker = f"{idx}." if ordered else "&#8226;"
+            items.append(("para", f"{marker}&nbsp;{_rl_inline(li)}"))
+        return items
+    if name in ("strong", "b", "em", "i", "code", "a", "br") or name is None:
+        # Naked inline content at the top level -- wrap as a paragraph.
+        return [("para", _rl_inline(node))]
+    # Unknown block -- recurse into children, flattening their blocks.
+    out: list[tuple[str, str]] = []
+    for child in node.children:
+        if hasattr(child, "name") and child.name is not None:
+            out.extend(_rl_block(child))
+    return out
+
+
+def render_markdown_to_reportlab(s: str) -> list[tuple[str, str]]:
+    """Render Markdown to a list of ReportLab Paragraph blocks.
+
+    Each entry is ``(kind, body)`` where ``kind`` selects the ParagraphStyle
+    (``"para"``, ``"h1".."h6"``, ``"pre"``) and ``body`` is mini-XML safe
+    for ``reportlab.platypus.Paragraph``. Empty input yields an empty list.
+    """
+    from bs4 import BeautifulSoup
+    import markdown as _markdown_lib
+
+    if not s or not s.strip():
+        return []
+    md = _markdown_lib.Markdown(extensions=["fenced_code", "tables"])
+    html = md.convert(s)
+    soup = BeautifulSoup(html, "html.parser")
+    blocks: list[tuple[str, str]] = []
+    for child in soup.children:
+        if hasattr(child, "name") and child.name is not None:
+            blocks.extend(_rl_block(child))
+        else:
+            text = str(child).strip()
+            if text:
+                blocks.append(("para", xml_escape(text)))
+    return blocks
 
 
 # ===================================================================
@@ -354,6 +511,27 @@ details summary:hover{color:{{ ACCENT }}}
 .report-toolbar select:focus,.report-toolbar input:focus{border-color:{{ ACCENT }};
   box-shadow:0 0 0 2px rgba(36,113,163,.15);outline:none}
 .report-toolbar .count-label{font-size:.8rem;color:{{ TEXT_MUTED }};margin-left:auto}
+/* Markdown rendered inside <dd> (description / impact / recommendation) */
+.finding dd p{margin:.25rem 0}
+.finding dd p:first-child{margin-top:0}
+.finding dd p:last-child{margin-bottom:0}
+.finding dd h1,.finding dd h2,.finding dd h3,
+.exec-summary h1,.exec-summary h2,.exec-summary h3{margin:.6rem 0 .3rem;color:{{ BRAND }};
+  border-bottom:1px solid {{ BORDER }};padding-bottom:.15rem}
+.finding dd h1,.exec-summary h1{font-size:1.1rem}
+.finding dd h2,.exec-summary h2{font-size:1.0rem}
+.finding dd h3,.exec-summary h3{font-size:.95rem;border-bottom:none}
+.finding dd code,.exec-summary code{background:{{ BG_LIGHT }};border:1px solid {{ BORDER }};
+  border-radius:3px;padding:.05rem .25rem;font-size:.85em;font-family:Menlo,Consolas,monospace}
+.finding dd pre,.exec-summary pre{background:{{ BG_LIGHT }};border:1px solid {{ BORDER }};
+  border-radius:4px;padding:.5rem .7rem;overflow-x:auto;font-size:.85em;margin:.4rem 0}
+.finding dd pre code,.exec-summary pre code{background:transparent;border:none;padding:0}
+.finding dd ul,.finding dd ol,.exec-summary ul,.exec-summary ol{margin:.3rem 0 .3rem 1.4rem}
+.finding dd li,.exec-summary li{margin:.1rem 0}
+.finding dd strong,.exec-summary strong{color:{{ TEXT_DARK }}}
+.finding dd a,.exec-summary a{color:{{ ACCENT }}}
+.exec-summary{margin:.5rem 0}
+.exec-summary p{margin:.4rem 0}
 {% block extra_css %}{% endblock %}
 </style>
 </head>
@@ -378,8 +556,8 @@ details summary:hover{color:{{ ACCENT }}}
 
 <!-- Executive Summary -->
 <h2 id="summary">Executive Summary</h2>
-<p><strong>{{ executive_summary.overall_assessment }}</strong></p>
-{% if executive_summary.summary_text %}<p>{{ executive_summary.summary_text }}</p>{% endif %}
+<div class="exec-summary"><strong>{{ executive_summary.overall_assessment }}</strong></div>
+{% if executive_summary.summary_text %}<div class="exec-summary">{{ executive_summary.summary_text | markdown }}</div>{% endif %}
 
 <div class="kpi-row">
   <div class="kpi-box"><div class="val" style="color:{{ ACCENT }}">{{ stats.total_findings }}</div><div class="label">Total Findings</div></div>
@@ -405,7 +583,7 @@ details summary:hover{color:{{ ACCENT }}}
 <!-- Verdict -->
 <h3 id="verdict">Verdict</h3>
 <div class="verdict">
-  {% if executive_summary.verdict_text %}<p>{{ executive_summary.verdict_text }}</p>{% endif %}
+  {% if executive_summary.verdict_text %}<div class="exec-summary">{{ executive_summary.verdict_text | markdown }}</div>{% endif %}
   {% if executive_summary.verdict_action %}<p><strong>Action:</strong> {{ executive_summary.verdict_action }}</p>{% endif %}
 </div>
 
@@ -499,9 +677,9 @@ details summary:hover{color:{{ ACCENT }}}
   </h3>
   <dl>
     <dt>Location:</dt><dd><code>{{ f.location }}</code></dd>
-    <dt>Description:</dt><dd>{{ f.description }}</dd>
-    {% if f.impact %}<dt>Impact:</dt><dd>{{ f.impact }}</dd>{% endif %}
-    <dt>Recommendation:</dt><dd>{{ f.recommendation }}</dd>
+    <dt>Description:</dt><dd>{{ f.description | markdown }}</dd>
+    {% if f.impact %}<dt>Impact:</dt><dd>{{ f.impact | markdown }}</dd>{% endif %}
+    <dt>Recommendation:</dt><dd>{{ f.recommendation | markdown }}</dd>
     {% if f.verdict %}
     <dt>Verdict:</dt><dd><span class="badge" style="background:{{ verdict_colors.get(f.verdict, '#7F8C8D') }}">{{ f.verdict }}</span></dd>
     {% endif %}
@@ -1209,6 +1387,7 @@ def render_html(data: dict[str, Any]) -> str:
 
     env = Environment(autoescape=True)
     env.filters["sev_label"] = sev_label
+    env.filters["markdown"] = render_markdown_to_html
     template = env.from_string(_HTML_TEMPLATE)
     ctx = _build_html_context(data, triage=False)
     _mark_safe_values(ctx)
@@ -1326,6 +1505,7 @@ def render_triage(data: dict[str, Any]) -> str:
 
     env = Environment(autoescape=True)
     env.filters["sev_label"] = sev_label
+    env.filters["markdown"] = render_markdown_to_html
     template = env.from_string(triage_template)
     ctx = _build_html_context(data, triage=True)
     _mark_safe_values(ctx)
@@ -1874,6 +2054,85 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         )
         return t
 
+    # ParagraphStyles for Markdown blocks rendered inside finding bodies.
+    # Sizes mirror _RL_HEADING_SIZES; pre uses Courier with the body's left indent.
+    md_heading_styles = {
+        kind: ParagraphStyle(
+            f"FB_{kind.upper()}",
+            fontSize=size,
+            textColor=TEXT_DARK,
+            fontName="Helvetica-Bold",
+            spaceBefore=4,
+            spaceAfter=2,
+            leading=size + 3,
+            leftIndent=12,
+        )
+        for kind, size in _RL_HEADING_SIZES.items()
+    }
+    md_pre_style = ParagraphStyle(
+        "FB_PRE",
+        fontSize=8.5,
+        textColor=TEXT_DARK,
+        fontName="Courier",
+        backColor=rl_colors.HexColor(BG_LIGHT),
+        borderColor=RL_BORDER,
+        borderWidth=0.5,
+        borderPadding=4,
+        spaceAfter=4,
+        leading=11,
+        leftIndent=12,
+    )
+
+    def _md_body(value: str, base_style: ParagraphStyle) -> list[Paragraph]:
+        """Render a Markdown long-text field as Paragraphs using ``base_style``.
+
+        Headings and code blocks use the Markdown-specific styles; regular
+        prose falls back to ``base_style`` so callers can plug into the
+        surrounding section's typography (executive summary uses ``body``).
+        """
+        blocks = render_markdown_to_reportlab(value)
+        if not blocks:
+            return []
+        out: list[Paragraph] = []
+        for kind, body in blocks:
+            if kind in md_heading_styles:
+                out.append(Paragraph(body, md_heading_styles[kind]))
+            elif kind == "pre":
+                out.append(Paragraph(body, md_pre_style))
+            else:
+                out.append(Paragraph(body, base_style))
+        return out
+
+    def _md_field(label: str, value: str) -> list[Paragraph]:
+        """Render a long-text field (Markdown) as a list of Paragraph flowables.
+
+        The first block is prefixed with ``<b>label:</b><br/>`` so the label
+        stays plain while the body renders its Markdown structure. Empty
+        values yield a single label-only Paragraph for layout consistency.
+        """
+        blocks = render_markdown_to_reportlab(value)
+        if not blocks:
+            return [Paragraph(f"<b>{label}:</b>", s["finding_body"])]
+        out: list[Paragraph] = []
+        first_kind, first_body = blocks[0]
+        first_xml = f"<b>{label}:</b><br/>{first_body}"
+        first_style = (
+            md_heading_styles[first_kind]
+            if first_kind in md_heading_styles
+            else md_pre_style
+            if first_kind == "pre"
+            else s["finding_body"]
+        )
+        out.append(Paragraph(first_xml, first_style))
+        for kind, body in blocks[1:]:
+            if kind in md_heading_styles:
+                out.append(Paragraph(body, md_heading_styles[kind]))
+            elif kind == "pre":
+                out.append(Paragraph(body, md_pre_style))
+            else:
+                out.append(Paragraph(body, s["finding_body"]))
+        return out
+
     # --- Finding renderers ---
     def render_finding(f: dict[str, Any]) -> KeepTogether:
         fid = f["id"]
@@ -1888,7 +2147,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         tag_display = (
             f' <font color="{TEXT_MUTED}">- {", ".join(tags)}</font>' if tags else ""
         )
-        elements = [
+        elements: list[Any] = [
             Paragraph(
                 f'<font color="{clr}"><b>{fid} ({sev})</b></font>: {title}{tag_display}',
                 s["finding_title"],
@@ -1897,11 +2156,11 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
                 f'<b>Location:</b> <font color="{ACCENT}">{loc}</font>',
                 s["finding_body"],
             ),
-            Paragraph(f"<b>Description:</b> {desc}", s["finding_body"]),
         ]
+        elements.extend(_md_field("Description", desc))
         if impact:
-            elements.append(Paragraph(f"<b>Impact:</b> {impact}", s["finding_body"]))
-        elements.append(Paragraph(f"<b>Recommendation:</b> {rec}", s["finding_body"]))
+            elements.extend(_md_field("Impact", impact))
+        elements.extend(_md_field("Recommendation", rec))
         verdict = f.get("verdict", "")
         if verdict:
             v_clr = GREEN if verdict == "RESOLVED" else RED
@@ -1992,7 +2251,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         )
     )
     if es.get("summary_text"):
-        story.append(Paragraph(es["summary_text"], s["body"]))
+        story.extend(_md_body(es["summary_text"], s["body"]))
     story.append(Spacer(1, 4))
     story.append(kpi_boxes())
     story.append(Spacer(1, 6))
@@ -2094,7 +2353,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
     story.append(Spacer(1, 10))
     story.append(Paragraph("Verdict", s["h2"]))
     if es.get("verdict_text"):
-        story.append(Paragraph(es["verdict_text"], s["body"]))
+        story.extend(_md_body(es["verdict_text"], s["body"]))
     if es.get("verdict_action"):
         story.append(
             Paragraph(f"<b>Claudius verdict:</b> {es['verdict_action']}", s["body"])
@@ -2120,7 +2379,13 @@ def _ext_for_format(fmt: str) -> str:
 def main() -> None:
     """Entry point for the CLI."""
     parser = argparse.ArgumentParser(
-        description="Convert a review report JSON into md, html, triage, or pdf format.",
+        description=(
+            "Convert a review report JSON into md, html, triage, or pdf format. "
+            "Long-text fields (description, impact, recommendation, executive "
+            "summary) render as Markdown in HTML and PDF. Requires "
+            "`markdown >= 3.4` and `beautifulsoup4 >= 4.10` "
+            "(install via `pip install -r scripts/requirements.txt`)."
+        ),
     )
     parser.add_argument("report", type=Path, help="Path to report JSON file")
     parser.add_argument(
