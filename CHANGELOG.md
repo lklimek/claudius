@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
-## [3.14.0] - 2026-04-29
+## [3.14.0] - 2026-04-30
 
 ### Added
 
