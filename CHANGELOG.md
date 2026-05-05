@@ -6,6 +6,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [3.14.3] - 2026-05-05
+
 ### Fixed
 
 - `scripts/generate_review_report.py` (QA-004): PDF output now registers a Unicode TrueType font (DejaVu Sans by default, with bold/italic/mono siblings via `pdfmetrics.registerFontFamily`) so emoji and non-Latin scripts (Cyrillic, Arabic, Hebrew, etc.) render correctly instead of as tofu boxes. Discovery order: `$CLAUDIUS_PDF_FONT` env override -> bundled `scripts/fonts/DejaVuSans.ttf` -> common Linux locations (`/usr/share/fonts/truetype/dejavu`, `/usr/share/fonts/truetype/noto`). When no TTF is found the renderer logs a warning to stderr and falls back to ReportLab's Helvetica/Courier core fonts (Latin-1 only) -- never crashes.
@@ -941,6 +943,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[3.14.3]: https://github.com/lklimek/claudius/compare/v3.14.0...v3.14.3
 [3.14.0]: https://github.com/lklimek/claudius/compare/v3.13.0...v3.14.0
 [3.13.0]: https://github.com/lklimek/claudius/compare/v3.12.0...v3.13.0
 [2.2.0]: https://github.com/lklimek/claudius/compare/v2.1.0...v2.2.0
