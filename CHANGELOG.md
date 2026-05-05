@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.14.1] - 2026-05-05
+
+### Added
+
+- `scripts/gh-resolve-review-threads.sh`: enhanced mode now accepts `--id <thread_id>` (repeatable) so callers can target specific threads without filters. The flag accepts three formats — GraphQL node IDs (`PRRT_*` / `PR_kw*`), REST review-comment IDs (`discussion_r<n>`), and bare numeric `databaseId` — and auto-converts REST/numeric forms to thread node IDs by matching `databaseId` against the PR's review threads. Mixed formats in a single invocation are deduplicated and resolved in one batched GraphQL mutation. Closes the manual mapping step previously required when consuming `pull_request_read` MCP output.
+
+### Changed
+
+- `scripts/gh-resolve-review-threads.sh`: legacy mode now rejects non-GraphQL IDs with a clear error pointing the caller at the enhanced `--id` form (REST/numeric IDs cannot be converted without PR context). `PRRT_*` legacy invocations remain unchanged.
+
 ## [3.14.0] - 2026-04-30
 
 ### Added

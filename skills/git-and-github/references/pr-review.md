@@ -101,7 +101,9 @@ gh-list-review-threads.sh <owner/repo> <pr>
   -> {id, isResolved, comments: [{databaseId, path, body}]}
 
 gh-resolve-review-threads.sh <thread_id> [thread_id ...]
-  -> Resolves all given threads in a single API call. Ask user before resolving.
+  -> Resolves PRRT_* GraphQL node IDs in a single API call. Ask user first.
+gh-resolve-review-threads.sh <owner/repo> <pr> --id <id> [--id <id> ...]
+  -> Same, but accepts discussion_r* and numeric databaseId — auto-converts via PR context.
 
 gh-pr-base-sha.sh <owner/repo> <pr>
   -> Base commit SHA.
