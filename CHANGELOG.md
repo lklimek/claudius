@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [3.14.2] - 2026-05-05
+
+### Fixed
+
+- `scripts/gh-resolve-review-threads.sh`: REST/numeric `--id` values now resolve when they reference any comment in a thread, not just the head comment. The conversion query previously fetched `comments(first: 1)` per thread and matched only `comments[0].databaseId`, so a valid review-reply ID would fail with "could not map". The query now pulls `comments(first: 100)` and the jq selector scans every comment in the array.
+- `scripts/gh-resolve-review-threads.sh`: `reviewThreads` is now paginated via `pageInfo { hasNextPage endCursor }`, so PRs with more than 100 threads no longer silently lose threads outside the first page. Capped defensively at 50 pages (5000 threads); exceeding the cap raises a clear error. The previous `TODO: paginate review threads beyond the first 100` comment is replaced with documentation of the new pagination behavior.
+
 ## [3.14.1] - 2026-05-05
 
 ### Added
@@ -944,6 +951,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[3.14.2]: https://github.com/lklimek/claudius/compare/v3.14.1...v3.14.2
+[3.14.1]: https://github.com/lklimek/claudius/compare/v3.14.0...v3.14.1
 [3.14.0]: https://github.com/lklimek/claudius/compare/v3.13.0...v3.14.0
 [3.13.0]: https://github.com/lklimek/claudius/compare/v3.12.0...v3.13.0
 [2.2.0]: https://github.com/lklimek/claudius/compare/v2.1.0...v2.2.0

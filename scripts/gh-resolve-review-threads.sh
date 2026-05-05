@@ -202,37 +202,82 @@ for id in "${explicit_ids[@]+"${explicit_ids[@]}"}"; do
   fi
 done
 
-threads_json=""
-if $need_threads_fetch; then
-  # TODO: paginate review threads beyond the first 100. ~all PRs we encounter
-  # have far fewer; revisit if a PR exceeds this and threads silently drop.
-  threads_json=$(run_gh api graphql \
-    -F owner="$owner" \
-    -F repo="$repo" \
-    -F pr_number="$pr_number" \
-    -f query='
-      query($owner: String!, $repo: String!, $pr_number: Int!) {
-        repository(owner: $owner, name: $repo) {
-          pullRequest(number: $pr_number) {
-            reviewThreads(first: 100) {
-              nodes {
-                id
-                isResolved
-                isOutdated
-                comments(first: 1) {
-                  nodes { databaseId path body author { login } }
+# Fetch every reviewThread on the PR, walking pageInfo cursors. Each thread
+# pulls comments(first: 100); REST/numeric --id values match against any
+# comment's databaseId (not just the head comment), since review replies have
+# their own databaseId. 100 covers virtually every real thread; deeper
+# replies would require nested pagination and aren't worth the complexity.
+# Hard-cap at PAGE_LIMIT pages (5000 threads) to stay defensive.
+fetch_all_threads() {
+  local PAGE_LIMIT=50
+  local cursor="null"
+  local pages=0
+  local accumulated="[]"
+  local resp nodes_chunk has_next end_cursor cursor_arg
+
+  while :; do
+    if [[ "$cursor" == "null" ]]; then
+      cursor_arg=()
+    else
+      cursor_arg=(-f cursor="$cursor")
+    fi
+
+    resp=$(run_gh api graphql \
+      -F owner="$owner" \
+      -F repo="$repo" \
+      -F pr_number="$pr_number" \
+      "${cursor_arg[@]}" \
+      -f query='
+        query($owner: String!, $repo: String!, $pr_number: Int!, $cursor: String) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $pr_number) {
+              reviewThreads(first: 100, after: $cursor) {
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  id
+                  isResolved
+                  isOutdated
+                  comments(first: 100) {
+                    nodes { databaseId path body author { login } }
+                  }
                 }
               }
             }
           }
-        }
-      }')
+        }')
+
+    nodes_chunk=$(echo "$resp" | jq -c '.data.repository.pullRequest.reviewThreads.nodes')
+    accumulated=$(jq -c -n --argjson a "$accumulated" --argjson b "$nodes_chunk" '$a + $b')
+
+    has_next=$(echo "$resp" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+    end_cursor=$(echo "$resp" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+
+    pages=$((pages + 1))
+    if [[ "$has_next" != "true" ]]; then
+      break
+    fi
+    if [[ $pages -ge $PAGE_LIMIT ]]; then
+      echo "Error: reviewThreads pagination exceeded $PAGE_LIMIT pages on $owner_repo#$pr_number" >&2
+      exit 1
+    fi
+    cursor="$end_cursor"
+  done
+
+  jq -c -n --argjson nodes "$accumulated" \
+    '{data: {repository: {pullRequest: {reviewThreads: {nodes: $nodes}}}}}'
+}
+
+threads_json=""
+if $need_threads_fetch; then
+  threads_json=$(fetch_all_threads)
 fi
 
 declare -a thread_ids=()
 
 # Resolve --id selections first, normalizing REST/numeric IDs via the fetched
-# threads JSON (databaseId match on the first comment of each thread).
+# threads JSON. Match against ANY comment's databaseId in each thread, not
+# just the head — review replies have their own databaseIds, and a valid
+# reply ID should resolve to its parent thread.
 for id in "${explicit_ids[@]+"${explicit_ids[@]}"}"; do
   if is_graphql_node_id "$id"; then
     thread_ids+=("$id")
@@ -245,7 +290,9 @@ for id in "${explicit_ids[@]+"${explicit_ids[@]}"}"; do
   fi
   db_id=$(extract_database_id "$id")
   node_id=$(echo "$threads_json" | jq -r --argjson db "$db_id" \
-    '.data.repository.pullRequest.reviewThreads.nodes[] | select(.comments.nodes[0].databaseId == $db) | .id' \
+    '.data.repository.pullRequest.reviewThreads.nodes[]
+       | select(any(.comments.nodes[]; .databaseId == $db))
+       | .id' \
     | head -n1)
   if [[ -z "$node_id" || "$node_id" == "null" ]]; then
     echo "Error: could not map comment id '$id' (databaseId=$db_id) to a review thread on $owner_repo#$pr_number" >&2
