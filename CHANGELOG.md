@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `scripts/generate_review_report.py` (QA-004): PDF output now registers a Unicode TrueType font (DejaVu Sans by default, with bold/italic/mono siblings via `pdfmetrics.registerFontFamily`) so emoji and non-Latin scripts (Cyrillic, Arabic, Hebrew, etc.) render correctly instead of as tofu boxes. Discovery order: `$CLAUDIUS_PDF_FONT` env override -> bundled `scripts/fonts/DejaVuSans.ttf` -> common Linux locations (`/usr/share/fonts/truetype/dejavu`, `/usr/share/fonts/truetype/noto`). When no TTF is found the renderer logs a warning to stderr and falls back to ReportLab's Helvetica/Courier core fonts (Latin-1 only) -- never crashes.
+- `scripts/generate_review_report.py` (QA-005): `render_markdown_to_reportlab()` wraps the Markdown -> HTML -> ReportLab pass in try/except. On any failure (malformed input, parser exception, ReportLab mini-XML rejection) it logs a warning and falls back to a single XML-escaped preformatted block containing the raw source so no content is silently swallowed.
+
 ## [3.14.0] - 2026-04-30
 
 ### Added

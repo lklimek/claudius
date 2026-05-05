@@ -10,13 +10,22 @@ HTML output is sanitised via ``bleach`` so untrusted Markdown cannot inject
 Requires ``markdown >= 3.4`` and ``beautifulsoup4 >= 4.10`` for HTML/PDF rendering
 (install via ``pip install -r scripts/requirements.txt``).
 
-Known limitations (open follow-ups):
-  - PDF Unicode: emoji and non-Latin scripts (Arabic, CJK) render as black
-    tofu (squares) because Helvetica core fonts lack glyphs. Workaround: use
-    Latin text in long-text fields, or wait for a PDF font-embedding pass.
-  - PDF malformed Markdown: an unclosed code fence in a description silently
-    swallows subsequent paragraphs in PDF output. HTML output degrades
-    gracefully (the literal fence survives as text).
+PDF Unicode support:
+  PDF output registers a Unicode TrueType font (DejaVu Sans by default) so emoji
+  and non-Latin scripts (Cyrillic, Arabic, CJK) render correctly. Font discovery
+  order: (1) ``$CLAUDIUS_PDF_FONT`` env var pointing to a TTF, (2) bundled font
+  at ``scripts/fonts/DejaVuSans.ttf`` (sibling ``-Bold``/``Mono`` variants picked
+  up automatically), (3) common Linux system locations (DejaVu, Noto Sans). When
+  no TTF is found, the renderer logs a warning to stderr and falls back to
+  ReportLab's Helvetica/Courier core fonts (Latin-1 only — emoji and non-Latin
+  scripts render as tofu boxes in that fallback).
+
+PDF malformed Markdown:
+  ``render_markdown_to_reportlab`` wraps the Markdown -> HTML -> ReportLab pass
+  in a try/except. On any failure (e.g. an unclosed code fence that confuses the
+  ReportLab mini-XML parser downstream), the renderer logs a warning to stderr
+  and falls back to a single escaped ``<pre>``-style block containing the raw
+  source so no content is silently dropped.
 """
 
 from __future__ import annotations
@@ -123,15 +132,40 @@ def _finding_tag_suffix(finding: dict[str, Any]) -> str:
 # Heading -> font size (pt) for ReportLab. Matches PDF body sizing.
 _RL_HEADING_SIZES = {"h1": 14, "h2": 13, "h3": 12, "h4": 11, "h5": 10, "h6": 10}
 
+# Monospace font name used inside ReportLab inline ``<font>`` tags emitted by
+# the Markdown walker. Defaults to the core ``Courier`` font (Latin-1 only) and
+# gets swapped for a Unicode TTF face by ``_register_pdf_fonts`` when one is
+# available, so inline ``code`` and fenced code blocks render emoji/CJK.
+_RL_MONO_FONT = "Courier"
+
 # Allowlist for bleach sanitisation of Markdown-produced HTML. Covers tags
 # the ``markdown`` library emits with ``fenced_code`` + ``tables``; anything
 # else (script, iframe, on* handlers, javascript: URIs) is stripped.
 _HTML_ALLOWED_TAGS = {
-    "p", "strong", "em", "code", "pre",
-    "h1", "h2", "h3", "h4", "h5", "h6",
-    "ul", "ol", "li",
-    "a", "br", "blockquote", "hr",
-    "table", "thead", "tbody", "tr", "th", "td",
+    "p",
+    "strong",
+    "em",
+    "code",
+    "pre",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "ul",
+    "ol",
+    "li",
+    "a",
+    "br",
+    "blockquote",
+    "hr",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
 }
 _HTML_ALLOWED_ATTRS = {"a": ["href", "title"]}
 _HTML_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
@@ -179,7 +213,7 @@ def _rl_inline(node: Any) -> str:
         elif name in ("em", "i"):
             parts.append(f"<i>{_rl_inline(child)}</i>")
         elif name == "code":
-            parts.append(f'<font name="Courier">{_rl_inline(child)}</font>')
+            parts.append(f'<font name="{_RL_MONO_FONT}">{_rl_inline(child)}</font>')
         elif name == "br":
             parts.append("<br/>")
         elif name == "a":
@@ -210,7 +244,7 @@ def _rl_block(node: Any) -> list[tuple[str, str]]:
         # Render code blocks verbatim in monospace, preserving newlines as <br/>.
         text = node.get_text()
         text = xml_escape(text).replace("\n", "<br/>")
-        return [("pre", f'<font name="Courier">{text}</font>')]
+        return [("pre", f'<font name="{_RL_MONO_FONT}">{text}</font>')]
     if name in ("ul", "ol"):
         items: list[tuple[str, str]] = []
         ordered = name == "ol"
@@ -229,30 +263,55 @@ def _rl_block(node: Any) -> list[tuple[str, str]]:
     return out
 
 
+def _markdown_fallback_blocks(s: str) -> list[tuple[str, str]]:
+    """Render *s* as a single escaped preformatted block.
+
+    Used when the Markdown parser or BeautifulSoup walker fails (e.g. on
+    malformed input that would otherwise silently swallow content). Newlines
+    are preserved as ``<br/>`` and special characters are XML-escaped so the
+    output is always safe for ``reportlab.platypus.Paragraph``.
+    """
+    text = xml_escape(s).replace("\n", "<br/>")
+    return [("pre", f'<font name="{_RL_MONO_FONT}">{text}</font>')]
+
+
 def render_markdown_to_reportlab(s: str) -> list[tuple[str, str]]:
     """Render Markdown to a list of ReportLab Paragraph blocks.
 
     Each entry is ``(kind, body)`` where ``kind`` selects the ParagraphStyle
     (``"para"``, ``"h1".."h6"``, ``"pre"``) and ``body`` is mini-XML safe
     for ``reportlab.platypus.Paragraph``. Empty input yields an empty list.
-    """
-    from bs4 import BeautifulSoup
-    import markdown as _markdown_lib
 
+    On any conversion error (malformed Markdown, parser exception, etc.) the
+    function logs a warning to stderr and falls back to a single escaped
+    preformatted block containing the raw source — never raises, never
+    silently drops content.
+    """
     if not s or not s.strip():
         return []
-    md = _markdown_lib.Markdown(extensions=["fenced_code", "tables"])
-    html = md.convert(s)
-    soup = BeautifulSoup(html, "html.parser")
-    blocks: list[tuple[str, str]] = []
-    for child in soup.children:
-        if hasattr(child, "name") and child.name is not None:
-            blocks.extend(_rl_block(child))
-        else:
-            text = str(child).strip()
-            if text:
-                blocks.append(("para", xml_escape(text)))
-    return blocks
+    try:
+        from bs4 import BeautifulSoup
+        import markdown as _markdown_lib
+
+        md = _markdown_lib.Markdown(extensions=["fenced_code", "tables"])
+        html = md.convert(s)
+        soup = BeautifulSoup(html, "html.parser")
+        blocks: list[tuple[str, str]] = []
+        for child in soup.children:
+            if hasattr(child, "name") and child.name is not None:
+                blocks.extend(_rl_block(child))
+            else:
+                text = str(child).strip()
+                if text:
+                    blocks.append(("para", xml_escape(text)))
+        return blocks
+    except Exception as exc:  # noqa: BLE001 -- intentional broad fallback
+        log.warning(
+            "Markdown -> ReportLab conversion failed (%s: %s); rendering raw text",
+            type(exc).__name__,
+            exc,
+        )
+        return _markdown_fallback_blocks(s)
 
 
 # ===================================================================
@@ -1515,6 +1574,180 @@ def render_triage(data: dict[str, Any]) -> str:
 # ===================================================================
 # FORMAT: PDF
 # ===================================================================
+# ---------------------------------------------------------------------------
+# PDF font registration (Unicode support)
+# ---------------------------------------------------------------------------
+
+# System search paths for a Unicode-capable sans-serif TTF and its bold/mono
+# siblings. The first tuple whose ``regular`` exists wins; missing siblings
+# fall back to ``regular`` (so bold/mono Markdown still renders, just without
+# weight/family contrast).
+_FONT_CANDIDATES: list[dict[str, str]] = [
+    {
+        "regular": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "bold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "italic": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+        "boldItalic": "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
+        "mono": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "monoBold": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+    },
+    {
+        "regular": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "bold": "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "italic": "/usr/share/fonts/truetype/noto/NotoSans-Italic.ttf",
+        "boldItalic": "/usr/share/fonts/truetype/noto/NotoSans-BoldItalic.ttf",
+        "mono": "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
+        "monoBold": "/usr/share/fonts/truetype/noto/NotoSansMono-Bold.ttf",
+    },
+]
+
+
+def _bundled_font_dir() -> Path:
+    """Return the optional bundled-font directory next to this script."""
+    return Path(__file__).resolve().parent / "fonts"
+
+
+def _resolve_font_set() -> dict[str, str] | None:
+    """Pick the first available font set.
+
+    Order:
+      1. ``$CLAUDIUS_PDF_FONT`` (single TTF used for regular, bold, mono).
+         Sibling ``-Bold.ttf``/``Mono.ttf`` files in the same directory are
+         picked up automatically when their names follow the DejaVu pattern.
+      2. Bundled fonts under ``scripts/fonts/DejaVuSans*.ttf``.
+      3. Common Linux system locations (DejaVu, Noto Sans).
+
+    Returns ``None`` if no usable regular TTF is found.
+    """
+    import os
+
+    override = os.environ.get("CLAUDIUS_PDF_FONT")
+    if override:
+        regular = Path(override)
+        if regular.is_file():
+            stem = regular.stem
+            parent = regular.parent
+
+            def _sibling(suffix: str) -> str:
+                cand = parent / f"{stem}{suffix}.ttf"
+                return str(cand) if cand.is_file() else str(regular)
+
+            return {
+                "regular": str(regular),
+                "bold": _sibling("-Bold"),
+                "italic": _sibling("-Oblique"),
+                "boldItalic": _sibling("-BoldOblique"),
+                "mono": str(regular),
+                "monoBold": _sibling("-Bold"),
+            }
+        log.warning("CLAUDIUS_PDF_FONT=%s does not point to a TTF file", override)
+
+    bundled = _bundled_font_dir()
+    bundled_regular = bundled / "DejaVuSans.ttf"
+    if bundled_regular.is_file():
+
+        def _b(name: str) -> str:
+            cand = bundled / name
+            return str(cand) if cand.is_file() else str(bundled_regular)
+
+        return {
+            "regular": str(bundled_regular),
+            "bold": _b("DejaVuSans-Bold.ttf"),
+            "italic": _b("DejaVuSans-Oblique.ttf"),
+            "boldItalic": _b("DejaVuSans-BoldOblique.ttf"),
+            "mono": _b("DejaVuSansMono.ttf"),
+            "monoBold": _b("DejaVuSansMono-Bold.ttf"),
+        }
+
+    for cand in _FONT_CANDIDATES:
+        regular = Path(cand["regular"])
+        if regular.is_file():
+            resolved = {"regular": str(regular)}
+            for key in ("bold", "italic", "boldItalic", "mono", "monoBold"):
+                p = Path(cand[key])
+                resolved[key] = str(p) if p.is_file() else str(regular)
+            return resolved
+    return None
+
+
+def _register_pdf_fonts() -> dict[str, str]:
+    """Register a Unicode font family with ReportLab.
+
+    Returns a mapping with keys ``regular``, ``bold``, ``italic``,
+    ``boldItalic``, ``mono``, ``monoBold`` whose values are the ReportLab
+    font names callers should use. On failure the mapping points back at
+    Helvetica/Courier core fonts (Latin-1 only).
+    """
+    global _RL_MONO_FONT
+    helvetica = {
+        "regular": "Helvetica",
+        "bold": "Helvetica-Bold",
+        "italic": "Helvetica-Oblique",
+        "boldItalic": "Helvetica-BoldOblique",
+        "mono": "Courier",
+        "monoBold": "Courier-Bold",
+    }
+    fonts = _resolve_font_set()
+    if fonts is None:
+        log.warning(
+            "Unicode font not available; emoji/CJK/Arabic will render as tofu "
+            "boxes in PDF output. Set CLAUDIUS_PDF_FONT to a TTF path or "
+            "install fonts-dejavu / fonts-noto."
+        )
+        _RL_MONO_FONT = "Courier"
+        return helvetica
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+
+        regular_name = "ClaudiusSans"
+        bold_name = "ClaudiusSans-Bold"
+        italic_name = "ClaudiusSans-Italic"
+        boldit_name = "ClaudiusSans-BoldItalic"
+        mono_name = "ClaudiusMono"
+        mono_bold_name = "ClaudiusMono-Bold"
+
+        pdfmetrics.registerFont(TTFont(regular_name, fonts["regular"]))
+        pdfmetrics.registerFont(TTFont(bold_name, fonts["bold"]))
+        pdfmetrics.registerFont(TTFont(italic_name, fonts["italic"]))
+        pdfmetrics.registerFont(TTFont(boldit_name, fonts["boldItalic"]))
+        pdfmetrics.registerFont(TTFont(mono_name, fonts["mono"]))
+        pdfmetrics.registerFont(TTFont(mono_bold_name, fonts["monoBold"]))
+        pdfmetrics.registerFontFamily(
+            regular_name,
+            normal=regular_name,
+            bold=bold_name,
+            italic=italic_name,
+            boldItalic=boldit_name,
+        )
+        pdfmetrics.registerFontFamily(
+            mono_name,
+            normal=mono_name,
+            bold=mono_bold_name,
+            italic=mono_name,
+            boldItalic=mono_bold_name,
+        )
+        log.info("Registered Unicode PDF font: %s", fonts["regular"])
+        _RL_MONO_FONT = mono_name
+        return {
+            "regular": regular_name,
+            "bold": bold_name,
+            "italic": italic_name,
+            "boldItalic": boldit_name,
+            "mono": mono_name,
+            "monoBold": mono_bold_name,
+        }
+    except Exception as exc:  # noqa: BLE001 -- font failure must not crash PDF rendering
+        log.warning(
+            "Failed to register Unicode font %s (%s: %s); falling back to Helvetica",
+            fonts.get("regular"),
+            type(exc).__name__,
+            exc,
+        )
+        _RL_MONO_FONT = "Courier"
+        return helvetica
+
+
 def render_pdf(data: dict[str, Any], output_path: Path) -> None:
     """Render the report as a PDF using reportlab and matplotlib."""
     import io
@@ -1541,6 +1774,11 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
     )
 
     matplotlib.use("Agg")
+
+    # Register Unicode TTF (DejaVu/Noto) — falls back to Helvetica with a
+    # warning when no TTF is available. Returned mapping is used everywhere
+    # below in place of hardcoded "Helvetica"/"Courier" names.
+    F = _register_pdf_fonts()
 
     # RL color constants
     RL_WHITE = rl_colors.HexColor(BG_WHITE)
@@ -1588,7 +1826,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             f"B_{sev}",
             fontSize=8,
             textColor="#FFFFFF",
-            fontName="Helvetica-Bold",
+            fontName=F["bold"],
             alignment=TA_CENTER,
             backColor=rl_colors.HexColor(clr),
             borderPadding=(2, 6, 2, 6),
@@ -1605,7 +1843,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             [
                 ("BACKGROUND", (0, 0), (-1, 0), RL_BRAND),
                 ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, 0), F["bold"]),
                 ("FONTSIZE", (0, 0), (-1, 0), 9),
                 ("ALIGN", (0, 0), (-1, 0), "CENTER"),
                 ("TOPPADDING", (0, 0), (-1, 0), 7),
@@ -1629,7 +1867,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "T",
             fontSize=20,
             textColor=TEXT_DARK,
-            fontName="Helvetica-Bold",
+            fontName=F["bold"],
             alignment=TA_CENTER,
             spaceAfter=4,
         ),
@@ -1637,7 +1875,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "Sub",
             fontSize=10,
             textColor=TEXT_MUTED,
-            fontName="Helvetica",
+            fontName=F["regular"],
             alignment=TA_CENTER,
             spaceAfter=2,
         ),
@@ -1645,7 +1883,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "H2",
             fontSize=14,
             textColor=BRAND,
-            fontName="Helvetica-Bold",
+            fontName=F["bold"],
             spaceBefore=14,
             spaceAfter=6,
         ),
@@ -1653,7 +1891,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "H3",
             fontSize=11,
             textColor=TEXT_DARK,
-            fontName="Helvetica-Bold",
+            fontName=F["bold"],
             spaceBefore=10,
             spaceAfter=4,
         ),
@@ -1661,7 +1899,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "B",
             fontSize=10,
             textColor=TEXT_DARK,
-            fontName="Helvetica",
+            fontName=F["regular"],
             spaceAfter=6,
             leading=14,
         ),
@@ -1669,7 +1907,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "Sm",
             fontSize=9,
             textColor=TEXT_SECONDARY,
-            fontName="Helvetica",
+            fontName=F["regular"],
             spaceAfter=4,
             leading=13,
         ),
@@ -1677,7 +1915,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "FT",
             fontSize=10,
             textColor=TEXT_DARK,
-            fontName="Helvetica-Bold",
+            fontName=F["bold"],
             spaceBefore=8,
             spaceAfter=2,
         ),
@@ -1685,7 +1923,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "FB",
             fontSize=9,
             textColor=TEXT_SECONDARY,
-            fontName="Helvetica",
+            fontName=F["regular"],
             spaceAfter=2,
             leading=13,
             leftIndent=12,
@@ -1694,17 +1932,17 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             "TH",
             fontSize=9,
             textColor=rl_colors.white,
-            fontName="Helvetica-Bold",
+            fontName=F["bold"],
             alignment=TA_CENTER,
         ),
         "tc": ParagraphStyle(
-            "TC", fontSize=9, textColor=TEXT_DARK, fontName="Helvetica", leading=12
+            "TC", fontSize=9, textColor=TEXT_DARK, fontName=F["regular"], leading=12
         ),
         "tcc": ParagraphStyle(
             "TCC",
             fontSize=9,
             textColor=TEXT_DARK,
-            fontName="Helvetica",
+            fontName=F["regular"],
             alignment=TA_CENTER,
             leading=12,
         ),
@@ -2026,14 +2264,14 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
                 f"KV_{label}",
                 fontSize=28,
                 textColor=rl_colors.HexColor(clr),
-                fontName="Helvetica-Bold",
+                fontName=F["bold"],
                 alignment=TA_CENTER,
             )
             ls = ParagraphStyle(
                 f"KL_{label}",
                 fontSize=9,
                 textColor=TEXT_MUTED,
-                fontName="Helvetica",
+                fontName=F["regular"],
                 alignment=TA_CENTER,
                 spaceBefore=2,
             )
@@ -2055,13 +2293,13 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         return t
 
     # ParagraphStyles for Markdown blocks rendered inside finding bodies.
-    # Sizes mirror _RL_HEADING_SIZES; pre uses Courier with the body's left indent.
+    # Sizes mirror _RL_HEADING_SIZES; pre uses the registered mono face with the body's left indent.
     md_heading_styles = {
         kind: ParagraphStyle(
             f"FB_{kind.upper()}",
             fontSize=size,
             textColor=TEXT_DARK,
-            fontName="Helvetica-Bold",
+            fontName=F["bold"],
             spaceBefore=4,
             spaceAfter=2,
             leading=size + 3,
@@ -2073,7 +2311,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         "FB_PRE",
         fontSize=8.5,
         textColor=TEXT_DARK,
-        fontName="Courier",
+        fontName=F["mono"],
         backColor=rl_colors.HexColor(BG_LIGHT),
         borderColor=RL_BORDER,
         borderWidth=0.5,
@@ -2195,11 +2433,11 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             canvas.setFillColor(RL_BRAND)
             canvas.rect(0, PAGE_H - 0.55 * inch, PAGE_W, 0.55 * inch, fill=1, stroke=0)
             canvas.setFillColor(rl_colors.white)
-            canvas.setFont("Helvetica-Bold", 11)
+            canvas.setFont(F["bold"], 11)
             canvas.drawString(
                 MARGIN, PAGE_H - 0.35 * inch, f"{project} - Code Review Report"
             )
-            canvas.setFont("Helvetica", 8)
+            canvas.setFont(F["regular"], 8)
             canvas.drawRightString(PAGE_W - MARGIN, PAGE_H - 0.25 * inch, date_str)
             canvas.drawRightString(
                 PAGE_W - MARGIN, PAGE_H - 0.40 * inch, f"Page {doc.page}"
@@ -2208,7 +2446,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             canvas.setLineWidth(0.5)
             canvas.line(MARGIN, 0.42 * inch, PAGE_W - MARGIN, 0.42 * inch)
             canvas.setFillColor(rl_colors.HexColor(TEXT_MUTED))
-            canvas.setFont("Helvetica", 7.5)
+            canvas.setFont(F["regular"], 7.5)
             canvas.drawCentredString(
                 PAGE_W / 2,
                 0.22 * inch,
