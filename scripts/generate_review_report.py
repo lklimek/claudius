@@ -11,14 +11,17 @@ Requires ``markdown >= 3.4`` and ``beautifulsoup4 >= 4.10`` for HTML/PDF renderi
 (install via ``pip install -r scripts/requirements.txt``).
 
 PDF Unicode support:
-  PDF output registers a Unicode TrueType font (DejaVu Sans by default) so emoji
-  and non-Latin scripts (Cyrillic, Arabic, CJK) render correctly. Font discovery
-  order: (1) ``$CLAUDIUS_PDF_FONT`` env var pointing to a TTF, (2) bundled font
-  at ``scripts/fonts/DejaVuSans.ttf`` (sibling ``-Bold``/``Mono`` variants picked
-  up automatically), (3) common Linux system locations (DejaVu, Noto Sans). When
-  no TTF is found, the renderer logs a warning to stderr and falls back to
-  ReportLab's Helvetica/Courier core fonts (Latin-1 only — emoji and non-Latin
-  scripts render as tofu boxes in that fallback).
+  PDF output registers a Unicode TrueType font so emoji and non-Latin scripts
+  (Cyrillic, Arabic, CJK) render correctly in both ReportLab text flow and
+  matplotlib charts. Font discovery order: (1) ``$CLAUDIUS_PDF_FONT`` env var
+  pointing to a TTF, (2) an optional user-supplied font dropped at
+  ``scripts/fonts/DejaVuSans.ttf`` (not shipped with the plugin; sibling
+  ``-Bold``/``Mono`` variants picked up automatically when present),
+  (3) common Linux system locations (DejaVu, Noto Sans — typically provided by
+  the ``fonts-dejavu`` / ``fonts-noto`` packages). When no TTF is found, the
+  renderer logs a warning to stderr and falls back to ReportLab's
+  Helvetica/Courier core fonts (Latin-1 only — emoji and non-Latin scripts
+  render as tofu boxes in that fallback).
 
 PDF malformed Markdown:
   ``render_markdown_to_reportlab`` wraps the Markdown -> HTML -> ReportLab pass
@@ -1748,6 +1751,37 @@ def _register_pdf_fonts() -> dict[str, str]:
         return helvetica
 
 
+def _configure_matplotlib_font(matplotlib: Any) -> None:
+    """Point matplotlib's default sans-serif family at the resolved Unicode TTF.
+
+    Matplotlib renders the PDF charts with its own font stack, independent of
+    ReportLab's registered fonts. Without this, user-controlled chart labels
+    (e.g. agent names in ``agent_stats``) containing non-Latin scripts render
+    as tofu boxes even though body text renders correctly. Best-effort: a
+    failure here only affects chart glyphs, so it never raises.
+    """
+    fonts = _resolve_font_set()
+    if fonts is None:
+        return
+    try:
+        from matplotlib import font_manager
+
+        font_manager.fontManager.addfont(fonts["regular"])
+        family = font_manager.FontProperties(fname=fonts["regular"]).get_name()
+        matplotlib.rcParams["font.family"] = "sans-serif"
+        matplotlib.rcParams["font.sans-serif"] = [family] + list(
+            matplotlib.rcParams.get("font.sans-serif", [])
+        )
+    except Exception as exc:  # noqa: BLE001 -- chart font is cosmetic, never fatal
+        log.warning(
+            "Failed to configure matplotlib Unicode font %s (%s: %s); "
+            "chart labels may render non-Latin scripts as tofu",
+            fonts.get("regular"),
+            type(exc).__name__,
+            exc,
+        )
+
+
 def render_pdf(data: dict[str, Any], output_path: Path) -> None:
     """Render the report as a PDF using reportlab and matplotlib."""
     import io
@@ -1779,6 +1813,10 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
     # warning when no TTF is available. Returned mapping is used everywhere
     # below in place of hardcoded "Helvetica"/"Courier" names.
     F = _register_pdf_fonts()
+
+    # Mirror the Unicode font into matplotlib so chart labels (e.g. agent names
+    # from agent_stats) render non-Latin scripts instead of tofu boxes.
+    _configure_matplotlib_font(matplotlib)
 
     # RL color constants
     RL_WHITE = rl_colors.HexColor(BG_WHITE)
