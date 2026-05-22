@@ -172,7 +172,11 @@ Apply the following matrix **without asking for confirmation**, except where not
 **Resolving bot threads** (fixed only) using the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
 
 ```bash
-${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <thread_id> [thread_id ...]
+# GraphQL node IDs (PRRT_*) — pass directly:
+${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <PRRT_id> [PRRT_id ...]
+
+# REST IDs from pull_request_read (discussion_r* or numeric databaseId) — use enhanced mode:
+${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <owner/repo> <pr_number> --id discussion_r123 --id 456 [...]
 ```
 
-Thread resolution has no MCP equivalent — the wrapper script uses a GraphQL mutation directly. Never resolve threads that are only partially addressed.
+Thread resolution has no MCP equivalent — the wrapper script uses a GraphQL mutation directly. The `--id` form auto-converts `discussion_r*` / numeric IDs to thread node IDs; mix freely with `PRRT_*` IDs in one invocation. Never resolve threads that are only partially addressed.

@@ -27,6 +27,8 @@ ${CLAUDE_SKILL_DIR}/../../scripts/gh-list-review-threads.sh <owner/repo> <pr>
 
 ```bash
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <thread_id> [thread_id ...]
+# OR (REST/numeric IDs need PR context for conversion):
+${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <owner/repo> <pr_number> --id <id> [--id <id> ...]
 ```
 
-Resolves all given threads in a single GraphQL API call. Always ask the user before resolving.
+Resolves all given threads in a single GraphQL API call. The `--id` form accepts `PRRT_*`, `discussion_r<n>`, and bare numeric `databaseId` (auto-converted via PR context). Always ask the user before resolving.
