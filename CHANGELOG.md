@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [3.14.5] - 2026-05-22
+
+### Fixed
+
+- `scripts/generate_review_report.py`: `CLAUDIUS_PDF_FONT` override now validates the `.ttf` extension before accepting a file, and the warning text is truthful about the actual condition — "is not a readable file" for a missing path, "is not a .ttf file" for a non-TrueType file (previously a non-TTF that existed was silently accepted while the warning still claimed "does not point to a TTF file").
+- `scripts/generate_review_report.py`: `_resolve_font_set` docstring corrected — the `scripts/fonts/DejaVuSans*.ttf` slot is an optional user-supplied drop-in (not shipped with the plugin), and the override branch picks up `-Bold`/`-Oblique`/`-BoldOblique` siblings only (the monospace slot reuses the regular face; there is no `Mono.ttf` auto-pickup).
+- `scripts/generate_review_report.py`: the Markdown -> ReportLab fallback warning now logs with `exc_info=True`, so the traceback (Markdown parse vs. BeautifulSoup vs. ReportLab mini-XML) is captured for diagnosis without changing the non-crashing behavior.
+
+### Added
+
+- `tests/test_generate_review_report.py`: pytest coverage for `_resolve_font_set` (env override valid/missing/non-TTF, sibling pickup, user-supplied dir, system-candidate fallback, no-font `None`) and `render_markdown_to_reportlab` (empty input, valid Markdown, malformed-input fallback to an escaped preformatted block with traceback logging). Fonts are isolated from the host so the suite is deterministic.
+
 ## [3.14.4] - 2026-05-22
 
 ### Fixed
@@ -967,6 +979,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[3.14.5]: https://github.com/lklimek/claudius/compare/v3.14.4...v3.14.5
 [3.14.4]: https://github.com/lklimek/claudius/compare/v3.14.3...v3.14.4
 [3.14.3]: https://github.com/lklimek/claudius/compare/v3.14.2...v3.14.3
 [3.14.2]: https://github.com/lklimek/claudius/compare/v3.14.1...v3.14.2

@@ -313,6 +313,7 @@ def render_markdown_to_reportlab(s: str) -> list[tuple[str, str]]:
             "Markdown -> ReportLab conversion failed (%s: %s); rendering raw text",
             type(exc).__name__,
             exc,
+            exc_info=True,
         )
         return _markdown_fallback_blocks(s)
 
@@ -1614,10 +1615,12 @@ def _resolve_font_set() -> dict[str, str] | None:
     """Pick the first available font set.
 
     Order:
-      1. ``$CLAUDIUS_PDF_FONT`` (single TTF used for regular, bold, mono).
-         Sibling ``-Bold.ttf``/``Mono.ttf`` files in the same directory are
-         picked up automatically when their names follow the DejaVu pattern.
-      2. Bundled fonts under ``scripts/fonts/DejaVuSans*.ttf``.
+      1. ``$CLAUDIUS_PDF_FONT`` (a single regular TTF). Sibling ``-Bold``,
+         ``-Oblique``, and ``-BoldOblique`` ``.ttf`` files in the same
+         directory are picked up automatically when present; the monospace
+         slot reuses the regular face.
+      2. An optional user-supplied font dropped at
+         ``scripts/fonts/DejaVuSans*.ttf`` (not shipped with the plugin).
       3. Common Linux system locations (DejaVu, Noto Sans).
 
     Returns ``None`` if no usable regular TTF is found.
@@ -1627,7 +1630,7 @@ def _resolve_font_set() -> dict[str, str] | None:
     override = os.environ.get("CLAUDIUS_PDF_FONT")
     if override:
         regular = Path(override)
-        if regular.is_file():
+        if regular.is_file() and regular.suffix.lower() == ".ttf":
             stem = regular.stem
             parent = regular.parent
 
@@ -1643,7 +1646,13 @@ def _resolve_font_set() -> dict[str, str] | None:
                 "mono": str(regular),
                 "monoBold": _sibling("-Bold"),
             }
-        log.warning("CLAUDIUS_PDF_FONT=%s does not point to a TTF file", override)
+        if not regular.is_file():
+            log.warning("CLAUDIUS_PDF_FONT=%s is not a readable file", override)
+        else:
+            log.warning(
+                "CLAUDIUS_PDF_FONT=%s is not a .ttf file (only TrueType is supported)",
+                override,
+            )
 
     bundled = _bundled_font_dir()
     bundled_regular = bundled / "DejaVuSans.ttf"
