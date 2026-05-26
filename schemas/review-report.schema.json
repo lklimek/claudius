@@ -9,7 +9,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.0.0", "1.1.0", "2.0.0"],
+      "enum": ["3.0.0"],
       "description": "Schema version (SemVer). Renderers check this for compatibility."
     },
     "metadata": {
@@ -20,7 +20,21 @@
         "project": { "type": "string", "description": "Project name or repository URL" },
         "date": { "type": "string", "format": "date", "description": "Review date (YYYY-MM-DD)" },
         "branch": { "type": "string", "description": "Branch reviewed" },
-        "commit": { "type": "string", "description": "HEAD commit short SHA" },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full 40-char SHA, used for permalink construction. Omit when not in a git repo."
+        },
+        "repository": {
+          "type": "object",
+          "required": ["owner", "repo"],
+          "additionalProperties": false,
+          "description": "GitHub owner/repo for permalink construction. Coordinator-derived from git remote; absent for non-GitHub or non-git directories.",
+          "properties": {
+            "owner": { "type": "string", "minLength": 1 },
+            "repo": { "type": "string", "minLength": 1 }
+          }
+        },
         "scope": { "type": "string", "description": "What was reviewed (paths, commit range, etc.)" },
         "reviewers": {
           "type": "array",
@@ -110,7 +124,12 @@
           "id": { "type": "string" },
           "severity": { "$ref": "#/$defs/severity" },
           "title": { "type": "string" },
-          "location": { "type": "string" }
+          "location": { "type": "string" },
+          "location_permalink": {
+            "type": "string",
+            "format": "uri",
+            "description": "GitHub permalink to the finding location. Coordinator-constructed when metadata.commit + metadata.repository + parseable location are all available."
+          }
         }
       }
     },
@@ -190,11 +209,17 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 5,
-      "description": "Numeric severity: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO"
+      "description": "Numeric severity: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO. Coordinator-derived from overall_severity via the OWASP band table."
+    },
+    "severity_float": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Normalized OWASP-style score in [0.0, 1.0]."
     },
     "finding": {
       "type": "object",
-      "required": ["id", "severity", "title", "location", "description", "recommendation"],
+      "required": ["id", "severity", "title", "location", "description", "recommendation", "risk", "impact", "scope", "overall_severity"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -203,6 +228,10 @@
           "description": "Finding ID with category prefix (SEC→security, PROJ→project, CODE/RUST/PY/GO/FE→code_quality, DOC→documentation, CMT→pr_comments, DEP→dependencies)"
         },
         "severity": { "$ref": "#/$defs/severity" },
+        "risk": { "$ref": "#/$defs/severity_float", "description": "OWASP Likelihood normalized to [0,1]." },
+        "impact": { "$ref": "#/$defs/severity_float", "description": "OWASP Impact normalized to [0,1]." },
+        "scope": { "$ref": "#/$defs/severity_float", "description": "PR relevance: 1.0 in-diff, 0.5 indirectly affected, 0.0 pre-existing/unrelated." },
+        "overall_severity": { "$ref": "#/$defs/severity_float", "description": "Coordinator-computed mean of risk, impact, scope." },
         "title": { "type": "string", "minLength": 1 },
         "tags": {
           "type": "array",
@@ -210,9 +239,36 @@
           "description": "Classification tags (OWASP, CWE, Rust best-practice IDs, etc.)"
         },
         "location": { "type": "string", "minLength": 1, "description": "file:start_line-end_line" },
+        "location_permalink": {
+          "type": "string",
+          "format": "uri",
+          "description": "Coordinator-constructed GitHub blob URL at metadata.commit. Absent when commit/repository/parseable location is missing."
+        },
         "description": { "type": "string", "minLength": 1, "description": "Markdown-formatted description of the finding. May contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
-        "impact": { "type": "string", "description": "Markdown-formatted impact statement. Same Markdown subset as description." },
+        "impact_description": { "type": "string", "description": "Markdown-formatted impact narrative. Same Markdown subset as description. Optional; the numeric impact field is separate." },
         "recommendation": { "type": "string", "minLength": 1, "description": "Markdown-formatted remediation guidance. Same Markdown subset as description." },
+        "code_snippets": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Producer-captured code excerpts illustrating the finding. Optional; absent when the producer captured none.",
+          "items": {
+            "type": "object",
+            "required": ["content"],
+            "additionalProperties": false,
+            "properties": {
+              "language": { "type": "string", "description": "Syntax-highlight hint, e.g., 'rust', 'python'." },
+              "caption": { "type": "string", "description": "Short label, e.g., 'auth.rs:42-58'." },
+              "content": { "type": "string", "description": "Verbatim code text. Renderers HTML-escape it; never treated as Markdown." }
+            }
+          }
+        },
+        "ai_assessment": { "type": "string", "description": "Validate-findings LLM rationale (Markdown)." },
+        "ai_verdict": {
+          "type": "string",
+          "enum": ["valid", "false_positive", "needs_investigation", "out_of_scope", "duplicate"],
+          "description": "Validate-findings LLM verdict."
+        },
+        "ai_verdict_confidence": { "$ref": "#/$defs/severity_float", "description": "Validate-findings confidence in [0,1]. Renderers fade the verdict chip toward the page background as confidence drops." },
         "reviewer": { "type": "string", "description": "GitHub username of the comment author" },
         "comment_id": { "type": "integer", "description": "GitHub REST API comment database ID" },
         "comment_url": { "type": "string", "format": "uri", "pattern": "^https?://", "description": "Direct URL to the review comment on GitHub (https/http only)" },

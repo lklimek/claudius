@@ -28,6 +28,7 @@ import argparse
 import json
 import logging
 import re
+import subprocess
 import sys
 from collections import defaultdict
 from collections.abc import Iterator
@@ -126,7 +127,7 @@ def _read_schema_version() -> str:
             return versions[-1]
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
         pass
-    return "2.0.0"
+    return "3.0.0"
 
 
 SCHEMA_VERSION = _read_schema_version()
@@ -146,6 +147,117 @@ def parse_location(location: str) -> tuple[str, int | None, int | None]:
     start = int(m.group(1))
     end = int(m.group(2)) if m.group(2) else start
     return (file_path, start, end)
+
+
+# ---------------------------------------------------------------------------
+# Git-derived metadata (permalink construction)
+# ---------------------------------------------------------------------------
+_GITHUB_REMOTE_RE = re.compile(
+    r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+    r"(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
+)
+_FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _derive_metadata_repository(repo_root: str) -> dict[str, str] | None:
+    """Parse `git remote get-url origin` into {owner, repo} for GitHub remotes.
+
+    Returns None for non-git directories, missing origin, or non-GitHub remotes.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_root, "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        log.info("git remote lookup failed in %s: %s", repo_root, e)
+        return None
+    if result.returncode != 0:
+        log.info("git remote get-url origin returned non-zero in %s", repo_root)
+        return None
+    url = result.stdout.strip()
+    match = _GITHUB_REMOTE_RE.match(url)
+    if not match:
+        log.info("non-GitHub or unrecognized remote URL %r — skipping", url)
+        return None
+    return {"owner": match["owner"], "repo": match["repo"]}
+
+
+def _full_sha(commit: str | None, repo_root: str) -> str | None:
+    """Expand a commit ref to full 40-char SHA via `git rev-parse`.
+
+    Returns the SHA as-is when already full; None for empty input or any failure.
+    """
+    if not commit:
+        return None
+    if _FULL_SHA_RE.match(commit):
+        return commit
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_root, "rev-parse", commit],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        log.info("git rev-parse failed for %r in %s: %s", commit, repo_root, e)
+        return None
+    if result.returncode != 0:
+        log.info("git rev-parse could not resolve %r in %s", commit, repo_root)
+        return None
+    full = result.stdout.strip()
+    return full if _FULL_SHA_RE.match(full) else None
+
+
+def _build_permalink(
+    repository: dict[str, str] | None,
+    sha: str | None,
+    location: str,
+) -> str | None:
+    """Build a GitHub blob URL with line anchors. Returns None when any input is missing."""
+    if not repository or not sha:
+        return None
+    file_path, start, end = parse_location(location)
+    if not file_path or start is None:
+        return None
+    anchor = f"#L{start}" if end is None or end == start else f"#L{start}-L{end}"
+    return (
+        f"https://github.com/{repository['owner']}/{repository['repo']}"
+        f"/blob/{sha}/{file_path}{anchor}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# OWASP severity derivation
+# ---------------------------------------------------------------------------
+def _derive_overall(finding: dict[str, Any]) -> float | None:
+    """Arithmetic mean of risk + impact + scope when all three are numeric floats."""
+    dims = []
+    for key in ("risk", "impact", "scope"):
+        value = finding.get(key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return None
+        dims.append(float(value))
+    return sum(dims) / 3.0
+
+
+# Band table mirrors the plan §Standard adopted.
+_SEVERITY_BANDS: list[tuple[float, int]] = [
+    (0.9, 5),
+    (0.7, 4),
+    (0.4, 3),
+    (0.1, 2),
+]
+
+
+def _derive_severity_int(overall: float) -> int:
+    """Map an overall_severity float to the 1..5 integer severity band."""
+    for threshold, level in _SEVERITY_BANDS:
+        if overall >= threshold:
+            return level
+    return 1
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +448,20 @@ def assign_ids(
         else:
             prefix = CATEGORY_PREFIX.get(cat, "CODE-")
 
-        findings.sort(key=lambda f: f.get("severity", 1), reverse=True)
+        # Primary: overall_severity desc (absent → -1 so floatless findings sink).
+        # Secondary: integer severity desc. Tertiary: stable by current order.
+        findings.sort(
+            key=lambda f: (
+                (
+                    f.get("overall_severity", -1.0)
+                    if isinstance(f.get("overall_severity"), (int, float))
+                    and not isinstance(f.get("overall_severity"), bool)
+                    else -1.0
+                ),
+                f.get("severity", 1),
+            ),
+            reverse=True,
+        )
 
         for f in findings:
             category_counters[cat] += 1
@@ -461,14 +586,15 @@ def generate_top_findings(
     top: list[dict[str, Any]] = []
     for _section, f in _iter_findings(sections):
         if f.get("severity", 1) >= 4:
-            top.append(
-                {
-                    "id": f["id"],
-                    "severity": f["severity"],
-                    "title": f["title"],
-                    "location": f["location"],
-                }
-            )
+            entry: dict[str, Any] = {
+                "id": f["id"],
+                "severity": f["severity"],
+                "title": f["title"],
+                "location": f["location"],
+            }
+            if "location_permalink" in f:
+                entry["location_permalink"] = f["location_permalink"]
+            top.append(entry)
     top.sort(key=lambda f: f["severity"], reverse=True)
     return top
 
@@ -535,12 +661,16 @@ def _flatten_agent_report(
                     "category": cat,
                     "section_title": section_title,
                     "severity": severity,
+                    "risk": f.get("risk"),
+                    "impact": f.get("impact"),
+                    "scope": f.get("scope"),
                     "title": title,
                     "tags": tags,
                     "location": location,
                     "description": description,
-                    "impact": f.get("impact", ""),
+                    "impact_description": f.get("impact_description", ""),
                     "recommendation": recommendation,
+                    "code_snippets": f.get("code_snippets"),
                     "positives": section_positives if section_positives else None,
                 }
             )
@@ -594,6 +724,16 @@ def cmd_prepare(args: argparse.Namespace) -> int:
             log.error("Invalid metadata JSON: %s", e)
             return 2
 
+    if args.repo_root:
+        repository = _derive_metadata_repository(args.repo_root)
+        if repository is not None:
+            metadata["repository"] = repository
+        full = _full_sha(metadata.get("commit"), args.repo_root)
+        if full is not None:
+            metadata["commit"] = full
+        elif "commit" in metadata:
+            metadata.pop("commit")
+
     output = {
         "metadata": metadata,
         "agents": agents,
@@ -637,6 +777,17 @@ def cmd_assemble(args: argparse.Namespace) -> int:
     agent_stats = data.get("agent_stats", [])
     top_override = data.get("top_findings_override")
     remediation_override = data.get("remediation_override")
+
+    repository = metadata.get("repository")
+    sha = metadata.get("commit")
+    for _section, f in _iter_findings(findings_sections):
+        overall = _derive_overall(f)
+        if overall is not None:
+            f["overall_severity"] = overall
+            f["severity"] = _derive_severity_int(overall)
+        permalink = _build_permalink(repository, sha, f.get("location", ""))
+        if permalink is not None:
+            f["location_permalink"] = permalink
 
     assign_ids(findings_sections)
 

@@ -1,0 +1,99 @@
+{
+  "schema_version": "3.0.0",
+  "metadata": {
+    "project": "claudius",
+    "date": "2026-05-26",
+    "branch": "feat/review-report-v3",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "repository": {
+      "owner": "lklimek",
+      "repo": "claudius"
+    },
+    "scope": "PR #99",
+    "reviewers": ["security-engineer", "developer-bilby"],
+    "report_type": "code_review",
+    "pr_number": 99
+  },
+  "executive_summary": {
+    "overall_assessment": "Full v3 report exercising every optional field.",
+    "summary_text": "One CRITICAL and one LOW finding, both with permalinks, snippets, and AI fields.",
+    "verdict_text": "Block merge until CRITICAL is fixed.",
+    "verdict_action": "request_changes"
+  },
+  "summary_statistics": {
+    "total_findings": 2,
+    "redundancy_ratio": "0%",
+    "severity_counts": {
+      "CRITICAL": 1,
+      "HIGH": 0,
+      "MEDIUM": 0,
+      "LOW": 1,
+      "INFO": 0
+    }
+  },
+  "top_findings": [
+    {
+      "id": "SEC-001",
+      "severity": 5,
+      "title": "Plaintext credential leak",
+      "location": "src/auth.rs:42-56",
+      "location_permalink": "https://github.com/lklimek/claudius/blob/0123456789abcdef0123456789abcdef01234567/src/auth.rs#L42-L56"
+    }
+  ],
+  "findings": [
+    {
+      "title": "Security Findings",
+      "category": "security",
+      "findings": [
+        {
+          "id": "SEC-001",
+          "severity": 5,
+          "risk": 1.0,
+          "impact": 1.0,
+          "scope": 1.0,
+          "overall_severity": 1.0,
+          "title": "Plaintext credential leak",
+          "tags": ["A02 Cryptographic Failures", "CWE-256"],
+          "location": "src/auth.rs:42-56",
+          "location_permalink": "https://github.com/lklimek_test/claudius/blob/0123456789abcdef0123456789abcdef01234567/src/auth.rs#L42-L56",
+          "description": "Credentials are written to disk unencrypted.",
+          "impact_description": "Anyone with disk access can recover production credentials.",
+          "recommendation": "Encrypt at rest using the platform keyring.",
+          "code_snippets": [
+            {
+              "language": "rust",
+              "caption": "auth.rs:42-56",
+              "content": "fn save(creds: &Creds) {\n    std::fs::write(\"/tmp/c\", creds.password.as_bytes()).unwrap();\n}"
+            }
+          ],
+          "ai_assessment": "Confirmed by reading source; producer was correct.",
+          "ai_verdict": "valid",
+          "ai_verdict_confidence": 0.95
+        }
+      ]
+    },
+    {
+      "title": "Code Quality",
+      "category": "code_quality",
+      "findings": [
+        {
+          "id": "CODE-001",
+          "severity": 2,
+          "risk": 0.2,
+          "impact": 0.2,
+          "scope": 0.2,
+          "overall_severity": 0.2,
+          "title": "Magic number in retry loop",
+          "tags": ["maintainability"],
+          "location": "src/retry.rs:10",
+          "location_permalink": "https://github.com/lklimek/claudius/blob/0123456789abcdef0123456789abcdef01234567/src/retry.rs#L10",
+          "description": "Hardcoded `5` should be a named constant.",
+          "recommendation": "Introduce `MAX_RETRIES`.",
+          "ai_assessment": "Style nit; valid but low priority.",
+          "ai_verdict": "valid",
+          "ai_verdict_confidence": 0.3
+        }
+      ]
+    }
+  ]
+}
