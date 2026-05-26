@@ -18,7 +18,7 @@ Agents emit a JSON array of `finding_section` objects:
 [
   {
     "title": "Section Title",
-    "category": "security|project|code_quality|dependencies|documentation|pr_comments",
+    "category": "security|project|code_quality|dependencies|documentation|pr_comments|pr_promises",
     "findings": [
       {
         "id": "PREFIX-001",
@@ -102,6 +102,7 @@ When writing findings to a file, ALWAYS use the Write tool — never use Bash co
 | `FE-` | code_quality | developer-bilby (frontend) |
 | `DOC-` | documentation | technical-writer-trillian |
 | `CMT-` | pr_comments | check-pr-comments |
+| `PPM-` | pr_promises | review-pr (Pass C: promise verification) |
 | `DEP-` | dependencies | review-dependency |
 
 IDs are provisional -- the consolidation step deduplicates and reassigns final IDs.
@@ -113,6 +114,18 @@ Agents may add context to `description` and `tags` per their domain:
 - **security-engineer**: include OWASP category and CWE in `tags`, CVE references and evidence in `description`
 - **qa-engineer**: include requirement reference, expected vs actual behavior in `description`
 - **check-pr-comments**: include `reviewer`, `comment_id`, `comment_url`, `thread_id`, `verdict` fields (schema-defined)
+- **review-pr Pass C (pr_promises)**: `location` is a synthetic string (no file:line) — use `PR-title`, `PR-body:summary-bullet-N`, or `PR-body:out-of-scope-item-N`. Renderers leave it as plain text (no permalink). Example:
+
+```json
+{
+  "id": "PPM-001",
+  "risk": 0.6, "impact": 0.5, "scope": 1.0,
+  "title": "Title claims PDF fix, diff is gRPC tests",
+  "location": "PR-title",
+  "description": "Title says `fix: PDF rendering` but diff touches only `tests/grpc/`.",
+  "recommendation": "Rename to `test(grpc): add coverage for retry path` or move the gRPC changes to a separate PR."
+}
+```
 
 ## Report Pipeline Tools
 

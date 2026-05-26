@@ -6,6 +6,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-05-26
+
+### Added
+
+- `skills/review-pr/SKILL.md`: new "Pass C — Promise Verification" audits the PR's self-description against the diff on three axes: title ↔ diff alignment, body Summary ↔ diff coverage, and out-of-scope enforcement. Reuses PR data fetched by §1, no extra MCP calls. Findings emit in v3 format with the new `pr_promises` category and `PPM-` ID prefix; `location` is a synthetic `PR-title` / `PR-body:summary-bullet-N` / `PR-body:out-of-scope-item-N` string (renderers leave it as plain text — no permalink).
+- `schemas/review-report.schema.json`: `pr_promises` category added to the `finding_section.category` enum and `severity_category_matrix` row keys; `PPM-` prefix added to the `finding.id` regex. Additive only — pre-existing reports remain valid.
+- `skills/report-format/SKILL.md`: `PPM-` row in the ID prefix table and a Pass C example demonstrating the synthetic `location` convention.
+- `scripts/consolidate_reports.py`: `CATEGORY_PREFIX` map registers `pr_promises → PPM-` so the coordinator assigns IDs correctly for Pass C findings.
+- `scripts/generate_review_report.py`: Markdown section heading ("Part VII: PR Promise Verification"), HTML/Triage filter chip option ("PR Promises"), and JS `catLabels` entry for `pr_promises`.
+- `tests/fixtures/pr-promises/synthetic-mismatched.md`, `tests/fixtures/pr-promises/synthetic-clean.md`: synthetic PR title/body/diff fixtures for exercising Pass C — mismatched fixture expects 3 findings (one per axis), clean fixture expects zero.
+
 ## [4.0.1] - 2026-05-26
 
 ### Fixed

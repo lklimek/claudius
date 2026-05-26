@@ -510,6 +510,7 @@ def render_markdown(data: dict[str, Any]) -> str:
         "dependencies": "Part IV: Dependencies",
         "documentation": "Part V: Documentation",
         "pr_comments": "Part VI: PR Comment Verification",
+        "pr_promises": "Part VII: PR Promise Verification",
     }
     for section in data.get("findings", []):
         cat = section.get("category", "")
@@ -868,6 +869,7 @@ details summary:hover{color:{{ ACCENT }}}
     <option value="documentation">Documentation</option>
     <option value="dependencies">Dependencies</option>
     <option value="pr_comments">PR Comments</option>
+    <option value="pr_promises">PR Promises</option>
   </select>
   <select id="filterAiVerdict">
     <option value="">All AI Verdicts</option>
@@ -1139,7 +1141,8 @@ details summary:hover{color:{{ ACCENT }}}
   const sevColors = {{ sev_colors_json }};
   const catLabels = {"security":"Security","project":"Project Consistency",
     "code_quality":"Code Quality","documentation":"Documentation",
-    "dependencies":"Dependencies","pr_comments":"PR Comments"};
+    "dependencies":"Dependencies","pr_comments":"PR Comments",
+    "pr_promises":"PR Promises"};
 
   function getFindings() {
     return container.querySelectorAll(".finding[data-finding-id]");
@@ -1783,6 +1786,7 @@ def render_triage(data: dict[str, Any]) -> str:
     <option value="documentation">Documentation</option>
     <option value="dependencies">Dependencies</option>
     <option value="pr_comments">PR Comments</option>
+    <option value="pr_promises">PR Promises</option>
   </select>
   {% if report_type == "comment_check" %}
   <select id="verdictFilter">
