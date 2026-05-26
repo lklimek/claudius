@@ -56,7 +56,7 @@ Agents emit a JSON array of `finding_section` objects:
 
 Producers MAY emit integer `severity` when they have no float estimate — the coordinator will accept it and derive the floats later. When the producer emits `risk`/`impact`/`scope`, the coordinator computes `overall_severity` and overrides integer `severity` via the band table in the `severity` skill.
 
-**Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown narrative formerly known as `impact`), `code_snippets` (when the producer captured exact source during analysis — never invent one).
+**Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (when the producer captured exact source during analysis — never invent one).
 
 ## Coordinator-derived / validator-owned fields — DO NOT emit
 

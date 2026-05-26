@@ -35,18 +35,14 @@ class TestV2Legacy:
         errors = list(VALIDATOR.iter_errors(data))
         assert errors, "Expected v2 fixture to fail v3 schema validation"
 
-    def test_consolidate_rejects_v2_input(self, tmp_path):
+    def test_consolidate_rejects_v2_input(self, tmp_path, caplog):
         """An agent report carrying schema_version != 3.0.0 must be rejected
-        loudly by the prepare phase."""
-        # _flatten_agent_report receives a list[section]; the section-level
-        # check the plan calls for must catch the legacy version when carried
-        # at the envelope. We use a wrapper here mimicking how producers may
-        # ship an envelope (some do); the prepare command currently expects
-        # a list of sections, so we test the helper directly.
+        loudly with a version-aware error message that points at the schema."""
         legacy = {"schema_version": "2.0.0", "sections": []}
         rep = tmp_path / "legacy.json"
         rep.write_text(json.dumps(legacy))
         import argparse
+        import logging
 
         args = argparse.Namespace(
             agent_reports=[f"agent:{rep}"],
@@ -54,8 +50,85 @@ class TestV2Legacy:
             output=str(tmp_path / "out.json"),
             metadata=None,
         )
-        # The input is an envelope dict, not a list, so cmd_prepare must
-        # reject it with rc=2 ("expected JSON array") OR detect the version
-        # marker. Either way: non-zero exit, no output file.
-        rc = cr.cmd_prepare(args)
+        with caplog.at_level(logging.ERROR):
+            rc = cr.cmd_prepare(args)
         assert rc != 0
+        # Error message must mention schema_version and the expected value,
+        # not just "expected JSON array".
+        joined = "\n".join(r.message for r in caplog.records)
+        assert "schema_version" in joined
+        assert "3.0.0" in joined
+
+    def test_consolidate_rejects_v1_envelope(self, tmp_path, caplog):
+        """A v1-shaped envelope (schema_version = 1.x) must also be rejected
+        with the same version-aware message."""
+        legacy = {"schema_version": "1.0.0", "findings": []}
+        rep = tmp_path / "legacy.json"
+        rep.write_text(json.dumps(legacy))
+        import argparse
+        import logging
+
+        args = argparse.Namespace(
+            agent_reports=[f"agent:{rep}"],
+            repo_root=str(tmp_path),
+            output=str(tmp_path / "out.json"),
+            metadata=None,
+        )
+        with caplog.at_level(logging.ERROR):
+            rc = cr.cmd_prepare(args)
+        assert rc != 0
+        joined = "\n".join(r.message for r in caplog.records)
+        assert "schema_version" in joined
+
+
+class TestFormatChecker:
+    """SEC-005 — jsonschema 4.x does not enforce `format: uri` by default.
+    The validators must opt in via format_checker=. As belt-and-braces, the
+    schema also pins location_permalink with `pattern: ^https?://` so a
+    non-http(s) URI is rejected even when format checking is off / lenient."""
+
+    def test_consolidate_validator_uses_format_checker(self):
+        """The consolidate validator must be built with a format checker so
+        format constraints are evaluated (not silently ignored)."""
+        import inspect
+        import consolidate_reports as cr_mod
+
+        src = inspect.getsource(cr_mod._validate_report)
+        assert "format_checker" in src, (
+            "consolidate_reports._validate_report must construct its "
+            "validator with format_checker= to enforce schema format clauses."
+        )
+
+    def test_generate_review_report_validator_uses_format_checker(self):
+        """The renderer-side validator must also opt in to format checking."""
+        import inspect
+        import generate_review_report as grr_mod
+
+        # _validate is internally defined inside main(); pick the
+        # canonical Validate function instead.
+        src = inspect.getsource(grr_mod)
+        # We expect at least one Draft202012Validator constructed with
+        # format_checker=.
+        assert "format_checker=" in src, (
+            "generate_review_report must construct validators with "
+            "format_checker= so format clauses are enforced."
+        )
+
+    def test_validate_report_helper_rejects_javascript_permalink(self):
+        """The schema's `pattern: ^https?://` on location_permalink must
+        reject javascript: and other non-http(s) URIs via _validate_report."""
+        import consolidate_reports as cr_mod
+        import json as _json
+
+        data = _json.loads((FIXTURES / "v3-minimal.json").read_text())
+        data["findings"][0]["findings"][0]["location_permalink"] = "javascript:alert(1)"
+        assert cr_mod._validate_report(data) is False
+
+    def test_validate_report_helper_rejects_non_uri_permalink(self):
+        """The schema must reject obviously non-URI values."""
+        import consolidate_reports as cr_mod
+        import json as _json
+
+        data = _json.loads((FIXTURES / "v3-minimal.json").read_text())
+        data["findings"][0]["findings"][0]["location_permalink"] = "not even close"
+        assert cr_mod._validate_report(data) is False

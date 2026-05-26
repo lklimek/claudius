@@ -6,6 +6,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-05-26
+
+### Fixed
+
+- `scripts/generate_review_report.py`: HTML and Triage renderers no longer crash with `UndefinedError` when a finding carries `ai_verdict` without `ai_verdict_confidence` — the Jinja chip template now uses the `default(1.0, true)` filter, so a producer that emits only the verdict still renders.
+- `scripts/generate_review_report.py`: `_verdict_color` no longer raises `ValueError` on `NaN`/`-Inf`/`+Inf` confidence values — `NaN` defaults to full saturation, infinities clamp to `[0, 1]`.
+- `scripts/generate_review_report.py`: Markdown renderer skips the orphan "AI Assessment" label when `ai_assessment` is empty, emitting a compact `AI Verdict:` line instead.
+- `scripts/generate_review_report.py`: Markdown code-snippet fences now grow longer than any backtick run inside the content, so a snippet that contains triple backticks no longer breaks out of the surrounding fence.
+- `scripts/generate_review_report.py`: Markdown snippet `caption` is HTML-escaped before interpolation into `<summary>`, blocking HTML/Markdown injection from producer-controlled captions.
+- `scripts/generate_review_report.py`: all four renderers (Markdown, HTML, Triage, PDF) validate `location_permalink` against `http(s)://` before emitting it as a clickable link — defense in depth against `javascript:` URIs.
+- `scripts/consolidate_reports.py`: `_build_permalink` URL-encodes the path component (spaces, unicode, `#`, `?`) and rejects paths containing control characters, so permalinks no longer hijack the URL fragment or break across whitespace.
+- `scripts/consolidate_reports.py`: `_GITHUB_REMOTE_RE` uses `\A`/`\Z` anchors with an explicit charset allowlist, so a remote URL with an embedded newline or whitespace no longer matches.
+- `scripts/consolidate_reports.py`: `cmd_prepare` now detects v1/v2 envelope dicts carrying `schema_version` and rejects them with a version-aware error pointing at the v3 schema (previously the user saw a misleading "expected JSON array" message).
+- `scripts/consolidate_reports.py` and `scripts/generate_review_report.py`: `jsonschema` validators are constructed with `format_checker=Draft202012Validator.FORMAT_CHECKER` so schema `format` clauses are enforced.
+- `schemas/review-report.schema.json`: `location_permalink` (in both `top_findings` and `finding`) now also carries `pattern: "^https?://"`, hard-rejecting `javascript:` and other non-http(s) URIs even when the optional URI format checker is unavailable.
+
+### Security
+
+- `skills/validate-findings/SKILL.md`: added an "Adversarial content handling" section (OWASP LLM01) that instructs the validator to treat producer fields as quoted data, flag instruction-shaped overrides as evidence of badness, cap confidence on suspicious inputs, and tightened the `git show` allowlist glob from `Bash(git show *)` to `Bash(git show [0-9a-f]*)` to require a commit SHA prefix.
+
+### Changed
+
+- `skills/severity/SKILL.md`: clarified the OWASP normalization prose to match the formulas — the recipe is the arithmetic mean of factor scores divided by 9.0 (the previous "sum / 9.0" wording contradicted the `average` formula).
+- `skills/grumpy-review/SKILL.md` and `skills/report-format/SKILL.md`: removed legacy "formerly known as" / "used to live in" framing from the `impact_description` field description; describe present-state only.
+- `tests/fixtures/reports/v3-full.json`: corrected the copy-paste typo `lklimek_test` to `lklimek` so all permalinks in the fixture point at a consistent owner.
+
 ## [4.0.0] - 2026-05-26
 
 ### Added

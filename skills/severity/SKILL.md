@@ -68,7 +68,7 @@ Schema v3 decomposes severity along three 0.0–1.0 dimensions per the [OWASP Ri
 
 ### `risk` (OWASP Likelihood, normalized)
 
-Sum the OWASP Likelihood factor scores (each rated 0–9 per the methodology) and divide by 9.0 to land in 0.0–1.0:
+Score each OWASP Likelihood factor 0–9 per the methodology, take the arithmetic mean, then divide by 9.0 to land in 0.0–1.0:
 
 - **Threat agent**: Skill level, Motive, Opportunity, Size
 - **Vulnerability**: Ease of discovery, Ease of exploit, Awareness, Intrusion detection
@@ -79,7 +79,7 @@ risk = average(factor_scores) / 9.0
 
 ### `impact` (OWASP Impact, normalized)
 
-Same recipe over OWASP Impact factors:
+Same recipe over OWASP Impact factors — score 0–9 per factor, average, divide by 9.0:
 
 - **Technical**: Loss of confidentiality, integrity, availability, accountability
 - **Business**: Financial damage, Reputation damage, Non-compliance, Privacy violation

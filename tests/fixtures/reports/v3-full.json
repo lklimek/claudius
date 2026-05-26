@@ -55,7 +55,7 @@
           "title": "Plaintext credential leak",
           "tags": ["A02 Cryptographic Failures", "CWE-256"],
           "location": "src/auth.rs:42-56",
-          "location_permalink": "https://github.com/lklimek_test/claudius/blob/0123456789abcdef0123456789abcdef01234567/src/auth.rs#L42-L56",
+          "location_permalink": "https://github.com/lklimek/claudius/blob/0123456789abcdef0123456789abcdef01234567/src/auth.rs#L42-L56",
           "description": "Credentials are written to disk unencrypted.",
           "impact_description": "Anyone with disk access can recover production credentials.",
           "recommendation": "Encrypt at rest using the platform keyring.",

@@ -35,6 +35,7 @@ from collections.abc import Iterator
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote as _url_quote
 
 try:
     import jsonschema
@@ -153,10 +154,11 @@ def parse_location(location: str) -> tuple[str, int | None, int | None]:
 # Git-derived metadata (permalink construction)
 # ---------------------------------------------------------------------------
 _GITHUB_REMOTE_RE = re.compile(
-    r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
-    r"(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
+    r"\A(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+    r"(?P<owner>[A-Za-z0-9][A-Za-z0-9._-]*)"
+    r"/(?P<repo>[A-Za-z0-9][A-Za-z0-9._-]*?)(?:\.git)?/?\Z"
 )
-_FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_FULL_SHA_RE = re.compile(r"\A[0-9a-f]{40}\Z")
 
 
 def _derive_metadata_repository(repo_root: str) -> dict[str, str] | None:
@@ -216,16 +218,25 @@ def _build_permalink(
     sha: str | None,
     location: str,
 ) -> str | None:
-    """Build a GitHub blob URL with line anchors. Returns None when any input is missing."""
+    """Build a GitHub blob URL with line anchors. Returns None when any input is missing.
+
+    The path component is URL-encoded so spaces, unicode, ``#``, and ``?`` in
+    a file path do not break the URL or hijack the fragment.
+    """
     if not repository or not sha:
         return None
     file_path, start, end = parse_location(location)
     if not file_path or start is None:
         return None
+    # Reject control characters outright — they have no place in a URL and
+    # would survive into downstream rendering / logging contexts.
+    if any(c in file_path for c in "\n\r\t"):
+        return None
+    safe_path = _url_quote(file_path, safe="/")
     anchor = f"#L{start}" if end is None or end == start else f"#L{start}-L{end}"
     return (
         f"https://github.com/{repository['owner']}/{repository['repo']}"
-        f"/blob/{sha}/{file_path}{anchor}"
+        f"/blob/{sha}/{safe_path}{anchor}"
     )
 
 
@@ -702,6 +713,24 @@ def cmd_prepare(args: argparse.Namespace) -> int:
             log.error("%s", e)
             return 2
 
+        # Detect a legacy v1/v2 envelope dict carrying schema_version and give
+        # a version-aware error before the shape check. The plan mandates a
+        # hard cutover: v1/v2 must be rejected with a pointer at the schema.
+        if isinstance(data, dict):
+            declared = data.get("schema_version")
+            if isinstance(declared, str) and declared and declared != SCHEMA_VERSION:
+                log.error(
+                    "Input %s declares schema_version=%r; only %r is accepted. "
+                    "v1/v2 reports are no longer supported — re-run the "
+                    "producer against the current commit to regenerate. See "
+                    "schemas/review-report.schema.json v%s.",
+                    path_str,
+                    declared,
+                    SCHEMA_VERSION,
+                    SCHEMA_VERSION,
+                )
+                return 2
+
         if not isinstance(data, list):
             log.error("Expected JSON array in %s", path_str)
             return 2
@@ -844,7 +873,10 @@ def _validate_report(report: dict[str, Any]) -> bool:
         log.error("Could not load schema: %s", e)
         return False
 
-    validator = jsonschema.Draft202012Validator(schema)
+    validator = jsonschema.Draft202012Validator(
+        schema,
+        format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER,
+    )
     errors = sorted(validator.iter_errors(report), key=lambda e: list(e.absolute_path))
     if errors:
         for err in errors:

@@ -91,3 +91,22 @@ def test_output_is_hex_rrggbb():
     assert out.startswith("#")
     assert len(out) == 7
     int(out[1:], 16)  # raises if not hex
+
+
+# ---------------------------------------------------------------------------
+# Robustness: NaN confidence must NOT crash; treated as default full saturation.
+# ---------------------------------------------------------------------------
+def test_nan_confidence_does_not_raise():
+    out = grr._verdict_color("valid", float("nan"))
+    # Same as None / 1.0 — full saturation base color.
+    assert out.upper() == grr.GREEN.upper()
+
+
+def test_inf_confidence_clamped_to_full_saturation():
+    out = grr._verdict_color("valid", float("inf"))
+    assert out.upper() == grr.GREEN.upper()
+
+
+def test_negative_inf_confidence_clamped_to_bg_light():
+    out = grr._verdict_color("valid", float("-inf"))
+    assert out.upper() == grr.BG_LIGHT.upper()

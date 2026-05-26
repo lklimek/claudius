@@ -130,7 +130,7 @@ Each agent writes its output to the specified file path as valid JSON:
 
 **Required finding fields**: `id`, `risk` / `impact` / `scope` (floats 0.0–1.0), `title`, `location`, `description`, `recommendation`. See `severity` skill for the OWASP-normalized recipes that produce the three float dimensions and the band table that the coordinator uses to derive the integer `severity`.
 
-**Optional**: `tags`, `impact_description` (Markdown narrative that used to live in the old `impact` field), `code_snippets` (emit only when you captured the exact source during analysis — never invent one).
+**Optional**: `tags`, `impact_description` (Markdown impact narrative; the numeric `impact` float is separate), `code_snippets` (emit only when you captured the exact source during analysis — never invent one).
 
 **Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats. Producers MAY still emit integer `severity` when they have no float estimate — the coordinator handles either path.
 

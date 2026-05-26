@@ -128,7 +128,8 @@
           "location_permalink": {
             "type": "string",
             "format": "uri",
-            "description": "GitHub permalink to the finding location. Coordinator-constructed when metadata.commit + metadata.repository + parseable location are all available."
+            "pattern": "^https?://",
+            "description": "GitHub permalink to the finding location (http/https only). Coordinator-constructed when metadata.commit + metadata.repository + parseable location are all available."
           }
         }
       }
@@ -242,7 +243,8 @@
         "location_permalink": {
           "type": "string",
           "format": "uri",
-          "description": "Coordinator-constructed GitHub blob URL at metadata.commit. Absent when commit/repository/parseable location is missing."
+          "pattern": "^https?://",
+          "description": "Coordinator-constructed GitHub blob URL at metadata.commit (http/https only). Absent when commit/repository/parseable location is missing."
         },
         "description": { "type": "string", "minLength": 1, "description": "Markdown-formatted description of the finding. May contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
         "impact_description": { "type": "string", "description": "Markdown-formatted impact narrative. Same Markdown subset as description. Optional; the numeric impact field is separate." },

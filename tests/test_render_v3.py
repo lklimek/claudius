@@ -16,7 +16,6 @@ import re
 import sys
 from pathlib import Path
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import generate_review_report as grr
 
@@ -105,13 +104,130 @@ def test_markdown_minimal_fixture_renders_cleanly():
     assert "](http" not in md  # no permalink link
 
 
+def _wrap_section(finding: dict) -> dict:
+    """Wrap a finding into a minimal renderable report shape."""
+    return {
+        "schema_version": "3.0.0",
+        "metadata": {"project": "p", "date": "2026-05-26"},
+        "executive_summary": {"overall_assessment": "ok"},
+        "summary_statistics": {
+            "total_findings": 1,
+            "severity_counts": {
+                "CRITICAL": 0,
+                "HIGH": 0,
+                "MEDIUM": 0,
+                "LOW": 0,
+                "INFO": 0,
+            },
+            "category_counts": {},
+            "agent_counts": {},
+        },
+        "findings": [{"category": "code_quality", "title": "T", "findings": [finding]}],
+    }
+
+
+def test_markdown_orphan_ai_assessment_label_suppressed():
+    """A finding with ai_verdict but no ai_assessment must NOT produce an
+    orphan 'AI Assessment' label with empty body."""
+    finding = {
+        "id": "X-001",
+        "severity": 2,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+        "ai_verdict": "valid",
+        "ai_verdict_confidence": 0.8,
+    }
+    md = grr.render_markdown(_wrap_section(finding))
+    # No trailing colon-with-empty-body for the AI block. The label may not
+    # appear at all, or must include both verdict info AND non-empty body.
+    assert "confidence: 0.80)*: \n" not in md
+    assert "confidence: 0.80)*:\n" not in md
+    # If the chip/verdict info is rendered, it should be in a self-contained
+    # form (no dangling empty body).
+    for line in md.splitlines():
+        if "AI Assessment" in line:
+            # Either no colon body, or it has content after the verdict info.
+            assert not line.rstrip().endswith(":")
+
+
+def test_markdown_snippet_content_with_backticks_uses_longer_fence():
+    """A snippet whose content contains a triple-backtick sequence must NOT
+    be wrapped in a fence that the content can terminate."""
+    finding = {
+        "id": "X-001",
+        "severity": 2,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+        "code_snippets": [
+            {
+                "language": "markdown",
+                "caption": "embedded fence",
+                "content": "before\n```\ninside\n```\nafter",
+            }
+        ],
+    }
+    md = grr.render_markdown(_wrap_section(finding))
+    # The opening fence must be at least 4 backticks so the embedded ``` does
+    # not terminate the fence.
+    assert "````markdown" in md or "`````markdown" in md
+    # The full inner content must appear without break-out.
+    assert "before\n```\ninside\n```\nafter" in md
+
+
+def test_markdown_snippet_caption_is_html_escaped():
+    """Producer-supplied caption must not inject HTML into the Markdown output."""
+    finding = {
+        "id": "X-001",
+        "severity": 2,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+        "code_snippets": [
+            {
+                "language": "rust",
+                "caption": "evil</summary><script>alert(1)</script>",
+                "content": "ok",
+            }
+        ],
+    }
+    md = grr.render_markdown(_wrap_section(finding))
+    # Raw script tag and closing summary must not survive verbatim.
+    assert "<script>alert(1)</script>" not in md
+    assert "evil</summary>" not in md
+    # Escaped form must appear instead.
+    assert "&lt;script&gt;" in md or "&lt;/summary&gt;" in md
+
+
+def test_markdown_snippet_description_passthrough_markdown():
+    """Description/recommendation/ai_assessment are documented as Markdown —
+    confirm they pass through (so producers can use formatting) and do NOT
+    get re-escaped into prose by the Markdown renderer."""
+    finding = {
+        "id": "X-001",
+        "severity": 2,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "**bold** and `code`",
+        "recommendation": "* item one\n* item two",
+    }
+    md = grr.render_markdown(_wrap_section(finding))
+    assert "**bold**" in md
+    assert "`code`" in md
+    assert "* item one" in md
+
+
 # ---------------------------------------------------------------------------
 # HTML
 # ---------------------------------------------------------------------------
 def test_html_permalink_anchor():
     data = _load("v3-full.json")
     html = grr.render_html(data)
-    assert 'href="https://github.com/lklimek_test/claudius/blob/' in html
+    assert 'href="https://github.com/lklimek/claudius/blob/' in html
     assert 'target="_blank"' in html
 
 
@@ -180,6 +296,49 @@ def test_html_minimal_fixture_renders_cleanly():
     assert "<code>src/example.rs:10-20</code>" in html
     assert 'href="None"' not in html
     assert 'href=""' not in html
+
+
+def test_html_ai_verdict_without_confidence_renders():
+    """Schema makes ai_verdict_confidence optional; HTML/Triage must NOT crash
+    when ai_verdict is present without ai_verdict_confidence."""
+    finding = {
+        "id": "X-001",
+        "severity": 2,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+        "ai_verdict": "valid",
+        # NO ai_verdict_confidence.
+    }
+    report = _wrap_section(finding)
+    # Must not raise.
+    html = grr.render_html(report)
+    triage = grr.render_triage(report)
+    # Default confidence (1.0) chip background is rendered.
+    assert "ai-verdict-chip" in html
+    assert "ai-verdict-chip" in triage
+    # The default-confidence label must read 1.00.
+    assert 'title="confidence: 1.00"' in html
+    assert 'title="confidence: 1.00"' in triage
+
+
+def test_html_javascript_scheme_in_permalink_not_rendered_as_href():
+    """Defense-in-depth: even if a malformed location_permalink slips through,
+    the HTML renderer must not emit it as a clickable javascript: href."""
+    finding = {
+        "id": "X-001",
+        "severity": 2,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+        "location_permalink": "javascript:alert(1)",
+    }
+    html = grr.render_html(_wrap_section(finding))
+    # No live javascript: href anywhere.
+    assert 'href="javascript:' not in html
+    assert "javascript:alert" not in html
 
 
 def test_html_verdict_chip_gradient_differs_between_high_and_low_confidence():

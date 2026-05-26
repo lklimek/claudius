@@ -134,3 +134,57 @@ class TestBuildPermalink:
     def test_unparseable_location(self):
         assert cr._build_permalink(self.REPO, self.SHA, "no-line-info") is None
         assert cr._build_permalink(self.REPO, self.SHA, "") is None
+
+    def test_path_with_spaces_is_url_encoded(self):
+        url = cr._build_permalink(self.REPO, self.SHA, "src/file with spaces.rs:42")
+        assert url is not None
+        # Space must be URL-encoded; the literal space breaks links.
+        assert " " not in url
+        assert "file%20with%20spaces.rs" in url
+
+    def test_path_with_unicode_is_url_encoded(self):
+        url = cr._build_permalink(self.REPO, self.SHA, "src/café.rs:1")
+        assert url is not None
+        assert "café" not in url
+        # %C3%A9 is UTF-8 encoded "é".
+        assert "%C3%A9" in url
+
+    def test_path_with_fragment_char_is_encoded(self):
+        # A '#' in the path would otherwise hijack the URL fragment.
+        url = cr._build_permalink(self.REPO, self.SHA, "src/weird#name.rs:1")
+        assert url is not None
+        # Only one '#' allowed — the anchor. The '#' in the path is encoded.
+        assert url.count("#") == 1
+        assert "%23" in url
+
+    def test_path_with_newline_rejected_or_encoded(self):
+        url = cr._build_permalink(self.REPO, self.SHA, "src/foo.rs\nX-Inj: 1:1")
+        # Either rejected outright or fully encoded — but never a raw newline.
+        assert url is None or "\n" not in url
+
+    def test_path_slashes_preserved(self):
+        url = cr._build_permalink(self.REPO, self.SHA, "a/b/c/file.rs:1")
+        assert url is not None
+        assert "/a/b/c/file.rs" in url
+
+
+# ---------------------------------------------------------------------------
+# _GITHUB_REMOTE_RE — strict anchoring and charset
+# ---------------------------------------------------------------------------
+class TestGithubRemoteRegex:
+    def test_rejects_embedded_newline_in_repo(self):
+        # CRLF-injection-shaped remote URL must not match.
+        m = cr._GITHUB_REMOTE_RE.match("git@github.com:owner/repo\nX-Inject: 1")
+        assert m is None
+
+    def test_rejects_whitespace_in_owner(self):
+        m = cr._GITHUB_REMOTE_RE.match("https://github.com/owner space/repo.git")
+        assert m is None
+
+    def test_accepts_dots_dashes_underscores(self):
+        m = cr._GITHUB_REMOTE_RE.match(
+            "https://github.com/my-org.name/my_repo.name.git"
+        )
+        assert m is not None
+        assert m["owner"] == "my-org.name"
+        assert m["repo"] == "my_repo.name"

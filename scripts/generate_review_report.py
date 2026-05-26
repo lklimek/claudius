@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Unified renderer: converts a review report JSON into md, html, triage, or pdf.
 
-Long-text finding fields (``description``, ``impact``, ``recommendation``,
-executive summary text) are rendered as Markdown in HTML and PDF outputs.
+Long-text finding fields (``description``, ``impact_description``,
+``recommendation``, ``ai_assessment``, executive summary text) are rendered as
+Markdown in HTML and PDF outputs.
 Markdown output passes the source through verbatim (Markdown in, Markdown out).
 HTML output is sanitised via ``bleach`` so untrusted Markdown cannot inject
 ``<script>`` or other active content.
@@ -36,7 +37,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
+from html import escape as html_escape
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
@@ -100,7 +103,10 @@ def validate_report(data: dict[str, Any], schema_path: Path) -> None:
     import jsonschema
 
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    validator = jsonschema.Draft202012Validator(schema)
+    validator = jsonschema.Draft202012Validator(
+        schema,
+        format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER,
+    )
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
     if errors:
         for err in errors:
@@ -201,13 +207,17 @@ def _verdict_color(verdict: str | None, confidence: float | None) -> str:
     """Linear-interpolate the verdict chip background between ``BG_LIGHT``
     (washed out) and the verdict's base color (full saturation).
 
-    ``confidence`` is clamped to ``[0, 1]``; ``None`` defaults to ``1.0`` so a
-    verdict from a producer that didn't run validate-findings still renders at
-    full saturation. Unknown verdicts return ``BG_LIGHT`` regardless of
-    confidence.
+    ``confidence`` is clamped to ``[0, 1]``; ``None`` and ``NaN`` default to
+    ``1.0`` so a verdict from a producer that didn't run validate-findings (or
+    emitted a malformed value) still renders at full saturation. Unknown
+    verdicts return ``BG_LIGHT`` regardless of confidence.
     """
     base_hex = _VERDICT_BASE_COLORS.get(verdict or "", BG_LIGHT)
     if confidence is None:
+        confidence = 1.0
+    # NaN compares False against every bound, so the clamp would skip and
+    # `round(...)` would then raise ValueError. Detect explicitly.
+    elif confidence != confidence:  # NaN
         confidence = 1.0
     if confidence < 0:
         confidence = 0.0
@@ -220,7 +230,8 @@ def _verdict_color(verdict: str | None, confidence: float | None) -> str:
 
 
 # ===================================================================
-# Markdown rendering for long-text fields (description / impact / etc.)
+# Markdown rendering for long-text fields (description / impact_description /
+# recommendation / ai_assessment).
 # ===================================================================
 
 # Heading -> font size (pt) for ReportLab. Matches PDF body sizing.
@@ -482,7 +493,10 @@ def render_markdown(data: dict[str, Any]) -> str:
         for tf in top[:5]:
             loc = tf.get("location", "")
             permalink = tf.get("location_permalink")
-            loc_md = f"[`{loc}`]({permalink})" if permalink else f"`{loc}`"
+            if permalink and permalink.startswith(("https://", "http://")):
+                loc_md = f"[`{loc}`]({permalink})"
+            else:
+                loc_md = f"`{loc}`"
             lines.append(
                 f"- **{tf['id']}** ({sev_label(tf['severity'])}): {tf['title']} \u2014 {loc_md}"
             )
@@ -521,7 +535,7 @@ def render_markdown(data: dict[str, Any]) -> str:
             lines.append("")
             loc = f.get("location", "")
             permalink = f.get("location_permalink")
-            if permalink:
+            if permalink and permalink.startswith(("https://", "http://")):
                 lines.append(f"- **Location**: [`{loc}`]({permalink})")
             else:
                 lines.append(f"- **Location**: `{loc}`")
@@ -532,12 +546,19 @@ def render_markdown(data: dict[str, Any]) -> str:
             if f.get("verdict"):
                 lines.append(f"- **Verdict**: {f['verdict']}")
             if f.get("ai_verdict"):
-                conf = f.get("ai_verdict_confidence", 1.0)
+                raw_conf = f.get("ai_verdict_confidence")
+                conf = raw_conf if isinstance(raw_conf, (int, float)) else 1.0
                 ai_text = f.get("ai_assessment", "")
-                lines.append(
-                    f"- **AI Assessment** *(verdict: {f['ai_verdict']}, "
-                    f"confidence: {conf:.2f})*: {ai_text}"
-                )
+                if ai_text:
+                    lines.append(
+                        f"- **AI Assessment** *(verdict: {f['ai_verdict']}, "
+                        f"confidence: {conf:.2f})*: {ai_text}"
+                    )
+                else:
+                    lines.append(
+                        f"- **AI Verdict**: {f['ai_verdict']} "
+                        f"*(confidence: {conf:.2f})*"
+                    )
             if f.get("reviewer"):
                 url = f.get("comment_url", "")
                 if url and url.startswith(("https://", "http://")):
@@ -546,17 +567,27 @@ def render_markdown(data: dict[str, Any]) -> str:
                 else:
                     lines.append(f"- **Reviewer**: {f['reviewer']}")
             for snip in f.get("code_snippets") or []:
-                summary = snip.get("caption") or snip.get("language") or "Code snippet"
+                raw_summary = (
+                    snip.get("caption") or snip.get("language") or "Code snippet"
+                )
+                # Caption is a producer-supplied label, not Markdown — escape
+                # HTML so it cannot break out of the surrounding <summary>.
+                summary = html_escape(raw_summary)
                 lang = snip.get("language", "")
                 content = snip.get("content", "")
+                # Pick a fence longer than any backtick run inside the content,
+                # so embedded ``` cannot terminate the outer fence (CommonMark
+                # requires opening/closing fences to match length).
+                longest = max((len(m) for m in re.findall(r"`+", content)), default=2)
+                fence = "`" * max(longest + 1, 3)
                 # GFM requires blank lines around <summary> and the fence for
                 # the embedded code block to parse on GitHub.
                 lines.append("")
                 lines.append(f"<details><summary>{summary}</summary>")
                 lines.append("")
-                lines.append(f"```{lang}")
+                lines.append(f"{fence}{lang}")
                 lines.append(content)
-                lines.append("```")
+                lines.append(fence)
                 lines.append("")
                 lines.append("</details>")
             lines.append("")
@@ -788,7 +819,7 @@ details summary:hover{color:{{ ACCENT }}}
   <td><a href="#finding-{{ tf.id }}">{{ tf.id }}</a></td>
   <td><span class="badge badge-{{ tf.severity|sev_label }}">{{ tf.severity|sev_label }}</span></td>
   <td>{{ tf.title }}</td>
-  <td>{% if tf.location_permalink %}<a href="{{ tf.location_permalink }}" target="_blank" rel="noopener"><code>{{ tf.location }}</code></a>{% else %}<code>{{ tf.location }}</code>{% endif %}</td>
+  <td>{% if tf.location_permalink and tf.location_permalink.startswith(('https://', 'http://')) %}<a href="{{ tf.location_permalink }}" target="_blank" rel="noopener"><code>{{ tf.location }}</code></a>{% else %}<code>{{ tf.location }}</code>{% endif %}</td>
   {% if triage %}<td class="no-print"><select class="triage-action-top" data-finding-id="{{ tf.id }}">
     <option value="---">---</option>
     <option value="fix">Fix</option>
@@ -871,12 +902,12 @@ details summary:hover{color:{{ ACCENT }}}
 <div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}">
   <h3>
     <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
-    {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence if f.ai_verdict_confidence is not none else 1.0) }}">{{ f.ai_verdict }}</span>{% endif %}
+    {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
   </h3>
   <dl>
-    <dt>Location:</dt><dd>{% if f.location_permalink %}<a href="{{ f.location_permalink }}" target="_blank" rel="noopener"><code>{{ f.location }}</code></a>{% else %}<code>{{ f.location }}</code>{% endif %}</dd>
+    <dt>Location:</dt><dd>{% if f.location_permalink and f.location_permalink.startswith(('https://', 'http://')) %}<a href="{{ f.location_permalink }}" target="_blank" rel="noopener"><code>{{ f.location }}</code></a>{% else %}<code>{{ f.location }}</code>{% endif %}</dd>
     <dt>Description:</dt><dd>{{ f.description | markdown }}</dd>
     {% if f.impact_description %}<dt>Impact:</dt><dd>{{ f.impact_description | markdown }}</dd>{% endif %}
     <dt>Recommendation:</dt><dd>{{ f.recommendation | markdown }}</dd>
@@ -2476,7 +2507,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         for tf in top_findings:
             loc = tf.get("location", "")
             permalink = tf.get("location_permalink")
-            if permalink:
+            if permalink and permalink.startswith(("https://", "http://")):
                 url_escaped = xml_escape(permalink, {chr(34): "&quot;"})
                 loc_xml = (
                     f'<a href="{url_escaped}" color="{ACCENT}">{xml_escape(loc)}</a>'
@@ -2677,7 +2708,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         tag_display = (
             f' <font color="{TEXT_MUTED}">- {", ".join(tags)}</font>' if tags else ""
         )
-        if permalink:
+        if permalink and permalink.startswith(("https://", "http://")):
             url_escaped = xml_escape(permalink, {chr(34): "&quot;"})
             loc_xml = f'<a href="{url_escaped}" color="{ACCENT}">{xml_escape(loc)}</a>'
         else:
@@ -2946,9 +2977,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Convert a review report JSON into md, html, triage, or pdf format. "
-            "Long-text fields (description, impact, recommendation, executive "
-            "summary) render as Markdown in HTML and PDF. Requires "
-            "`markdown >= 3.4` and `beautifulsoup4 >= 4.10` "
+            "Long-text fields (description, impact_description, recommendation, "
+            "ai_assessment, executive summary) render as Markdown in HTML and "
+            "PDF. Requires `markdown >= 3.4` and `beautifulsoup4 >= 4.10` "
             "(install via `pip install -r scripts/requirements.txt`)."
         ),
     )
