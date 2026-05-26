@@ -87,6 +87,19 @@ SEV_LABELS: dict[int, str] = {
     1: "INFO",
 }
 
+# Display labels for every finding category in the v3 schema. Renderers iterate
+# this dict so scoreboard tables / charts / filter chips stay in sync with the
+# schema instead of falling out of date when a new category lands.
+CATEGORY_LABELS: dict[str, str] = {
+    "security": "Security",
+    "project": "Project",
+    "code_quality": "Code Quality",
+    "documentation": "Documentation",
+    "dependencies": "Dependencies",
+    "pr_comments": "PR Comments",
+    "pr_promises": "PR Promises",
+}
+
 
 def sev_label(value: int | str) -> str:
     """Map numeric severity to label string. Pass-through if already a string."""
@@ -459,19 +472,20 @@ def render_markdown(data: dict[str, Any]) -> str:
         lines.append(es["summary_text"])
         lines.append("")
 
-    # Severity counts summary table
+    # Severity counts summary table — columns derive from CATEGORY_LABELS so
+    # adding a new category to the schema lights up everywhere automatically.
     matrix = stats.get("severity_category_matrix", [])
     if matrix:
         lines.append("### Findings Summary")
         lines.append("")
-        lines.append(
-            "| Severity | Security | Project | Code Quality | Documentation | Total |"
-        )
-        lines.append("|---|---|---|---|---|---|")
+        header = "| Severity | " + " | ".join(CATEGORY_LABELS.values()) + " | Total |"
+        sep = "|---" * (len(CATEGORY_LABELS) + 2) + "|"
+        lines.append(header)
+        lines.append(sep)
         for row in matrix:
+            cells = [str(row.get(cat, 0)) for cat in CATEGORY_LABELS]
             lines.append(
-                f"| {row['severity']} | {row.get('security', 0)} | {row.get('project', 0)} "
-                f"| {row.get('code_quality', 0)} | {row.get('documentation', 0)} | {row['total']} |"
+                f"| {row['severity']} | " + " | ".join(cells) + f" | {row['total']} |"
             )
         lines.append("")
 
@@ -788,15 +802,14 @@ details summary:hover{color:{{ ACCENT }}}
   <div class="kpi-box"><div class="val" style="color:{{ RED }}">{{ stats.critical_count | default(0) }}</div><div class="label">Critical</div></div>
 </div>
 
-<!-- Summary table -->
+<!-- Summary table (columns derive from category_labels) -->
 {% if matrix %}
 <table>
-<tr><th>Severity</th><th>Security</th><th>Project</th><th>Code Quality</th><th>Documentation</th><th>Total</th></tr>
+<tr><th>Severity</th>{% for slug, label in category_labels.items() %}<th>{{ label }}</th>{% endfor %}<th>Total</th></tr>
 {% for row in matrix %}
 <tr>
   <td><span class="badge badge-{{ row.severity }}">{{ row.severity }}</span></td>
-  <td>{{ row.security }}</td><td>{{ row.project }}</td>
-  <td>{{ row.code_quality }}</td><td>{{ row.documentation | default(0) }}</td>
+  {% for slug in category_labels %}<td>{{ row[slug] | default(0) }}</td>{% endfor %}
   <td><strong>{{ row.total }}</strong></td>
 </tr>
 {% endfor %}
@@ -901,7 +914,7 @@ details summary:hover{color:{{ ACCENT }}}
 <summary>{{ sec.findings | length }} finding{{ "s" if sec.findings | length != 1 else "" }}</summary>
 
 {% for f in sec.findings %}
-<div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}">
+<div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ f._category if f._category else sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}">
   <h3>
     <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
@@ -1020,11 +1033,12 @@ details summary:hover{color:{{ ACCENT }}}
     });
   }
 
-  // Category stacked bar
+  // Category stacked bar — `cats` / `catLabels` come from CATEGORY_LABELS so
+  // a new schema category lights up automatically.
   const matrix = {{ matrix_json }};
   if (matrix.length) {
-    const cats = ["security", "project", "code_quality", "documentation"];
-    const catLabels = ["Security", "Project", "Code Quality", "Documentation"];
+    const cats = {{ category_slugs_json }};
+    const catLabels = {{ category_label_list_json }};
     const datasets = [];
     for (const s of sevOrder) {
       const row = matrix.find(r => r.severity === s);
@@ -1574,10 +1588,16 @@ def _build_html_context(
 
     if triage:
         # Flatten all findings into a single list sorted by overall_severity
-        # (float) when present, falling back to integer severity.
+        # (float) when present, falling back to integer severity. Stash the
+        # origin section's category on each finding so the per-finding
+        # `data-category` attribute survives the flatten — otherwise every
+        # finding inherits the wrapper section's `"all"` and the triage
+        # category filter chip stops working.
         all_findings = []
         for sec in findings_sections:
+            origin_cat = sec.get("category", "")
             for f in sec.get("findings", []):
+                f["_category"] = origin_cat
                 all_findings.append(f)
         all_findings.sort(
             key=lambda f: (
@@ -1648,6 +1668,13 @@ def _build_html_context(
             "</", r"<\/"
         ),
         "priority_colors_json": json.dumps(PRIORITY_COLORS).replace("</", r"<\/"),
+        "category_labels": CATEGORY_LABELS,
+        "category_slugs_json": json.dumps(list(CATEGORY_LABELS.keys())).replace(
+            "</", r"<\/"
+        ),
+        "category_label_list_json": json.dumps(list(CATEGORY_LABELS.values())).replace(
+            "</", r"<\/"
+        ),
         "verdict_colors": {"RESOLVED": GREEN, "UNRESOLVED": RED},
         "triage": triage,
     }
@@ -1688,6 +1715,8 @@ def _mark_safe_values(ctx: dict[str, Any]) -> None:
         "agent_stats_json",
         "remediation_json",
         "priority_colors_json",
+        "category_slugs_json",
+        "category_label_list_json",
     }
     for key in safe_keys | json_keys:
         if key in ctx and isinstance(ctx[key], str):
@@ -2310,19 +2339,18 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         return _to_img(fig, CW * 0.85, 2.3 * inch)
 
     def chart_category_bar() -> Image:
-        cats = ["Security", "Code Quality", "Project Consistency"]
+        # Category list derives from CATEGORY_LABELS so all schema categories
+        # surface in the chart, not just the original 3.
+        cat_slugs = list(CATEGORY_LABELS.keys())
+        cats = list(CATEGORY_LABELS.values())
         cat_data: dict[str, list[int]] = {}
         for sv in SEV_ORDER:
             for row in matrix:
                 if row["severity"] == sv:
-                    cat_data[sv] = [
-                        row.get("security", 0),
-                        row.get("code_quality", 0),
-                        row.get("project", 0),
-                    ]
+                    cat_data[sv] = [row.get(slug, 0) for slug in cat_slugs]
                     break
             else:
-                cat_data[sv] = [0, 0, 0]
+                cat_data[sv] = [0] * len(cat_slugs)
         fig, ax = plt.subplots(figsize=(6.2, 2.2))
         _clean(fig, [ax])
         y = np.arange(len(cats))
@@ -2477,27 +2505,28 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
 
     # --- Tables ---
     def tbl_summary() -> Table:
-        header = [
-            Paragraph(h, s["th"])
-            for h in ["Severity", "Security", "Project", "Code Quality", "Total"]
-        ]
+        # Columns derive from CATEGORY_LABELS so a new schema category lights
+        # up automatically. Severity + N categories + Total share the content
+        # width proportionally.
+        cat_slugs = list(CATEGORY_LABELS.keys())
+        headers = ["Severity", *CATEGORY_LABELS.values(), "Total"]
+        header = [Paragraph(h, s["th"]) for h in headers]
         tbl_data = [header]
         for row in matrix:
             sev = row["severity"]
-            tbl_data.append(
-                [
-                    _badge(sev),
-                    Paragraph(str(row.get("security", 0)), s["tcc"]),
-                    Paragraph(str(row.get("project", 0)), s["tcc"]),
-                    Paragraph(str(row.get("code_quality", 0)), s["tcc"]),
-                    Paragraph(f"<b>{row['total']}</b>", s["tcc"]),
-                ]
-            )
-        t = Table(
-            tbl_data,
-            colWidths=[1.1 * inch, 1.2 * inch, 1.1 * inch, 1.3 * inch, 0.7 * inch],
-            repeatRows=1,
-        )
+            cells: list[Any] = [_badge(sev)]
+            for slug in cat_slugs:
+                cells.append(Paragraph(str(row.get(slug, 0)), s["tcc"]))
+            cells.append(Paragraph(f"<b>{row['total']}</b>", s["tcc"]))
+            tbl_data.append(cells)
+        # Severity column gets 1.1in; total gets 0.6in; remaining width splits
+        # evenly across category columns.
+        sev_w = 1.1 * inch
+        total_w = 0.6 * inch
+        cat_total_w = CW - sev_w - total_w
+        cat_w = cat_total_w / max(len(cat_slugs), 1)
+        col_widths = [sev_w, *([cat_w] * len(cat_slugs)), total_w]
+        t = Table(tbl_data, colWidths=col_widths, repeatRows=1)
         t.setStyle(_tbl_style())
         return t
 

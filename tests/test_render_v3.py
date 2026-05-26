@@ -372,6 +372,70 @@ def test_triage_minimal_renders():
     assert "ai-verdict-chip" not in html
 
 
+def test_triage_finding_data_category_preserves_origin_category():
+    """Regression: the triage renderer flattens all findings into a single
+    `category: "all"` wrapper section. Each finding's `data-category` attribute
+    on the rendered `<div>` must still reflect the ORIGINAL section category
+    (so the category filter chip works) — not the post-flatten `"all"` value.
+    """
+    report = {
+        "schema_version": "3.0.0",
+        "metadata": {"project": "p", "date": "2026-05-26"},
+        "executive_summary": {"overall_assessment": "ok"},
+        "summary_statistics": {
+            "total_findings": 2,
+            "severity_counts": {
+                "CRITICAL": 0,
+                "HIGH": 0,
+                "MEDIUM": 0,
+                "LOW": 2,
+                "INFO": 0,
+            },
+        },
+        "findings": [
+            {
+                "title": "Security",
+                "category": "security",
+                "findings": [
+                    {
+                        "id": "SEC-001",
+                        "severity": 2,
+                        "title": "S",
+                        "location": "src/a.rs:1",
+                        "description": "d",
+                        "recommendation": "r",
+                    }
+                ],
+            },
+            {
+                "title": "PR Promises",
+                "category": "pr_promises",
+                "findings": [
+                    {
+                        "id": "PPM-001",
+                        "severity": 2,
+                        "title": "P",
+                        "location": "PR-title",
+                        "description": "d",
+                        "recommendation": "r",
+                    }
+                ],
+            },
+        ],
+    }
+    html = grr.render_triage(report)
+    sec_match = re.search(r'id="finding-SEC-001"[^>]*data-category="([^"]*)"', html)
+    ppm_match = re.search(r'id="finding-PPM-001"[^>]*data-category="([^"]*)"', html)
+    assert sec_match, "SEC-001 div not found in triage HTML"
+    assert ppm_match, "PPM-001 div not found in triage HTML"
+    assert (
+        sec_match.group(1) == "security"
+    ), f'SEC-001 data-category collapsed to "{sec_match.group(1)}" — expected "security"'
+    assert (
+        ppm_match.group(1) == "pr_promises"
+    ), f'PPM-001 data-category collapsed to "{ppm_match.group(1)}" — expected "pr_promises"'
+
+
 # ---------------------------------------------------------------------------
 # PDF
 # ---------------------------------------------------------------------------

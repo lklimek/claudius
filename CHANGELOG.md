@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.1] - 2026-05-26
+
+### Fixed
+
+- `scripts/generate_review_report.py`: scoreboard tables in all four renderers (Markdown, HTML, Triage, PDF) now enumerate every category from the v3 schema instead of a hardcoded subset. Previously `pr_promises`, `pr_comments`, and `dependencies` rows were silently dropped from the severity x category matrix and from the Chart.js category bar chart. Driven by a single `CATEGORY_LABELS` map so future schema additions light up everywhere automatically.
+- `scripts/generate_review_report.py`: triage HTML `data-category` attribute now reflects the finding's original section category, not the post-flatten wrapper. The flatten step previously stamped `data-category="all"` on every finding, breaking the triage category filter chip. Origin category is stashed on each finding (`_category`) before flattening; the template prefers it when present.
+- `skills/review-pr/SKILL.md`: Pass C trigger hints now express severity as `risk≈X.Y, impact≈X.Y` float ranges (consistent with the v3 producer contract that emits floats and lets the coordinator derive integer bands) instead of the contradictory `→ HIGH/MEDIUM/LOW` labels.
+
+### Changed
+
+- `skills/report-format/SKILL.md`: the `pr_promises` example now includes a rationale paragraph explaining why each field carries its value (`scope: 1.0`, synthetic `location`, risk/impact rationale).
+
 ## [4.1.0] - 2026-05-26
 
 ### Added

@@ -53,29 +53,31 @@ Findings emit in the v3 report format. See `claudius:report-format` for the enve
 
 Run all three; emit at most one finding per axis-trigger. When the diff is large, delegate the per-axis judgment to a subagent per `git-and-github` § Context Management.
 
+Trigger hints below give `risk` / `impact` float ranges (the only severity fields a producer emits — the coordinator computes `overall_severity` and the integer band). Always cross-check the rubric and band table in `claudius:severity`.
+
 #### Axis 1 — Title ↔ diff
 
 Input: PR title + file list + diff.
 Process: extract the title's action verb + topic; verify the diff exercises that topic (path keywords are necessary, semantic relevance is sufficient).
 Triggers:
-- **Off-target** — title's topic absent from the diff. Severity scales with distance: completely unrelated → HIGH, partial drift → MEDIUM.
-- **Vague/non-actionable** — title is `misc`, `cleanup`, `wip`, `update`, etc. → LOW (style; alignment unjudgeable).
+- **Off-target** — title's topic absent from the diff. Completely unrelated → `risk≈0.8, impact≈0.7`; partial drift → `risk≈0.5, impact≈0.5`.
+- **Vague/non-actionable** — title is `misc`, `cleanup`, `wip`, `update`, etc. → `risk≈0.3, impact≈0.3` (style; alignment unjudgeable).
 
 #### Axis 2 — Body Summary ↔ diff
 
 Input: extracted Summary bullets + diff.
 Process: for each bullet, locate a corresponding hunk; flag bullets without coverage and large hunks without a corresponding bullet.
 Triggers:
-- **Missing claim** — bullet describes a change with no matching diff hunk → MEDIUM (reviewer trust degraded).
-- **Partial implementation** — bullet's claim is broader than what landed → LOW–MEDIUM depending on gap size.
-- **Undocumented change** — production-code hunk ≥ 50 LOC not mentioned anywhere in the body → LOW–MEDIUM depending on size and risk surface.
+- **Missing claim** — bullet describes a change with no matching diff hunk → `risk≈0.6, impact≈0.5` (reviewer trust degraded).
+- **Partial implementation** — bullet's claim is broader than what landed → `risk≈0.4–0.6, impact≈0.3–0.5` depending on gap size.
+- **Undocumented change** — production-code hunk ≥ 50 LOC not mentioned anywhere in the body → `risk≈0.4–0.6, impact≈0.3–0.6` depending on size and risk surface.
 
 #### Axis 3 — Out-of-scope enforcement
 
 Input: out-of-scope bullets + diff.
 Process: for each deferred item, search the diff for matching code/paths.
 Triggers:
-- **Scope creep** — deferred item appears in the diff. Severity scales with size and reversibility: a 5-line touch → LOW; a multi-file migration → HIGH.
+- **Scope creep** — deferred item appears in the diff. Scales with size and reversibility: a 5-line touch → `risk≈0.3, impact≈0.3`; a multi-file migration → `risk≈0.8, impact≈0.7`.
 
 ### Finding emit template
 

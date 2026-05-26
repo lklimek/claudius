@@ -92,7 +92,9 @@ def test_mismatched_fixture_documents_each_axis():
 
 def test_mismatched_fixture_required_sections_present():
     text, expected = _load_fixture("synthetic-mismatched.md")
-    _assert_required_sections("synthetic-mismatched.md", text, expected["required_sections"])
+    _assert_required_sections(
+        "synthetic-mismatched.md", text, expected["required_sections"]
+    )
 
 
 def test_mismatched_fixture_out_of_scope_section_actually_lists_an_item():
