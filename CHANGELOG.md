@@ -4,6 +4,34 @@ All notable changes to this project are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [3.14.5] - 2026-05-22
+
+### Fixed
+
+- `scripts/generate_review_report.py`: `CLAUDIUS_PDF_FONT` override now validates the `.ttf` extension before accepting a file, and the warning text is truthful about the actual condition — "is not a readable file" for a missing path, "is not a .ttf file" for a non-TrueType file (previously a non-TTF that existed was silently accepted while the warning still claimed "does not point to a TTF file").
+- `scripts/generate_review_report.py`: `_resolve_font_set` docstring corrected — the `scripts/fonts/DejaVuSans*.ttf` slot is an optional user-supplied drop-in (not shipped with the plugin), and the override branch picks up `-Bold`/`-Oblique`/`-BoldOblique` siblings only (the monospace slot reuses the regular face; there is no `Mono.ttf` auto-pickup).
+- `scripts/generate_review_report.py`: the Markdown -> ReportLab fallback warning now logs with `exc_info=True`, so the traceback (Markdown parse vs. BeautifulSoup vs. ReportLab mini-XML) is captured for diagnosis without changing the non-crashing behavior.
+
+### Added
+
+- `tests/test_generate_review_report.py`: pytest coverage for `_resolve_font_set` (env override valid/missing/non-TTF, sibling pickup, user-supplied dir, system-candidate fallback, no-font `None`) and `render_markdown_to_reportlab` (empty input, valid Markdown, malformed-input fallback to an escaped preformatted block with traceback logging). Fonts are isolated from the host so the suite is deterministic.
+
+## [3.14.4] - 2026-05-22
+
+### Fixed
+
+- `scripts/generate_review_report.py` (CQ-001): the resolved Unicode TTF is now also wired into matplotlib (`font_manager.addfont` + `rcParams["font.sans-serif"]`) so PDF chart labels — e.g. agent names from `agent_stats` — render non-Latin scripts instead of tofu boxes, matching the ReportLab text flow. Best-effort: a matplotlib font failure logs a warning and leaves chart glyphs degraded but never aborts the render.
+- `scripts/generate_review_report.py` / CHANGELOG (DOC-001): corrected the font-discovery wording. The `scripts/fonts/DejaVuSans.ttf` slot is an optional user-supplied drop-in, **not** a font shipped with the plugin; system fonts come from the `fonts-dejavu` / `fonts-noto` packages. Module docstring and 3.14.3 changelog entry updated to match.
+
+## [3.14.3] - 2026-05-05
+
+### Fixed
+
+- `scripts/generate_review_report.py` (QA-004): PDF output now registers a Unicode TrueType font (DejaVu Sans / Noto Sans, with bold/italic/mono siblings via `pdfmetrics.registerFontFamily`) so emoji and non-Latin scripts (Cyrillic, Arabic, Hebrew, etc.) render correctly instead of as tofu boxes. Discovery order: `$CLAUDIUS_PDF_FONT` env override -> optional user-supplied `scripts/fonts/DejaVuSans.ttf` (not shipped with the plugin) -> common Linux locations (`/usr/share/fonts/truetype/dejavu`, `/usr/share/fonts/truetype/noto`, provided by `fonts-dejavu` / `fonts-noto`). When no TTF is found the renderer logs a warning to stderr and falls back to ReportLab's Helvetica/Courier core fonts (Latin-1 only) -- never crashes.
+- `scripts/generate_review_report.py` (QA-005): `render_markdown_to_reportlab()` wraps the Markdown -> HTML -> ReportLab pass in try/except. On any failure (malformed input, parser exception, ReportLab mini-XML rejection) it logs a warning and falls back to a single XML-escaped preformatted block containing the raw source so no content is silently swallowed.
+
 ## [3.14.2] - 2026-05-05
 
 ### Fixed
@@ -951,6 +979,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[3.14.5]: https://github.com/lklimek/claudius/compare/v3.14.4...v3.14.5
+[3.14.4]: https://github.com/lklimek/claudius/compare/v3.14.3...v3.14.4
+[3.14.3]: https://github.com/lklimek/claudius/compare/v3.14.2...v3.14.3
 [3.14.2]: https://github.com/lklimek/claudius/compare/v3.14.1...v3.14.2
 [3.14.1]: https://github.com/lklimek/claudius/compare/v3.14.0...v3.14.1
 [3.14.0]: https://github.com/lklimek/claudius/compare/v3.13.0...v3.14.0
