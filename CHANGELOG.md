@@ -6,6 +6,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-05-26
+
+### Added
+
+- `schemas/review-report.schema.json`: multi-dimensional severity floats `risk`, `impact`, `scope` (0.0–1.0) plus derived `overall_severity` per the [OWASP Risk Rating Methodology](https://owasp.org/www-community/OWASP_Risk_Rating_Methodology); CVSS v4.0-aligned band table maps `overall_severity` to integer `severity` 1..5.
+- `schemas/review-report.schema.json`: `location_permalink` (GitHub `blob/<sha>/<path>#L<n>` URL) constructed by the coordinator from `metadata.commit` + `metadata.repository` + finding location.
+- `schemas/review-report.schema.json`: optional `code_snippets[]` (`{language?, caption?, content}`) so producers can attach the exact source they inspected.
+- `schemas/review-report.schema.json`: AI validation fields `ai_assessment` (Markdown), `ai_verdict` (`valid` | `false_positive` | `needs_investigation` | `out_of_scope` | `duplicate`), `ai_verdict_confidence` (0.0–1.0).
+- `schemas/review-report.schema.json`: `metadata.repository` (`{owner, repo}`) auto-derived by the coordinator from `git remote get-url origin`; absent for non-GitHub / non-git directories.
+- `skills/validate-findings/`: new coordinator-only skill that runs an opt-in LLM validation pass over a consolidated v3 report — populates `ai_assessment` / `ai_verdict` / `ai_verdict_confidence`, estimates missing OWASP float dimensions, and re-derives integer severity through the same Python helpers the coordinator uses.
+- `skills/severity/SKILL.md`: "OWASP Risk Rating normalization" section with factor-averaging recipes for `risk` and `impact`, the 1.0 / 0.5 / 0.0 `scope` rubric, and the float→integer band table.
+
+### Changed
+
+- `schemas/review-report.schema.json`: `impact` is now a 0.0–1.0 float (the OWASP Impact dimension); the previous Markdown narrative is renamed to `impact_description` (still optional, still Markdown).
+- `schemas/review-report.schema.json`: integer `severity` is now derived by the coordinator from the `risk`/`impact`/`scope` floats per the CVSS-aligned band table — producers may still emit it when they have no float estimate, but the coordinator overrides whenever floats are present.
+- `schemas/review-report.schema.json`: `metadata.commit` must be a full 40-character SHA when present, so permalinks can be constructed unambiguously.
+- Producer skills (`grumpy-review`, `check-pr-comments`, `review-pr`, `report-format`): JSON examples and emit rules updated for v3 — emit `risk`/`impact`/`scope` floats, optional `code_snippets`, full-SHA `metadata.commit`; do NOT emit coordinator/validator-owned fields.
+
+### Removed
+
+- `schemas/review-report.schema.json`: support for `schema_version` `1.0.0`, `1.1.0`, and `2.0.0`. Only `3.0.0` is accepted.
+
+### Migration
+
+v1/v2 reports are no longer accepted. Re-run the producer (grumpy-review / check-pr-comments / review-pr) against the current commit to regenerate findings against the v3 schema. There is no in-place conversion path.
+
 ## [3.14.5] - 2026-05-22
 
 ### Fixed
@@ -979,6 +1006,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[4.0.0]: https://github.com/lklimek/claudius/compare/v3.14.5...v4.0.0
 [3.14.5]: https://github.com/lklimek/claudius/compare/v3.14.4...v3.14.5
 [3.14.4]: https://github.com/lklimek/claudius/compare/v3.14.3...v3.14.4
 [3.14.3]: https://github.com/lklimek/claudius/compare/v3.14.2...v3.14.3

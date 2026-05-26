@@ -109,13 +109,18 @@ Each agent writes its output to the specified file path as valid JSON:
     "findings": [
       {
         "id": "PREFIX-001",
-        "severity": 5,
+        "risk": 0.6,
+        "impact": 0.7,
+        "scope": 1.0,
         "title": "Short finding title",
         "tags": ["A03 Injection", "CWE-79"],
         "location": "src/auth.rs:42-56",
         "description": "What the issue is and why it matters",
-        "impact": "What could go wrong",
-        "recommendation": "How to fix it"
+        "impact_description": "What could go wrong (Markdown narrative)",
+        "recommendation": "How to fix it",
+        "code_snippets": [
+          {"language": "rust", "caption": "auth.rs:42", "content": "let user = unwrap_token(&hdr);"}
+        ]
       }
     ],
     "positives": "Optional positive observations"
@@ -123,9 +128,13 @@ Each agent writes its output to the specified file path as valid JSON:
 ]
 ```
 
-**Required finding fields**: `id`, `severity` (integer: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO), `title`, `location`, `description`, `recommendation`.
-**Optional**: `tags`, `impact`.
-**Impact guidance**: assess end-user and developer experience impact, not just technical correctness.
+**Required finding fields**: `id`, `risk` / `impact` / `scope` (floats 0.0–1.0), `title`, `location`, `description`, `recommendation`. See `severity` skill for the OWASP-normalized recipes that produce the three float dimensions and the band table that the coordinator uses to derive the integer `severity`.
+
+**Optional**: `tags`, `impact_description` (Markdown narrative that used to live in the old `impact` field), `code_snippets` (emit only when you captured the exact source during analysis — never invent one).
+
+**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats. Producers MAY still emit integer `severity` when they have no float estimate — the coordinator handles either path.
+
+**Metadata**: emit `metadata.commit` as the full 40-character SHA (`git rev-parse HEAD`, not `--short`); omit when not in a git repo. The coordinator derives `metadata.repository` from `git remote get-url origin` — producers do not emit it.
 
 **ID prefixes**: `SEC-` security, `PROJ-` project, `RUST-`/`PY-`/`GO-`/`FE-` language, `DOC-` docs.
 Agents assign provisional sequential IDs within their prefix (e.g., `SEC-001`, `SEC-002`).

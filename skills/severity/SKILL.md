@@ -61,3 +61,53 @@ Emit severity as an integer in finding JSON:
 - Severity reflects **impact and likelihood**, not effort to fix
 - A trivial one-line fix can still be CRITICAL if the impact is severe
 - UX/DX impact is a severity factor — a broken user journey or confusing developer experience can be HIGH even if the code compiles and passes tests
+
+## OWASP Risk Rating normalization
+
+Schema v3 decomposes severity along three 0.0–1.0 dimensions per the [OWASP Risk Rating Methodology](https://owasp.org/www-community/OWASP_Risk_Rating_Methodology). The coordinator computes `overall_severity = (risk + impact + scope) / 3` and derives the integer `severity` from the band table below — never ask the LLM to do the arithmetic.
+
+### `risk` (OWASP Likelihood, normalized)
+
+Sum the OWASP Likelihood factor scores (each rated 0–9 per the methodology) and divide by 9.0 to land in 0.0–1.0:
+
+- **Threat agent**: Skill level, Motive, Opportunity, Size
+- **Vulnerability**: Ease of discovery, Ease of exploit, Awareness, Intrusion detection
+
+```
+risk = average(factor_scores) / 9.0
+```
+
+### `impact` (OWASP Impact, normalized)
+
+Same recipe over OWASP Impact factors:
+
+- **Technical**: Loss of confidentiality, integrity, availability, accountability
+- **Business**: Financial damage, Reputation damage, Non-compliance, Privacy violation
+
+```
+impact = average(factor_scores) / 9.0
+```
+
+For pure code-quality findings without a security angle, score the technical factors only and treat business factors as 0 — the average still lands in a sensible band.
+
+### `scope` (PR relevance)
+
+| Value | Meaning |
+|-------|---------|
+| `1.0` | Directly in the PR diff — introduced or modified by this change |
+| `0.5` | Indirectly affected — pre-existing code touched or reachable via the diff |
+| `0.0` | Unrelated to the PR — pre-existing issue outside the diff |
+
+### Band table (`overall_severity` → integer `severity`)
+
+CVSS v4.0-aligned bands, applied by the coordinator:
+
+| `overall_severity` | int | label |
+|---|---|---|
+| ≥ 0.9 | 5 | CRITICAL |
+| ≥ 0.7 | 4 | HIGH |
+| ≥ 0.4 | 3 | MEDIUM |
+| ≥ 0.1 | 2 | LOW |
+| < 0.1 | 1 | INFO |
+
+Producers emit `risk`/`impact`/`scope` floats; the coordinator (or `validate-findings` when a producer omits them) writes `overall_severity` and the integer `severity`.
