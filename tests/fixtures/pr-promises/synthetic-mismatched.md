@@ -65,3 +65,12 @@ diff --git a/tests/grpc/retry_test.go b/tests/grpc/retry_test.go
 3. **Axis 3 (out-of-scope enforcement)** — body declares the auth/OAuth2 migration out of scope, yet `src/auth/oauth_migration.go` ships 42 lines of exactly that migration. Scope creep. `location: PR-body:out-of-scope-item-1`.
 
 Summary bullet 2 (retry/backoff) IS implemented by the diff and must NOT trigger a finding.
+
+<!-- expected: {
+  "expected_finding_count": 3,
+  "title_alignment": "off_target",
+  "summary_alignment": "missing_claim",
+  "out_of_scope": "scope_creep",
+  "required_sections": ["## PR Title", "## PR Body", "## PR Diff (excerpt)", "## Out of scope"]
+} -->
+
