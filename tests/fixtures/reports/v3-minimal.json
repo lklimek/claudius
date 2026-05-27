@@ -1,0 +1,40 @@
+{
+  "schema_version": "3.0.0",
+  "metadata": {
+    "project": "claudius",
+    "date": "2026-05-26"
+  },
+  "executive_summary": {
+    "overall_assessment": "Minimal v3 report with no permalinks, no code_snippets, no AI fields."
+  },
+  "summary_statistics": {
+    "total_findings": 1,
+    "severity_counts": {
+      "CRITICAL": 0,
+      "HIGH": 0,
+      "MEDIUM": 1,
+      "LOW": 0,
+      "INFO": 0
+    }
+  },
+  "findings": [
+    {
+      "title": "Code Quality",
+      "category": "code_quality",
+      "findings": [
+        {
+          "id": "CODE-001",
+          "severity": 3,
+          "risk": 0.5,
+          "impact": 0.5,
+          "scope": 0.5,
+          "overall_severity": 0.5,
+          "title": "Example finding without optional fields",
+          "location": "src/example.rs:10-20",
+          "description": "A minimal v3 finding to verify the schema accepts reports with no optional fields populated.",
+          "recommendation": "Nothing to do — this is a fixture."
+        }
+      ]
+    }
+  ]
+}

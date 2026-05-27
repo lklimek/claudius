@@ -63,18 +63,18 @@ This is the default end of the workflow. Steps 5-7 (structured report) are only 
 
 ## 5. Build Structured Report JSON
 
-Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v2.0.0).
+Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v3.0.0).
 
 ### Report structure
 
 ```json
 {
-  "schema_version": "1.1.0",
+  "schema_version": "3.0.0",
   "metadata": {
     "project": "<owner>/<repo>",
     "date": "YYYY-MM-DD",
     "branch": "<pr-branch>",
-    "commit": "<HEAD short SHA>",
+    "commit": "<full 40-char SHA from `git rev-parse HEAD`>",
     "scope": "PR #<number> comment verification",
     "reviewers": ["<unique reviewer usernames>"],
     "report_type": "comment_check",
@@ -99,6 +99,8 @@ Produce a `report.json` file following the unified report schema (`../../schemas
 }
 ```
 
+`metadata.commit` must be the full 40-character SHA when present (omit for non-git directories). `metadata.repository` is coordinator-derived — do NOT emit it from this skill.
+
 ### Finding format
 
 Each review comment becomes one finding:
@@ -106,7 +108,9 @@ Each review comment becomes one finding:
 ```json
 {
   "id": "CMT-001",
-  "severity": 1,
+  "risk": 0.1,
+  "impact": 0.1,
+  "scope": 1.0,
   "title": "Short description of what the comment requests",
   "location": "path/to/file.rs:42-56",
   "description": "What the comment asked for (multi-line OK)",
@@ -120,10 +124,13 @@ Each review comment becomes one finding:
 }
 ```
 
-- **Resolved** comments: `severity: 1` (INFO), `verdict: "RESOLVED"`. `recommendation` describes what was done.
-- **Unresolved** comments: assessed numeric severity (5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW), `verdict: "UNRESOLVED"`. `recommendation` describes what still needs to be done.
-- Severity mapping: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO. See `severity` skill for definitions.
+- **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (the comment is satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done. The coordinator will derive `severity = 1` (INFO) from those floats.
+- **Unresolved** comments: assess `risk` and `impact` per the OWASP recipes in the `severity` skill; set `scope = 1.0` (the comment names code in the PR diff). The coordinator derives the integer `severity` band. Set `verdict: "UNRESOLVED"` and let `recommendation` describe what still needs doing.
 - `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 8.
+
+**Do NOT emit** (coordinator/validator-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `risk`/`impact`/`scope` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
+
+**Optional**: `code_snippets` — when the comment quotes specific source you verified, you may attach it as `[{language, caption, content}]`; never invent one.
 
 ### Numbering
 

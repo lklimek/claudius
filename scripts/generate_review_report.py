@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Unified renderer: converts a review report JSON into md, html, triage, or pdf.
 
-Long-text finding fields (``description``, ``impact``, ``recommendation``,
-executive summary text) are rendered as Markdown in HTML and PDF outputs.
+Long-text finding fields (``description``, ``impact_description``,
+``recommendation``, ``ai_assessment``, executive summary text) are rendered as
+Markdown in HTML and PDF outputs.
 Markdown output passes the source through verbatim (Markdown in, Markdown out).
 HTML output is sanitised via ``bleach`` so untrusted Markdown cannot inject
 ``<script>`` or other active content.
@@ -36,7 +37,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
+from html import escape as html_escape
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
@@ -100,7 +103,10 @@ def validate_report(data: dict[str, Any], schema_path: Path) -> None:
     import jsonschema
 
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    validator = jsonschema.Draft202012Validator(schema)
+    validator = jsonschema.Draft202012Validator(
+        schema,
+        format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER,
+    )
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
     if errors:
         for err in errors:
@@ -128,8 +134,124 @@ def _finding_tag_suffix(finding: dict[str, Any]) -> str:
     return ""
 
 
+# ---------------------------------------------------------------------------
+# v3 shared helpers \u2014 used by every renderer so location/severity/verdict
+# rendering stays consistent across Markdown / HTML / Triage / PDF.
+# ---------------------------------------------------------------------------
+def _location_link(finding: dict[str, Any]) -> dict[str, Any]:
+    """Return ``{"text": location, "url": permalink or None}``.
+
+    Templates use the dict's ``url`` to decide between linked and plain text;
+    callers don't have to branch.
+    """
+    return {
+        "text": finding.get("location", ""),
+        "url": finding.get("location_permalink") or None,
+    }
+
+
+def _severity_tooltip(finding: dict[str, Any]) -> str:
+    """Return ``"overall=.. risk=.. impact=.. scope=.."`` when all floats
+    present, else ``""``. The numeric tooltip surfaces the breakdown for the
+    HTML severity badge (no hover affordance in Markdown/PDF)."""
+    keys = ("overall_severity", "risk", "impact", "scope")
+    if not all(isinstance(finding.get(k), (int, float)) for k in keys):
+        return ""
+    return (
+        f"overall={finding['overall_severity']:.2f} "
+        f"risk={finding['risk']:.2f} "
+        f"impact={finding['impact']:.2f} "
+        f"scope={finding['scope']:.2f}"
+    )
+
+
+# Verdict base colors. ``valid`` is positive (green); ``needs_investigation``
+# is amber; ``out_of_scope`` reuses the brand accent (neutral information);
+# ``false_positive`` / ``duplicate`` are muted (dismissed). Unknown verdicts
+# fall back to the page background so the chip stays visible but unstyled.
+_VERDICT_BASE_COLORS: dict[str, str] = {
+    "valid": GREEN,
+    "needs_investigation": AMBER,
+    "out_of_scope": ACCENT,
+    "false_positive": TEXT_MUTED,
+    "duplicate": TEXT_MUTED,
+}
+
+
+def _hex_to_rgb(s: str) -> tuple[int, int, int]:
+    s = s.lstrip("#")
+    return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+
+
+def _rgb_to_hex(r: int, g: int, b: int) -> str:
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
+_SNIPPET_LANG_RE = re.compile(r"[A-Za-z0-9_+.\-]+")
+
+
+def _sanitize_snippet_language(raw: Any) -> str:
+    """Sanitize a producer-supplied code-fence language tag.
+
+    The info-string after a GFM fence is otherwise arbitrary, so a value
+    containing newlines or backticks would terminate the fence early and
+    inject downstream Markdown/HTML. We keep only the leading run of
+    allowlist characters (``[A-Za-z0-9_+.-]+``) so common languages like
+    ``python``, ``c++``, ``objective-c``, ``f#`` (truncates to ``f``) pass
+    through unchanged. Returns ``""`` when nothing safe survives, in which
+    case the caller emits a bare fence.
+    """
+    if not isinstance(raw, str):
+        return ""
+    match = _SNIPPET_LANG_RE.match(raw.strip())
+    return match.group(0) if match else ""
+
+
+def _truncate_snippet(content: str, max_lines: int) -> tuple[str, int]:
+    """Soft-cap a code snippet to ``max_lines`` lines for PDF rendering.
+
+    Returns the (possibly truncated) text and the number of omitted lines.
+    The marker line ``[truncated — {N} lines omitted]`` replaces the tail so
+    long blocks don't blow the page flow.
+    """
+    lines = content.splitlines()
+    if len(lines) <= max_lines:
+        return content, 0
+    omitted = len(lines) - max_lines
+    kept = lines[:max_lines]
+    kept.append(f"[truncated — {omitted} lines omitted]")
+    return "\n".join(kept), omitted
+
+
+def _verdict_color(verdict: str | None, confidence: float | None) -> str:
+    """Linear-interpolate the verdict chip background between ``BG_LIGHT``
+    (washed out) and the verdict's base color (full saturation).
+
+    ``confidence`` is clamped to ``[0, 1]``; ``None`` and ``NaN`` default to
+    ``1.0`` so a verdict from a producer that didn't run validate-findings (or
+    emitted a malformed value) still renders at full saturation. Unknown
+    verdicts return ``BG_LIGHT`` regardless of confidence.
+    """
+    base_hex = _VERDICT_BASE_COLORS.get(verdict or "", BG_LIGHT)
+    if confidence is None:
+        confidence = 1.0
+    # NaN compares False against every bound, so the clamp would skip and
+    # `round(...)` would then raise ValueError. Detect explicitly.
+    elif confidence != confidence:  # NaN
+        confidence = 1.0
+    if confidence < 0:
+        confidence = 0.0
+    elif confidence > 1:
+        confidence = 1.0
+    bg = _hex_to_rgb(BG_LIGHT)
+    base = _hex_to_rgb(base_hex)
+    blended = tuple(round(bg[i] + (base[i] - bg[i]) * confidence) for i in range(3))
+    return _rgb_to_hex(*blended)
+
+
 # ===================================================================
-# Markdown rendering for long-text fields (description / impact / etc.)
+# Markdown rendering for long-text fields (description / impact_description /
+# recommendation / ai_assessment).
 # ===================================================================
 
 # Heading -> font size (pt) for ReportLab. Matches PDF body sizing.
@@ -389,8 +511,14 @@ def render_markdown(data: dict[str, Any]) -> str:
         lines.append("### Top 5 Findings")
         lines.append("")
         for tf in top[:5]:
+            loc = tf.get("location", "")
+            permalink = tf.get("location_permalink")
+            if permalink and permalink.startswith(("https://", "http://")):
+                loc_md = f"[`{loc}`]({permalink})"
+            else:
+                loc_md = f"`{loc}`"
             lines.append(
-                f"- **{tf['id']}** ({sev_label(tf['severity'])}): {tf['title']} \u2014 `{tf['location']}`"
+                f"- **{tf['id']}** ({sev_label(tf['severity'])}): {tf['title']} \u2014 {loc_md}"
             )
         lines.append("")
 
@@ -413,17 +541,44 @@ def render_markdown(data: dict[str, Any]) -> str:
 
         for f in section.get("findings", []):
             tag_str = _finding_tag_suffix(f)
+            sev_extra = ""
+            if _severity_tooltip(f):
+                sev_extra = (
+                    f" *(overall={f['overall_severity']:.2f}, "
+                    f"risk={f['risk']:.2f}, "
+                    f"impact={f['impact']:.2f}, "
+                    f"scope={f['scope']:.2f})*"
+                )
             lines.append(
-                f"### {f['id']} ({sev_label(f['severity'])}): {f['title']}{tag_str}"
+                f"### {f['id']} ({sev_label(f['severity'])}){sev_extra}: {f['title']}{tag_str}"
             )
             lines.append("")
-            lines.append(f"- **Location**: `{f['location']}`")
+            loc = f.get("location", "")
+            permalink = f.get("location_permalink")
+            if permalink and permalink.startswith(("https://", "http://")):
+                lines.append(f"- **Location**: [`{loc}`]({permalink})")
+            else:
+                lines.append(f"- **Location**: `{loc}`")
             lines.append(f"- **Description**: {f['description']}")
-            if f.get("impact"):
-                lines.append(f"- **Impact**: {f['impact']}")
+            if f.get("impact_description"):
+                lines.append(f"- **Impact**: {f['impact_description']}")
             lines.append(f"- **Recommendation**: {f['recommendation']}")
             if f.get("verdict"):
                 lines.append(f"- **Verdict**: {f['verdict']}")
+            if f.get("ai_verdict"):
+                raw_conf = f.get("ai_verdict_confidence")
+                conf = raw_conf if isinstance(raw_conf, (int, float)) else 1.0
+                ai_text = f.get("ai_assessment", "")
+                if ai_text:
+                    lines.append(
+                        f"- **AI Assessment** *(verdict: {f['ai_verdict']}, "
+                        f"confidence: {conf:.2f})*: {ai_text}"
+                    )
+                else:
+                    lines.append(
+                        f"- **AI Verdict**: {f['ai_verdict']} "
+                        f"*(confidence: {conf:.2f})*"
+                    )
             if f.get("reviewer"):
                 url = f.get("comment_url", "")
                 if url and url.startswith(("https://", "http://")):
@@ -431,6 +586,33 @@ def render_markdown(data: dict[str, Any]) -> str:
                     lines.append(f"- **Reviewer**: [{safe_reviewer}]({url})")
                 else:
                     lines.append(f"- **Reviewer**: {f['reviewer']}")
+            for snip in f.get("code_snippets") or []:
+                raw_summary = (
+                    snip.get("caption") or snip.get("language") or "Code snippet"
+                )
+                # Caption is a producer-supplied label, not Markdown — escape
+                # HTML so it cannot break out of the surrounding <summary>.
+                summary = html_escape(raw_summary)
+                # Sanitize the producer-supplied language to an allowlist
+                # token so newlines or backticks cannot break out of the
+                # fence. Empty result means a bare fence with no info-string.
+                lang = _sanitize_snippet_language(snip.get("language", ""))
+                content = snip.get("content", "")
+                # Pick a fence longer than any backtick run inside the content,
+                # so embedded ``` cannot terminate the outer fence (CommonMark
+                # requires opening/closing fences to match length).
+                longest = max((len(m) for m in re.findall(r"`+", content)), default=2)
+                fence = "`" * max(longest + 1, 3)
+                # GFM requires blank lines around <summary> and the fence for
+                # the embedded code block to parse on GitHub.
+                lines.append("")
+                lines.append(f"<details><summary>{summary}</summary>")
+                lines.append("")
+                lines.append(f"{fence}{lang}")
+                lines.append(content)
+                lines.append(fence)
+                lines.append("")
+                lines.append("</details>")
             lines.append("")
 
         if section.get("positives"):
@@ -660,7 +842,7 @@ details summary:hover{color:{{ ACCENT }}}
   <td><a href="#finding-{{ tf.id }}">{{ tf.id }}</a></td>
   <td><span class="badge badge-{{ tf.severity|sev_label }}">{{ tf.severity|sev_label }}</span></td>
   <td>{{ tf.title }}</td>
-  <td><code>{{ tf.location }}</code></td>
+  <td>{% if tf.location_permalink and tf.location_permalink.startswith(('https://', 'http://')) %}<a href="{{ tf.location_permalink }}" target="_blank" rel="noopener"><code>{{ tf.location }}</code></a>{% else %}<code>{{ tf.location }}</code>{% endif %}</td>
   {% if triage %}<td class="no-print"><select class="triage-action-top" data-finding-id="{{ tf.id }}">
     <option value="---">---</option>
     <option value="fix">Fix</option>
@@ -710,10 +892,18 @@ details summary:hover{color:{{ ACCENT }}}
     <option value="dependencies">Dependencies</option>
     <option value="pr_comments">PR Comments</option>
   </select>
+  <select id="filterAiVerdict">
+    <option value="">All AI Verdicts</option>
+    <option value="valid">Valid</option>
+    <option value="false_positive">False Positive</option>
+    <option value="needs_investigation">Needs Investigation</option>
+    <option value="out_of_scope">Out of Scope</option>
+    <option value="duplicate">Duplicate</option>
+  </select>
   <input type="text" id="filterSearch" placeholder="Search findings&hellip;" aria-label="Search findings">
   <select id="sortBy">
-    <option value="">Sort by&hellip;</option>
-    <option value="severity">Severity</option>
+    <option value="overall" selected>Overall Severity</option>
+    <option value="severity">Severity (band)</option>
     <option value="id">ID</option>
     <option value="category">Category</option>
   </select>
@@ -732,17 +922,19 @@ details summary:hover{color:{{ ACCENT }}}
 <summary>{{ sec.findings | length }} finding{{ "s" if sec.findings | length != 1 else "" }}</summary>
 
 {% for f in sec.findings %}
-<div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ sec.category }}">
+<div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}">
   <h3>
-    <span class="badge badge-{{ f.severity|sev_label }}">{{ f.severity|sev_label }}</span>
+    <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
+    {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
   </h3>
   <dl>
-    <dt>Location:</dt><dd><code>{{ f.location }}</code></dd>
+    <dt>Location:</dt><dd>{% if f.location_permalink and f.location_permalink.startswith(('https://', 'http://')) %}<a href="{{ f.location_permalink }}" target="_blank" rel="noopener"><code>{{ f.location }}</code></a>{% else %}<code>{{ f.location }}</code>{% endif %}</dd>
     <dt>Description:</dt><dd>{{ f.description | markdown }}</dd>
-    {% if f.impact %}<dt>Impact:</dt><dd>{{ f.impact | markdown }}</dd>{% endif %}
+    {% if f.impact_description %}<dt>Impact:</dt><dd>{{ f.impact_description | markdown }}</dd>{% endif %}
     <dt>Recommendation:</dt><dd>{{ f.recommendation | markdown }}</dd>
+    {% if f.ai_assessment %}<dt>AI Assessment:</dt><dd>{{ f.ai_assessment | markdown }}</dd>{% endif %}
     {% if f.verdict %}
     <dt>Verdict:</dt><dd><span class="badge" style="background:{{ verdict_colors.get(f.verdict, '#7F8C8D') }}">{{ f.verdict }}</span></dd>
     {% endif %}
@@ -750,6 +942,9 @@ details summary:hover{color:{{ ACCENT }}}
     <dt>Reviewer:</dt><dd>{% if f.comment_url and f.comment_url.startswith(('https://', 'http://')) %}<a href="{{ f.comment_url }}">{{ f.reviewer }}</a>{% else %}{{ f.reviewer }}{% endif %}</dd>
     {% endif %}
   </dl>
+  {% for snip in f.code_snippets | default([]) %}
+  <details class="code-snippet"><summary>{{ snip.caption or snip.language or 'Code snippet' }}</summary><pre><code class="language-{{ snip.language | default('') | e }}">{{ snip.content | e }}</code></pre></details>
+  {% endfor %}
 </div>
 {% endfor %}
 
@@ -955,12 +1150,13 @@ details summary:hover{color:{{ ACCENT }}}
   const originalHTML = container.innerHTML;
   const sevFilter = document.getElementById("filterSeverity");
   const catFilter = document.getElementById("filterCategory");
+  const aiVerdictFilter = document.getElementById("filterAiVerdict");
   const searchInput = document.getElementById("filterSearch");
   const sortSelect = document.getElementById("sortBy");
   const sortOrderBtn = document.getElementById("sortOrder");
   const countLabel = document.getElementById("filterCount");
   let ascending = true;
-  let currentSort = "";
+  let currentSort = sortSelect ? sortSelect.value : "";
 
   const sevLabels = {5:"CRITICAL",4:"HIGH",3:"MEDIUM",2:"LOW",1:"INFO"};
   const sevColors = {{ sev_colors_json }};
@@ -989,11 +1185,13 @@ details summary:hover{color:{{ ACCENT }}}
     const findings = getFindings();
     const sv = sevFilter ? sevFilter.value : "";
     const ct = catFilter ? catFilter.value : "";
+    const av = aiVerdictFilter ? aiVerdictFilter.value : "";
     const q = searchInput ? searchInput.value.toLowerCase() : "";
     findings.forEach(f => {
       let show = true;
       if (sv && f.dataset.severity !== sv) show = false;
       if (ct && f.dataset.category !== ct) show = false;
+      if (av && f.dataset.aiVerdict !== av) show = false;
       if (q && !f.textContent.toLowerCase().includes(q)) show = false;
       f.style.display = show ? "" : "none";
     });
@@ -1038,7 +1236,36 @@ details summary:hover{color:{{ ACCENT }}}
 
     const dir = ascending ? 1 : -1;
 
-    if (key === "severity") {
+    if (key === "overall") {
+      // Sort by overall_severity (float), absent values (NaN) sink to bottom.
+      // Group by integer severity band so the existing bucket layout is preserved.
+      const withOverall = allFindings.map(f => {
+        const v = parseFloat(f.dataset.overall);
+        return {el: f, v: isNaN(v) ? -1 : v};
+      });
+      // Descending by overall when ascending=true (CRITICAL first), like the
+      // severity branch above — the toggle inverts.
+      const sign = ascending ? -1 : 1;
+      withOverall.sort((a, b) => sign * (a.v - b.v));
+      // Re-bucket by severity band for the secondary visual axis.
+      const sevNums = [5,4,3,2,1];
+      const groups = new Map();
+      sevNums.forEach(n => groups.set(n, []));
+      withOverall.forEach(({el}) => {
+        const n = parseInt(el.dataset.severity, 10) || 1;
+        if (!groups.has(n)) groups.set(n, []);
+        groups.get(n).push(el);
+      });
+      container.innerHTML = "";
+      const order = ascending ? sevNums : [...sevNums].reverse();
+      order.forEach(num => {
+        const items = groups.get(num);
+        const label = sevLabels[num] || "UNKNOWN";
+        if (items && items.length > 0) {
+          container.appendChild(buildSection(label, items, sevColors[label]));
+        }
+      });
+    } else if (key === "severity") {
       // Group by numeric severity, ordered descending (5=CRITICAL first)
       const sevNums = [5,4,3,2,1];
       const groups = new Map();
@@ -1069,6 +1296,7 @@ details summary:hover{color:{{ ACCENT }}}
 
   if (sevFilter) sevFilter.addEventListener("change", applyFilters);
   if (catFilter) catFilter.addEventListener("change", applyFilters);
+  if (aiVerdictFilter) aiVerdictFilter.addEventListener("change", applyFilters);
   if (searchInput) searchInput.addEventListener("input", applyFilters);
   if (sortSelect) sortSelect.addEventListener("change", () => {
     currentSort = sortSelect.value;
@@ -1081,6 +1309,9 @@ details summary:hover{color:{{ ACCENT }}}
     rebuildView();
   });
 
+  // Apply the default sort (Overall Severity) on load so the page reflects
+  // the dropdown's initial selection.
+  if (currentSort) rebuildView();
   updateCount();
 })();
 </script>
@@ -1184,17 +1415,20 @@ _TRIAGE_EXTRA_JS = r"""
   const sevFilter = document.getElementById("filterSeverity");
   const catFilter = document.getElementById("filterCategory");
   const verdictFilter = document.getElementById("verdictFilter");
+  const aiVerdictFilter = document.getElementById("filterAiVerdict");
   const searchInput = document.getElementById("filterSearch");
   const sortSelect = document.getElementById("sortBy");
 
   function applyFilters() {
     const sv = sevFilter.value, ct = catFilter.value, q = searchInput.value.toLowerCase();
     const vd = verdictFilter ? verdictFilter.value : "";
+    const av = aiVerdictFilter ? aiVerdictFilter.value : "";
     findings.forEach(f => {
       let show = true;
       if (sv && f.dataset.severity !== sv) show = false;
       if (ct && f.dataset.category !== ct) show = false;
       if (vd && f.dataset.verdict !== vd) show = false;
+      if (av && f.dataset.aiVerdict !== av) show = false;
       if (q && !f.textContent.toLowerCase().includes(q)) show = false;
       f.style.display = show ? "" : "none";
     });
@@ -1204,6 +1438,11 @@ _TRIAGE_EXTRA_JS = r"""
     const key = sortSelect.value;
     const arr = Array.from(findings);
     arr.sort((a, b) => {
+      if (key === "overall") {
+        const av = parseFloat(a.dataset.overall);
+        const bv = parseFloat(b.dataset.overall);
+        return (isNaN(bv) ? -1 : bv) - (isNaN(av) ? -1 : av);
+      }
       if (key === "severity") return (parseInt(b.dataset.severity,10)||0) - (parseInt(a.dataset.severity,10)||0);
       if (key === "id") return a.dataset.findingId.localeCompare(b.dataset.findingId);
       if (key === "category") return (a.dataset.category||"").localeCompare(b.dataset.category||"");
@@ -1215,6 +1454,7 @@ _TRIAGE_EXTRA_JS = r"""
   if (sevFilter) sevFilter.addEventListener("change", applyFilters);
   if (catFilter) catFilter.addEventListener("change", applyFilters);
   if (verdictFilter) verdictFilter.addEventListener("change", applyFilters);
+  if (aiVerdictFilter) aiVerdictFilter.addEventListener("change", applyFilters);
   if (searchInput) searchInput.addEventListener("input", applyFilters);
   if (sortSelect) sortSelect.addEventListener("change", () => { applySort(); applyFilters(); });
 
@@ -1318,8 +1558,9 @@ _TRIAGE_EXTRA_JS = r"""
     requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add("show")));
   }
 
-  // Default sort: severity (CRITICAL first)
-  if (sortSelect) { sortSelect.value = "severity"; applySort(); }
+  // Default sort: overall severity (CRITICAL first); sortSelect's `selected`
+  // option drives it — applySort once on load mirrors the dropdown's state.
+  if (sortSelect) applySort();
 })();
 </script>
 """
@@ -1328,18 +1569,47 @@ _TRIAGE_EXTRA_JS = r"""
 def _build_html_context(
     data: dict[str, Any], *, triage: bool = False
 ) -> dict[str, Any]:
-    """Build the Jinja2 template context from report data."""
+    """Build the Jinja2 template context from report data.
+
+    Pre-computes per-finding ``_verdict_chip_bg`` (verdict→hex blend) and
+    ``_severity_tooltip`` so the Jinja template stays declarative — it can
+    reference both as plain attributes rather than calling Python helpers
+    inline.
+    """
+    import copy as _copy
+
     meta = _meta(data)
     stats = data.get("summary_statistics", {})
 
-    findings_sections = data.get("findings", [])
+    findings_sections = _copy.deepcopy(data.get("findings", []))
+    for sec in findings_sections:
+        for f in sec.get("findings", []):
+            if f.get("ai_verdict"):
+                f["_verdict_chip_bg"] = _verdict_color(
+                    f["ai_verdict"], f.get("ai_verdict_confidence")
+                )
+            tip = _severity_tooltip(f)
+            if tip:
+                f["_severity_tooltip"] = tip
+
     if triage:
-        # Flatten all findings into a single list sorted by severity
+        # Flatten all findings into a single list sorted by overall_severity
+        # (float) when present, falling back to integer severity.
         all_findings = []
         for sec in findings_sections:
             for f in sec.get("findings", []):
                 all_findings.append(f)
-        all_findings.sort(key=lambda f: f.get("severity", 1), reverse=True)
+        all_findings.sort(
+            key=lambda f: (
+                (
+                    f.get("overall_severity")
+                    if isinstance(f.get("overall_severity"), (int, float))
+                    else -1.0
+                ),
+                f.get("severity", 1),
+            ),
+            reverse=True,
+        )
         findings_sections = [
             {
                 "title": "All Findings (by severity)",
@@ -1473,20 +1743,18 @@ def render_triage(data: dict[str, Any]) -> str:
         _TRIAGE_EXTRA_JS,
     )
 
-    # Add data-verdict attribute to finding divs (base template has the others)
-    old_finding_div = (
-        ' data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}"'
-        ' data-category="{{ sec.category }}">'
-    )
+    # Add comment-check `data-verdict` attribute. The base template already
+    # carries data-overall and data-ai-verdict; the triage filter for the
+    # comment-check `verdict` (RESOLVED/UNRESOLVED) lives only on triage pages.
+    old_finding_div = " data-ai-verdict=\"{{ f.ai_verdict | default('', true) }}\">"
     new_finding_div = (
-        ' data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}"'
-        ' data-category="{{ sec.category }}"'
+        " data-ai-verdict=\"{{ f.ai_verdict | default('', true) }}\""
         " data-verdict=\"{{ f.verdict | default('', true) }}\">"
     )
     triage_template = triage_template.replace(old_finding_div, new_finding_div)
-    assert new_finding_div in triage_template, (
-        "Template patch failed: finding div not found in triage template"
-    )
+    assert (
+        new_finding_div in triage_template
+    ), "Template patch failed: finding div not found in triage template"
 
     # Add triage row after each finding's </dl>
     old_dl_close = "  </dl>\n</div>\n{% endfor %}"
@@ -1546,10 +1814,18 @@ def render_triage(data: dict[str, Any]) -> str:
     <option value="UNRESOLVED">Unresolved</option>
   </select>
   {% endif %}
+  <select id="filterAiVerdict">
+    <option value="">All AI Verdicts</option>
+    <option value="valid">Valid</option>
+    <option value="false_positive">False Positive</option>
+    <option value="needs_investigation">Needs Investigation</option>
+    <option value="out_of_scope">Out of Scope</option>
+    <option value="duplicate">Duplicate</option>
+  </select>
   <input type="text" id="filterSearch" placeholder="Search findings...">
   <select id="sortBy">
-    <option value="">Sort By...</option>
-    <option value="severity">Severity</option>
+    <option value="overall" selected>Overall Severity</option>
+    <option value="severity">Severity (band)</option>
     <option value="id">ID</option>
     <option value="category">Category</option>
   </select>
@@ -1749,7 +2025,9 @@ def _register_pdf_fonts() -> dict[str, str]:
             "mono": mono_name,
             "monoBold": mono_bold_name,
         }
-    except Exception as exc:  # noqa: BLE001 -- font failure must not crash PDF rendering
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 -- font failure must not crash PDF rendering
         log.warning(
             "Failed to register Unicode font %s (%s: %s); falling back to Helvetica",
             fonts.get("regular"),
@@ -2250,14 +2528,21 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         ]
         tbl_data = [header]
         for tf in top_findings:
+            loc = tf.get("location", "")
+            permalink = tf.get("location_permalink")
+            if permalink and permalink.startswith(("https://", "http://")):
+                url_escaped = xml_escape(permalink, {chr(34): "&quot;"})
+                loc_xml = (
+                    f'<a href="{url_escaped}" color="{ACCENT}">{xml_escape(loc)}</a>'
+                )
+            else:
+                loc_xml = f'<font color="{ACCENT}">{xml_escape(loc)}</font>'
             tbl_data.append(
                 [
                     Paragraph(tf["id"], s["tcc"]),
                     _badge(tf["severity"]),
                     Paragraph(tf["title"], s["tc"]),
-                    Paragraph(
-                        f'<font color="{ACCENT}">{tf["location"]}</font>', s["tc"]
-                    ),
+                    Paragraph(loc_xml, s["tc"]),
                 ]
             )
         t = Table(
@@ -2404,9 +2689,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         first_style = (
             md_heading_styles[first_kind]
             if first_kind in md_heading_styles
-            else md_pre_style
-            if first_kind == "pre"
-            else s["finding_body"]
+            else md_pre_style if first_kind == "pre" else s["finding_body"]
         )
         out.append(Paragraph(first_xml, first_style))
         for kind, body in blocks[1:]:
@@ -2419,33 +2702,84 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         return out
 
     # --- Finding renderers ---
+    from reportlab.platypus import Preformatted
+
+    pre_snippet_style = ParagraphStyle(
+        "FB_SNIPPET",
+        fontSize=8,
+        textColor=TEXT_DARK,
+        fontName=F["mono"],
+        backColor=rl_colors.HexColor(BG_LIGHT),
+        borderColor=RL_BORDER,
+        borderWidth=0.5,
+        borderPadding=4,
+        leading=10,
+        leftIndent=12,
+    )
+
     def render_finding(f: dict[str, Any]) -> KeepTogether:
         fid = f["id"]
         sev = sev_label(f["severity"])
         title = f["title"]
         tags = f.get("tags", [])
-        loc = f["location"]
+        loc = f.get("location", "")
+        permalink = f.get("location_permalink")
         desc = f["description"]
-        impact = f.get("impact", "")
+        impact_desc = f.get("impact_description", "")
         rec = f["recommendation"]
         clr = SEV_COLORS.get(sev, TEXT_MUTED)
         tag_display = (
             f' <font color="{TEXT_MUTED}">- {", ".join(tags)}</font>' if tags else ""
         )
+        if permalink and permalink.startswith(("https://", "http://")):
+            url_escaped = xml_escape(permalink, {chr(34): "&quot;"})
+            loc_xml = f'<a href="{url_escaped}" color="{ACCENT}">{xml_escape(loc)}</a>'
+        else:
+            loc_xml = f'<font color="{ACCENT}">{xml_escape(loc)}</font>'
         elements: list[Any] = [
             Paragraph(
                 f'<font color="{clr}"><b>{fid} ({sev})</b></font>: {title}{tag_display}',
                 s["finding_title"],
             ),
-            Paragraph(
-                f'<b>Location:</b> <font color="{ACCENT}">{loc}</font>',
-                s["finding_body"],
-            ),
         ]
+        # Float breakdown line — PDF has no hover, so we surface it inline.
+        tip = _severity_tooltip(f)
+        if tip:
+            elements.append(
+                Paragraph(
+                    f'<font color="{TEXT_MUTED}">{xml_escape(tip)}</font>',
+                    s["small"],
+                )
+            )
+        elements.append(Paragraph(f"<b>Location:</b> {loc_xml}", s["finding_body"]))
         elements.extend(_md_field("Description", desc))
-        if impact:
-            elements.extend(_md_field("Impact", impact))
+        if impact_desc:
+            elements.extend(_md_field("Impact", impact_desc))
         elements.extend(_md_field("Recommendation", rec))
+        ai_verdict = f.get("ai_verdict", "")
+        if ai_verdict:
+            conf = f.get("ai_verdict_confidence")
+            chip_bg = _verdict_color(ai_verdict, conf)
+            conf_display = f"{conf:.2f}" if isinstance(conf, (int, float)) else "—"
+            elements.append(
+                Paragraph(
+                    f"<b>AI Verdict:</b> "
+                    f'<font backColor="{chip_bg}" color="#FFFFFF"><b> {xml_escape(ai_verdict)} </b></font>'
+                    f" (confidence: {conf_display})",
+                    s["finding_body"],
+                )
+            )
+            if f.get("ai_assessment"):
+                elements.extend(_md_field("AI Assessment", f["ai_assessment"]))
+        for snip in f.get("code_snippets") or []:
+            caption = snip.get("caption") or snip.get("language") or "Code snippet"
+            content = snip.get("content", "")
+            content, _ = _truncate_snippet(content, 200)
+            elements.append(
+                Paragraph(f"<b>Code snippet</b>: {xml_escape(caption)}", s["small"])
+            )
+            # Preformatted handles escaping internally and preserves newlines.
+            elements.append(Preformatted(content, pre_snippet_style))
         verdict = f.get("verdict", "")
         if verdict:
             v_clr = GREEN if verdict == "RESOLVED" else RED
@@ -2666,9 +3000,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Convert a review report JSON into md, html, triage, or pdf format. "
-            "Long-text fields (description, impact, recommendation, executive "
-            "summary) render as Markdown in HTML and PDF. Requires "
-            "`markdown >= 3.4` and `beautifulsoup4 >= 4.10` "
+            "Long-text fields (description, impact_description, recommendation, "
+            "ai_assessment, executive summary) render as Markdown in HTML and "
+            "PDF. Requires `markdown >= 3.4` and `beautifulsoup4 >= 4.10` "
             "(install via `pip install -r scripts/requirements.txt`)."
         ),
     )

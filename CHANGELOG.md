@@ -6,6 +6,77 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.0.3] - 2026-05-27
+
+### Fixed
+
+- `tests/test_report_pipeline.sh`: the fixture glob is now narrowed to `tests/fixtures/reports/v3-*.json`, so only v3 happy-path fixtures are exercised by the end-to-end pipeline. Previously the broad `*.json` glob swept in the negative-test `v2-legacy.json` (intended to fail v3 validation) and a stale pre-v3 fixture, causing CI to red on PR #35 after the v3 hard cutover.
+- `tests/fixtures/legacy/v2-legacy.json`: relocated from `tests/fixtures/reports/` so it cannot be mistaken for an expected-pass fixture. The negative-rejection test in `tests/test_schema_v3_strict.py` follows the move.
+- `tests/fixtures/reports/pr-13-severity-refactor.json`: removed as obsolete — it predated the v3 schema, had no test or script referencing it, and was only being kept alive by the pipeline glob.
+
+## [4.0.2] - 2026-05-27
+
+### Fixed
+
+- `scripts/generate_review_report.py`: Markdown snippet `language` field is now sanitized via an allowlist (`[A-Za-z0-9_+.-]+`) before being interpolated into the GFM fence info-string; a producer-controlled value containing newlines or backticks can no longer break out of the fence and inject arbitrary Markdown/HTML downstream. Addresses Copilot review comment on PR #35.
+
+### Changed
+
+- `skills/report-format/SKILL.md`, `skills/grumpy-review/SKILL.md`, `skills/check-pr-comments/SKILL.md`: producer guidance now requires `risk`/`impact`/`scope` floats on every finding. Dropped the misleading "MAY emit integer `severity` alone" escape hatch — without all three floats the coordinator cannot derive `overall_severity` and the schema rejects the finding, so the previous wording contradicted the enforced contract. The `validate-findings` skill remains the documented path to populate floats post-hoc.
+
+## [4.0.1] - 2026-05-26
+
+### Fixed
+
+- `scripts/generate_review_report.py`: HTML and Triage renderers no longer crash with `UndefinedError` when a finding carries `ai_verdict` without `ai_verdict_confidence` — the Jinja chip template now uses the `default(1.0, true)` filter, so a producer that emits only the verdict still renders.
+- `scripts/generate_review_report.py`: `_verdict_color` no longer raises `ValueError` on `NaN`/`-Inf`/`+Inf` confidence values — `NaN` defaults to full saturation, infinities clamp to `[0, 1]`.
+- `scripts/generate_review_report.py`: Markdown renderer skips the orphan "AI Assessment" label when `ai_assessment` is empty, emitting a compact `AI Verdict:` line instead.
+- `scripts/generate_review_report.py`: Markdown code-snippet fences now grow longer than any backtick run inside the content, so a snippet that contains triple backticks no longer breaks out of the surrounding fence.
+- `scripts/generate_review_report.py`: Markdown snippet `caption` is HTML-escaped before interpolation into `<summary>`, blocking HTML/Markdown injection from producer-controlled captions.
+- `scripts/generate_review_report.py`: all four renderers (Markdown, HTML, Triage, PDF) validate `location_permalink` against `http(s)://` before emitting it as a clickable link — defense in depth against `javascript:` URIs.
+- `scripts/consolidate_reports.py`: `_build_permalink` URL-encodes the path component (spaces, unicode, `#`, `?`) and rejects paths containing control characters, so permalinks no longer hijack the URL fragment or break across whitespace.
+- `scripts/consolidate_reports.py`: `_GITHUB_REMOTE_RE` uses `\A`/`\Z` anchors with an explicit charset allowlist, so a remote URL with an embedded newline or whitespace no longer matches.
+- `scripts/consolidate_reports.py`: `cmd_prepare` now detects v1/v2 envelope dicts carrying `schema_version` and rejects them with a version-aware error pointing at the v3 schema (previously the user saw a misleading "expected JSON array" message).
+- `scripts/consolidate_reports.py` and `scripts/generate_review_report.py`: `jsonschema` validators are constructed with `format_checker=Draft202012Validator.FORMAT_CHECKER` so schema `format` clauses are enforced.
+- `schemas/review-report.schema.json`: `location_permalink` (in both `top_findings` and `finding`) now also carries `pattern: "^https?://"`, hard-rejecting `javascript:` and other non-http(s) URIs even when the optional URI format checker is unavailable.
+
+### Security
+
+- `skills/validate-findings/SKILL.md`: added an "Adversarial content handling" section (OWASP LLM01) that instructs the validator to treat producer fields as quoted data, flag instruction-shaped overrides as evidence of badness, cap confidence on suspicious inputs, and tightened the `git show` allowlist glob from `Bash(git show *)` to `Bash(git show [0-9a-f]*)` to require a commit SHA prefix.
+
+### Changed
+
+- `skills/severity/SKILL.md`: clarified the OWASP normalization prose to match the formulas — the recipe is the arithmetic mean of factor scores divided by 9.0 (the previous "sum / 9.0" wording contradicted the `average` formula).
+- `skills/grumpy-review/SKILL.md` and `skills/report-format/SKILL.md`: removed legacy "formerly known as" / "used to live in" framing from the `impact_description` field description; describe present-state only.
+- `tests/fixtures/reports/v3-full.json`: corrected the copy-paste typo `lklimek_test` to `lklimek` so all permalinks in the fixture point at a consistent owner.
+
+## [4.0.0] - 2026-05-26
+
+### Added
+
+- `schemas/review-report.schema.json`: multi-dimensional severity floats `risk`, `impact`, `scope` (0.0–1.0) plus derived `overall_severity` per the [OWASP Risk Rating Methodology](https://owasp.org/www-community/OWASP_Risk_Rating_Methodology); CVSS v4.0-aligned band table maps `overall_severity` to integer `severity` 1..5.
+- `schemas/review-report.schema.json`: `location_permalink` (GitHub `blob/<sha>/<path>#L<n>` URL) constructed by the coordinator from `metadata.commit` + `metadata.repository` + finding location.
+- `schemas/review-report.schema.json`: optional `code_snippets[]` (`{language?, caption?, content}`) so producers can attach the exact source they inspected.
+- `schemas/review-report.schema.json`: AI validation fields `ai_assessment` (Markdown), `ai_verdict` (`valid` | `false_positive` | `needs_investigation` | `out_of_scope` | `duplicate`), `ai_verdict_confidence` (0.0–1.0).
+- `schemas/review-report.schema.json`: `metadata.repository` (`{owner, repo}`) auto-derived by the coordinator from `git remote get-url origin`; absent for non-GitHub / non-git directories.
+- `skills/validate-findings/`: new coordinator-only skill that runs an opt-in LLM validation pass over a consolidated v3 report — populates `ai_assessment` / `ai_verdict` / `ai_verdict_confidence`, estimates missing OWASP float dimensions, and re-derives integer severity through the same Python helpers the coordinator uses.
+- `skills/severity/SKILL.md`: "OWASP Risk Rating normalization" section with factor-averaging recipes for `risk` and `impact`, the 1.0 / 0.5 / 0.0 `scope` rubric, and the float→integer band table.
+
+### Changed
+
+- `schemas/review-report.schema.json`: `impact` is now a 0.0–1.0 float (the OWASP Impact dimension); the previous Markdown narrative is renamed to `impact_description` (still optional, still Markdown).
+- `schemas/review-report.schema.json`: integer `severity` is now derived by the coordinator from the `risk`/`impact`/`scope` floats per the CVSS-aligned band table — producers may still emit it when they have no float estimate, but the coordinator overrides whenever floats are present.
+- `schemas/review-report.schema.json`: `metadata.commit` must be a full 40-character SHA when present, so permalinks can be constructed unambiguously.
+- Producer skills (`grumpy-review`, `check-pr-comments`, `review-pr`, `report-format`): JSON examples and emit rules updated for v3 — emit `risk`/`impact`/`scope` floats, optional `code_snippets`, full-SHA `metadata.commit`; do NOT emit coordinator/validator-owned fields.
+
+### Removed
+
+- `schemas/review-report.schema.json`: support for `schema_version` `1.0.0`, `1.1.0`, and `2.0.0`. Only `3.0.0` is accepted.
+
+### Migration
+
+v1/v2 reports are no longer accepted. Re-run the producer (grumpy-review / check-pr-comments / review-pr) against the current commit to regenerate findings against the v3 schema. There is no in-place conversion path.
+
 ## [3.14.5] - 2026-05-22
 
 ### Fixed
@@ -979,6 +1050,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - 13 specialist agents: architect, business-domain-analyst, devops-engineer, frontend-developer, go-developer, project-reviewer, python-developer, qa-engineer, rust-developer, security-engineer, technical-researcher, technical-writer, ux-designer
 - Claudius coordinator agent
 
+[4.0.0]: https://github.com/lklimek/claudius/compare/v3.14.5...v4.0.0
 [3.14.5]: https://github.com/lklimek/claudius/compare/v3.14.4...v3.14.5
 [3.14.4]: https://github.com/lklimek/claudius/compare/v3.14.3...v3.14.4
 [3.14.3]: https://github.com/lklimek/claudius/compare/v3.14.2...v3.14.3

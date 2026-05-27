@@ -156,6 +156,27 @@ def test_markdown_valid_renders_blocks():
     assert "<b>bold</b>" in body or "bold" in body
 
 
+# ---------------------------------------------------------------------------
+# v3 smoke test — round-trips a minimal report through every renderer to catch
+# accidental regressions in the field-renaming (`impact_description`) and the
+# new optional fields (`location_permalink`, `code_snippets`, AI fields).
+# ---------------------------------------------------------------------------
+def test_v3_minimal_round_trips_through_all_renderers(tmp_path):
+    import json as _json
+
+    fx = Path(__file__).resolve().parent / "fixtures" / "reports" / "v3-minimal.json"
+    data = _json.loads(fx.read_text(encoding="utf-8"))
+    md = grr.render_markdown(data)
+    html = grr.render_html(data)
+    triage = grr.render_triage(data)
+    pdf_out = tmp_path / "smoke.pdf"
+    grr.render_pdf(data, pdf_out)
+    assert "Example finding without optional fields" in md
+    assert "Example finding without optional fields" in html
+    assert "Example finding without optional fields" in triage
+    assert pdf_out.is_file() and pdf_out.stat().st_size > 1000
+
+
 def test_markdown_fallback_on_parser_error(monkeypatch, caplog):
     """When the Markdown parse raises, the helper logs (with traceback) and
     returns a single escaped preformatted block — no exception escapes, no

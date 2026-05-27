@@ -6,7 +6,9 @@ allowed-tools: ["Bash(*validate_report.py *)", "Bash(*consolidate_reports.py *)"
 
 # Review Report Format
 
-Unified format for all review findings. Schema: `schemas/review-report.schema.json` (v2.0.0).
+Unified format for all review findings. Schema: `schemas/review-report.schema.json` (v3.0.0).
+
+**Hard cutover**: schema versions 1.x and 2.x are no longer accepted. Producers and consumers must use v3.0.0.
 
 ## Finding Structure
 
@@ -20,13 +22,18 @@ Agents emit a JSON array of `finding_section` objects:
     "findings": [
       {
         "id": "PREFIX-001",
-        "severity": 5,
+        "risk": 0.6,
+        "impact": 0.7,
+        "scope": 1.0,
         "title": "Short finding title",
         "tags": ["A03 Injection", "CWE-79"],
         "location": "src/auth.rs:42-56",
         "description": "What the issue is and why it matters",
-        "impact": "What could go wrong",
-        "recommendation": "How to fix it"
+        "impact_description": "What could go wrong (Markdown narrative)",
+        "recommendation": "How to fix it",
+        "code_snippets": [
+          {"language": "rust", "caption": "auth.rs:42", "content": "let user = unwrap_token(&hdr);"}
+        ]
       }
     ],
     "positives": "Optional positive observations"
@@ -39,21 +46,36 @@ Agents emit a JSON array of `finding_section` objects:
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | `PREFIX-NNN` -- see ID Prefixes below |
-| `severity` | integer | 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO |
+| `risk` | float | 0.0–1.0, OWASP Likelihood normalized (see `severity` skill) |
+| `impact` | float | 0.0–1.0, OWASP Impact normalized (see `severity` skill) |
+| `scope` | float | 0.0–1.0, PR relevance (1.0 direct, 0.5 indirect, 0.0 unrelated) |
 | `title` | string | Short finding title |
 | `location` | string | Full file path with lines: `src/auth.rs:42-56` -- never bare line numbers |
 | `description` | string | What the issue is and why it matters |
 | `recommendation` | string | How to fix it |
 
-**Optional**: `tags` (OWASP, CWE, etc.), `impact` (what could go wrong).
+Producers MUST emit `risk`, `impact`, and `scope`. The coordinator computes `overall_severity` from them and derives integer `severity` via the band table in the `severity` skill. A finding without all three floats has no `overall_severity` and is rejected by the schema — the `validate-findings` skill is the only documented path to populate floats post-hoc.
+
+**Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (when the producer captured exact source during analysis — never invent one).
+
+## Coordinator-derived / validator-owned fields — DO NOT emit
+
+Producers must NOT set these; they are populated downstream:
+
+- `overall_severity` — Python-computed mean of `risk`/`impact`/`scope`
+- `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL
+- `metadata.repository` — coordinator derives from `git remote get-url origin`
+- `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by the `validate-findings` skill
+- Derived integer `severity` when emitting floats — the coordinator overrides
 
 ## Long-Text Field Format
 
 These fields are **Markdown** by default — agents emit Markdown markup, renderers parse it as CommonMark:
 
 - `description`
-- `impact`
+- `impact_description`
 - `recommendation`
+- `ai_assessment`
 - `executive_summary.summary_text`, `executive_summary.verdict_text`
 
 Use Markdown — renderers handle formatting; you write content. Single-line fields (`title`, `severity`, `category`, `location`, etc.) stay plain text.
@@ -106,12 +128,18 @@ For complete reports (grumpy-review, check-pr-comments), wrap finding sections i
 
 ```json
 {
-  "schema_version": "2.0.0",
-  "metadata": { "project": "...", "date": "YYYY-MM-DD" },
+  "schema_version": "3.0.0",
+  "metadata": {
+    "project": "claudius",
+    "date": "YYYY-MM-DD",
+    "commit": "<full 40-char SHA from `git rev-parse HEAD`>"
+  },
   "executive_summary": { "overall_assessment": "..." },
   "summary_statistics": { "total_findings": 0, "severity_counts": {} },
   "findings": []
 }
 ```
+
+`metadata.commit` must be a full 40-character SHA when present (the coordinator builds permalinks from it). Both `metadata.commit` and `metadata.repository` are optional — omit them for non-git directories; permalinks are silently skipped and everything else renders normally.
 
 See `schemas/review-report.schema.json` for complete envelope schema.

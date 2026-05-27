@@ -577,7 +577,7 @@ class TestScanIntentional:
 class TestValidateReport:
     def test_valid_report_returns_true(self):
         report = {
-            "schema_version": "2.0.0",
+            "schema_version": "3.0.0",
             "metadata": {"project": "test", "date": "2026-03-05"},
             "executive_summary": {"overall_assessment": "All good"},
             "summary_statistics": {
@@ -595,13 +595,13 @@ class TestValidateReport:
         assert cr._validate_report(report) is True
 
     def test_invalid_report_returns_false(self):
-        report = {"schema_version": "2.0.0"}  # missing required fields
+        report = {"schema_version": "3.0.0"}  # missing required fields
         result = cr._validate_report(report)
         assert result is False
 
     def test_returns_bool_type(self):
         report = {
-            "schema_version": "2.0.0",
+            "schema_version": "3.0.0",
             "metadata": {"project": "x", "date": "2026-01-01"},
             "executive_summary": {"overall_assessment": "ok"},
             "summary_statistics": {
@@ -632,7 +632,7 @@ class TestFlattenAgentReport:
                         "tags": ["sql", "injection"],
                         "location": "src/db.rs:10-20",
                         "description": "Unsafe query",
-                        "impact": "Data breach",
+                        "impact_description": "Data breach",
                         "recommendation": "Use parameterized queries",
                     }
                 ],
@@ -651,7 +651,7 @@ class TestFlattenAgentReport:
         assert f["tags"] == ["sql", "injection"]
         assert f["location"] == "src/db.rs:10-20"
         assert f["description"] == "Unsafe query"
-        assert f["impact"] == "Data breach"
+        assert f["impact_description"] == "Data breach"
         assert f["recommendation"] == "Use parameterized queries"
 
         assert len(positives) == 1
@@ -680,7 +680,7 @@ class TestFlattenAgentReport:
         assert len(raw) == 1
         f = raw[0]
         assert f.get("tags", []) == []
-        assert f.get("impact", "") == ""
+        assert f.get("impact_description", "") == ""
         # original_id is empty string, stripped by _strip_none_values
         assert "original_id" not in f or f["original_id"] == ""
         assert positives == []
@@ -892,6 +892,9 @@ class TestCmdAssemble:
                             "description": "Bad query",
                             "recommendation": "Parameterize",
                             "tags": [],
+                            "risk": 0.7,
+                            "impact": 0.7,
+                            "scope": 1.0,
                         }
                     ],
                 }
@@ -913,7 +916,7 @@ class TestCmdAssemble:
         assert rc == 0
         assert output.exists()
         report = json.loads(output.read_text())
-        assert report["schema_version"] == "2.0.0"
+        assert report["schema_version"] == "3.0.0"
         assert report["summary_statistics"]["total_findings"] == 1
 
     def test_missing_input_returns_2(self, tmp_path):
