@@ -128,7 +128,7 @@ Each review comment becomes one finding:
 - **Unresolved** comments: assess `risk` and `impact` per the OWASP recipes in the `severity` skill; set `scope = 1.0` (the comment names code in the PR diff). The coordinator derives the integer `severity` band. Set `verdict: "UNRESOLVED"` and let `recommendation` describe what still needs doing.
 - `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 8.
 
-**Do NOT emit** (coordinator/validator-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`. Emitting integer `severity` is acceptable when the producer has no float estimate, but the coordinator overrides whenever floats are present.
+**Do NOT emit** (coordinator/validator-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `risk`/`impact`/`scope` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 
 **Optional**: `code_snippets` — when the comment quotes specific source you verified, you may attach it as `[{language, caption, content}]`; never invent one.
 

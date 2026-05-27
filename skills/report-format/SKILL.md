@@ -54,7 +54,7 @@ Agents emit a JSON array of `finding_section` objects:
 | `description` | string | What the issue is and why it matters |
 | `recommendation` | string | How to fix it |
 
-Producers MAY emit integer `severity` when they have no float estimate — the coordinator will accept it and derive the floats later. When the producer emits `risk`/`impact`/`scope`, the coordinator computes `overall_severity` and overrides integer `severity` via the band table in the `severity` skill.
+Producers MUST emit `risk`, `impact`, and `scope`. The coordinator computes `overall_severity` from them and derives integer `severity` via the band table in the `severity` skill. A finding without all three floats has no `overall_severity` and is rejected by the schema — the `validate-findings` skill is the only documented path to populate floats post-hoc.
 
 **Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (when the producer captured exact source during analysis — never invent one).
 

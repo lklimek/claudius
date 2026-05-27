@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-05-27
+
+### Fixed
+
+- `scripts/generate_review_report.py`: Markdown snippet `language` field is now sanitized via an allowlist (`[A-Za-z0-9_+.-]+`) before being interpolated into the GFM fence info-string; a producer-controlled value containing newlines or backticks can no longer break out of the fence and inject arbitrary Markdown/HTML downstream. Addresses Copilot review comment on PR #35.
+
+### Changed
+
+- `skills/report-format/SKILL.md`, `skills/grumpy-review/SKILL.md`, `skills/check-pr-comments/SKILL.md`: producer guidance now requires `risk`/`impact`/`scope` floats on every finding. Dropped the misleading "MAY emit integer `severity` alone" escape hatch — without all three floats the coordinator cannot derive `overall_severity` and the schema rejects the finding, so the previous wording contradicted the enforced contract. The `validate-findings` skill remains the documented path to populate floats post-hoc.
+
 ## [4.0.1] - 2026-05-26
 
 ### Fixed

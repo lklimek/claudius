@@ -203,6 +203,67 @@ def test_markdown_snippet_caption_is_html_escaped():
     assert "&lt;script&gt;" in md or "&lt;/summary&gt;" in md
 
 
+def test_markdown_snippet_language_is_sanitized_against_fence_breakout():
+    """Producer-supplied snippet `language` must be sanitized — a value
+    containing newlines or backticks would otherwise terminate the fence
+    early and inject arbitrary Markdown/HTML downstream."""
+    finding = {
+        "id": "X-001",
+        "severity": 2,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+        "code_snippets": [
+            {
+                "language": "python\n```\n<script>alert(1)</script>",
+                "caption": "evil-lang",
+                "content": "print('ok')",
+            }
+        ],
+    }
+    md = grr.render_markdown(_wrap_section(finding))
+    # The injected script tag must NOT survive verbatim after the fence —
+    # either the language is sanitized to a clean token or omitted entirely,
+    # but the embedded raw HTML must never leak through the opening fence.
+    assert "<script>alert(1)</script>" not in md
+    # The fence itself must remain a single intact line — no embedded newline
+    # in the language tag that would split the fence open.
+    fence_lines = [ln for ln in md.splitlines() if ln.startswith("```")]
+    assert fence_lines, "expected at least one fence line in rendered output"
+    for ln in fence_lines:
+        # After the backtick run, only allowlist chars (or empty) are valid.
+        tail = ln.lstrip("`")
+        assert re.fullmatch(
+            r"[A-Za-z0-9_+.\-]*", tail
+        ), f"fence info-string contains disallowed chars: {ln!r}"
+
+
+def test_sanitize_snippet_language_legitimate_values_passthrough():
+    """Allowlist sanitizer must preserve common legitimate language tokens
+    like `python`, `rust`, `c++`, `objective-c`. Tokens containing
+    disallowed chars keep only the safe leading run (e.g. `f#` -> `f`)."""
+    helper = grr._sanitize_snippet_language
+    assert helper("python") == "python"
+    assert helper("rust") == "rust"
+    assert helper("c++") == "c++"
+    assert helper("objective-c") == "objective-c"
+    assert helper("Java_Script") == "Java_Script"
+    assert helper("ts.x") == "ts.x"
+    # Hostile inputs keep only the safe leading run, so the rendered fence
+    # carries a benign language tag (or nothing) — never a fence-breaking
+    # newline or backtick.
+    assert helper("python\n```evil") == "python"
+    assert helper("f#") == "f"
+    # Empty / whitespace / pure-hostile inputs collapse to empty so the
+    # renderer falls back to a bare fence.
+    assert helper("") == ""
+    assert helper("   ") == ""
+    assert helper("```") == ""
+    assert helper("\n\n\n") == ""
+    assert helper(None) == ""
+
+
 def test_markdown_snippet_description_passthrough_markdown():
     """Description/recommendation/ai_assessment are documented as Markdown —
     confirm they pass through (so producers can use formatting) and do NOT
