@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.3] - 2026-05-27
+
+### Fixed
+
+- `scripts/generate_review_report.py`: triage view (`--format triage`) now actually renders the per-finding decision dropdown, rationale input, and decision hint that were silently missing since the v3 cutover. The post-hoc `.replace()`-based injection broke when `code_snippets` were inserted between `</dl>` and `</div>`; the renderer now uses Jinja `{% if triage %}` conditionals inside the template so the UI is wired structurally rather than by brittle string search. Adjacent `.replace()` calls in `render_triage` (extra CSS/JS blocks, `data-verdict` attribute, triage toolbar) audited; each now carries a post-replace assert to fail loudly if the anchor stops matching.
+
 ## [4.1.2] - 2026-05-27
 
 ### Changed
