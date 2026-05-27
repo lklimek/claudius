@@ -346,8 +346,9 @@ def test_html_renders_visible_float_chips_for_v3_findings():
 
 
 def test_html_omits_chips_when_floats_absent():
-    """A minimal producer-shape finding without floats must NOT render
-    empty chips or crash."""
+    """A minimal finding with the float dimensions absent (legacy / relaxed
+    shape, NOT the v3 producer-shape contract which still requires
+    ``risk``/``impact``/``scope``) must NOT render empty chips or crash."""
     finding = {
         "id": "X-001",
         "severity": 2,
@@ -363,10 +364,11 @@ def test_html_omits_chips_when_floats_absent():
 
 
 def test_html_chips_omit_when_floats_are_non_numeric():
-    """Defensive: legacy/relaxed producers may emit a narrative string in
-    ``impact`` (or any other float dimension) instead of a number. The renderer
-    must not crash and must omit the chip for that non-numeric field while
-    still rendering numeric peers."""
+    """Defensive guard, NOT the v3 producer-shape contract: a legacy report
+    may carry a narrative string in ``impact`` (or any other float dimension)
+    instead of a number. The renderer must not crash and must omit the chip
+    for that non-numeric field while still rendering numeric peers. The
+    producer-shape contract under v3 still requires the floats to be numeric."""
     finding = {
         "id": "X-001",
         # All four float dimensions as non-numeric. ``%.2f`` would raise
