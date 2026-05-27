@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.3] - 2026-05-27
+
+### Changed
+
+- `claudius:ci-dance` Step 2 and `claudius:grand-admiral` § Worktree Isolation now document TWO team-spawn quirks (both surfaced in a real ci-dance run): (1) `prompt` parameter on `Agent(team_name=...)` is silently ignored — lead MUST follow with `SendMessage` to start the stream; (2) `isolation="worktree"` is silently NOT honored — team-spawned agents land in the lead's CWD instead of a dedicated worktree. Workarounds documented. Recommendation: use SOLO `Agent(isolation="worktree")` spawns for the three streams; coordinate via filesystem/explicit DMs instead of the team task list.
+
 ## [4.1.2] - 2026-05-27
 
 ### Changed
