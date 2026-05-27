@@ -3,7 +3,9 @@
 # Checks schema validation, severity integrity, sort order, and rendering.
 #
 # Usage: ./tests/test_report_pipeline.sh [fixture.json ...]
-# If no args, runs all fixtures in tests/fixtures/reports/*.json
+# If no args, runs all v3 happy-path fixtures in tests/fixtures/reports/v3-*.json.
+# Negative/legacy fixtures live under tests/fixtures/legacy/ and are driven by
+# tests/test_schema_v3_strict.py, not this pipeline.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -24,7 +26,7 @@ fail() { echo -e "  ${RED}✗${NC} $1"; ((fail++)) || true; }
 if [ $# -gt 0 ]; then
   fixtures=("$@")
 else
-  fixtures=("$FIXTURES_DIR"/*.json)
+  fixtures=("$FIXTURES_DIR"/v3-*.json)
 fi
 
 if [ ${#fixtures[@]} -eq 0 ]; then

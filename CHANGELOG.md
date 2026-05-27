@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.0.3] - 2026-05-27
+
+### Fixed
+
+- `tests/test_report_pipeline.sh`: the fixture glob is now narrowed to `tests/fixtures/reports/v3-*.json`, so only v3 happy-path fixtures are exercised by the end-to-end pipeline. Previously the broad `*.json` glob swept in the negative-test `v2-legacy.json` (intended to fail v3 validation) and a stale pre-v3 fixture, causing CI to red on PR #35 after the v3 hard cutover.
+- `tests/fixtures/legacy/v2-legacy.json`: relocated from `tests/fixtures/reports/` so it cannot be mistaken for an expected-pass fixture. The negative-rejection test in `tests/test_schema_v3_strict.py` follows the move.
+- `tests/fixtures/reports/pr-13-severity-refactor.json`: removed as obsolete — it predated the v3 schema, had no test or script referencing it, and was only being kept alive by the pipeline glob.
+
 ## [4.0.2] - 2026-05-27
 
 ### Fixed

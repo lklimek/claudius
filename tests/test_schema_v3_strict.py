@@ -13,6 +13,7 @@ import consolidate_reports as cr
 SCHEMA = json.loads(cr.SCHEMA_PATH.read_text(encoding="utf-8"))
 VALIDATOR = jsonschema.Draft202012Validator(SCHEMA)
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "reports"
+LEGACY_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "legacy"
 
 
 class TestV3Minimal:
@@ -31,7 +32,7 @@ class TestV3Full:
 
 class TestV2Legacy:
     def test_rejected(self):
-        data = json.loads((FIXTURES / "v2-legacy.json").read_text())
+        data = json.loads((LEGACY_FIXTURES / "v2-legacy.json").read_text())
         errors = list(VALIDATOR.iter_errors(data))
         assert errors, "Expected v2 fixture to fail v3 schema validation"
 
