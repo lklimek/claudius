@@ -433,6 +433,70 @@ def test_triage_minimal_renders():
     assert "ai-verdict-chip" not in html
 
 
+def test_triage_finding_data_category_preserves_origin_category():
+    """Regression: the triage renderer flattens all findings into a single
+    `category: "all"` wrapper section. Each finding's `data-category` attribute
+    on the rendered `<div>` must still reflect the ORIGINAL section category
+    (so the category filter chip works) — not the post-flatten `"all"` value.
+    """
+    report = {
+        "schema_version": "3.0.0",
+        "metadata": {"project": "p", "date": "2026-05-26"},
+        "executive_summary": {"overall_assessment": "ok"},
+        "summary_statistics": {
+            "total_findings": 2,
+            "severity_counts": {
+                "CRITICAL": 0,
+                "HIGH": 0,
+                "MEDIUM": 0,
+                "LOW": 2,
+                "INFO": 0,
+            },
+        },
+        "findings": [
+            {
+                "title": "Security",
+                "category": "security",
+                "findings": [
+                    {
+                        "id": "SEC-001",
+                        "severity": 2,
+                        "title": "S",
+                        "location": "src/a.rs:1",
+                        "description": "d",
+                        "recommendation": "r",
+                    }
+                ],
+            },
+            {
+                "title": "PR Promises",
+                "category": "pr_promises",
+                "findings": [
+                    {
+                        "id": "PPM-001",
+                        "severity": 2,
+                        "title": "P",
+                        "location": "PR-title",
+                        "description": "d",
+                        "recommendation": "r",
+                    }
+                ],
+            },
+        ],
+    }
+    html = grr.render_triage(report)
+    sec_match = re.search(r'id="finding-SEC-001"[^>]*data-category="([^"]*)"', html)
+    ppm_match = re.search(r'id="finding-PPM-001"[^>]*data-category="([^"]*)"', html)
+    assert sec_match, "SEC-001 div not found in triage HTML"
+    assert ppm_match, "PPM-001 div not found in triage HTML"
+    assert (
+        sec_match.group(1) == "security"
+    ), f'SEC-001 data-category collapsed to "{sec_match.group(1)}" — expected "security"'
+    assert (
+        ppm_match.group(1) == "pr_promises"
+    ), f'PPM-001 data-category collapsed to "{ppm_match.group(1)}" — expected "pr_promises"'
+
+
 # ---------------------------------------------------------------------------
 # PDF
 # ---------------------------------------------------------------------------
@@ -487,6 +551,76 @@ def test_build_html_context_omits_chip_bg_when_no_verdict():
     ctx = grr._build_html_context(data)
     f = ctx["findings"][0]["findings"][0]
     assert f.get("_verdict_chip_bg") is None or "_verdict_chip_bg" not in f
+
+
+# ---------------------------------------------------------------------------
+# Producer-shape report (no coordinator-derived fields) must render cleanly
+# through every renderer. Mirrors the relaxed v3 schema — producer skills
+# (e.g. check-pr-comments) emit reports with no `severity`, no
+# `overall_severity`, no `location_permalink`, no AI fields, and the
+# renderers must degrade gracefully instead of crashing.
+# ---------------------------------------------------------------------------
+def _producer_shape_report() -> dict:
+    return {
+        "schema_version": "3.0.0",
+        "metadata": {"project": "p", "date": "2026-05-27"},
+        "executive_summary": {"overall_assessment": "producer shape"},
+        "summary_statistics": {
+            "total_findings": 1,
+            "severity_counts": {
+                "CRITICAL": 0,
+                "HIGH": 0,
+                "MEDIUM": 0,
+                "LOW": 1,
+                "INFO": 0,
+            },
+        },
+        "findings": [
+            {
+                "title": "Code Quality",
+                "category": "code_quality",
+                "findings": [
+                    {
+                        "id": "CODE-001",
+                        "risk": 0.4,
+                        "impact": 0.4,
+                        "scope": 1.0,
+                        "title": "Producer-shape finding",
+                        "location": "src/example.rs:10-20",
+                        "description": "Producer emitted no coordinator-derived fields.",
+                        "recommendation": "Coordinator fills the rest later.",
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_render_markdown_producer_shape_does_not_crash():
+    md = grr.render_markdown(_producer_shape_report())
+    assert "Producer-shape finding" in md
+    # Sev label must not literally read "None".
+    assert "(None)" not in md
+
+
+def test_render_html_producer_shape_does_not_crash():
+    html = grr.render_html(_producer_shape_report())
+    assert "Producer-shape finding" in html
+    assert "badge-None" not in html
+    assert "finding-None" not in html
+
+
+def test_render_triage_producer_shape_does_not_crash():
+    html = grr.render_triage(_producer_shape_report())
+    assert "Producer-shape finding" in html
+    assert "badge-None" not in html
+
+
+def test_render_pdf_producer_shape_does_not_crash(tmp_path):
+    out = tmp_path / "producer.pdf"
+    grr.render_pdf(_producer_shape_report(), out)
+    assert out.is_file()
+    assert out.stat().st_size > 500
 
 
 # ---------------------------------------------------------------------------

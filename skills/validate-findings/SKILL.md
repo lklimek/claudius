@@ -1,13 +1,13 @@
 ---
 name: validate-findings
-description: Coordinator-only LLM validation pass. Adds ai_assessment / ai_verdict / ai_verdict_confidence and re-estimates missing risk/impact/scope on a consolidated v3 report.
+description: Coordinator-only LLM validation pass. Adds ai_assessment / ai_verdict / ai_verdict_confidence and, in the rare partial-producer case, re-estimates absent risk/impact/scope on a consolidated v3 report.
 allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
 model: inherit
 ---
 
 # Validate Findings
 
-Opt-in coordinator-only step that runs an LLM validation pass over a consolidated v3 report. Adds AI assessment, verdict, and confidence to each finding, and fills in missing OWASP float dimensions when a producer omitted them. NOT part of the automatic review pipeline — invoke after `consolidate_reports.py assemble` when a triage-quality validation pass is wanted.
+Opt-in coordinator-only step that runs an LLM validation pass over a consolidated v3 report. Adds AI assessment, verdict, and confidence to each finding. Under the v3 contract producers emit `risk`/`impact`/`scope` themselves, so the typical run leaves the floats untouched; this skill only re-estimates them in the rare case the consolidator left them absent (partial producer output that still satisfied the schema). NOT part of the automatic review pipeline — invoke after `consolidate_reports.py assemble` when a triage-quality validation pass is wanted.
 
 **Argument**: `$ARGUMENTS` — path to the consolidated `report.json` to validate. Edited in place.
 

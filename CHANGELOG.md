@@ -6,6 +6,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.2] - 2026-05-27
+
+### Changed
+
+- `schemas/review-report.schema.json`: the v3 finding schema no longer requires coordinator-derived fields. Integer `severity` and float `overall_severity` are now optional alongside the already-optional `location_permalink` and AI verdict trio (`ai_assessment`, `ai_verdict`, `ai_verdict_confidence`). Producer-emitted reports validate without them; the coordinator's derive pass still WRITES them on consolidation. Resolves a contradiction where producer-only skills (e.g. `check-pr-comments`) couldn't validate their own output without first routing through `consolidate_reports.py assemble`. Producer-side fields (`id`, `risk`, `impact`, `scope`, `title`, `location`, `description`, `recommendation`) stay required — the schema still rejects findings missing any LLM-supplied judgement.
+- `scripts/generate_review_report.py`: `sev_label` collapses missing / Jinja-undefined / non-int values to `"INFO"`, and the Markdown + PDF renderers read `severity` defensively (`.get("severity")`). Producer-shape reports — no integer `severity` yet — now render through all four renderers (Markdown, HTML, Triage, PDF) without crashing.
+- `skills/report-format/SKILL.md`: example finding now carries a one-line note clarifying it is the producer-emitted shape and that the coordinator adds `severity` / `overall_severity` on its derive pass.
+- `skills/validate-findings/SKILL.md`: description tightened to distinguish the typical "add AI fields, leave floats alone" run from the rare partial-producer case where the skill re-estimates absent `risk`/`impact`/`scope`.
+
+## [4.1.1] - 2026-05-26
+
+### Fixed
+
+- `scripts/generate_review_report.py`: scoreboard tables in all four renderers (Markdown, HTML, Triage, PDF) now enumerate every category from the v3 schema instead of a hardcoded subset. Previously `pr_promises`, `pr_comments`, and `dependencies` rows were silently dropped from the severity x category matrix and from the Chart.js category bar chart. Driven by a single `CATEGORY_LABELS` map so future schema additions light up everywhere automatically.
+- `scripts/generate_review_report.py`: triage HTML `data-category` attribute now reflects the finding's original section category, not the post-flatten wrapper. The flatten step previously stamped `data-category="all"` on every finding, breaking the triage category filter chip. Origin category is stashed on each finding (`_category`) before flattening; the template prefers it when present.
+- `skills/review-pr/SKILL.md`: Pass C trigger hints now express severity as `risk≈X.Y, impact≈X.Y` float ranges (consistent with the v3 producer contract that emits floats and lets the coordinator derive integer bands) instead of the contradictory `→ HIGH/MEDIUM/LOW` labels.
+
+### Changed
+
+- `skills/report-format/SKILL.md`: the `pr_promises` example now includes a rationale paragraph explaining why each field carries its value (`scope: 1.0`, synthetic `location`, risk/impact rationale).
+
+## [4.1.0] - 2026-05-26
+
+### Added
+
+- `skills/review-pr/SKILL.md`: new "Pass C — Promise Verification" audits the PR's self-description against the diff on three axes: title ↔ diff alignment, body Summary ↔ diff coverage, and out-of-scope enforcement. Reuses PR data fetched by §1, no extra MCP calls. Findings emit in v3 format with the new `pr_promises` category and `PPM-` ID prefix; `location` is a synthetic `PR-title` / `PR-body:summary-bullet-N` / `PR-body:out-of-scope-item-N` string (renderers leave it as plain text — no permalink).
+- `schemas/review-report.schema.json`: `pr_promises` category added to the `finding_section.category` enum and `severity_category_matrix` row keys; `PPM-` prefix added to the `finding.id` regex. Additive only — pre-existing reports remain valid.
+- `skills/report-format/SKILL.md`: `PPM-` row in the ID prefix table and a Pass C example demonstrating the synthetic `location` convention.
+- `scripts/consolidate_reports.py`: `CATEGORY_PREFIX` map registers `pr_promises → PPM-` so the coordinator assigns IDs correctly for Pass C findings.
+- `scripts/generate_review_report.py`: Markdown section heading ("Part VII: PR Promise Verification"), HTML/Triage filter chip option ("PR Promises"), and JS `catLabels` entry for `pr_promises`.
+- `tests/fixtures/pr-promises/synthetic-mismatched.md`, `tests/fixtures/pr-promises/synthetic-clean.md`: synthetic PR title/body/diff fixtures for exercising Pass C — mismatched fixture expects 3 findings (one per axis), clean fixture expects zero.
+
 ## [4.0.3] - 2026-05-27
 
 ### Fixed

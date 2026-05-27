@@ -30,6 +30,80 @@ class TestV3Full:
         assert errors == [], [e.message for e in errors]
 
 
+class TestProducerShapeAccepted:
+    """Producer-emitted findings (no coordinator-derived fields) MUST validate.
+
+    LLMs supply OWASP floats (risk/impact/scope) and the qualitative content
+    (title/location/description/recommendation); the coordinator computes
+    overall_severity, integer severity, location_permalink, and any AI
+    verdict fields on its own pass. The v3 schema therefore must not REQUIRE
+    those derived fields — a fresh producer report should validate as-is so
+    a skill like check-pr-comments can call validate_report.py on its own
+    output without first routing through consolidate_reports.py.
+    """
+
+    def _producer_report(self) -> dict:
+        return {
+            "schema_version": "3.0.0",
+            "metadata": {"project": "p", "date": "2026-05-27"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "summary_statistics": {
+                "total_findings": 1,
+                "severity_counts": {
+                    "CRITICAL": 0,
+                    "HIGH": 0,
+                    "MEDIUM": 0,
+                    "LOW": 1,
+                    "INFO": 0,
+                },
+            },
+            "findings": [
+                {
+                    "title": "Code Quality",
+                    "category": "code_quality",
+                    "findings": [
+                        {
+                            "id": "CODE-001",
+                            "risk": 0.4,
+                            "impact": 0.4,
+                            "scope": 1.0,
+                            "title": "Producer-shape finding",
+                            "location": "src/example.rs:10-20",
+                            "description": "A producer-emitted finding with no coordinator fields.",
+                            "recommendation": "Coordinator will fill the derived bits later.",
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_producer_shape_finding_passes_schema(self):
+        """No `severity`, no `overall_severity`, no `location_permalink`,
+        no AI fields — the producer report must still pass v3 validation."""
+        data = self._producer_report()
+        errors = list(VALIDATOR.iter_errors(data))
+        assert errors == [], [e.message for e in errors]
+
+    def test_producer_shape_missing_required_float_is_still_rejected(self):
+        """Producer-side fields stay required. Dropping `risk` must fail —
+        the coordinator can't derive overall_severity without all three floats."""
+        data = self._producer_report()
+        del data["findings"][0]["findings"][0]["risk"]
+        errors = list(VALIDATOR.iter_errors(data))
+        assert (
+            errors
+        ), "Expected schema to reject finding missing producer-required `risk`"
+
+    def test_producer_shape_missing_required_text_is_still_rejected(self):
+        """The qualitative LLM judgements (title/location/description/...) stay required."""
+        data = self._producer_report()
+        del data["findings"][0]["findings"][0]["description"]
+        errors = list(VALIDATOR.iter_errors(data))
+        assert (
+            errors
+        ), "Expected schema to reject finding missing required `description`"
+
+
 class TestV2Legacy:
     def test_rejected(self):
         data = json.loads((LEGACY_FIXTURES / "v2-legacy.json").read_text())
