@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.5] - 2026-05-27
+
+### Fixed
+
+- `scripts/generate_review_report.py`: all four v3 float-dimension chips (`overall_severity`, `risk`, `impact`, `scope`) in the HTML/Triage template now share the same `is number` guard. Previously only `impact` was guarded; the other three only checked `is not none`, so a producer/legacy report supplying any of them as a non-numeric value (e.g. a narrative string from a relaxed shape) would crash rendering with `TypeError: must be real number, not str`. Each chip is now rendered iff its underlying value is numeric, restoring per-field defensive parity with `_severity_tooltip`.
+
+## [4.1.4] - 2026-05-27
+
+### Changed
+
+- `scripts/generate_review_report.py`: HTML and Triage renderers now surface v3 severity floats (`overall_severity`, `risk`, `impact`, `scope`) as visible monospace chips next to each finding's severity badge. Previously the floats were only readable via hover tooltip on the badge. Markdown and PDF renderers already showed them inline; this change brings HTML/Triage to parity. Renderer chips degrade gracefully on legacy reports where a float field carries a non-numeric value (e.g. `impact` as a narrative string from pre-v3 reports) — the affected chip is omitted, others render normally. Producer-shape reports under v3 still carry the required floats.
+
 ## [4.1.3] - 2026-05-27
 
 ### Fixed
