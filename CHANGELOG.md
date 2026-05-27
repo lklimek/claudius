@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.2] - 2026-05-27
+
+### Changed
+
+- `schemas/review-report.schema.json`: the v3 finding schema no longer requires coordinator-derived fields. Integer `severity` and float `overall_severity` are now optional alongside the already-optional `location_permalink` and AI verdict trio (`ai_assessment`, `ai_verdict`, `ai_verdict_confidence`). Producer-emitted reports validate without them; the coordinator's derive pass still WRITES them on consolidation. Resolves a contradiction where producer-only skills (e.g. `check-pr-comments`) couldn't validate their own output without first routing through `consolidate_reports.py assemble`. Producer-side fields (`id`, `risk`, `impact`, `scope`, `title`, `location`, `description`, `recommendation`) stay required — the schema still rejects findings missing any LLM-supplied judgement.
+- `scripts/generate_review_report.py`: `sev_label` collapses missing / Jinja-undefined / non-int values to `"INFO"`, and the Markdown + PDF renderers read `severity` defensively (`.get("severity")`). Producer-shape reports — no integer `severity` yet — now render through all four renderers (Markdown, HTML, Triage, PDF) without crashing.
+- `skills/report-format/SKILL.md`: example finding now carries a one-line note clarifying it is the producer-emitted shape and that the coordinator adds `severity` / `overall_severity` on its derive pass.
+- `skills/validate-findings/SKILL.md`: description tightened to distinguish the typical "add AI fields, leave floats alone" run from the rare partial-producer case where the skill re-estimates absent `risk`/`impact`/`scope`.
+
 ## [4.1.1] - 2026-05-26
 
 ### Fixed

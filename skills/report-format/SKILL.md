@@ -41,6 +41,8 @@ Agents emit a JSON array of `finding_section` objects:
 ]
 ```
 
+This is the producer-emitted shape. Integer `severity` and float `overall_severity` are not listed — the coordinator's derive pass adds them from `risk`/`impact`/`scope` (see "Coordinator-derived / validator-owned fields" below). The example validates against the v3 schema as-is because those derived fields are optional; producer skills can call `validate_report.py` on their own output before consolidation.
+
 ## Required Fields
 
 | Field | Type | Description |
@@ -54,7 +56,7 @@ Agents emit a JSON array of `finding_section` objects:
 | `description` | string | What the issue is and why it matters |
 | `recommendation` | string | How to fix it |
 
-Producers MUST emit `risk`, `impact`, and `scope`. The coordinator computes `overall_severity` from them and derives integer `severity` via the band table in the `severity` skill. A finding without all three floats has no `overall_severity` and is rejected by the schema — the `validate-findings` skill is the only documented path to populate floats post-hoc.
+Producers MUST emit `risk`, `impact`, and `scope` — the schema rejects findings missing any of them. The coordinator computes `overall_severity` from those floats and derives integer `severity` via the band table in the `severity` skill. The `validate-findings` skill is the only documented path to re-estimate floats post-hoc when a producer's partial output reaches the coordinator without them.
 
 **Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (when the producer captured exact source during analysis — never invent one).
 

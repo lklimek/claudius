@@ -101,11 +101,22 @@ CATEGORY_LABELS: dict[str, str] = {
 }
 
 
-def sev_label(value: int | str) -> str:
-    """Map numeric severity to label string. Pass-through if already a string."""
+def sev_label(value: int | str | None) -> str:
+    """Map numeric severity to label string. Pass-through if already a string.
+
+    Missing values — ``None``, Jinja's ``Undefined``, or anything that
+    isn't already a string label — collapse to ``"INFO"`` so producer-shape
+    reports (no coordinator-derived integer severity yet) render with a
+    benign default rather than a literal ``"None"`` / empty string.
+    """
+    if isinstance(value, bool):
+        # bool is a subclass of int; treat as missing.
+        return "INFO"
     if isinstance(value, int):
         return SEV_LABELS.get(value, "INFO")
-    return str(value)
+    if isinstance(value, str):
+        return value
+    return "INFO"
 
 
 # ===================================================================
@@ -532,7 +543,7 @@ def render_markdown(data: dict[str, Any]) -> str:
             else:
                 loc_md = f"`{loc}`"
             lines.append(
-                f"- **{tf['id']}** ({sev_label(tf['severity'])}): {tf['title']} \u2014 {loc_md}"
+                f"- **{tf['id']}** ({sev_label(tf.get('severity'))}): {tf['title']} \u2014 {loc_md}"
             )
         lines.append("")
 
@@ -565,7 +576,7 @@ def render_markdown(data: dict[str, Any]) -> str:
                     f"scope={f['scope']:.2f})*"
                 )
             lines.append(
-                f"### {f['id']} ({sev_label(f['severity'])}){sev_extra}: {f['title']}{tag_str}"
+                f"### {f['id']} ({sev_label(f.get('severity'))}){sev_extra}: {f['title']}{tag_str}"
             )
             lines.append("")
             loc = f.get("location", "")
@@ -2760,7 +2771,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
 
     def render_finding(f: dict[str, Any]) -> KeepTogether:
         fid = f["id"]
-        sev = sev_label(f["severity"])
+        sev = sev_label(f.get("severity"))
         title = f["title"]
         tags = f.get("tags", [])
         loc = f.get("location", "")

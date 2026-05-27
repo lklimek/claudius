@@ -554,6 +554,76 @@ def test_build_html_context_omits_chip_bg_when_no_verdict():
 
 
 # ---------------------------------------------------------------------------
+# Producer-shape report (no coordinator-derived fields) must render cleanly
+# through every renderer. Mirrors the relaxed v3 schema — producer skills
+# (e.g. check-pr-comments) emit reports with no `severity`, no
+# `overall_severity`, no `location_permalink`, no AI fields, and the
+# renderers must degrade gracefully instead of crashing.
+# ---------------------------------------------------------------------------
+def _producer_shape_report() -> dict:
+    return {
+        "schema_version": "3.0.0",
+        "metadata": {"project": "p", "date": "2026-05-27"},
+        "executive_summary": {"overall_assessment": "producer shape"},
+        "summary_statistics": {
+            "total_findings": 1,
+            "severity_counts": {
+                "CRITICAL": 0,
+                "HIGH": 0,
+                "MEDIUM": 0,
+                "LOW": 1,
+                "INFO": 0,
+            },
+        },
+        "findings": [
+            {
+                "title": "Code Quality",
+                "category": "code_quality",
+                "findings": [
+                    {
+                        "id": "CODE-001",
+                        "risk": 0.4,
+                        "impact": 0.4,
+                        "scope": 1.0,
+                        "title": "Producer-shape finding",
+                        "location": "src/example.rs:10-20",
+                        "description": "Producer emitted no coordinator-derived fields.",
+                        "recommendation": "Coordinator fills the rest later.",
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_render_markdown_producer_shape_does_not_crash():
+    md = grr.render_markdown(_producer_shape_report())
+    assert "Producer-shape finding" in md
+    # Sev label must not literally read "None".
+    assert "(None)" not in md
+
+
+def test_render_html_producer_shape_does_not_crash():
+    html = grr.render_html(_producer_shape_report())
+    assert "Producer-shape finding" in html
+    assert "badge-None" not in html
+    assert "finding-None" not in html
+
+
+def test_render_triage_producer_shape_does_not_crash():
+    html = grr.render_triage(_producer_shape_report())
+    assert "Producer-shape finding" in html
+    assert "badge-None" not in html
+
+
+def test_render_pdf_producer_shape_does_not_crash(tmp_path):
+    out = tmp_path / "producer.pdf"
+    grr.render_pdf(_producer_shape_report(), out)
+    assert out.is_file()
+    assert out.stat().st_size > 500
+
+
+# ---------------------------------------------------------------------------
 # Regression: existing v2 `impact` string handling is gone — `impact` is now a
 # float; `impact_description` carries the narrative.
 # ---------------------------------------------------------------------------

@@ -221,7 +221,7 @@
     },
     "finding": {
       "type": "object",
-      "required": ["id", "severity", "title", "location", "description", "recommendation", "risk", "impact", "scope", "overall_severity"],
+      "required": ["id", "title", "location", "description", "recommendation", "risk", "impact", "scope"],
       "additionalProperties": false,
       "properties": {
         "id": {
