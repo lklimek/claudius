@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.3] - 2026-05-27
+
+### Changed
+
+- `scripts/generate_review_report.py`: HTML and Triage renderers now surface v3 severity floats (`overall_severity`, `risk`, `impact`, `scope`) as visible monospace chips next to each finding's severity badge. Previously the floats were only readable via hover tooltip on the badge. Markdown and PDF renderers already showed them inline; this change brings HTML/Triage to parity. Chips render only when the corresponding float is present (graceful fallback for floatless producer reports per the v3 schema relaxation).
+
 ## [4.1.2] - 2026-05-27
 
 ### Changed
