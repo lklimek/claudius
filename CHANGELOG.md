@@ -16,6 +16,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 - Prior 4.1.3 assertion that `Agent(team_name=..., prompt=...)` silently ignores `prompt` (and that the lead must follow each spawn with a `SendMessage` kickoff to avoid deadlock) is **not reproducible** on the current Claude Code harness. Empirical re-validation: team-spawned agents receive their `prompt` and execute it on the first turn. The "kickoff" framing has been removed from both skills.
 
+## [4.1.5] - 2026-05-27
+
+### Fixed
+
+- `scripts/generate_review_report.py`: all four v3 float-dimension chips (`overall_severity`, `risk`, `impact`, `scope`) in the HTML/Triage template now share the same `is number` guard. Previously only `impact` was guarded; the other three only checked `is not none`, so a producer/legacy report supplying any of them as a non-numeric value (e.g. a narrative string from a relaxed shape) would crash rendering with `TypeError: must be real number, not str`. Each chip is now rendered iff its underlying value is numeric, restoring per-field defensive parity with `_severity_tooltip`.
+
+## [4.1.4] - 2026-05-27
+
+### Changed
+
+- `scripts/generate_review_report.py`: HTML and Triage renderers now surface v3 severity floats (`overall_severity`, `risk`, `impact`, `scope`) as visible monospace chips next to each finding's severity badge. Previously the floats were only readable via hover tooltip on the badge. Markdown and PDF renderers already showed them inline; this change brings HTML/Triage to parity. Renderer chips degrade gracefully on legacy reports where a float field carries a non-numeric value (e.g. `impact` as a narrative string from pre-v3 reports) — the affected chip is omitted, others render normally. Producer-shape reports under v3 still carry the required floats.
+
+## [4.1.3] - 2026-05-27
+
+### Fixed
+
+- `scripts/generate_review_report.py`: triage view (`--format triage`) now actually renders the per-finding decision dropdown, rationale input, and decision hint that were silently missing since the v3 cutover. The post-hoc `.replace()`-based injection broke when `code_snippets` were inserted between `</dl>` and `</div>`; the renderer now uses Jinja `{% if triage %}` conditionals inside the template so the UI is wired structurally rather than by brittle string search. Adjacent `.replace()` calls in `render_triage` (extra CSS/JS blocks, `data-verdict` attribute, triage toolbar) audited; each now carries a post-replace assert to fail loudly if the anchor stops matching.
+
 ## [4.1.2] - 2026-05-27
 
 ### Changed

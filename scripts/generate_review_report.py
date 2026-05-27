@@ -732,6 +732,14 @@ tr:nth-child(even) td{background:{{ BG_LIGHT }}}
 /* Tag chips */
 .tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:.7rem;
   background:{{ BG_LIGHT }};border:1px solid {{ BORDER }};color:{{ TEXT_SECONDARY }};margin-left:4px}
+/* Severity-breakdown metric chips (v3 floats: overall/risk/impact/scope) */
+.metric-chip{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;
+  font-size:.72rem;font-weight:600;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;vertical-align:middle}
+.metric-overall{background-color:#4f46e5}
+.metric-risk{background-color:#c2410c}
+.metric-impact{background-color:#b91c1c}
+.metric-scope{background-color:#047857}
 /* Sections */
 h2{color:{{ BRAND }};margin-top:2rem;margin-bottom:.5rem;border-bottom:2px solid {{ BRAND }};padding-bottom:.3rem}
 h3{margin-top:1.2rem;margin-bottom:.3rem}
@@ -959,6 +967,10 @@ details summary:hover{color:{{ ACCENT }}}
 <div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ f._category if f._category else sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}">
   <h3>
     <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
+    {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of risk/impact/scope)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
+    {% if f.risk is number %}<span class="metric-chip metric-risk" title="OWASP Likelihood normalized">R {{ '%.2f' % f.risk }}</span>{% endif %}
+    {% if f.impact is number %}<span class="metric-chip metric-impact" title="OWASP Impact normalized">I {{ '%.2f' % f.impact }}</span>{% endif %}
+    {% if f.scope is number %}<span class="metric-chip metric-scope" title="PR relevance (1.0 direct, 0.5 indirect, 0.0 unrelated)">S {{ '%.2f' % f.scope }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
@@ -979,6 +991,20 @@ details summary:hover{color:{{ ACCENT }}}
   {% for snip in f.code_snippets | default([]) %}
   <details class="code-snippet"><summary>{{ snip.caption or snip.language or 'Code snippet' }}</summary><pre><code class="language-{{ snip.language | default('') | e }}">{{ snip.content | e }}</code></pre></details>
   {% endfor %}
+  {% if triage %}
+  <div class="triage-row">
+    <select class="triage-action">
+      <option value="---">---</option>
+      <option value="fix">Fix</option>
+      <option value="accept_risk">Accept Risk</option>
+      <option value="defer">Defer</option>
+      <option value="false_positive">False Positive</option>
+      <option value="duplicate">Duplicate</option>
+    </select>
+    <input type="text" class="triage-rationale" placeholder="Rationale...">
+    <span class="decision-hint" aria-live="polite"></span>
+  </div>
+  {% endif %}
 </div>
 {% endfor %}
 
@@ -1779,20 +1805,32 @@ def render_html(data: dict[str, Any]) -> str:
 
 
 def render_triage(data: dict[str, Any]) -> str:
-    """Render the report as an interactive triage HTML page."""
+    """Render the report as an interactive triage HTML page.
+
+    The per-finding decision dropdown (triage-row) and the `{% if triage %}`
+    data-attribute / chrome blocks live structurally in ``_HTML_TEMPLATE``
+    behind a ``triage`` context flag — this routine only patches in the extra
+    CSS, JS, the comment-check ``data-verdict`` attribute, and the toolbar.
+    Every `.replace()` below carries a post-replace assert so any future
+    template drift fails loudly instead of silently dropping UI.
+    """
     from jinja2 import Environment
 
-    # Build a triage-augmented template by injecting extra CSS and JS blocks.
-    # The base template already provides data attributes on findings and a
-    # filter toolbar (hidden when triage=True via {% if not triage %}).
-    # Here we add triage-specific CSS, JS, controls, and the triage toolbar.
+    # Inject triage-specific CSS / JS into the two empty Jinja blocks.
     triage_template = _HTML_TEMPLATE.replace(
         "{% block extra_css %}{% endblock %}",
         _TRIAGE_EXTRA_CSS,
-    ).replace(
+    )
+    assert (
+        _TRIAGE_EXTRA_CSS in triage_template
+    ), "Template patch failed: extra_css block anchor not found"
+    triage_template = triage_template.replace(
         "{% block extra_js %}{% endblock %}",
         _TRIAGE_EXTRA_JS,
     )
+    assert (
+        _TRIAGE_EXTRA_JS in triage_template
+    ), "Template patch failed: extra_js block anchor not found"
 
     # Add comment-check `data-verdict` attribute. The base template already
     # carries data-overall and data-ai-verdict; the triage filter for the
@@ -1806,26 +1844,6 @@ def render_triage(data: dict[str, Any]) -> str:
     assert (
         new_finding_div in triage_template
     ), "Template patch failed: finding div not found in triage template"
-
-    # Add triage row after each finding's </dl>
-    old_dl_close = "  </dl>\n</div>\n{% endfor %}"
-    new_dl_close = (
-        "  </dl>\n"
-        '  <div class="triage-row">\n'
-        '    <select class="triage-action">\n'
-        '      <option value="---">---</option>\n'
-        '      <option value="fix">Fix</option>\n'
-        '      <option value="accept_risk">Accept Risk</option>\n'
-        '      <option value="defer">Defer</option>\n'
-        '      <option value="false_positive">False Positive</option>\n'
-        '      <option value="duplicate">Duplicate</option>\n'
-        "    </select>\n"
-        '    <input type="text" class="triage-rationale" placeholder="Rationale...">\n'
-        '    <span class="decision-hint" aria-live="polite"></span>\n'
-        "  </div>\n"
-        "</div>\n{% endfor %}"
-    )
-    triage_template = triage_template.replace(old_dl_close, new_dl_close)
 
     # Add triage toolbar before the first section heading.
     # The base report toolbar is hidden ({% if not triage %}), so we inject
@@ -1888,11 +1906,17 @@ def render_triage(data: dict[str, Any]) -> str:
 </div>
 """
     # Insert toolbar inside the findings section, after the heading
-    triage_template = triage_template.replace(
-        "{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}",
-        "{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}\n"
-        "{% if loop.first %}\n" + toolbar_html + "{% endif %}",
+    toolbar_anchor = (
+        "{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}"
     )
+    toolbar_block = "{% if loop.first %}\n" + toolbar_html + "{% endif %}"
+    triage_template = triage_template.replace(
+        toolbar_anchor,
+        toolbar_anchor + "\n" + toolbar_block,
+    )
+    assert (
+        toolbar_block in triage_template
+    ), "Template patch failed: triage toolbar anchor (sec.subtitle line) not found"
 
     env = Environment(autoescape=True)
     env.filters["sev_label"] = sev_label
