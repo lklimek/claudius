@@ -6,11 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [4.1.3] - 2026-05-27
+## [4.1.5] - 2026-05-27
 
 ### Changed
 
-- `claudius:ci-dance` Step 2 and `claudius:grand-admiral` § Worktree Isolation now document TWO team-spawn quirks (both surfaced in a real ci-dance run): (1) `prompt` parameter on `Agent(team_name=...)` is silently ignored — lead MUST follow with `SendMessage` to start the stream; (2) `isolation="worktree"` is silently NOT honored — team-spawned agents land in the lead's CWD instead of a dedicated worktree. Workarounds documented. Recommendation: use SOLO `Agent(isolation="worktree")` spawns for the three streams; coordinate via filesystem/explicit DMs instead of the team task list.
+- `claudius:ci-dance` Step 2 and `claudius:grand-admiral` § Worktree Isolation: team-spawn quirk write-up now scoped to the one quirk that reproduces on the current harness — `Agent(team_name=..., isolation="worktree")` silently drops `isolation` and the agent lands in the lead's CWD instead of a dedicated worktree. Added a newly surfaced sub-quirk: `Agent()` calls from within a team-lead session that OMIT `team_name` are auto-joined to the lead's team and lose `isolation` the same way; true solo+worktree requires a session with no team context. Workarounds: (a) lead pre-creates a worktree with `git worktree add` and tells the team-spawned stream to `cd` into it on its first turn, or (b) spawn from a non-team session.
+
+### Retracted
+
+- Prior 4.1.3 assertion that `Agent(team_name=..., prompt=...)` silently ignores `prompt` (and that the lead must follow each spawn with a `SendMessage` kickoff to avoid deadlock) is **not reproducible** on the current Claude Code harness. Empirical re-validation: team-spawned agents receive their `prompt` and execute it on the first turn. The "kickoff" framing has been removed from both skills.
 
 ## [4.1.2] - 2026-05-27
 

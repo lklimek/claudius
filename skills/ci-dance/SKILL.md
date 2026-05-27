@@ -82,19 +82,18 @@ Then spawn each stream as a named agent with `team_name: "ci-dance"` and `isolat
 - `grumpy-stream`
 - `review-stream`
 
-### Kickoff and team-spawn quirks
+### Team-spawn worktree quirk
 
-**Two team-spawn quirks** to handle, both surfaced in a real ci-dance run:
+See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary for ci-dance:
 
-1. **`prompt` parameter ignored**. When `team_name` is set, the `prompt` passed to `Agent()` is NOT delivered to the spawned agent — the agent spawns IDLE and waits for the team mailbox. The lead MUST follow each spawn with `SendMessage(to=<stream-name>, message=<full procedure>)` to start the agent's first turn. Without this kickoff, streams sit idle forever and the loop deadlocks.
-
-2. **`isolation: "worktree"` NOT honored**. Team-spawned agents do NOT get a dedicated worktree — they land in the team-context CWD (typically the lead's main repo). `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. If a stream proceeds anyway it will edit the main repo directly (risky — see "Wrong-worktree pitfall" in `grand-admiral`).
+- **`isolation="worktree"` silently dropped for team-spawned agents.** `Agent(team_name=..., isolation="worktree")` lands the agent in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
+- **Team context inherits even when `team_name` is omitted.** `Agent()` calls issued from within a team-lead session are auto-joined to the lead's team and lose `isolation` the same way. Omitting `team_name` is NOT an escape hatch — true solo+worktree requires a session that has no team context at all.
 
 **Workarounds**:
-- For the prompt: always SendMessage the full procedure after spawning. The kickoff MUST include the worktree-orientation block (`pwd` / `git worktree list` / `git merge --ff-only <full-40-char-SHA>`) and instructions on what to do if `pwd` is the main repo.
-- For isolation: either (a) spawn the streams SOLO (no `team_name`) and coordinate via something other than the team task list — the team's shared task list is the main benefit lost, but it can be replaced with explicit DMs and per-stream task IDs; or (b) lead manually creates worktrees before spawning streams via `git worktree add .claude/worktrees/agent-<stream-name> -b <branch-name> <SHA>` and tells each stream its assigned path in the kickoff DM.
+- (a) Lead pre-creates worktrees via `git worktree add .claude/worktrees/agent-<stream-name> -b <branch-name> <SHA>` and tells each team-spawned stream its assigned path in the spawn `prompt`; the stream `cd`s into it on its first turn.
+- (b) Run the streams from a non-team session so `Agent(isolation="worktree")` actually provisions a worktree.
 
-**Recommendation for v1**: use SOLO spawns (no `team_name`) for the three streams. Solo `Agent(isolation="worktree")` works correctly — both prompt delivered AND worktree provisioned. Coordinate via filesystem state (each stream commits on a uniquely named branch) and merge in Step 3. The team's shared task list is the main loss, but the worktree isolation is more valuable.
+**Recommendation for v1**: use SOLO spawns (no team) for the three streams. Solo `Agent(isolation="worktree")` from a non-team session provisions a worktree correctly. Coordinate via filesystem state (each stream commits on a uniquely named branch) and merge in Step 3. The team's shared task list is the cost; per-stream worktree isolation is the benefit.
 
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
