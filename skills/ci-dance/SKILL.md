@@ -87,13 +87,9 @@ Then spawn each stream as a named agent with `team_name: "ci-dance"` and `isolat
 See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary for ci-dance:
 
 - **`isolation="worktree"` silently dropped for team-spawned agents.** `Agent(team_name=..., isolation="worktree")` lands the agent in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
-- **Team context inherits even when `team_name` is omitted.** `Agent()` calls issued from within a team-lead session are auto-joined to the lead's team and lose `isolation` the same way. Omitting `team_name` is NOT an escape hatch — true solo+worktree requires a session that has no team context at all.
+- **Team context inheritance** — explanatory note, NOT a recovery path. `Agent()` calls issued from within a team-lead session that OMIT `team_name` are auto-joined to the lead's team and lose `isolation` the same way. Omitting `team_name` does not escape the team context, which is why the lead cannot rely on an in-session "spawn solo" trick — the worktree must be pre-created externally.
 
-**Workarounds**:
-- (a) Lead pre-creates worktrees via `git worktree add .claude/worktrees/agent-<stream-name> -b <branch-name> <SHA>` and tells each team-spawned stream its assigned path in the spawn `prompt`; the stream `cd`s into it on its first turn.
-- (b) Run the streams from a non-team session so `Agent(isolation="worktree")` actually provisions a worktree.
-
-**Recommendation for v1**: use SOLO spawns (no team) for the three streams. Solo `Agent(isolation="worktree")` from a non-team session provisions a worktree correctly. Coordinate via filesystem state (each stream commits on a uniquely named branch) and merge in Step 3. The team's shared task list is the cost; per-stream worktree isolation is the benefit.
+**Workaround (single canonical path)**: the lead pre-creates one worktree per stream via `git worktree add .claude/worktrees/agent-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and includes the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s into its assigned path on its first turn and works there. This is the stable path; do not attempt other workarounds.
 
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
