@@ -642,3 +642,74 @@ def test_html_uses_impact_description_not_impact_float():
     assert "Anyone with disk access can recover production credentials." in html
     # If we accidentally rendered the float, we'd see ">1.0<" inside the Impact dd.
     assert "<dd>1.0</dd>" not in html
+
+
+# ---------------------------------------------------------------------------
+# Triage decision UI — regression for the v3-cutover silent breakage
+# ---------------------------------------------------------------------------
+# The triage view used to inject the per-finding decision dropdown via a
+# post-hoc string `.replace()` anchored on `"  </dl>\n</div>\n{% endfor %}"`.
+# When the v3 cutover (PR #35) added a `code_snippets` for-loop between
+# `</dl>` and `</div>`, the anchor stopped matching, `.replace()` silently
+# returned the unchanged string, and the decision UI vanished from every
+# triage report. These tests pin the structural contract.
+
+
+def test_triage_renders_decision_ui_for_every_finding():
+    """Every finding card in --format triage must carry an action dropdown,
+    a rationale input, and a decision-hint span."""
+    data = _load("v3-full.json")
+    finding_count = sum(len(sec["findings"]) for sec in data["findings"])
+    assert finding_count > 0, "fixture must contain at least one finding"
+    html = grr.render_triage(data)
+    assert html.count('class="triage-action"') == finding_count
+    assert html.count('class="triage-rationale"') == finding_count
+    assert html.count('class="decision-hint"') == finding_count
+
+
+def test_triage_renders_data_verdict_attribute_on_findings():
+    """The triage filter for comment-check verdicts depends on each finding
+    div carrying `data-verdict=...`. This used to be patched in by a separate
+    `.replace()`; it now lives in the template behind `{% if triage %}`."""
+    data = _load("v3-full.json")
+    finding_count = sum(len(sec["findings"]) for sec in data["findings"])
+    html = grr.render_triage(data)
+    assert html.count("data-verdict=") == finding_count
+
+
+def test_html_does_not_render_triage_decision_ui():
+    """Inverse: the plain `--format html` view must NOT contain the per-finding
+    decision dropdown or rationale input — those belong only to triage."""
+    data = _load("v3-full.json")
+    html = grr.render_html(data)
+    assert 'class="triage-action"' not in html
+    assert 'class="triage-rationale"' not in html
+    assert 'class="decision-hint"' not in html
+
+
+def test_triage_renders_decision_ui_when_findings_have_code_snippets():
+    """Direct regression: a finding carrying `code_snippets` (the structural
+    change that broke the old `.replace()` anchor) must still get a decision
+    dropdown rendered after its snippet block."""
+    finding = {
+        "id": "X-001",
+        "severity": 3,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+        "code_snippets": [
+            {"language": "rust", "caption": "snippet", "content": "fn x() {}"}
+        ],
+    }
+    html = grr.render_triage(_wrap_section(finding))
+    assert 'class="triage-action"' in html
+    assert 'class="triage-rationale"' in html
+    # The dropdown must appear AFTER the snippet block, inside the same
+    # finding card (i.e. structurally adjacent — same string still present).
+    snippet_pos = html.find("language-rust")
+    dropdown_pos = html.find('class="triage-action"')
+    assert snippet_pos != -1 and dropdown_pos != -1
+    assert (
+        dropdown_pos > snippet_pos
+    ), "decision dropdown must render after the snippet inside the finding card"
