@@ -29,6 +29,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - `scripts/generate_review_report.py`: Markdown section heading ("Part VII: PR Promise Verification"), HTML/Triage filter chip option ("PR Promises"), and JS `catLabels` entry for `pr_promises`.
 - `tests/fixtures/pr-promises/synthetic-mismatched.md`, `tests/fixtures/pr-promises/synthetic-clean.md`: synthetic PR title/body/diff fixtures for exercising Pass C — mismatched fixture expects 3 findings (one per axis), clean fixture expects zero.
 
+## [4.0.3] - 2026-05-27
+
+### Fixed
+
+- `tests/test_report_pipeline.sh`: the fixture glob is now narrowed to `tests/fixtures/reports/v3-*.json`, so only v3 happy-path fixtures are exercised by the end-to-end pipeline. Previously the broad `*.json` glob swept in the negative-test `v2-legacy.json` (intended to fail v3 validation) and a stale pre-v3 fixture, causing CI to red on PR #35 after the v3 hard cutover.
+- `tests/fixtures/legacy/v2-legacy.json`: relocated from `tests/fixtures/reports/` so it cannot be mistaken for an expected-pass fixture. The negative-rejection test in `tests/test_schema_v3_strict.py` follows the move.
+- `tests/fixtures/reports/pr-13-severity-refactor.json`: removed as obsolete — it predated the v3 schema, had no test or script referencing it, and was only being kept alive by the pipeline glob.
+
+## [4.0.2] - 2026-05-27
+
+### Fixed
+
+- `scripts/generate_review_report.py`: Markdown snippet `language` field is now sanitized via an allowlist (`[A-Za-z0-9_+.-]+`) before being interpolated into the GFM fence info-string; a producer-controlled value containing newlines or backticks can no longer break out of the fence and inject arbitrary Markdown/HTML downstream. Addresses Copilot review comment on PR #35.
+
+### Changed
+
+- `skills/report-format/SKILL.md`, `skills/grumpy-review/SKILL.md`, `skills/check-pr-comments/SKILL.md`: producer guidance now requires `risk`/`impact`/`scope` floats on every finding. Dropped the misleading "MAY emit integer `severity` alone" escape hatch — without all three floats the coordinator cannot derive `overall_severity` and the schema rejects the finding, so the previous wording contradicted the enforced contract. The `validate-findings` skill remains the documented path to populate floats post-hoc.
+
 ## [4.0.1] - 2026-05-26
 
 ### Fixed

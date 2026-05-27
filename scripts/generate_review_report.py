@@ -200,6 +200,26 @@ def _rgb_to_hex(r: int, g: int, b: int) -> str:
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
+_SNIPPET_LANG_RE = re.compile(r"[A-Za-z0-9_+.\-]+")
+
+
+def _sanitize_snippet_language(raw: Any) -> str:
+    """Sanitize a producer-supplied code-fence language tag.
+
+    The info-string after a GFM fence is otherwise arbitrary, so a value
+    containing newlines or backticks would terminate the fence early and
+    inject downstream Markdown/HTML. We keep only the leading run of
+    allowlist characters (``[A-Za-z0-9_+.-]+``) so common languages like
+    ``python``, ``c++``, ``objective-c``, ``f#`` (truncates to ``f``) pass
+    through unchanged. Returns ``""`` when nothing safe survives, in which
+    case the caller emits a bare fence.
+    """
+    if not isinstance(raw, str):
+        return ""
+    match = _SNIPPET_LANG_RE.match(raw.strip())
+    return match.group(0) if match else ""
+
+
 def _truncate_snippet(content: str, max_lines: int) -> tuple[str, int]:
     """Soft-cap a code snippet to ``max_lines`` lines for PDF rendering.
 
@@ -588,7 +608,10 @@ def render_markdown(data: dict[str, Any]) -> str:
                 # Caption is a producer-supplied label, not Markdown — escape
                 # HTML so it cannot break out of the surrounding <summary>.
                 summary = html_escape(raw_summary)
-                lang = snip.get("language", "")
+                # Sanitize the producer-supplied language to an allowlist
+                # token so newlines or backticks cannot break out of the
+                # fence. Empty result means a bare fence with no info-string.
+                lang = _sanitize_snippet_language(snip.get("language", ""))
                 content = snip.get("content", "")
                 # Pick a fence longer than any backtick run inside the content,
                 # so embedded ``` cannot terminate the outer fence (CommonMark
@@ -883,6 +906,14 @@ details summary:hover{color:{{ ACCENT }}}
     <option value="dependencies">Dependencies</option>
     <option value="pr_comments">PR Comments</option>
     <option value="pr_promises">PR Promises</option>
+  </select>
+  <select id="filterAiVerdict">
+    <option value="">All AI Verdicts</option>
+    <option value="valid">Valid</option>
+    <option value="false_positive">False Positive</option>
+    <option value="needs_investigation">Needs Investigation</option>
+    <option value="out_of_scope">Out of Scope</option>
+    <option value="duplicate">Duplicate</option>
   </select>
   <select id="filterAiVerdict">
     <option value="">All AI Verdicts</option>
