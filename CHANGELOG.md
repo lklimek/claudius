@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [4.1.6] - 2026-05-27
+## [4.1.7] - 2026-05-27
 
 ### Changed
 
