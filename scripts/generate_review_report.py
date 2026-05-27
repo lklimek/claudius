@@ -967,10 +967,10 @@ details summary:hover{color:{{ ACCENT }}}
 <div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ f._category if f._category else sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}">
   <h3>
     <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
-    {% if f.get('overall_severity') is not none %}<span class="metric-chip metric-overall" title="Overall severity (mean of risk/impact/scope)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
-    {% if f.get('risk') is not none %}<span class="metric-chip metric-risk" title="OWASP Likelihood normalized">R {{ '%.2f' % f.risk }}</span>{% endif %}
-    {% if f.get('impact') is not none and f.impact is number %}<span class="metric-chip metric-impact" title="OWASP Impact normalized">I {{ '%.2f' % f.impact }}</span>{% endif %}
-    {% if f.get('scope') is not none %}<span class="metric-chip metric-scope" title="PR relevance (1.0 direct, 0.5 indirect, 0.0 unrelated)">S {{ '%.2f' % f.scope }}</span>{% endif %}
+    {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of risk/impact/scope)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
+    {% if f.risk is number %}<span class="metric-chip metric-risk" title="OWASP Likelihood normalized">R {{ '%.2f' % f.risk }}</span>{% endif %}
+    {% if f.impact is number %}<span class="metric-chip metric-impact" title="OWASP Impact normalized">I {{ '%.2f' % f.impact }}</span>{% endif %}
+    {% if f.scope is number %}<span class="metric-chip metric-scope" title="PR relevance (1.0 direct, 0.5 indirect, 0.0 unrelated)">S {{ '%.2f' % f.scope }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}

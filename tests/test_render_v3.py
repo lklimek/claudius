@@ -362,6 +362,76 @@ def test_html_omits_chips_when_floats_absent():
     assert 'class="metric-chip' not in html
 
 
+def test_html_chips_omit_when_floats_are_non_numeric():
+    """Defensive: legacy/relaxed producers may emit a narrative string in
+    ``impact`` (or any other float dimension) instead of a number. The renderer
+    must not crash and must omit the chip for that non-numeric field while
+    still rendering numeric peers."""
+    finding = {
+        "id": "X-001",
+        # All four float dimensions as non-numeric. ``%.2f`` would raise
+        # TypeError if the chip template tried to format these.
+        "overall_severity": "high",
+        "risk": "likely",
+        "impact": "Allows remote code execution.",
+        "scope": None,  # already covered by ``is not none`` — sanity peer.
+        "severity": 3,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+    }
+    # Must not raise — the four chips must each be guarded with ``is number``.
+    html = grr.render_html(_wrap_section(finding))
+    # None of the four chips should appear when their underlying value is
+    # non-numeric.
+    assert 'class="metric-chip metric-overall"' not in html
+    assert 'class="metric-chip metric-risk"' not in html
+    assert 'class="metric-chip metric-impact"' not in html
+    assert 'class="metric-chip metric-scope"' not in html
+
+
+def test_html_chips_partial_numeric_renders_only_numeric_dimensions():
+    """When some float dimensions are numeric and others are strings, only
+    the numeric ones become chips. Guards must be per-field, not all-or-none."""
+    finding = {
+        "id": "X-001",
+        "overall_severity": 0.55,  # numeric — chip expected
+        "risk": "high",  # non-numeric — chip omitted
+        "impact": 0.8,  # numeric — chip expected
+        "scope": "broad",  # non-numeric — chip omitted
+        "severity": 3,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+    }
+    html = grr.render_html(_wrap_section(finding))
+    assert "Overall 0.55" in html
+    assert "I 0.80" in html
+    assert 'class="metric-chip metric-risk"' not in html
+    assert 'class="metric-chip metric-scope"' not in html
+
+
+def test_triage_chips_omit_when_floats_are_non_numeric():
+    """Triage shares the HTML template — the same per-field numeric guard
+    must hold there."""
+    finding = {
+        "id": "X-001",
+        "overall_severity": "high",
+        "risk": "likely",
+        "impact": "narrative",
+        "scope": "broad",
+        "severity": 3,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+    }
+    triage = grr.render_triage(_wrap_section(finding))
+    assert 'class="metric-chip' not in triage
+
+
 def test_triage_renders_visible_float_chips_for_v3_findings():
     """Triage view inherits from HTML template — chips must surface there too."""
     finding = {
