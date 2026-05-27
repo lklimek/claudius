@@ -320,6 +320,69 @@ def test_html_code_snippet_content_is_escaped():
     assert "<script>alert('xss')</script>" not in html
 
 
+def test_html_renders_visible_float_chips_for_v3_findings():
+    """Each finding with risk/impact/scope/overall_severity must surface
+    them as visible chips in HTML, not just hover-tooltip."""
+    finding = {
+        "id": "X-001",
+        "risk": 0.6,
+        "impact": 0.7,
+        "scope": 1.0,
+        "overall_severity": 0.77,
+        "severity": 4,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+    }
+    html = grr.render_html(_wrap_section(finding))
+    # Chip text — visible, not just tooltip-attribute.
+    assert "Overall 0.77" in html
+    assert "R 0.60" in html
+    assert "I 0.70" in html
+    assert "S 1.00" in html
+    # Tooltip-as-belt-and-braces still present.
+    assert 'title="overall=0.77 risk=0.60 impact=0.70 scope=1.00"' in html
+
+
+def test_html_omits_chips_when_floats_absent():
+    """A minimal producer-shape finding without floats must NOT render
+    empty chips or crash."""
+    finding = {
+        "id": "X-001",
+        "severity": 2,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+    }
+    html = grr.render_html(_wrap_section(finding))
+    # No chip span should appear when the floats are absent (CSS class
+    # declaration in <style> always exists; check for actual rendered chips).
+    assert 'class="metric-chip' not in html
+
+
+def test_triage_renders_visible_float_chips_for_v3_findings():
+    """Triage view inherits from HTML template — chips must surface there too."""
+    finding = {
+        "id": "X-001",
+        "risk": 0.6,
+        "impact": 0.7,
+        "scope": 1.0,
+        "overall_severity": 0.77,
+        "severity": 4,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "D",
+        "recommendation": "R",
+    }
+    triage = grr.render_triage(_wrap_section(finding))
+    assert "Overall 0.77" in triage
+    assert "R 0.60" in triage
+    assert "I 0.70" in triage
+    assert "S 1.00" in triage
+
+
 def test_html_data_overall_and_data_ai_verdict_present():
     """The non-triage HTML carries `data-overall` (float, for sort) and
     `data-ai-verdict` (AI verdict, for filter). The comment-check
