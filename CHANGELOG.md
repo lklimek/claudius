@@ -6,6 +6,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.1.7] - 2026-05-27
+
+### Changed
+
+- `skills/check-pr-comments/SKILL.md`: producers MUST now emit `location_permalink` directly (lifted from the coordinator-owned exclusion list) whenever `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all available. The skill documents the `https://github.com/{owner}/{repo}/blob/{commit}/{path}#L{n}[-L{m}]` template, range/single-line anchor handling, and URL-encoding requirements. Path-only `location` values are explicitly rejected to keep producer/coordinator parity — the coordinator's `_build_permalink` also rejects them. Fixes the `triage_server.py` rendering where standalone `check-pr-comments` reports showed `location` as plain text — the coordinator's derive pass never runs on producer-only output, so the producer is the only consistent place to populate the clickable permalink. Coordinator behaviour unchanged: when a consolidator pass does run it normalizes `location_permalink` from `metadata.repository` + `metadata.commit` + a line-addressable `location`; if any of those is missing, the existing producer value is preserved unchanged.
+- `skills/check-pr-comments/SKILL.md`: tightened the `title` field contract. Titles are now bounded to 80 characters with NO trailing `...` truncation marker, MUST NOT prefix the reviewer username (the renderer already shows it separately), and MUST NOT verbatim-copy the comment's first line — Markdown markers (`**`, `>`), emoji, and severity labels (`Suggestion:`, `Issue:`, `Nit:`, `Question:`) from the comment body are stripped. Title phrases the change the comment requests as an imperative or noun phrase. Schema block now carries one positive example and three negative ones, lifted from a real PR #3554 report where titles read like quoted Markdown fragments.
+
+### Added
+
+- `tests/test_check_pr_comments_permalink.py`: regression coverage for the producer-side permalink template. Verifies the URL form for single-line (`#L42`) and range (`#L42-L56`) locations, owner/repo split from `metadata.project`, URL-encoding for unsafe path characters, graceful omission when commit, project, or parseable location is missing, and producer/coordinator parity on rejected edge cases (path-only, malformed range like `:1-` or `:-2`).
+
 ## [4.1.6] - 2026-05-27
 
 ### Changed

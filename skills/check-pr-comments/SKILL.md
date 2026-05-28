@@ -111,8 +111,9 @@ Each review comment becomes one finding:
   "risk": 0.1,
   "impact": 0.1,
   "scope": 1.0,
-  "title": "Short description of what the comment requests",
+  "title": "Add fee-headroom guard to transfer_with_change_address",
   "location": "path/to/file.rs:42-56",
+  "location_permalink": "https://github.com/<owner>/<repo>/blob/<commit>/path/to/file.rs#L42-L56",
   "description": "What the comment asked for (multi-line OK)",
   "recommendation": "What was done (RESOLVED) or what to do (UNRESOLVED)",
   "reviewer": "github-username",
@@ -124,11 +125,57 @@ Each review comment becomes one finding:
 }
 ```
 
+#### `title` — rules
+
+The `title` is the column users see at a glance in the rendered report. The `reviewer` field is shown separately, so the title must carry only the substance.
+
+1. **≤ 80 characters.** Hard cap. Do NOT emit a `…` / `...` truncation marker — write a title that fits.
+2. **No reviewer prefix.** Never start with `<username>:` — the renderer already shows the reviewer next to the title.
+3. **No verbatim copy of the comment's first line.** Strip Markdown markers (`**`, leading `>`), emoji, and severity labels (`Suggestion:`, `Issue:`, `Nit:`, `Question:`) that came from the comment body. The title summarises, not quotes.
+4. **Phrase as an imperative or noun phrase describing the change requested**, not a quote of the reviewer's wording.
+
+Good (what the comment *asks for*):
+- `Add fee-headroom guard to transfer_with_change_address`
+- `Rename transfer_inner to transfer`
+- `Type FeeStrategyResolveError variants`
+- `Clarify which dispatcher the error message refers to`
+
+Bad (quotes / markup / prefix / truncation):
+- `thepastaclaw: **🟡 Suggestion: \`transfer_with_change_address\` skips the \`Re...`
+- `lklimek: Looks like we can rename transfer_inner back to transfer and...`
+- `> Explain when to use transfer() and when to use transfer_with...`
+
+#### `location_permalink` — rules
+
+**Producers MUST emit `location_permalink` whenever `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present.** This is the field the renderer turns into a clickable link; standalone reports never see the coordinator's derive pass, so the producer is the only place that always knows the commit. Path-only locations (no `:line`) MUST NOT carry a `location_permalink` — the coordinator's `_build_permalink` rejects them too, so emitting one would break producer/coordinator parity.
+
+URL template:
+
+```
+https://github.com/{owner}/{repo}/blob/{commit}/{path}{anchor}
+```
+
+- `{owner}/{repo}`: split `metadata.project` on `/` (it's already in `<owner>/<repo>` form).
+- `{commit}`: full 40-char SHA from `metadata.commit`.
+- `{path}`: the file path from `location` — split off the trailing `:line` or `:start-end` suffix; the remainder is the path. (This matches the coordinator's `parse_location` regex, which anchors at end of string. Splitting at the first `:` would break paths that contain `:`.) URL-encode spaces, `#`, `?`, and any non-ASCII characters.
+- `{anchor}`:
+  - `#L{line}` when `location` ends in `:{line}` (single line)
+  - `#L{start}-L{end}` when `location` ends in `:{start}-{end}` (range)
+
+Examples:
+
+- `location: "src/auth.rs:42"`, project `octo/widgets`, commit `0123…ef` →
+  `https://github.com/octo/widgets/blob/0123…ef/src/auth.rs#L42`
+- `location: "packages/wallet/src/transfer.rs:414-420"` →
+  `…/blob/<sha>/packages/wallet/src/transfer.rs#L414-L420`
+
+Omit `location_permalink` (do NOT emit an empty string) when commit or project is missing, when `location` lacks a `:line` or `:start-end` suffix, or when the line suffix isn't a valid integer (or a valid integer-integer range).
+
 - **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (the comment is satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done. The coordinator will derive `severity = 1` (INFO) from those floats.
 - **Unresolved** comments: assess `risk` and `impact` per the OWASP recipes in the `severity` skill; set `scope = 1.0` (the comment names code in the PR diff). The coordinator derives the integer `severity` band. Set `verdict: "UNRESOLVED"` and let `recommendation` describe what still needs doing.
 - `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 8.
 
-**Do NOT emit** (coordinator/validator-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `risk`/`impact`/`scope` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
+**Do NOT emit** (coordinator/validator-owned): `overall_severity`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `risk`/`impact`/`scope` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 
 **Optional**: `code_snippets` — when the comment quotes specific source you verified, you may attach it as `[{language, caption, content}]`; never invent one.
 
