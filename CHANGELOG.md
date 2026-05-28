@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-05-28
+
+### Added
+
+- **Reviewer call-tree inspection**: `grumpy-review`, `review-pr`, and `check-pr-comments` now perform a deep transitive in-repo caller walk for every function modified by the diff. Reviewer probes the environment for the deepest analysis tool available (ctags, GNU global, ripgrep, tree-sitter, any installed LSP) and falls back to grep-based caller extraction. Findings emit in new `call_tree` category with `CALL-` ID prefix. Walk is capped at depth 5, 200 callers, 60s per function; reviewer ranks modified functions by risk (public API > private; trait/interface impl > leaf; signature-changed > body-only) and walks the top 10 when a PR touches many.
+- **Ephemeral-ID coding convention** in `skills/coding-best-practices/SKILL.md`: source code, comments, and committed docs MUST NOT reference transient review-finding IDs (e.g. `CMT-001`, `SEC-014`, `RUST-123`, `CALL-005`). Allow-list documented for permanent IDs (`ADR-NNN`, `RFC-NNN`, `CWE-NNN`, `CVE-YYYY-NNNN`, `OWASP-*`, GHSA, GitHub issue/PR refs, `TODO`/`FIXME`, committed test-spec IDs). Enforced two ways: Bilby (write-side, preloads BP) and `grumpy-review`/`review-pr` (review-side, via new `scripts/lint_ephemeral_ids.py`).
+- **Schema**: `schemas/review-report.schema.json` extended with `call_tree` category and `CALL-` ID pattern (additive, no schema version bump).
+- **Regression guards**: `tests/test_skill_frontmatter.py` parses every skill/agent frontmatter via PyYAML; `tests/test_bp_load_audit.py` asserts curated agent set loads `coding-best-practices`.
+
+### Changed
+
+- `coding-best-practices` skill is now loaded by every reviewer/coder agent (`architect-nagatha`, `claudius`, `developer-bilby` (already), `project-reviewer-adams` (already), `qa-engineer-marvin`, `security-engineer-smythe`, `technical-writer-trillian`, `ux-designer-diziet`) via YAML `skills:` frontmatter. Orchestrator skills that spawn coding/reviewing agents now explicitly require spawned agents preload BP (`grumpy-review` §3, `check-pr-comments` §3).
+
+### Fixed
+
+- `skills/release/SKILL.md`: YAML frontmatter `description:` value quoted to fix PyYAML parse error on unquoted colon. `claude plugin validate .` now exits 0 (previously reported this one error).
+
 ## [4.1.7] - 2026-05-27
 
 ### Changed

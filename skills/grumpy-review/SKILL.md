@@ -92,9 +92,10 @@ every review agent prompt MUST include these review-specific elements:
 1. **Comparison base**: How to see what changed (`git show <base>:<file>` or `git diff`)
 2. **Finding format**: Use the severity levels and structure defined below
 3. **Review checklists**: Embed relevant checklist content or rely on the agent's preloaded skills
-4. **UX/DX lens**: instruct agents to assess how findings affect end-user workflows and developer experience, not just code correctness
-5. **CI context**: When MemCan/WebSearch are unavailable (e.g., CI), instruct agents: "Do not use memcan tools or WebSearch/WebFetch."
-6. **File output**: Instruct agents to use the Write tool for creating files — never `cat > file` or heredoc redirections.
+4. **BP preload**: every spawned reviewer agent (`security-engineer-smythe`, `project-reviewer-adams`, `developer-bilby`, `technical-writer-trillian`, etc.) MUST preload `coding-best-practices` so its Cross-Cutting Rules govern every finding — state this explicitly in each spawn prompt.
+5. **UX/DX lens**: instruct agents to assess how findings affect end-user workflows and developer experience, not just code correctness
+6. **CI context**: When MemCan/WebSearch are unavailable (e.g., CI), instruct agents: "Do not use memcan tools or WebSearch/WebFetch."
+7. **File output**: Instruct agents to use the Write tool for creating files — never `cat > file` or heredoc redirections.
 
 ### Finding format (JSON)
 
