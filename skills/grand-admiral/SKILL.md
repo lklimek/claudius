@@ -172,6 +172,8 @@ ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 2. Worktrees then fork cleanly from `origin/<branch>`.
 3. Use this option only when origin is genuinely required (cross-machine work, PR-gated CI, sharing across sessions).
 
+**Team-spawn variant (KNOWN BROKEN — isolation dropped)**: when spawning via `Agent(team_name=..., isolation="worktree")`, the `isolation="worktree"` flag is silently ignored. The agent lands in the lead's CWD (not a worktree); `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. The spawn `prompt` IS delivered and executed on first turn — no kickoff `SendMessage` is required. **Why "spawn solo from within the team" is not an option**: `Agent()` calls issued from a team-lead session that OMIT `team_name` are still auto-joined to the lead's team and lose `isolation` the same way. Omitting `team_name` does not escape the team context — this is an explanatory fact, not an alternative workaround. **The only stable recovery path**: lead manually pre-creates a worktree via `git worktree add .claude/worktrees/agent-<name> -b <branch> <SHA>` BEFORE spawning and includes the absolute path in the spawn prompt; the stream `cd`s into that path on its first turn and works there. Use this single path — do not improvise.
+
 **Why Option A is the default**: minimizes pushes (especially in unattended/auto mode where push approval is friction), keeps work local until ready to share, plays nicely with the global "never push without explicit permission" rule.
 
 **Post-wave:** enumerate worktrees -> verify commits -> cherry-pick/merge into the feature branch -> run tests -> clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work.

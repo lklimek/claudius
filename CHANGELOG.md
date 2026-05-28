@@ -17,6 +17,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 - `tests/test_check_pr_comments_permalink.py`: regression coverage for the producer-side permalink template. Verifies the URL form for single-line (`#L42`) and range (`#L42-L56`) locations, owner/repo split from `metadata.project`, URL-encoding for unsafe path characters, and graceful omission when commit, project, or parseable location is missing.
 
+## [4.1.6] - 2026-05-27
+
+### Changed
+
+- `claudius:ci-dance` Step 2 and `claudius:grand-admiral` § Worktree Isolation: team-spawn quirk write-up now scoped to the one quirk that reproduces on the current harness — `Agent(team_name=..., isolation="worktree")` silently drops `isolation` and the agent lands in the lead's CWD instead of a dedicated worktree. Team-context inheritance is documented as an explanatory fact (`Agent()` calls from a team-lead session that OMIT `team_name` are auto-joined to the lead's team and lose `isolation` the same way — omitting `team_name` does not escape the team context). Single canonical workaround: the lead pre-creates one worktree per stream with `git worktree add .claude/worktrees/agent-<name> -b <branch> <SHA>` BEFORE spawning and includes the absolute path in each spawn `prompt`; each stream `cd`s into its assigned path on its first turn. The "spawn solo from within the team" alternative is no longer offered — team-context inheritance is why pre-create is the only stable path.
+
+### Retracted
+
+- Prior 4.1.3 assertion that `Agent(team_name=..., prompt=...)` silently ignores `prompt` (and that the lead must follow each spawn with a `SendMessage` kickoff to avoid deadlock) is **not reproducible** on the current Claude Code harness. Empirical re-validation: team-spawned agents receive their `prompt` and execute it on the first turn. The "kickoff" framing has been removed from both skills.
+
 ## [4.1.5] - 2026-05-27
 
 ### Fixed
