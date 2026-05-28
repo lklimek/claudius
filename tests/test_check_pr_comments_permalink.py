@@ -39,28 +39,32 @@ def _producer_permalink(
     owner, _, repo = project.partition("/")
     if not owner or not repo:
         return None
-    # Parse location: "path", "path:line", or "path:start-end".
-    if ":" in location:
-        path, _, lines = location.rpartition(":")
-        if "-" in lines:
-            start, _, end = lines.partition("-")
-        else:
-            start, end = lines, ""
+    # Parse location: "path:line" or "path:start-end". Path-only is rejected
+    # to match the coordinator (`consolidate_reports.parse_location`).
+    if ":" not in location:
+        return None
+    path, _, lines = location.rpartition(":")
+    if "-" in lines:
+        start, _, end = lines.partition("-")
+        # Both ends MUST be integers when `-` is present; reject malformed
+        # forms like "file:1-" or "file:-2" that the coordinator regex rejects.
+        if not start or not end:
+            return None
         try:
             start_n = int(start)
-            end_n = int(end) if end else None
+            end_n = int(end)
         except ValueError:
             return None
     else:
-        path = location
-        start_n = None
+        try:
+            start_n = int(lines)
+        except ValueError:
+            return None
         end_n = None
     if not path:
         return None
     safe_path = _url_quote(path, safe="/")
-    if start_n is None:
-        anchor = ""
-    elif end_n is None or end_n == start_n:
+    if end_n is None or end_n == start_n:
         anchor = f"#L{start_n}"
     else:
         anchor = f"#L{start_n}-L{end_n}"
@@ -131,6 +135,20 @@ class TestMissingInputs:
     def test_unparseable_line_number(self):
         assert _producer_permalink("octo/widgets", SHA, "f.rs:notanumber") is None
 
+    def test_path_only_returns_none(self):
+        # Path-only locations have no `:line` suffix. Coordinator regex rejects
+        # them; producer template MUST match.
+        assert _producer_permalink("octo/widgets", SHA, "src/file.rs") is None
+
+    def test_malformed_range_missing_end(self):
+        # "file.rs:1-" has `-` but no end digit. Coordinator rejects; producer
+        # MUST match — emitting `#L1` here would silently drift from coordinator.
+        assert _producer_permalink("octo/widgets", SHA, "src/file.rs:1-") is None
+
+    def test_malformed_range_missing_start(self):
+        # "file.rs:-2" has `-` but no start digit. Same rule.
+        assert _producer_permalink("octo/widgets", SHA, "src/file.rs:-2") is None
+
 
 # ---------------------------------------------------------------------------
 # URL-encoding for unsafe path characters
@@ -195,4 +213,19 @@ class TestProducerCoordinatorParity:
         assert _producer_permalink("octo/widgets", "", "src/x.rs:1") is None
         assert cr._build_permalink(
             {"owner": "octo", "repo": "widgets"}, "", "src/x.rs:1"
+        ) is None
+
+    def test_path_only_both_return_none(self):
+        # Path-only: producer rejects (per tightened contract), coordinator
+        # rejects (regex requires `:line` suffix).
+        assert _producer_permalink("octo/widgets", SHA, "src/x.rs") is None
+        assert cr._build_permalink(
+            {"owner": "octo", "repo": "widgets"}, SHA, "src/x.rs"
+        ) is None
+
+    def test_malformed_range_both_return_none(self):
+        # "file.rs:1-" rejected by both sides.
+        assert _producer_permalink("octo/widgets", SHA, "src/x.rs:1-") is None
+        assert cr._build_permalink(
+            {"owner": "octo", "repo": "widgets"}, SHA, "src/x.rs:1-"
         ) is None

@@ -147,7 +147,7 @@ Bad (quotes / markup / prefix / truncation):
 
 #### `location_permalink` — rules
 
-**Producers MUST emit `location_permalink` whenever `metadata.project`, `metadata.commit`, and a parseable `location` (`path` or `path:line` or `path:start-end`) are all present.** This is the field the renderer turns into a clickable link; standalone reports never see the coordinator's derive pass, so the producer is the only place that always knows the commit.
+**Producers MUST emit `location_permalink` whenever `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present.** This is the field the renderer turns into a clickable link; standalone reports never see the coordinator's derive pass, so the producer is the only place that always knows the commit. Path-only locations (no `:line`) MUST NOT carry a `location_permalink` — the coordinator's `_build_permalink` rejects them too, so emitting one would break producer/coordinator parity.
 
 URL template:
 
@@ -157,11 +157,10 @@ https://github.com/{owner}/{repo}/blob/{commit}/{path}{anchor}
 
 - `{owner}/{repo}`: split `metadata.project` on `/` (it's already in `<owner>/<repo>` form).
 - `{commit}`: full 40-char SHA from `metadata.commit`.
-- `{path}`: the file path from `location` (left of the first `:`). URL-encode spaces, `#`, `?`, and any non-ASCII characters.
+- `{path}`: the file path from `location` — split off the trailing `:line` or `:start-end` suffix; the remainder is the path. (This matches the coordinator's `parse_location` regex, which anchors at end of string. Splitting at the first `:` would break paths that contain `:`.) URL-encode spaces, `#`, `?`, and any non-ASCII characters.
 - `{anchor}`:
   - `#L{line}` when `location` ends in `:{line}` (single line)
   - `#L{start}-L{end}` when `location` ends in `:{start}-{end}` (range)
-  - omit the anchor entirely when `location` carries no line info
 
 Examples:
 
@@ -170,7 +169,7 @@ Examples:
 - `location: "packages/wallet/src/transfer.rs:414-420"` →
   `…/blob/<sha>/packages/wallet/src/transfer.rs#L414-L420`
 
-Omit `location_permalink` (do NOT emit an empty string) when commit or project is missing or when `location` can't be parsed into a path.
+Omit `location_permalink` (do NOT emit an empty string) when commit or project is missing, when `location` lacks a `:line` or `:start-end` suffix, or when the line suffix isn't a valid integer (or a valid integer-integer range).
 
 - **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (the comment is satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done. The coordinator will derive `severity = 1` (INFO) from those floats.
 - **Unresolved** comments: assess `risk` and `impact` per the OWASP recipes in the `severity` skill; set `scope = 1.0` (the comment names code in the PR diff). The coordinator derives the integer `severity` band. Set `verdict: "UNRESOLVED"` and let `recommendation` describe what still needs doing.
