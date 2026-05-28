@@ -3,7 +3,7 @@ name: review-pr
 description: Use to review a PR for code quality, security, and correctness.
 agent: claudius
 context: fork
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage, mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_review_write, mcp__plugin_claudius_github__add_comment_to_pending_review
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gh search code*), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage, mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_review_write, mcp__plugin_claudius_github__add_comment_to_pending_review
 ---
 
 # PR Audit Workflow
@@ -35,6 +35,8 @@ Invoke the `/claudius:grumpy-review` skill with the PR scope as the argument. It
 - Consolidated, deduplicated report generation
 
 Pass the PR's scope (changed files, base branch) as context to the review methodology.
+
+The grumpy-review delegation also covers the deep transitive call-tree walk (`category: "call_tree"`, `CALL-` prefix; see [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md)) and the ephemeral-ID lint step — both are inherited automatically by invoking `/claudius:grumpy-review`. After the review completes, run `git diff $BASE...HEAD | python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --diff` against the PR diff and fold any genuine `code_quality` hits into the audit before posting.
 
 ## 3. Pass C — Promise Verification
 

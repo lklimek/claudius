@@ -4,7 +4,7 @@ description: "Parallel-agent code review for quality, security, dependencies, an
 agent: claudius
 context: fork
 model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gh search code*), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology
@@ -148,6 +148,24 @@ final IDs.
 
 **Tags**: classification references — OWASP (`A01`–`A10`), CWE, language best-practice IDs, etc.
 Tag ALL security findings with OWASP categories. Non-security findings may omit tags.
+
+### Call-tree inspection
+
+When the diff modifies or removes any function/method declaration, every code-quality reviewer agent MUST run a deep transitive in-repo caller walk before emitting findings. Methodology lives in [references/call-tree-walk.md](references/call-tree-walk.md) — read it once per review and follow the steps.
+
+Finding shape: `category: "call_tree"`, ID prefix `CALL-` (coordinator-assigned). The producer emits a provisional `CALL-NNN`. Every `call_tree` finding's `description` MUST start with a `Walked via: <tool>` line so the reader can judge walk depth and tool quality.
+
+Skip the walk for pure additions, doc-only PRs, and changes confined to test files.
+
+### Ephemeral-ID lint
+
+After each agent emits findings, run the dumb ephemeral-ID lint against the diff:
+
+```bash
+git diff $BASE_BRANCH...HEAD | python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --diff
+```
+
+For each hit, judge whether the surrounding context is a genuine violation or a quoted/escaped example (e.g. a code fence inside a skill file demonstrating the rule, a test fixture asserting the rule, or this lint's own docstring). Dismiss in-skill examples; promote genuine violations to `code_quality` findings with `tags: ["ephemeral-id-reference"]` and ID prefix `CODE-` (coordinator-assigned). The lint always exits 0 — judgement is yours.
 
 ## 4. Spawn Agents
 
