@@ -82,6 +82,15 @@ Then spawn each stream as a named agent with `team_name: "ci-dance"` and `isolat
 - `grumpy-stream`
 - `review-stream`
 
+### Team-spawn worktree quirk
+
+See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary for ci-dance:
+
+- **`isolation="worktree"` silently dropped for team-spawned agents.** `Agent(team_name=..., isolation="worktree")` lands the agent in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
+- **Team context inheritance** — explanatory note, NOT a recovery path. `Agent()` calls issued from within a team-lead session that OMIT `team_name` are auto-joined to the lead's team and lose `isolation` the same way. Omitting `team_name` does not escape the team context, which is why the lead cannot rely on an in-session "spawn solo" trick — the worktree must be pre-created externally.
+
+**Workaround (single canonical path)**: the lead pre-creates one worktree per stream via `git worktree add .claude/worktrees/agent-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and includes the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s into its assigned path on its first turn and works there. This is the stable path; do not attempt other workarounds.
+
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
 **Isolation**: Each stream runs in its own **git worktree** (`isolation: "worktree"`). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
