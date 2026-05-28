@@ -94,6 +94,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "security": "Security",
     "project": "Project",
     "code_quality": "Code Quality",
+    "call_tree": "Call-Tree Inspection",
     "documentation": "Documentation",
     "dependencies": "Dependencies",
     "pr_comments": "PR Comments",
@@ -552,10 +553,11 @@ def render_markdown(data: dict[str, Any]) -> str:
         "security": "Part I: Security Findings",
         "project": "Part II: Project Consistency",
         "code_quality": "Part III: Code Quality & Language Best Practices",
-        "dependencies": "Part IV: Dependencies",
-        "documentation": "Part V: Documentation",
-        "pr_comments": "Part VI: PR Comment Verification",
-        "pr_promises": "Part VII: PR Promise Verification",
+        "call_tree": "Part IV: Call-Tree Inspection",
+        "dependencies": "Part V: Dependencies",
+        "documentation": "Part VI: Documentation",
+        "pr_comments": "Part VII: PR Comment Verification",
+        "pr_promises": "Part VIII: PR Promise Verification",
     }
     for section in data.get("findings", []):
         cat = section.get("category", "")
@@ -921,6 +923,7 @@ details summary:hover{color:{{ ACCENT }}}
     <option value="security">Security</option>
     <option value="project">Project</option>
     <option value="code_quality">Code Quality</option>
+    <option value="call_tree">Call-Tree Inspection</option>
     <option value="documentation">Documentation</option>
     <option value="dependencies">Dependencies</option>
     <option value="pr_comments">PR Comments</option>
@@ -1222,7 +1225,8 @@ details summary:hover{color:{{ ACCENT }}}
   const sevLabels = {5:"CRITICAL",4:"HIGH",3:"MEDIUM",2:"LOW",1:"INFO"};
   const sevColors = {{ sev_colors_json }};
   const catLabels = {"security":"Security","project":"Project Consistency",
-    "code_quality":"Code Quality","documentation":"Documentation",
+    "code_quality":"Code Quality","call_tree":"Call-Tree Inspection",
+    "documentation":"Documentation",
     "dependencies":"Dependencies","pr_comments":"PR Comments",
     "pr_promises":"PR Promises"};
 
@@ -1872,6 +1876,7 @@ def render_triage(data: dict[str, Any]) -> str:
     <option value="security">Security</option>
     <option value="project">Project</option>
     <option value="code_quality">Code Quality</option>
+    <option value="call_tree">Call-Tree Inspection</option>
     <option value="documentation">Documentation</option>
     <option value="dependencies">Dependencies</option>
     <option value="pr_comments">PR Comments</option>

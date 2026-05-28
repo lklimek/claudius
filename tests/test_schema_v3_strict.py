@@ -104,6 +104,93 @@ class TestProducerShapeAccepted:
         ), "Expected schema to reject finding missing required `description`"
 
 
+class TestCallTreeCategory:
+    """Stream A — the call_tree category and CALL- ID prefix must validate
+    end-to-end; unknown prefixes must still be rejected."""
+
+    def test_call_tree_fixture_passes_schema(self):
+        data = json.loads((FIXTURES / "v3-call-tree.json").read_text())
+        errors = list(VALIDATOR.iter_errors(data))
+        assert errors == [], [e.message for e in errors]
+
+    def test_call_prefix_finding_validates(self):
+        """A standalone finding with id=CALL-001 and category=call_tree
+        must pass the v3 schema."""
+        report = {
+            "schema_version": "3.0.0",
+            "metadata": {"project": "p", "date": "2026-05-28"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "summary_statistics": {
+                "total_findings": 1,
+                "severity_counts": {
+                    "CRITICAL": 0,
+                    "HIGH": 0,
+                    "MEDIUM": 1,
+                    "LOW": 0,
+                    "INFO": 0,
+                },
+            },
+            "findings": [
+                {
+                    "title": "Call-Tree Inspection",
+                    "category": "call_tree",
+                    "findings": [
+                        {
+                            "id": "CALL-001",
+                            "risk": 0.5,
+                            "impact": 0.5,
+                            "scope": 1.0,
+                            "title": "Walked call chain hides an unbounded loop",
+                            "location": "src/walker.rs:42-58",
+                            "description": "Following foo -> bar -> baz, baz spins forever on attacker input.",
+                            "recommendation": "Add an iteration bound and surface it through the public API.",
+                        }
+                    ],
+                }
+            ],
+        }
+        errors = list(VALIDATOR.iter_errors(report))
+        assert errors == [], [e.message for e in errors]
+
+    def test_unknown_id_prefix_is_rejected(self):
+        """An id with a prefix not in the schema's alternation must fail."""
+        report = {
+            "schema_version": "3.0.0",
+            "metadata": {"project": "p", "date": "2026-05-28"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "summary_statistics": {
+                "total_findings": 1,
+                "severity_counts": {
+                    "CRITICAL": 0,
+                    "HIGH": 0,
+                    "MEDIUM": 1,
+                    "LOW": 0,
+                    "INFO": 0,
+                },
+            },
+            "findings": [
+                {
+                    "title": "Security Findings",
+                    "category": "security",
+                    "findings": [
+                        {
+                            "id": "XYZ-001",
+                            "risk": 0.5,
+                            "impact": 0.5,
+                            "scope": 1.0,
+                            "title": "Bogus prefix",
+                            "location": "src/x.rs:1",
+                            "description": "d",
+                            "recommendation": "r",
+                        }
+                    ],
+                }
+            ],
+        }
+        errors = list(VALIDATOR.iter_errors(report))
+        assert errors, "Expected schema to reject finding with unknown id prefix XYZ-"
+
+
 class TestV2Legacy:
     def test_rejected(self):
         data = json.loads((LEGACY_FIXTURES / "v2-legacy.json").read_text())

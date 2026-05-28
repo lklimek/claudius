@@ -18,7 +18,7 @@ Agents emit a JSON array of `finding_section` objects:
 [
   {
     "title": "Section Title",
-    "category": "security|project|code_quality|dependencies|documentation|pr_comments|pr_promises",
+    "category": "security|project|code_quality|call_tree|dependencies|documentation|pr_comments|pr_promises",
     "findings": [
       {
         "id": "PREFIX-001",
@@ -106,6 +106,7 @@ When writing findings to a file, ALWAYS use the Write tool — never use Bash co
 | `CMT-` | pr_comments | check-pr-comments |
 | `PPM-` | pr_promises | review-pr (Pass C: promise verification) |
 | `DEP-` | dependencies | review-dependency |
+| `CALL-` | call_tree | reviewer call-tree inspection pass |
 
 IDs are provisional -- the consolidation step deduplicates and reassigns final IDs.
 
