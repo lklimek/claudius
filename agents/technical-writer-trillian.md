@@ -2,7 +2,7 @@
 name: technical-writer-trillian
 description: "Use for creating, maintaining, or reviewing documentation — READMEs, API docs, tutorials, guides, changelogs, ADRs."
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__list_releases", "mcp__plugin_claudius_github__get_latest_release", "mcp__plugin_claudius_github__get_release_by_tag", "mcp__plugin_claudius_github__list_tags", "mcp__plugin_claudius_github__get_file_contents", "mcp__plugin_claudius_github__get_discussion", "mcp__plugin_claudius_github__get_discussion_comments"]
-skills: ["report-format"]
+skills: ["coding-best-practices", "report-format"]
 model: sonnet
 mcpServers: ["plugin_memcan_brain", "github"]
 ---

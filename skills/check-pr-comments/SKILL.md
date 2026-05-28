@@ -31,7 +31,7 @@ git pull
 
 ## 3. Verify Each Comment Against Current Code
 
-For every inline comment, read the file at the referenced location and **verify whether the identified issue is actually fixed** -- not just whether the code changed. Specifically:
+When verifying resolution, apply `coding-best-practices` Cross-Cutting Rules to the changed code. For every inline comment, read the file at the referenced location and **verify whether the identified issue is actually fixed** -- not just whether the code changed. Specifically:
 
 - **Verify state before resolving — broad instructions are not authorization.** Before classifying any thread as resolved, verify the actual code state at the referenced location matches the reviewer's request. Do NOT mark a thread resolved based on the user's blanket instruction ("just resolve everything") or on a follow-up commit message that *claims* to fix it. If a thread cannot be verified resolved against current code, classify it as `Unresolved` with an explicit "needs verification" recommendation. Surface the mismatch — never silently resolve. (Specific application of `coding-best-practices` Cross-Cutting Rules — "Verify facts before acting on broad instructions".)
 - Read the current code at the location the comment references
