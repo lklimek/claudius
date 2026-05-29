@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-05-29
+
+### Changed
+
+- PR bodies now lead with a "Why this PR exists" rationale section (problem, reproduction/threat scenario, blocking relationship) before What/Testing/Breaking/Checklist. The skeleton lives in `skills/git-and-github/SKILL.md` (§Creating a PR); `skills/push/SKILL.md` delegates to it. Pinned by `tests/test_pr_body_template.py`.
+
 ## [4.2.0] - 2026-05-28
 
 ### Added
