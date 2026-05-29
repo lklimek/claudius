@@ -131,5 +131,55 @@ if dupes:
   echo ""
 done
 
+# === producer-shape (check-pr-comments) report ===
+# Floats, no integer severity, all-zero severity_counts. Must validate, then
+# render with NON-zero counts (renderer derives severity + recomputes stats).
+echo "=== producer-shape ==="
+PRODUCER="$TMPDIR/producer.json"
+cat > "$PRODUCER" << 'JSON'
+{
+  "schema_version": "3.1.0",
+  "metadata": {"project": "p", "date": "2026-05-29", "report_type": "comment_check"},
+  "executive_summary": {"overall_assessment": "ok"},
+  "summary_statistics": {
+    "total_findings": 1,
+    "severity_counts": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+  },
+  "findings": [
+    {
+      "title": "PR Comments",
+      "category": "pr_comments",
+      "findings": [
+        {
+          "id": "CMT-001",
+          "risk": 0.8,
+          "impact": 0.8,
+          "scope": 1.0,
+          "author_type": "bot",
+          "title": "Unresolved review comment",
+          "location": "src/x.py:1",
+          "description": "d",
+          "recommendation": "r"
+        }
+      ]
+    }
+  ]
+}
+JSON
+
+if python3 "$REPO_ROOT/scripts/validate_report.py" "$PRODUCER" >/dev/null 2>&1; then
+  ok "producer-shape schema validation"
+else
+  fail "producer-shape schema validation"
+fi
+
+if python3 "$REPO_ROOT/scripts/generate_review_report.py" "$PRODUCER" --format md -o - 2>/dev/null \
+    | grep -qE '^\| HIGH .*\| 1 \|$'; then
+  ok "producer-shape renders non-zero HIGH count"
+else
+  fail "producer-shape renders non-zero HIGH count"
+fi
+echo ""
+
 echo "=== Results: $pass passed, $fail failed ==="
 [ "$fail" -eq 0 ]

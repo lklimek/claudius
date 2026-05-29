@@ -943,7 +943,10 @@ class TestCmdAssemble:
         assert rc == 0
         assert output.exists()
         report = json.loads(output.read_text())
-        assert report["schema_version"] == "3.0.0"
+        # The coordinator stamps the current schema version (read from the
+        # schema file), which advanced to 3.1.0 — assert against that, not a
+        # frozen literal, so the test tracks the schema rather than rotting.
+        assert report["schema_version"] == cr.SCHEMA_VERSION
         assert report["summary_statistics"]["total_findings"] == 1
 
     def test_missing_input_returns_2(self, tmp_path):

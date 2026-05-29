@@ -44,6 +44,8 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
+from severity_util import build_severity_stats, derive_finding_severity
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
@@ -118,6 +120,65 @@ def sev_label(value: int | str | None) -> str:
     if isinstance(value, str):
         return value
     return "INFO"
+
+
+# ===================================================================
+# On-the-fly severity normalization
+# ===================================================================
+# Producer-shape reports (e.g. check-pr-comments) emit risk/impact/scope floats
+# but never the coordinator-derived integer ``severity`` nor real
+# ``severity_counts``. Without these, findings render INFO and the summary
+# table / charts read all-zero. These helpers derive the missing values from
+# the floats at render time so a standalone producer report displays correctly.
+
+
+def _normalize_finding_severities(data: dict[str, Any]) -> None:
+    """Fill in a finding's integer ``severity`` from risk/impact/scope in-place.
+
+    Only touches findings that lack a valid integer ``severity`` but carry all
+    three OWASP floats; everything else is left untouched.
+    """
+    for section in data.get("findings", []):
+        for f in section.get("findings", []):
+            sev = f.get("severity")
+            if isinstance(sev, int) and not isinstance(sev, bool) and 1 <= sev <= 5:
+                continue
+            derived = derive_finding_severity(f)
+            if derived is not None:
+                f["severity"] = derived
+
+
+def _counts_all_zero(counts: dict[str, Any] | None) -> bool:
+    """True when severity_counts is absent, empty, or every band is zero."""
+    if not counts:
+        return True
+    return all(not v for v in counts.values())
+
+
+def _normalize_summary_statistics(data: dict[str, Any]) -> None:
+    """Recompute severity_counts + severity_category_matrix in-place when absent.
+
+    Triggers only when the existing ``severity_counts`` is missing or all-zero
+    and at least one finding carries a derivable severity, so a hand-supplied
+    statistics block is never overwritten.
+    """
+    stats = data.get("summary_statistics")
+    if not isinstance(stats, dict):
+        return
+    if not _counts_all_zero(stats.get("severity_counts")):
+        return
+    sections = data.get("findings", [])
+    rebuilt = build_severity_stats(sections)
+    if rebuilt["total_findings"] == 0:
+        return
+    stats["severity_counts"] = rebuilt["severity_counts"]
+    stats["severity_category_matrix"] = rebuilt["severity_category_matrix"]
+
+
+def _normalize_report(data: dict[str, Any]) -> None:
+    """Run both severity-normalization passes; safe to call from every renderer."""
+    _normalize_finding_severities(data)
+    _normalize_summary_statistics(data)
 
 
 # ===================================================================
@@ -470,6 +531,7 @@ def render_markdown_to_reportlab(s: str) -> list[tuple[str, str]]:
 # ===================================================================
 def render_markdown(data: dict[str, Any]) -> str:
     """Render the report as a Markdown string."""
+    _normalize_report(data)
     meta = _meta(data)
     es = data.get("executive_summary", {})
     stats = data.get("summary_statistics", {})
@@ -1644,6 +1706,7 @@ def _build_html_context(
     """
     import copy as _copy
 
+    _normalize_report(data)
     meta = _meta(data)
     stats = data.get("summary_statistics", {})
 
@@ -2152,6 +2215,8 @@ def _configure_matplotlib_font(matplotlib: Any) -> None:
 
 def render_pdf(data: dict[str, Any], output_path: Path) -> None:
     """Render the report as a PDF using reportlab and matplotlib."""
+    _normalize_report(data)
+
     import io
 
     import matplotlib

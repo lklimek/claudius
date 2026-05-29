@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-05-29
+
+### Added
+
+- Schema 3.1.0 (additive over 3.0.0; both validate): `metadata.report_type: pr_audit`, optional finding `author_type` (`bot`/`human`), optional `finding_section.verdict` (`PASS`/`FAIL`/`NEEDS_REVIEW`).
+- Shared `scripts/severity_util.py` — single source of truth for the OWASP severity band table, per-finding severity derivation, and the summary-statistics / category-matrix builder, imported by both the coordinator (`consolidate_reports.py`) and the renderer (`generate_review_report.py`).
+
+### Fixed
+
+- check-pr-comments findings rendered INFO with zero severity counts — the renderer now derives per-finding severity from `risk`/`impact`/`scope` and recomputes summary statistics on-the-fly when absent or all-zero, so standalone producer reports show real severities and counts across Markdown / HTML / triage / PDF. A non-zero supplied `severity_counts` is never overwritten.
+- Permalink commit now derives from `git rev-parse @{u}` (falling back to local `HEAD` only when the branch has no upstream) in `check-pr-comments`, `report-format`, and `grumpy-review`, so generated permalinks resolve on GitHub instead of 404-ing on an unpushed HEAD.
+
 ## [4.2.0] - 2026-05-28
 
 ### Added

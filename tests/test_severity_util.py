@@ -11,29 +11,30 @@ import severity_util as su
 
 
 # ---------------------------------------------------------------------------
-# derive_finding_severity — band boundaries (mirrors test_severity_derivation)
+# derive_finding_severity — band mapping. Boundary exactness is covered by
+# TestPrimitives below against derive_severity_int directly (driving through the
+# float mean would re-introduce IEEE-754 rounding at the band edges, e.g.
+# (0.7+0.7+0.7)/3 = 0.6999…). Here we just confirm the float trio maps to the
+# expected band well inside each range.
 # ---------------------------------------------------------------------------
 class TestDeriveFindingSeverity:
     @pytest.mark.parametrize(
-        "overall,expected",
+        "value,expected",
         [
-            (1.0, 5),
-            (0.95, 5),
-            (0.9, 5),
-            (0.89, 4),
-            (0.7, 4),
-            (0.69, 3),
-            (0.4, 3),
-            (0.39, 2),
-            (0.1, 2),
-            (0.09, 1),
-            (0.0, 1),
+            (0.95, 5),  # CRITICAL
+            (0.8, 4),  # HIGH
+            (0.5, 3),  # MEDIUM
+            (0.2, 2),  # LOW
+            (0.05, 1),  # INFO
         ],
     )
-    def test_band_boundaries(self, overall, expected):
-        # Drive a uniform finding whose mean equals `overall`.
-        f = {"risk": overall, "impact": overall, "scope": overall}
+    def test_band_mapping(self, value, expected):
+        f = {"risk": value, "impact": value, "scope": value}
         assert su.derive_finding_severity(f) == expected
+
+    def test_mixed_dimensions_use_mean(self):
+        # mean of 1.0/0.7/1.0 = 0.9 -> CRITICAL band.
+        assert su.derive_finding_severity({"risk": 1.0, "impact": 0.7, "scope": 1.0}) == 5
 
     @pytest.mark.parametrize("missing", ["risk", "impact", "scope"])
     def test_any_missing_returns_none(self, missing):
@@ -61,7 +62,18 @@ class TestPrimitives:
 
     @pytest.mark.parametrize(
         "overall,expected",
-        [(1.0, 5), (0.7, 4), (0.4, 3), (0.1, 2), (0.0, 1)],
+        [
+            (1.0, 5),
+            (0.9, 5),
+            (0.89, 4),
+            (0.7, 4),
+            (0.69, 3),
+            (0.4, 3),
+            (0.39, 2),
+            (0.1, 2),
+            (0.09, 1),
+            (0.0, 1),
+        ],
     )
     def test_derive_severity_int_bands(self, overall, expected):
         assert su.derive_severity_int(overall) == expected
