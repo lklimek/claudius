@@ -40,7 +40,6 @@ from urllib.parse import quote as _url_quote
 from severity_util import (
     SEV_LABELS,
     SEV_ORDER,
-    build_severity_stats,
     derive_overall,
     derive_severity_int,
 )
