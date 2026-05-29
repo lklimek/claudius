@@ -9,7 +9,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["3.0.0"],
+      "enum": ["3.0.0", "3.1.0"],
       "description": "Schema version (SemVer). Renderers check this for compatibility."
     },
     "metadata": {
@@ -43,7 +43,7 @@
         },
         "report_type": {
           "type": "string",
-          "enum": ["code_review", "comment_check"],
+          "enum": ["code_review", "comment_check", "pr_audit"],
           "description": "Type of report. Defaults to code_review if omitted."
         },
         "pr_number": {
@@ -212,7 +212,7 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 5,
-      "description": "Numeric severity: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO. Coordinator-derived from overall_severity via the OWASP band table."
+      "description": "Numeric severity: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO. Coordinator-derived from overall_severity via the OWASP band table. Optional on producer/standalone reports; renderers derive it on-the-fly from risk/impact/scope when absent."
     },
     "severity_float": {
       "type": "number",
@@ -235,6 +235,11 @@
         "impact": { "$ref": "#/$defs/severity_float", "description": "OWASP Impact normalized to [0,1]." },
         "scope": { "$ref": "#/$defs/severity_float", "description": "PR relevance: 1.0 in-diff, 0.5 indirectly affected, 0.0 pre-existing/unrelated." },
         "overall_severity": { "$ref": "#/$defs/severity_float", "description": "Coordinator-computed mean of risk, impact, scope." },
+        "author_type": {
+          "type": "string",
+          "enum": ["bot", "human"],
+          "description": "Comment author classification (check-pr-comments)."
+        },
         "title": { "type": "string", "minLength": 1 },
         "tags": {
           "type": "array",
@@ -299,7 +304,12 @@
           "type": "array",
           "items": { "$ref": "#/$defs/finding" }
         },
-        "positives": { "type": "string", "description": "Positive observations for this section" }
+        "positives": { "type": "string", "description": "Positive observations for this section" },
+        "verdict": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "NEEDS_REVIEW"],
+          "description": "Section-level audit verdict (review-pr Pass C)."
+        }
       }
     },
     "triage_decision": {

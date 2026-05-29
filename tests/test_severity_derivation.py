@@ -59,3 +59,14 @@ class TestDeriveSeverityInt:
     )
     def test_band_boundaries(self, overall, expected):
         assert cr._derive_severity_int(overall) == expected
+
+
+# ---------------------------------------------------------------------------
+# Re-export parity — the legacy private names must be the severity_util helpers.
+# ---------------------------------------------------------------------------
+class TestReExportParity:
+    def test_aliases_are_severity_util_functions(self):
+        import severity_util as su
+
+        assert cr._derive_overall is su.derive_overall
+        assert cr._derive_severity_int is su.derive_severity_int

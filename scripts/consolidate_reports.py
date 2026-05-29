@@ -37,6 +37,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote as _url_quote
 
+from severity_util import (
+    SEV_LABELS,
+    SEV_ORDER,
+    build_severity_stats,
+    derive_overall,
+    derive_severity_int,
+)
+
 try:
     import jsonschema
 
@@ -55,15 +63,6 @@ log = logging.getLogger(__name__)
 SCHEMA_PATH = (
     Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
 )
-
-SEV_LABELS: dict[int, str] = {
-    5: "CRITICAL",
-    4: "HIGH",
-    3: "MEDIUM",
-    2: "LOW",
-    1: "INFO",
-}
-SEV_ORDER: list[str] = list(SEV_LABELS.values())  # CRITICAL, HIGH, ... INFO
 
 CATEGORY_PREFIX: dict[str, str] = {
     "security": "SEC-",
@@ -134,6 +133,9 @@ def _read_schema_version() -> str:
 
 
 SCHEMA_VERSION = _read_schema_version()
+
+# Both the current minor and its predecessor validate (additive 3.0 -> 3.1).
+ACCEPTED_SCHEMA_VERSIONS = {"3.0.0", "3.1.0"}
 
 
 # ---------------------------------------------------------------------------
@@ -243,34 +245,11 @@ def _build_permalink(
 
 
 # ---------------------------------------------------------------------------
-# OWASP severity derivation
+# OWASP severity derivation (shared with the renderer via severity_util)
 # ---------------------------------------------------------------------------
-def _derive_overall(finding: dict[str, Any]) -> float | None:
-    """Arithmetic mean of risk + impact + scope when all three are numeric floats."""
-    dims = []
-    for key in ("risk", "impact", "scope"):
-        value = finding.get(key)
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
-            return None
-        dims.append(float(value))
-    return sum(dims) / 3.0
-
-
-# Band table mirrors the plan §Standard adopted.
-_SEVERITY_BANDS: list[tuple[float, int]] = [
-    (0.9, 5),
-    (0.7, 4),
-    (0.4, 3),
-    (0.1, 2),
-]
-
-
-def _derive_severity_int(overall: float) -> int:
-    """Map an overall_severity float to the 1..5 integer severity band."""
-    for threshold, level in _SEVERITY_BANDS:
-        if overall >= threshold:
-            return level
-    return 1
+# Re-exported under the legacy private names the test-suite imports.
+_derive_overall = derive_overall
+_derive_severity_int = derive_severity_int
 
 
 # ---------------------------------------------------------------------------
@@ -720,15 +699,19 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         # hard cutover: v1/v2 must be rejected with a pointer at the schema.
         if isinstance(data, dict):
             declared = data.get("schema_version")
-            if isinstance(declared, str) and declared and declared != SCHEMA_VERSION:
+            if (
+                isinstance(declared, str)
+                and declared
+                and declared not in ACCEPTED_SCHEMA_VERSIONS
+            ):
                 log.error(
-                    "Input %s declares schema_version=%r; only %r is accepted. "
+                    "Input %s declares schema_version=%r; only %s are accepted. "
                     "v1/v2 reports are no longer supported — re-run the "
                     "producer against the current commit to regenerate. See "
                     "schemas/review-report.schema.json v%s.",
                     path_str,
                     declared,
-                    SCHEMA_VERSION,
+                    sorted(ACCEPTED_SCHEMA_VERSIONS),
                     SCHEMA_VERSION,
                 )
                 return 2

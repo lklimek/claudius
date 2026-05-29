@@ -191,6 +191,89 @@ class TestCallTreeCategory:
         assert errors, "Expected schema to reject finding with unknown id prefix XYZ-"
 
 
+class TestV31AdditiveFields:
+    """Schema 3.1.0 additive bits: pr_audit report_type, finding author_type,
+    finding_section verdict. All optional; absence still validates and the
+    'severity not required' producer contract stays green."""
+
+    def _base(self) -> dict:
+        return {
+            "schema_version": "3.1.0",
+            "metadata": {"project": "p", "date": "2026-05-29"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "summary_statistics": {
+                "total_findings": 1,
+                "severity_counts": {
+                    "CRITICAL": 0,
+                    "HIGH": 0,
+                    "MEDIUM": 0,
+                    "LOW": 1,
+                    "INFO": 0,
+                },
+            },
+            "findings": [
+                {
+                    "title": "PR Comments",
+                    "category": "pr_comments",
+                    "findings": [
+                        {
+                            "id": "CMT-001",
+                            "risk": 0.4,
+                            "impact": 0.4,
+                            "scope": 1.0,
+                            "title": "t",
+                            "location": "src/x.py:1",
+                            "description": "d",
+                            "recommendation": "r",
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_schema_version_3_1_0_validates(self):
+        errors = list(VALIDATOR.iter_errors(self._base()))
+        assert errors == [], [e.message for e in errors]
+
+    def test_report_type_pr_audit_validates(self):
+        data = self._base()
+        data["metadata"]["report_type"] = "pr_audit"
+        errors = list(VALIDATOR.iter_errors(data))
+        assert errors == [], [e.message for e in errors]
+
+    def test_author_type_bot_and_human_validate(self):
+        for value in ("bot", "human"):
+            data = self._base()
+            data["findings"][0]["findings"][0]["author_type"] = value
+            errors = list(VALIDATOR.iter_errors(data))
+            assert errors == [], (value, [e.message for e in errors])
+
+    def test_author_type_invalid_rejected(self):
+        data = self._base()
+        data["findings"][0]["findings"][0]["author_type"] = "robot"
+        assert list(VALIDATOR.iter_errors(data)), "invalid author_type must fail"
+
+    def test_finding_section_verdict_values_validate(self):
+        for value in ("PASS", "FAIL", "NEEDS_REVIEW"):
+            data = self._base()
+            data["findings"][0]["verdict"] = value
+            errors = list(VALIDATOR.iter_errors(data))
+            assert errors == [], (value, [e.message for e in errors])
+
+    def test_finding_section_verdict_invalid_rejected(self):
+        data = self._base()
+        data["findings"][0]["verdict"] = "MAYBE"
+        assert list(VALIDATOR.iter_errors(data)), "invalid section verdict must fail"
+
+    def test_severity_still_not_required(self):
+        """Belt-and-braces: a 3.1.0 producer finding with no integer severity
+        must still validate (severity stays optional)."""
+        data = self._base()
+        assert "severity" not in data["findings"][0]["findings"][0]
+        errors = list(VALIDATOR.iter_errors(data))
+        assert errors == [], [e.message for e in errors]
+
+
 class TestV2Legacy:
     def test_rejected(self):
         data = json.loads((LEGACY_FIXTURES / "v2-legacy.json").read_text())
