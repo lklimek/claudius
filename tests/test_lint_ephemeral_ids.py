@@ -146,6 +146,34 @@ def test_diff_mode_line_numbers_from_hunk() -> None:
     assert by_id["RUST-007"] == 12
 
 
+NO_NEWLINE_DIFF_FIXTURE = """\
+diff --git a/foo.py b/foo.py
+index 1234567..89abcde 100644
+--- a/foo.py
++++ b/foo.py
+@@ -10,3 +10,4 @@
+ context before CMT-001 ignored
+-removed last line no newline
+\\ No newline at end of file
++replacement last line
++trailing added CMT-002 should match
+\\ No newline at end of file
+"""
+
+
+def test_diff_mode_no_newline_marker_does_not_shift_lines() -> None:
+    """The ``\\ No newline at end of file`` marker is diff metadata, not a
+    content line — it must not advance the new-file line counter, so added
+    matches after it report the correct line number."""
+    hits = lint.scan_diff(NO_NEWLINE_DIFF_FIXTURE)
+    by_id = {h["matched_id"]: h["line"] for h in hits}
+    # Hunk starts at new-file line 10: context (10→11), removed (skipped), the
+    # no-newline marker (skipped, no advance), replacement added line (11→12),
+    # then the ephemeral-ID added line at 12. Were the marker mistakenly
+    # counted as content it would advance the counter and report 13.
+    assert by_id == {"CMT-002": 12}
+
+
 def test_diff_mode_via_subprocess_stdin() -> None:
     """End-to-end: pipe a diff through stdin, parse JSON output."""
     result = subprocess.run(

@@ -46,7 +46,9 @@ Emit one INFO finding listing every modified function, marking which were walked
 ```text
 category: "call_tree"
 id: CALL-NNN (coordinator-assigned)
-severity: 1 (INFO)
+risk: 0.1
+impact: 0.1
+scope: 0.3
 title: "Call-tree walk scoped to top 10 of N modified functions"
 description: |
   Walked via: <tool>

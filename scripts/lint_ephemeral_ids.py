@@ -98,7 +98,9 @@ def scan_diff(diff_text: str) -> list[dict]:
     File names come from ``+++ b/<path>`` headers. Line numbers come from the
     hunk header's new-file start, incremented for each context (` `) and
     added (`+`) line; removed (`-`) lines do not advance the new-file pointer.
-    Skips diff metadata lines (``---``, ``+++``, ``@@``, ``diff``, ``index``).
+    Skips diff metadata lines (``---``, ``+++``, ``@@``, ``diff``, ``index``)
+    and the ``\\ No newline at end of file`` marker (which is metadata, not
+    content, and must not advance the new-file pointer).
     """
     hits: list[dict] = []
     current_file = "<stdin>"
@@ -110,7 +112,14 @@ def scan_diff(diff_text: str) -> list[dict]:
             if m:
                 current_file = m.group(1)
             continue
-        if raw.startswith("--- ") or raw.startswith("diff ") or raw.startswith("index "):
+        if (
+            raw.startswith("--- ")
+            or raw.startswith("diff ")
+            or raw.startswith("index ")
+        ):
+            continue
+        if raw.startswith("\\ "):
+            # "\ No newline at end of file" — diff metadata, not content.
             continue
         m = _HUNK_HEADER.match(raw)
         if m:
