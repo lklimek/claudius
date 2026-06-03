@@ -15,11 +15,15 @@ Two flavours of test live here:
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "review-pr" / "SKILL.md"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "pr-promises"
+
+sys.path.insert(0, str(ROOT / "scripts"))
+from severity_util import derive_finding_severity  # noqa: E402
 
 
 def _skill_text() -> str:
@@ -37,12 +41,27 @@ class TestSkillDocumentsPassCRules:
 
     def test_pr_body_unparseable_fallback(self):
         text = _skill_text()
+        # Unparseable is a LOW finding with scope=0.0 (no actionable diff work) —
+        # at scope=1.0 the mean would floor at 1/3 and wrongly read MEDIUM.
         assert "PR body unparseable" in text
+        assert "`risk≈0.2, impact≈0.2, scope=0.0`" in text
+        assert "ONE low-confidence `pr_promises` LOW finding" in text
 
     def test_clean_pass_empty_findings_plus_info(self):
         text = _skill_text()
         assert "findings: []" in text
         assert "PR self-description verified" in text
+        # Clean-pass INFO finding uses scope=0.0 so its low floats derive to the
+        # INFO band; the integer severity is never hand-written.
+        assert "`risk=0.1, impact=0.1, scope=0.0`" in text
+        assert "never hand-write the integer `severity`" in text
+
+    def test_passc_scope_exception_documented(self):
+        # Copilot asked for an explicit Pass C exception to the scope=1.0 rule.
+        text = _skill_text()
+        assert "Pass C `scope` exception" in text
+        # The exception ties the informational findings to scope=0.0.
+        assert "use `scope=0.0`" in text
 
     def test_undocumented_change_keyword_overlap(self):
         text = _skill_text()
@@ -80,6 +99,29 @@ class TestSkillDocumentsPassCRules:
 
 
 # ---------------------------------------------------------------------------
+# Band-derivation guard: the documented Pass C floats land in the documented
+# bands. Pins the SKILL's "INFO" / "LOW" labels to severity_util's band table
+# so the floats and bands can't drift apart again.
+# ---------------------------------------------------------------------------
+class TestPassCFloatsDeriveDocumentedBands:
+    def test_clean_pass_floats_derive_info(self):
+        # "PR self-description verified": risk=0.1, impact=0.1, scope=0.0.
+        floats = {"risk": 0.1, "impact": 0.1, "scope": 0.0}
+        assert derive_finding_severity(floats) == 1  # INFO
+
+    def test_unparseable_floats_derive_low(self):
+        # "PR body unparseable": risk≈0.2, impact≈0.2, scope=0.0.
+        floats = {"risk": 0.2, "impact": 0.2, "scope": 0.0}
+        assert derive_finding_severity(floats) == 2  # LOW
+
+    def test_scope_one_would_inflate_to_medium(self):
+        # The bug Copilot caught: at scope=1.0 the mean floors at 1/3 and both
+        # informational findings wrongly read MEDIUM — hence the scope=0.0 fix.
+        assert derive_finding_severity({"risk": 0.1, "impact": 0.1, "scope": 1.0}) == 2
+        assert derive_finding_severity({"risk": 0.2, "impact": 0.2, "scope": 1.0}) == 3
+
+
+# ---------------------------------------------------------------------------
 # Parser-mirror: the documented fenced-body unwrap exposes ## Summary
 # ---------------------------------------------------------------------------
 SUMMARY_RE = re.compile(
@@ -108,11 +150,14 @@ def _unwrap_fenced_body(body: str) -> str:
     if not open_m:
         return body
     fence = open_m.group(1)
-    # Find last non-blank line; it must be a closing fence of the same kind.
+    # Find last non-blank line; it must be a *matching* closing fence: same
+    # fence character, length >= the opener, and only fence characters after
+    # stripping whitespace.
     end = len(lines) - 1
     while end > start and lines[end].strip() == "":
         end -= 1
-    if end <= start or not lines[end].strip().startswith(fence[0] * 3):
+    closing = lines[end].strip()
+    if end <= start or len(closing) < len(fence) or set(closing) != {fence[0]}:
         return body
     inner = lines[start + 1 : end]
     # Dedent by longest common leading whitespace over non-blank lines.
@@ -158,6 +203,25 @@ class TestFencedUnwrapExposesSummary:
         # An ordinary (non-wholly-fenced) body is returned unchanged.
         plain = "## Summary\n\n- did a thing\n"
         assert _unwrap_fenced_body(plain) == plain
+
+    def test_unwrap_noop_when_closing_fence_shorter_than_opener(self):
+        # Opener is ```` (4 backticks); the trailing ``` (3) is NOT a matching
+        # close — the closing fence must be at least as long as the opener.
+        body = "````\n## Summary\n\n- a thing\n```"
+        assert _unwrap_fenced_body(body) == body
+
+    def test_unwrap_noop_when_last_line_has_trailing_text(self):
+        # The last line is ```python (fence chars + trailing text) — an info
+        # string is an *opening* fence, never a close, so the body is unchanged.
+        body = "```\n## Summary\n\n- a thing\n```python"
+        assert _unwrap_fenced_body(body) == body
+
+    def test_unwrap_succeeds_for_equal_length_fences(self):
+        # Control: equal-length ``` fences (opener == closer) still unwrap.
+        body = "```\n## Summary\n\n- a thing\n```"
+        out = _unwrap_fenced_body(body)
+        assert not out.lstrip().startswith("```")
+        assert SUMMARY_RE.search(out) is not None
 
     def test_fenced_fixture_present_and_self_describing(self):
         # The committed fixture demonstrates the same wholly-fenced shape and
