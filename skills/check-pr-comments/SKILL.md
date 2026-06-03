@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Use to verify PR review comments are addressed in code. Optionally produces triage-compatible report.
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gh search code*), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment, mcp__plugin_claudius_github__add_issue_comment
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment, mcp__plugin_claudius_github__add_issue_comment
 ---
 
 # Check PR Comments Workflow
@@ -64,18 +64,18 @@ This is the default end of the workflow. Steps 5-7 (structured report) are only 
 
 ## 5. Build Structured Report JSON
 
-Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v3.0.0).
+Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v3.1.0; 3.0.0 still accepted).
 
 ### Report structure
 
 ```json
 {
-  "schema_version": "3.0.0",
+  "schema_version": "3.1.0",
   "metadata": {
     "project": "<owner>/<repo>",
     "date": "YYYY-MM-DD",
     "branch": "<pr-branch>",
-    "commit": "<full 40-char SHA from `git rev-parse HEAD`>",
+    "commit": "<full 40-char SHA from `git rev-parse @{u}` (fall back to `git rev-parse HEAD` when the branch has no upstream)>",
     "scope": "PR #<number> comment verification",
     "reviewers": ["<unique reviewer usernames>"],
     "report_type": "comment_check",
@@ -157,7 +157,7 @@ https://github.com/{owner}/{repo}/blob/{commit}/{path}{anchor}
 ```
 
 - `{owner}/{repo}`: split `metadata.project` on `/` (it's already in `<owner>/<repo>` form).
-- `{commit}`: full 40-char SHA from `metadata.commit`.
+- `{commit}`: full 40-char SHA from `metadata.commit` (derived from `git rev-parse @{u}` with a `git rev-parse HEAD` fallback — use the pushed commit so permalinks resolve on GitHub; fall back to local HEAD only when the branch has no upstream).
 - `{path}`: the file path from `location` — split off the trailing `:line` or `:start-end` suffix; the remainder is the path. (This matches the coordinator's `parse_location` regex, which anchors at end of string. Splitting at the first `:` would break paths that contain `:`.) URL-encode spaces, `#`, `?`, and any non-ASCII characters.
 - `{anchor}`:
   - `#L{line}` when `location` ends in `:{line}` (single line)

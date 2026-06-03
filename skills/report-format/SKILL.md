@@ -150,7 +150,7 @@ For complete reports (grumpy-review, check-pr-comments), wrap finding sections i
   "metadata": {
     "project": "claudius",
     "date": "YYYY-MM-DD",
-    "commit": "<full 40-char SHA from `git rev-parse HEAD`>"
+    "commit": "<full 40-char SHA from `git rev-parse @{u}` (fall back to `git rev-parse HEAD` when the branch has no upstream)>"
   },
   "executive_summary": { "overall_assessment": "..." },
   "summary_statistics": { "total_findings": 0, "severity_counts": {} },
