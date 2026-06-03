@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-05-29
+
+### Changed
+
+- review-pr Pass C v1.1: compound PR titles are split on commas/em-dashes and each topic verified independently with a majority-hits rule; the "undocumented change" trigger keeps its ≥50-LOC threshold but now defines "mentioned" precisely (keyword overlap with ≥1 Summary bullet OR a field-ownership-table row); Summary-heading precedence is fixed as `## Summary` > `### Summary` > `## What changed` (first match wins, bullet-list fallback only when none match); Pass C may optionally set `finding_section.verdict` on its `pr_promises` section (PASS/FAIL/NEEDS_REVIEW) and `metadata.report_type: "pr_audit"` on the envelope.
+
+### Fixed
+
+- review-pr Pass C body extraction: a PR body wholly wrapped in a single code fence is now unwrapped and dedented before the column-0-anchored Summary/Out-of-scope regexes run, instead of silently matching nothing; if no Summary header and no top-level bullet list survive, Pass C emits one low-confidence LOW "PR body unparseable" finding rather than skipping silently.
+- review-pr Pass C clean-pass output: a fully-clean Pass C now emits `findings: []` plus one INFO "PR self-description verified" finding, making a clean pass distinguishable from "Pass C did not run".
+- review-pr Pass C code_snippets `language`: cross-references `claudius:report-format` §code_snippets for allowed `language` values instead of hard-coding `"diff"`.
+
 ## [4.4.0] - 2026-05-29
 
 ### Changed
