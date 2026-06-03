@@ -61,14 +61,13 @@ description: |
 Discover what the environment offers. Run cheap `which` probes once, cache the answers — `which` is the only detection primitive on every skill's allow-list, so prefer it over `test -f`/`ps -e` (which the sandbox blocks):
 
 ```bash
-which ctags global gtags rg ripgrep tree-sitter rust-analyzer gopls pyright pylsp tsserver 2>/dev/null
+which ctags global gtags rg ripgrep tree-sitter 2>/dev/null
 ```
 
-`which <lsp-binary>` tells you whether a language server is installed; assume any already-running instance can be reached if its binary resolves. The probe order is tool-agnostic — pick whatever the environment actually offers. Suggested order:
+The probe order is tool-agnostic — pick whatever the environment actually offers. Suggested order:
 
 | Tier | Tool | When |
 |---|---|---|
-| Best | LSP (`rust-analyzer`, `gopls`, `pyright`, `tsserver`) | Already running — exact symbol resolution |
 | Best | `ctags -R --languages=<lang>` (universal-ctags) | Language-aware, fast, scriptable |
 | Best | GNU global (`gtags` + `global -r <sym>`) | Language-aware, fastest cross-ref |
 | Good | `tree-sitter query` | When grammar is installed; precise AST queries |
