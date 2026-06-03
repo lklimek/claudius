@@ -812,6 +812,30 @@ def test_render_pdf_producer_shape_does_not_crash(tmp_path):
     assert out.stat().st_size > 500
 
 
+def test_normalize_realigns_total_findings_with_rebuilt_counts():
+    """Regression: when ``_normalize_summary_statistics`` rebuilds an all-zero
+    ``severity_counts`` block, it must also realign ``total_findings`` so the
+    HTML KPI can't disagree with the rebuilt counts. Feed a producer-shape
+    report whose statistics block carries all-zero counts and a deliberately
+    wrong ``total_findings``, then assert the recompute fixes both."""
+    report = _producer_shape_report()
+    report["summary_statistics"]["severity_counts"] = {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "MEDIUM": 0,
+        "LOW": 0,
+        "INFO": 0,
+    }
+    report["summary_statistics"]["total_findings"] = 99  # deliberately wrong
+
+    true_count = sum(len(sec["findings"]) for sec in report["findings"])
+    grr._normalize_report(report)
+
+    stats = report["summary_statistics"]
+    assert stats["total_findings"] == true_count
+    assert stats["total_findings"] == sum(stats["severity_counts"].values())
+
+
 # ---------------------------------------------------------------------------
 # Regression: existing v2 `impact` string handling is gone — `impact` is now a
 # float; `impact_description` carries the narrative.

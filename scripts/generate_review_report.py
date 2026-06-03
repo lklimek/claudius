@@ -158,9 +158,11 @@ def _counts_all_zero(counts: dict[str, Any] | None) -> bool:
 def _normalize_summary_statistics(data: dict[str, Any]) -> None:
     """Recompute severity_counts + severity_category_matrix in-place when absent.
 
-    Triggers only when the existing ``severity_counts`` is missing or all-zero
-    and at least one finding carries a derivable severity, so a hand-supplied
-    statistics block is never overwritten.
+    Triggers only when ``severity_counts`` is missing or all-zero and the report
+    contains at least one finding (a hand-supplied non-zero statistics block is
+    never overwritten). Note floatless findings are counted as INFO, so the
+    trigger is finding-existence, not severity-derivability. ``total_findings``
+    is realigned to the rebuilt count so the HTML KPI never disagrees with it.
     """
     stats = data.get("summary_statistics")
     if not isinstance(stats, dict):
@@ -173,6 +175,7 @@ def _normalize_summary_statistics(data: dict[str, Any]) -> None:
         return
     stats["severity_counts"] = rebuilt["severity_counts"]
     stats["severity_category_matrix"] = rebuilt["severity_category_matrix"]
+    stats["total_findings"] = rebuilt["total_findings"]
 
 
 def _normalize_report(data: dict[str, Any]) -> None:
