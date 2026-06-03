@@ -82,7 +82,9 @@ class TestSkillDocumentsPassCRules:
 # ---------------------------------------------------------------------------
 # Parser-mirror: the documented fenced-body unwrap exposes ## Summary
 # ---------------------------------------------------------------------------
-SUMMARY_RE = re.compile(r"^##+\s+(?:Summary|What changed)\b", re.IGNORECASE | re.MULTILINE)
+SUMMARY_RE = re.compile(
+    r"^##+\s+(?:Summary|What changed)\b", re.IGNORECASE | re.MULTILINE
+)
 
 _FENCE_RE = re.compile(r"^(```+|~~~+)")
 
@@ -114,9 +116,9 @@ def _unwrap_fenced_body(body: str) -> str:
         return body
     inner = lines[start + 1 : end]
     # Dedent by longest common leading whitespace over non-blank lines.
-    indents = [len(l) - len(l.lstrip()) for l in inner if l.strip()]
+    indents = [len(ln) - len(ln.lstrip()) for ln in inner if ln.strip()]
     pad = min(indents) if indents else 0
-    return "\n".join(l[pad:] if len(l) >= pad else l for l in inner)
+    return "\n".join(ln[pad:] if len(ln) >= pad else ln for ln in inner)
 
 
 # A PR body that is wholly wrapped in one indented code fence — the exact shape
