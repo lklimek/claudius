@@ -191,7 +191,9 @@ class TestProducerCoordinatorParity:
 
     def test_single_line_matches(self):
         prod = _producer_permalink("octo/widgets", SHA, "src/auth.rs:42")
-        coord = cr._build_permalink({"owner": "octo", "repo": "widgets"}, SHA, "src/auth.rs:42")
+        coord = cr._build_permalink(
+            {"owner": "octo", "repo": "widgets"}, SHA, "src/auth.rs:42"
+        )
         assert prod == coord
 
     def test_range_matches(self):
@@ -211,21 +213,26 @@ class TestProducerCoordinatorParity:
     def test_missing_pieces_both_return_none(self):
         # Producer and coordinator agree on the "give up" condition.
         assert _producer_permalink("octo/widgets", "", "src/x.rs:1") is None
-        assert cr._build_permalink(
-            {"owner": "octo", "repo": "widgets"}, "", "src/x.rs:1"
-        ) is None
+        assert (
+            cr._build_permalink({"owner": "octo", "repo": "widgets"}, "", "src/x.rs:1")
+            is None
+        )
 
     def test_path_only_both_return_none(self):
         # Path-only: producer rejects (per tightened contract), coordinator
         # rejects (regex requires `:line` suffix).
         assert _producer_permalink("octo/widgets", SHA, "src/x.rs") is None
-        assert cr._build_permalink(
-            {"owner": "octo", "repo": "widgets"}, SHA, "src/x.rs"
-        ) is None
+        assert (
+            cr._build_permalink({"owner": "octo", "repo": "widgets"}, SHA, "src/x.rs")
+            is None
+        )
 
     def test_malformed_range_both_return_none(self):
         # "file.rs:1-" rejected by both sides.
         assert _producer_permalink("octo/widgets", SHA, "src/x.rs:1-") is None
-        assert cr._build_permalink(
-            {"owner": "octo", "repo": "widgets"}, SHA, "src/x.rs:1-"
-        ) is None
+        assert (
+            cr._build_permalink(
+                {"owner": "octo", "repo": "widgets"}, SHA, "src/x.rs:1-"
+            )
+            is None
+        )

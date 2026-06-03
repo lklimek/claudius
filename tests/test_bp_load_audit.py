@@ -47,9 +47,9 @@ def _load_frontmatter(agent_name: str) -> dict:
 def test_agent_loads_coding_best_practices(agent_name: str) -> None:
     fm = _load_frontmatter(agent_name)
     skills = fm.get("skills", [])
-    assert isinstance(skills, list), (
-        f"agents/{agent_name}.md: `skills` field must be a list, got {type(skills).__name__}"
-    )
+    assert isinstance(
+        skills, list
+    ), f"agents/{agent_name}.md: `skills` field must be a list, got {type(skills).__name__}"
     assert "coding-best-practices" in skills, (
         f"agents/{agent_name}.md: missing `coding-best-practices` in `skills` frontmatter "
         f"(found: {skills}). Reviewer/coder agents must preload BP so its "

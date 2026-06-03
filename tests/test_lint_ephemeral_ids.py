@@ -26,7 +26,6 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import lint_ephemeral_ids as lint  # noqa: E402
 from consolidate_reports import CATEGORY_PREFIX  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Positive cases — every consolidator-owned prefix
 # ---------------------------------------------------------------------------
@@ -194,7 +193,9 @@ def test_diff_mode_via_subprocess_stdin() -> None:
 # ---------------------------------------------------------------------------
 def test_file_mode_via_subprocess(tmp_path: Path) -> None:
     target = tmp_path / "sample.md"
-    target.write_text("Talk about CMT-001 here.\nNo hits on this line.\nAlso SEC-014.\n")
+    target.write_text(
+        "Talk about CMT-001 here.\nNo hits on this line.\nAlso SEC-014.\n"
+    )
     result = subprocess.run(
         [sys.executable, str(SCRIPT), str(target)],
         capture_output=True,
