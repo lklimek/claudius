@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
-from severity_util import build_severity_stats, derive_finding_severity
+from severity_util import build_severity_stats, derive_overall, derive_severity_int
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -133,19 +133,33 @@ def sev_label(value: int | str | None) -> str:
 
 
 def _normalize_finding_severities(data: dict[str, Any]) -> None:
-    """Fill in a finding's integer ``severity`` from risk/impact/scope in-place.
+    """Fill a finding's overall_severity + integer severity from floats in-place.
 
-    Only touches findings that lack a valid integer ``severity`` but carry all
-    three OWASP floats; everything else is left untouched.
+    Producer-shape findings carry risk/impact/scope but often lack a valid
+    integer ``severity`` and/or ``overall_severity``. Derive both from the
+    floats (overall = mean; severity = band of overall) so the Markdown overall
+    suffix and HTML ``data-overall`` sort key are populated. Findings already
+    carrying valid values are left untouched.
     """
     for section in data.get("findings", []):
         for f in section.get("findings", []):
             sev = f.get("severity")
-            if isinstance(sev, int) and not isinstance(sev, bool) and 1 <= sev <= 5:
+            has_sev = (
+                isinstance(sev, int) and not isinstance(sev, bool) and 1 <= sev <= 5
+            )
+            overall = f.get("overall_severity")
+            has_overall = isinstance(overall, (int, float)) and not isinstance(
+                overall, bool
+            )
+            if has_sev and has_overall:
                 continue
-            derived = derive_finding_severity(f)
-            if derived is not None:
-                f["severity"] = derived
+            derived_overall = derive_overall(f)
+            if derived_overall is None:
+                continue
+            if not has_overall:
+                f["overall_severity"] = derived_overall
+            if not has_sev:
+                f["severity"] = derive_severity_int(derived_overall)
 
 
 def _counts_all_zero(counts: dict[str, Any] | None) -> bool:

@@ -131,11 +131,6 @@ def _read_schema_versions() -> list[str]:
     return ["3.0.0"]
 
 
-def _read_schema_version() -> str:
-    """Read the newest schema_version from the schema file (default fallback)."""
-    return _read_schema_versions()[-1]
-
-
 _SCHEMA_VERSIONS = _read_schema_versions()
 SCHEMA_VERSION = _SCHEMA_VERSIONS[-1]
 
