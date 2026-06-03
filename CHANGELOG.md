@@ -14,7 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ### Fixed
 
-- review-pr Pass C body extraction: a PR body wholly wrapped in a single code fence is now unwrapped and dedented before the column-0-anchored Summary/Out-of-scope regexes run, instead of silently matching nothing; if no Summary header and no top-level bullet list survive, Pass C emits one low-confidence INFO "PR body unparseable" finding rather than skipping silently.
+- review-pr Pass C body extraction: a PR body wholly wrapped in a single code fence is now unwrapped and dedented before the column-0-anchored Summary/Out-of-scope regexes run, instead of silently matching nothing; if no Summary header and no top-level bullet list survive, Pass C emits one low-confidence LOW "PR body unparseable" finding rather than skipping silently.
 - review-pr Pass C clean-pass output: a fully-clean Pass C now emits `findings: []` plus one INFO "PR self-description verified" finding, making a clean pass distinguishable from "Pass C did not run".
 - review-pr Pass C code_snippets `language`: cross-references `claudius:report-format` §code_snippets for allowed `language` values instead of hard-coding `"diff"`.
 
