@@ -20,7 +20,9 @@ WHY = "Why this PR exists"
 
 def test_git_github_has_why_section() -> None:
     text = GIT_GITHUB.read_text(encoding="utf-8")
-    assert f"## {WHY}" in text, f"{GIT_GITHUB}: missing '## {WHY}' heading in PR-body template"
+    assert (
+        f"## {WHY}" in text
+    ), f"{GIT_GITHUB}: missing '## {WHY}' heading in PR-body template"
 
 
 def test_why_section_leads_what_and_testing() -> None:
@@ -36,19 +38,21 @@ def test_why_section_demands_reproduction_and_blocking() -> None:
     """The skeleton must prompt for a concrete repro/threat scenario and blocking relationship."""
     text = GIT_GITHUB.read_text(encoding="utf-8")
     lowered = text.lower()
-    assert "reproduction" in lowered or "threat scenario" in lowered, (
-        f"{GIT_GITHUB}: '{WHY}' skeleton must ask for a reproduction or threat scenario"
-    )
-    assert "blocking" in lowered, (
-        f"{GIT_GITHUB}: '{WHY}' skeleton must ask for the blocking relationship"
-    )
+    assert (
+        "reproduction" in lowered or "threat scenario" in lowered
+    ), f"{GIT_GITHUB}: '{WHY}' skeleton must ask for a reproduction or threat scenario"
+    assert (
+        "blocking" in lowered
+    ), f"{GIT_GITHUB}: '{WHY}' skeleton must ask for the blocking relationship"
 
 
 def test_push_references_why_without_inlining_template() -> None:
     text = PUSH.read_text(encoding="utf-8")
     assert WHY in text, f"{PUSH}: must reference the '{WHY}' section"
-    assert "git-and-github" in text, f"{PUSH}: must delegate to git-and-github for the template"
+    assert (
+        "git-and-github" in text
+    ), f"{PUSH}: must delegate to git-and-github for the template"
     # No duplicated skeleton: push references the section, it doesn't redefine the heading.
-    assert f"## {WHY}" not in text, (
-        f"{PUSH}: must not inline a duplicate '## {WHY}' template — delegate to git-and-github"
-    )
+    assert (
+        f"## {WHY}" not in text
+    ), f"{PUSH}: must not inline a duplicate '## {WHY}' template — delegate to git-and-github"
