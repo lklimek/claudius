@@ -34,7 +34,9 @@ class TestDeriveFindingSeverity:
 
     def test_mixed_dimensions_use_mean(self):
         # mean of 1.0/0.7/1.0 = 0.9 -> CRITICAL band.
-        assert su.derive_finding_severity({"risk": 1.0, "impact": 0.7, "scope": 1.0}) == 5
+        assert (
+            su.derive_finding_severity({"risk": 1.0, "impact": 0.7, "scope": 1.0}) == 5
+        )
 
     @pytest.mark.parametrize("missing", ["risk", "impact", "scope"])
     def test_any_missing_returns_none(self, missing):

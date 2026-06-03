@@ -228,7 +228,7 @@
         "id": {
           "type": "string",
           "pattern": "^(SEC|QA|PROJ|CODE|RUST|PY|GO|FE|DOC|CMT|DEP|PPM|CALL)-\\d{3}$",
-          "description": "Finding ID with category prefix (SEC→security, PROJ→project, CODE/RUST/PY/GO/FE→code_quality, DOC→documentation, CMT→pr_comments, DEP→dependencies, PPM→pr_promises, CALL→call_tree)"
+          "description": "Finding ID with category prefix (SEC→security, PROJ→project, CODE/RUST/PY/GO/FE/QA→code_quality, DOC→documentation, CMT→pr_comments, DEP→dependencies, PPM→pr_promises, CALL→call_tree)"
         },
         "severity": { "$ref": "#/$defs/severity" },
         "risk": { "$ref": "#/$defs/severity_float", "description": "OWASP Likelihood normalized to [0,1]." },

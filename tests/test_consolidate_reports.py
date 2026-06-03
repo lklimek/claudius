@@ -331,7 +331,9 @@ class TestAssignIds:
         ids = [f["id"] for f in sections[0]["findings"]]
         assert ids == ["CALL-001", "CALL-002"], ids
         stats = cr.compute_statistics(sections, [])
-        matrix_by_sev = {row["severity"]: row for row in stats["severity_category_matrix"]}
+        matrix_by_sev = {
+            row["severity"]: row for row in stats["severity_category_matrix"]
+        }
         assert matrix_by_sev["HIGH"]["call_tree"] == 1
         assert matrix_by_sev["MEDIUM"]["call_tree"] == 1
         # The original code_quality column must NOT pick up the call_tree counts —
