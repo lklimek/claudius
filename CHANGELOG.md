@@ -18,6 +18,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - review-pr Pass C clean-pass output: a fully-clean Pass C now emits `findings: []` plus one INFO "PR self-description verified" finding, making a clean pass distinguishable from "Pass C did not run".
 - review-pr Pass C code_snippets `language`: cross-references `claudius:report-format` §code_snippets for allowed `language` values instead of hard-coding `"diff"`.
 
+## [4.4.0] - 2026-05-29
+
+### Changed
+
+- PR bodies now lead with a "Why this PR exists" rationale section (problem, reproduction/threat scenario, blocking relationship) before What/Testing/Breaking/Checklist. The skeleton lives in `skills/git-and-github/SKILL.md` (§Creating a PR); `skills/push/SKILL.md` delegates to it. Pinned by `tests/test_pr_body_template.py`.
+
 ## [4.3.0] - 2026-05-29
 
 ### Added
@@ -27,15 +33,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ### Fixed
 
-- check-pr-comments findings rendered INFO with zero severity counts — the renderer now derives per-finding severity from `risk`/`impact`/`scope` and recomputes summary statistics on-the-fly when absent or all-zero, so standalone producer reports show real severities and counts across Markdown / HTML / triage / PDF. A non-zero supplied `severity_counts` is never overwritten.
+- check-pr-comments findings rendered INFO with zero severity counts — the renderer now derives per-finding severity from `risk`/`impact`/`scope` and recomputes summary statistics on-the-fly when absent or all-zero, so standalone producer reports show real severities and counts across Markdown / HTML / triage / PDF. A non-zero supplied `severity_counts` is never overwritten. The recompute also realigns `total_findings` so the HTML KPI can't disagree with the rebuilt counts.
+- `consolidate_reports.ACCEPTED_SCHEMA_VERSIONS` is now derived from the schema's `schema_version` enum (single read) instead of a hard-coded set, so it can't drift on the next schema bump.
 - Permalink commit now derives from `git rev-parse @{u}` (falling back to local `HEAD` only when the branch has no upstream) in `check-pr-comments`, `report-format`, and `grumpy-review`, so generated permalinks resolve on GitHub instead of 404-ing on an unpushed HEAD.
 
 ## [4.2.0] - 2026-05-28
 
 ### Added
 
-- **Reviewer call-tree inspection**: `grumpy-review`, `review-pr`, and `check-pr-comments` now perform a deep transitive in-repo caller walk for every function modified by the diff. Reviewer probes the environment for the deepest analysis tool available (ctags, GNU global, ripgrep, tree-sitter, any installed LSP) and falls back to grep-based caller extraction. Findings emit in new `call_tree` category with `CALL-` ID prefix. Walk is capped at depth 5, 200 callers, 60s per function; reviewer ranks modified functions by risk (public API > private; trait/interface impl > leaf; signature-changed > body-only) and walks the top 10 when a PR touches many.
-- **Ephemeral-ID coding convention** in `skills/coding-best-practices/SKILL.md`: source code, comments, and committed docs MUST NOT reference transient review-finding IDs (e.g. `CMT-001`, `SEC-014`, `RUST-123`, `CALL-005`). Allow-list documented for permanent IDs (`ADR-NNN`, `RFC-NNN`, `CWE-NNN`, `CVE-YYYY-NNNN`, `OWASP-*`, GHSA, GitHub issue/PR refs, `TODO`/`FIXME`, committed test-spec IDs). Enforced two ways: Bilby (write-side, preloads BP) and `grumpy-review`/`review-pr` (review-side, via new `scripts/lint_ephemeral_ids.py`).
+- **Reviewer call-tree inspection**: `grumpy-review`, `review-pr`, and `check-pr-comments` now perform a deep transitive in-repo caller walk for every function modified by the diff. Reviewer probes the environment for the deepest analysis tool available (ctags, GNU global, ripgrep, tree-sitter) and falls back to grep-based caller extraction. Findings emit in new `call_tree` category with `CALL-` ID prefix. Walk is capped at depth 5, 200 callers, 60s per function; reviewer ranks modified functions by risk (public API > private; trait/interface impl > leaf; signature-changed > body-only) and walks the top 10 when a PR touches many.
+- **Ephemeral-ID coding convention** in `skills/coding-best-practices/SKILL.md`: source code, comments, and committed docs MUST NOT reference transient review-finding IDs (e.g. `CMT-NNN`, `SEC-NNN`, `RUST-NNN`, `CALL-NNN`). Allow-list documented for permanent IDs (`ADR-NNN`, `RFC-NNN`, `CWE-NNN`, `CVE-YYYY-NNNN`, `OWASP-*`, GHSA, GitHub issue/PR refs, `TODO`/`FIXME`, committed test-spec IDs). Enforced two ways: Bilby (write-side, preloads BP) and `grumpy-review`/`review-pr` (review-side, via new `scripts/lint_ephemeral_ids.py`).
 - **Schema**: `schemas/review-report.schema.json` extended with `call_tree` category and `CALL-` ID pattern (additive, no schema version bump).
 - **Regression guards**: `tests/test_skill_frontmatter.py` parses every skill/agent frontmatter via PyYAML; `tests/test_bp_load_audit.py` asserts curated agent set loads `coding-best-practices`.
 
@@ -205,15 +212,15 @@ v1/v2 reports are no longer accepted. Re-run the producer (grumpy-review / check
 
 ### Fixed
 
-- `scripts/generate_review_report.py` (CQ-001): the resolved Unicode TTF is now also wired into matplotlib (`font_manager.addfont` + `rcParams["font.sans-serif"]`) so PDF chart labels — e.g. agent names from `agent_stats` — render non-Latin scripts instead of tofu boxes, matching the ReportLab text flow. Best-effort: a matplotlib font failure logs a warning and leaves chart glyphs degraded but never aborts the render.
-- `scripts/generate_review_report.py` / CHANGELOG (DOC-001): corrected the font-discovery wording. The `scripts/fonts/DejaVuSans.ttf` slot is an optional user-supplied drop-in, **not** a font shipped with the plugin; system fonts come from the `fonts-dejavu` / `fonts-noto` packages. Module docstring and 3.14.3 changelog entry updated to match.
+- `scripts/generate_review_report.py`: the resolved Unicode TTF is now also wired into matplotlib (`font_manager.addfont` + `rcParams["font.sans-serif"]`) so PDF chart labels — e.g. agent names from `agent_stats` — render non-Latin scripts instead of tofu boxes, matching the ReportLab text flow. Best-effort: a matplotlib font failure logs a warning and leaves chart glyphs degraded but never aborts the render.
+- `scripts/generate_review_report.py` / CHANGELOG: corrected the font-discovery wording. The `scripts/fonts/DejaVuSans.ttf` slot is an optional user-supplied drop-in, **not** a font shipped with the plugin; system fonts come from the `fonts-dejavu` / `fonts-noto` packages. Module docstring and 3.14.3 changelog entry updated to match.
 
 ## [3.14.3] - 2026-05-05
 
 ### Fixed
 
-- `scripts/generate_review_report.py` (QA-004): PDF output now registers a Unicode TrueType font (DejaVu Sans / Noto Sans, with bold/italic/mono siblings via `pdfmetrics.registerFontFamily`) so emoji and non-Latin scripts (Cyrillic, Arabic, Hebrew, etc.) render correctly instead of as tofu boxes. Discovery order: `$CLAUDIUS_PDF_FONT` env override -> optional user-supplied `scripts/fonts/DejaVuSans.ttf` (not shipped with the plugin) -> common Linux locations (`/usr/share/fonts/truetype/dejavu`, `/usr/share/fonts/truetype/noto`, provided by `fonts-dejavu` / `fonts-noto`). When no TTF is found the renderer logs a warning to stderr and falls back to ReportLab's Helvetica/Courier core fonts (Latin-1 only) -- never crashes.
-- `scripts/generate_review_report.py` (QA-005): `render_markdown_to_reportlab()` wraps the Markdown -> HTML -> ReportLab pass in try/except. On any failure (malformed input, parser exception, ReportLab mini-XML rejection) it logs a warning and falls back to a single XML-escaped preformatted block containing the raw source so no content is silently swallowed.
+- `scripts/generate_review_report.py`: PDF output now registers a Unicode TrueType font (DejaVu Sans / Noto Sans, with bold/italic/mono siblings via `pdfmetrics.registerFontFamily`) so emoji and non-Latin scripts (Cyrillic, Arabic, Hebrew, etc.) render correctly instead of as tofu boxes. Discovery order: `$CLAUDIUS_PDF_FONT` env override -> optional user-supplied `scripts/fonts/DejaVuSans.ttf` (not shipped with the plugin) -> common Linux locations (`/usr/share/fonts/truetype/dejavu`, `/usr/share/fonts/truetype/noto`, provided by `fonts-dejavu` / `fonts-noto`). When no TTF is found the renderer logs a warning to stderr and falls back to ReportLab's Helvetica/Courier core fonts (Latin-1 only) -- never crashes.
+- `scripts/generate_review_report.py`: `render_markdown_to_reportlab()` wraps the Markdown -> HTML -> ReportLab pass in try/except. On any failure (malformed input, parser exception, ReportLab mini-XML rejection) it logs a warning and falls back to a single XML-escaped preformatted block containing the raw source so no content is silently swallowed.
 
 ## [3.14.2] - 2026-05-05
 

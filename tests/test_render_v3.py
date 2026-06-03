@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import generate_review_report as grr
 
@@ -810,6 +812,65 @@ def test_render_pdf_producer_shape_does_not_crash(tmp_path):
     grr.render_pdf(_producer_shape_report(), out)
     assert out.is_file()
     assert out.stat().st_size > 500
+
+
+def test_normalize_realigns_total_findings_with_rebuilt_counts():
+    """Regression: when ``_normalize_summary_statistics`` rebuilds an all-zero
+    ``severity_counts`` block, it must also realign ``total_findings`` so the
+    HTML KPI can't disagree with the rebuilt counts. Feed a producer-shape
+    report whose statistics block carries all-zero counts and a deliberately
+    wrong ``total_findings``, then assert the recompute fixes both."""
+    report = _producer_shape_report()
+    report["summary_statistics"]["severity_counts"] = {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "MEDIUM": 0,
+        "LOW": 0,
+        "INFO": 0,
+    }
+    report["summary_statistics"]["total_findings"] = 99  # deliberately wrong
+
+    true_count = sum(len(sec["findings"]) for sec in report["findings"])
+    grr._normalize_report(report)
+
+    stats = report["summary_statistics"]
+    assert stats["total_findings"] == true_count
+    assert stats["total_findings"] == sum(stats["severity_counts"].values())
+
+
+def test_normalize_fills_overall_severity_and_band_from_floats():
+    """Regression: a producer-shape finding (floats only, no `severity`, no
+    `overall_severity`) must come out of `_normalize_report` with BOTH
+    `overall_severity == mean(risk, impact, scope)` AND the correct integer
+    band — otherwise the Markdown overall suffix and HTML `data-overall` sort
+    key stay empty."""
+    report = _producer_shape_report()
+    f = report["findings"][0]["findings"][0]
+    f.pop("severity", None)
+    f.pop("overall_severity", None)
+
+    grr._normalize_report(report)
+
+    expected_overall = (f["risk"] + f["impact"] + f["scope"]) / 3.0
+    assert f["overall_severity"] == pytest.approx(expected_overall)
+    # risk=0.4, impact=0.4, scope=1.0 -> overall=0.6 -> MEDIUM band (3).
+    assert f["severity"] == 3
+
+
+def test_normalize_fills_overall_severity_when_only_int_severity_present():
+    """A finding carrying a valid integer `severity` but no `overall_severity`
+    must still get `overall_severity` filled from the floats (the int severity
+    is left untouched)."""
+    report = _producer_shape_report()
+    f = report["findings"][0]["findings"][0]
+    f["severity"] = 4  # valid integer, deliberately not the float band
+    f.pop("overall_severity", None)
+
+    grr._normalize_report(report)
+
+    expected_overall = (f["risk"] + f["impact"] + f["scope"]) / 3.0
+    assert f["overall_severity"] == pytest.approx(expected_overall)
+    assert f["severity"] == 4  # pre-existing valid int severity preserved
 
 
 # ---------------------------------------------------------------------------

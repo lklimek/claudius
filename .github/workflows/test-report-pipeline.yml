@@ -5,16 +5,18 @@ on:
     paths:
       - 'scripts/**'
       - 'schemas/**'
-      - 'tests/fixtures/reports/**'
-      - 'tests/test_report_pipeline.sh'
-      - 'tests/test_consolidate_reports.py'
+      - 'skills/**'
+      - 'agents/**'
+      - 'tests/**'
+      - '.github/workflows/test-report-pipeline.yml'
   pull_request:
     paths:
       - 'scripts/**'
       - 'schemas/**'
-      - 'tests/fixtures/reports/**'
-      - 'tests/test_report_pipeline.sh'
-      - 'tests/test_consolidate_reports.py'
+      - 'skills/**'
+      - 'agents/**'
+      - 'tests/**'
+      - '.github/workflows/test-report-pipeline.yml'
 
 jobs:
   test:
@@ -32,7 +34,7 @@ jobs:
           pip install pytest
 
       - name: Unit tests
-        run: python3 -m pytest tests/test_consolidate_reports.py -v
+        run: python3 -m pytest tests/ -q
 
       - name: Report pipeline (fixtures)
         run: ./tests/test_report_pipeline.sh

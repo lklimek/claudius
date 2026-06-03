@@ -8,7 +8,7 @@ For every function modified by the diff, surface every transitive in-repo caller
 
 ## When to Run
 
-Trigger only when `git diff $BASE...HEAD` shows modified or removed function/method declarations. Skip for:
+Trigger only when `git diff $BASE_BRANCH...HEAD` shows modified or removed function/method declarations. Skip for:
 
 - Pure additions (new functions, no callers exist yet).
 - Doc-only PRs.
@@ -58,20 +58,16 @@ description: |
 
 ## Step 3 — Probe Tooling
 
-Discover what the environment offers. Run cheap probes once, cache the answers:
+Discover what the environment offers. Run cheap `which` probes once, cache the answers — `which` is the only detection primitive on every skill's allow-list, so prefer it over `test -f`/`ps -e` (which the sandbox blocks):
 
 ```bash
-which ctags global rg ripgrep tree-sitter 2>/dev/null
-test -f compile_commands.json && echo "clangd-capable"
-test -f tsconfig.json && echo "tsc-capable"
-ps -e | grep -E 'rust-analyzer|gopls|pyright|pylsp|tsserver' 2>/dev/null
+which ctags global gtags rg ripgrep tree-sitter 2>/dev/null
 ```
 
-Pick the deepest tool available. Suggested order:
+The probe order is tool-agnostic — pick whatever the environment actually offers. Suggested order:
 
 | Tier | Tool | When |
 |---|---|---|
-| Best | LSP (`rust-analyzer`, `gopls`, `pyright`, `tsserver`) | Already running — exact symbol resolution |
 | Best | `ctags -R --languages=<lang>` (universal-ctags) | Language-aware, fast, scriptable |
 | Best | GNU global (`gtags` + `global -r <sym>`) | Language-aware, fastest cross-ref |
 | Good | `tree-sitter query` | When grammar is installed; precise AST queries |

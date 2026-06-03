@@ -117,24 +117,26 @@ def _strip_none_values(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None and v != ""}
 
 
-def _read_schema_version() -> str:
-    """Read schema_version from the schema file, falling back to a default."""
+def _read_schema_versions() -> list[str]:
+    """Read the schema_version enum (oldest..newest) from the schema file."""
     try:
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
         versions = (
             schema.get("properties", {}).get("schema_version", {}).get("enum", [])
         )
         if versions:
-            return versions[-1]
+            return list(versions)
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
         pass
-    return "3.0.0"
+    return ["3.0.0"]
 
 
-SCHEMA_VERSION = _read_schema_version()
+_SCHEMA_VERSIONS = _read_schema_versions()
+SCHEMA_VERSION = _SCHEMA_VERSIONS[-1]
 
-# Both the current minor and its predecessor validate (additive 3.0 -> 3.1).
-ACCEPTED_SCHEMA_VERSIONS = {"3.0.0", "3.1.0"}
+# Every enum entry validates (additive 3.0 -> 3.1), derived from the schema so
+# the accepted set never drifts from the source on the next version bump.
+ACCEPTED_SCHEMA_VERSIONS = set(_SCHEMA_VERSIONS)
 
 
 # ---------------------------------------------------------------------------

@@ -331,7 +331,9 @@ class TestAssignIds:
         ids = [f["id"] for f in sections[0]["findings"]]
         assert ids == ["CALL-001", "CALL-002"], ids
         stats = cr.compute_statistics(sections, [])
-        matrix_by_sev = {row["severity"]: row for row in stats["severity_category_matrix"]}
+        matrix_by_sev = {
+            row["severity"]: row for row in stats["severity_category_matrix"]
+        }
         assert matrix_by_sev["HIGH"]["call_tree"] == 1
         assert matrix_by_sev["MEDIUM"]["call_tree"] == 1
         # The original code_quality column must NOT pick up the call_tree counts —
@@ -1003,3 +1005,28 @@ class TestCmdAssemble:
         rc = cr.cmd_assemble(args)
         assert rc == 0
         assert output.exists()
+
+
+# ---------------------------------------------------------------------------
+# Schema-version derivation
+# ---------------------------------------------------------------------------
+class TestSchemaVersionDerivation:
+    """``SCHEMA_VERSION`` and ``ACCEPTED_SCHEMA_VERSIONS`` must both be derived
+    from the schema enum — a hard-coded accepted set drifts on the next bump."""
+
+    def _schema_enum(self) -> list[str]:
+        schema_path = (
+            Path(__file__).resolve().parent.parent
+            / "schemas"
+            / "review-report.schema.json"
+        )
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        return schema["properties"]["schema_version"]["enum"]
+
+    def test_accepted_versions_match_schema_enum(self):
+        """Anti-drift guard: the accepted set is exactly the schema enum."""
+        assert cr.ACCEPTED_SCHEMA_VERSIONS == set(self._schema_enum())
+
+    def test_schema_version_is_newest_enum_entry(self):
+        assert cr.SCHEMA_VERSION == self._schema_enum()[-1]
+        assert cr.SCHEMA_VERSION in cr.ACCEPTED_SCHEMA_VERSIONS

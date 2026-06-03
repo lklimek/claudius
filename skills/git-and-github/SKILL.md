@@ -61,7 +61,22 @@ If a push fails with 403 or "Resource not accessible" and `ghsudo` is installed,
 
 Check for a PR template first. If a template exists, read and fill it in. When applicable, include an informal user story (what the user can achieve, no technical details -- start with "Imagine you are...").
 
-Always create PRs as drafts.
+The PR body **must lead with a `## Why this PR exists` section** — reviewers read motivation before mechanics. Use this skeleton (drop empty sections):
+
+```markdown
+## Why this PR exists
+- **Problem**: 1-2 plain-language sentences on what's broken or missing.
+- **What breaks without it**: a concrete reproduction or threat scenario — numbered steps or a short narrative showing the actual failure/misbehaviour, not an abstract claim.
+- **Blocking relationship**: prerequisite for / depends on / stacked atop PR #N, if any.
+
+## What was done
+## Testing
+## Breaking changes
+## Checklist
+## Attribution
+```
+
+`Why this PR exists` comes first; the remaining sections follow in that order. Always create PRs as drafts.
 
 ### Reviewing a PR
 
