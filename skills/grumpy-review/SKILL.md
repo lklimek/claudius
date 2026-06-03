@@ -4,7 +4,7 @@ description: "Parallel-agent code review for quality, security, dependencies, an
 agent: claudius
 context: fork
 model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology
@@ -92,9 +92,10 @@ every review agent prompt MUST include these review-specific elements:
 1. **Comparison base**: How to see what changed (`git show <base>:<file>` or `git diff`)
 2. **Finding format**: Use the severity levels and structure defined below
 3. **Review checklists**: Embed relevant checklist content or rely on the agent's preloaded skills
-4. **UX/DX lens**: instruct agents to assess how findings affect end-user workflows and developer experience, not just code correctness
-5. **CI context**: When MemCan/WebSearch are unavailable (e.g., CI), instruct agents: "Do not use memcan tools or WebSearch/WebFetch."
-6. **File output**: Instruct agents to use the Write tool for creating files — never `cat > file` or heredoc redirections.
+4. **BP preload**: every spawned reviewer agent (`security-engineer-smythe`, `project-reviewer-adams`, `developer-bilby`, `technical-writer-trillian`, etc.) MUST preload `coding-best-practices` so its Cross-Cutting Rules govern every finding — state this explicitly in each spawn prompt.
+5. **UX/DX lens**: instruct agents to assess how findings affect end-user workflows and developer experience, not just code correctness
+6. **CI context**: When MemCan/WebSearch are unavailable (e.g., CI), instruct agents: "Do not use memcan tools or WebSearch/WebFetch."
+7. **File output**: Instruct agents to use the Write tool for creating files — never `cat > file` or heredoc redirections.
 
 ### Finding format (JSON)
 
@@ -105,7 +106,7 @@ Each agent writes its output to the specified file path as valid JSON:
 [
   {
     "title": "Section Title",
-    "category": "security|project|code_quality|dependencies|documentation",
+    "category": "security|project|code_quality|dependencies|documentation|call_tree",
     "findings": [
       {
         "id": "PREFIX-001",
@@ -136,7 +137,7 @@ Each agent writes its output to the specified file path as valid JSON:
 
 **Metadata**: emit `metadata.commit` as the full 40-character SHA (`git rev-parse HEAD`, not `--short`); omit when not in a git repo. The coordinator derives `metadata.repository` from `git remote get-url origin` — producers do not emit it.
 
-**ID prefixes**: `SEC-` security, `PROJ-` project, `RUST-`/`PY-`/`GO-`/`FE-` language, `DOC-` docs.
+**ID prefixes**: `SEC-` security, `PROJ-` project, `RUST-`/`PY-`/`GO-`/`FE-` language, `DOC-` docs, `CALL-` call-tree.
 Agents assign provisional sequential IDs within their prefix (e.g., `SEC-001`, `SEC-002`).
 IDs may collide across parallel agents — the consolidation step (5c) deduplicates and reassigns
 final IDs.
@@ -147,6 +148,24 @@ final IDs.
 
 **Tags**: classification references — OWASP (`A01`–`A10`), CWE, language best-practice IDs, etc.
 Tag ALL security findings with OWASP categories. Non-security findings may omit tags.
+
+### Call-tree inspection
+
+When the diff modifies or removes any function/method declaration, every code-quality reviewer agent MUST run a deep transitive in-repo caller walk before emitting findings. Methodology lives in [references/call-tree-walk.md](references/call-tree-walk.md) — read it once per review and follow the steps.
+
+Finding shape: `category: "call_tree"`, ID prefix `CALL-` (coordinator-assigned). The producer emits a provisional `CALL-NNN`. Every `call_tree` finding's `description` MUST start with a `Walked via: <tool>` line so the reader can judge walk depth and tool quality.
+
+Skip the walk for pure additions, doc-only PRs, and changes confined to test files.
+
+### Ephemeral-ID lint
+
+After each agent emits findings, run the dumb ephemeral-ID lint against the diff:
+
+```bash
+git diff $BASE_BRANCH...HEAD | python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --diff
+```
+
+For each hit, judge whether the surrounding context is a genuine violation or a quoted/escaped example (e.g. a code fence inside a skill file demonstrating the rule, a test fixture asserting the rule, or this lint's own docstring). Dismiss in-skill examples; promote genuine violations to `code_quality` findings with `tags: ["ephemeral-id-reference"]` and ID prefix `CODE-` (coordinator-assigned). The lint always exits 0 — judgement is yours.
 
 ## 4. Spawn Agents
 

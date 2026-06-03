@@ -635,6 +635,60 @@ def test_triage_finding_data_category_preserves_origin_category():
 # ---------------------------------------------------------------------------
 # PDF
 # ---------------------------------------------------------------------------
+def test_markdown_matrix_includes_call_tree_column():
+    """Stream A: the Markdown scoreboard table must surface the new
+    call_tree category column (driven by CATEGORY_LABELS)."""
+    data = _load("v3-call-tree.json")
+    # The fixture has no pre-computed matrix; compute one to drive the renderer.
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "scripts"))
+    import consolidate_reports as cr  # type: ignore
+
+    data["summary_statistics"]["severity_category_matrix"] = cr.compute_statistics(
+        data["findings"], []
+    )["severity_category_matrix"]
+    md = grr.render_markdown(data)
+    assert "Call-Tree Inspection" in md, md[:2000]
+    # The HIGH row must show the 1 finding under the call_tree column.
+    # Find the HIGH line and assert it contains a 1 in the call_tree column.
+    high_line = next(line for line in md.splitlines() if line.startswith("| HIGH "))
+    # CATEGORY_LABELS order: security, project, code_quality, call_tree, ...
+    # cells: | HIGH | sec | proj | cq | call_tree | doc | dep | cmt | ppm | total |
+    cells = [c.strip() for c in high_line.split("|")]
+    # cells[0] is leading empty, cells[1]="HIGH", then category cells.
+    assert cells[1] == "HIGH"
+    # The 4th category column is call_tree.
+    assert cells[5] == "1", high_line
+
+
+def test_html_includes_call_tree_in_filter_chip_and_js_labels():
+    """Stream A: the HTML renderer must include call_tree in the category
+    filter dropdown, the Chart.js category-label list, and the JS catLabels
+    lookup — otherwise findings in that category render but can never be
+    filtered or scored against."""
+    data = _load("v3-call-tree.json")
+    html = grr.render_html(data)
+    # Filter <option> for category dropdown.
+    assert '<option value="call_tree">Call-Tree Inspection</option>' in html
+    # JS catLabels lookup carries the slug.
+    assert '"call_tree":"Call-Tree Inspection"' in html
+    # Chart.js category-label list (CATEGORY_LABELS values) carries the label.
+    assert "Call-Tree Inspection" in html
+    # The finding card data-category attribute reflects the new category.
+    assert 'data-category="call_tree"' in html
+
+
+def test_triage_includes_call_tree_in_filter_and_data_attribute():
+    """The triage renderer shares the template; the filter chip and
+    per-finding data-category must carry call_tree there too."""
+    data = _load("v3-call-tree.json")
+    html = grr.render_triage(data)
+    assert '<option value="call_tree">Call-Tree Inspection</option>' in html
+    assert 'data-category="call_tree"' in html
+
+
 def test_pdf_full_renders(tmp_path):
     data = _load("v3-full.json")
     out = tmp_path / "out.pdf"

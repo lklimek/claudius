@@ -69,6 +69,7 @@ CATEGORY_PREFIX: dict[str, str] = {
     "security": "SEC-",
     "project": "PROJ-",
     "code_quality": "CODE-",
+    "call_tree": "CALL-",
     "documentation": "DOC-",
     "pr_comments": "CMT-",
     "pr_promises": "PPM-",

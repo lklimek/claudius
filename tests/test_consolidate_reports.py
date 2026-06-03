@@ -312,6 +312,33 @@ class TestAssignIds:
         # The original finding object should have been mutated
         assert "id" in f
 
+    def test_call_tree_category_gets_call_prefix_and_populates_matrix(
+        self, make_finding, make_section
+    ):
+        """Stream A: the call_tree category must assign sequential CALL-NNN
+        IDs and the resulting matrix row must carry the call_tree column."""
+        sections = [
+            make_section(
+                category="call_tree",
+                title="Call-Tree Inspection",
+                findings=[
+                    make_finding(severity=4, title="Unbounded recursion"),
+                    make_finding(severity=3, title="Swallowed error two frames deep"),
+                ],
+            ),
+        ]
+        cr.assign_ids(sections)
+        ids = [f["id"] for f in sections[0]["findings"]]
+        assert ids == ["CALL-001", "CALL-002"], ids
+        stats = cr.compute_statistics(sections, [])
+        matrix_by_sev = {row["severity"]: row for row in stats["severity_category_matrix"]}
+        assert matrix_by_sev["HIGH"]["call_tree"] == 1
+        assert matrix_by_sev["MEDIUM"]["call_tree"] == 1
+        # The original code_quality column must NOT pick up the call_tree counts —
+        # call_tree is its own category, NOT folded into code_quality.
+        assert matrix_by_sev["HIGH"]["code_quality"] == 0
+        assert matrix_by_sev["MEDIUM"]["code_quality"] == 0
+
 
 # ---------------------------------------------------------------------------
 # compute_statistics

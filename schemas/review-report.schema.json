@@ -95,6 +95,7 @@
               "security": { "type": "integer", "minimum": 0 },
               "project": { "type": "integer", "minimum": 0 },
               "code_quality": { "type": "integer", "minimum": 0 },
+              "call_tree": { "type": "integer", "minimum": 0 },
               "dependencies": { "type": "integer", "minimum": 0 },
               "documentation": { "type": "integer", "minimum": 0 },
               "pr_comments": { "type": "integer", "minimum": 0 },
@@ -226,8 +227,8 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^(SEC|QA|PROJ|CODE|RUST|PY|GO|FE|DOC|CMT|DEP|PPM)-\\d{3}$",
-          "description": "Finding ID with category prefix (SEC→security, PROJ→project, CODE/RUST/PY/GO/FE→code_quality, DOC→documentation, CMT→pr_comments, DEP→dependencies, PPM→pr_promises)"
+          "pattern": "^(SEC|QA|PROJ|CODE|RUST|PY|GO|FE|DOC|CMT|DEP|PPM|CALL)-\\d{3}$",
+          "description": "Finding ID with category prefix (SEC→security, PROJ→project, CODE/RUST/PY/GO/FE/QA→code_quality, DOC→documentation, CMT→pr_comments, DEP→dependencies, PPM→pr_promises, CALL→call_tree)"
         },
         "severity": { "$ref": "#/$defs/severity" },
         "risk": { "$ref": "#/$defs/severity_float", "description": "OWASP Likelihood normalized to [0,1]." },
@@ -292,7 +293,7 @@
         "subtitle": { "type": "string" },
         "category": {
           "type": "string",
-          "enum": ["security", "project", "code_quality", "dependencies", "documentation", "pr_comments", "pr_promises"]
+          "enum": ["security", "project", "code_quality", "call_tree", "dependencies", "documentation", "pr_comments", "pr_promises"]
         },
         "findings": {
           "type": "array",

@@ -1,0 +1,52 @@
+{
+  "schema_version": "3.0.0",
+  "metadata": {
+    "project": "claudius",
+    "date": "2026-05-28"
+  },
+  "executive_summary": {
+    "overall_assessment": "Call-tree inspection fixture exercising the CALL- prefix and call_tree category end-to-end."
+  },
+  "summary_statistics": {
+    "total_findings": 2,
+    "severity_counts": {
+      "CRITICAL": 0,
+      "HIGH": 1,
+      "MEDIUM": 1,
+      "LOW": 0,
+      "INFO": 0
+    }
+  },
+  "findings": [
+    {
+      "title": "Call-Tree Inspection",
+      "category": "call_tree",
+      "findings": [
+        {
+          "id": "CALL-001",
+          "risk": 0.7,
+          "impact": 0.7,
+          "scope": 1.0,
+          "severity": 4,
+          "overall_severity": 0.8,
+          "title": "Unchecked recursion into untrusted path",
+          "location": "src/walker.rs:120-145",
+          "description": "Following the call chain `walk_dir` -> `descend` -> `descend` shows no depth guard; an attacker-controlled directory tree can blow the stack.",
+          "recommendation": "Add an explicit recursion-depth limit and surface a typed error when it is exceeded."
+        },
+        {
+          "id": "CALL-002",
+          "risk": 0.5,
+          "impact": 0.5,
+          "scope": 1.0,
+          "severity": 3,
+          "overall_severity": 0.6666666666666666,
+          "title": "Error swallowed two frames deep",
+          "location": "src/walker.rs:200-210",
+          "description": "Walking `process_entry` -> `try_open` -> `_` discards the underlying `io::Error` and substitutes a generic message.",
+          "recommendation": "Propagate the source error via `#[source]` so callers can distinguish missing-file from permission-denied."
+        }
+      ]
+    }
+  ]
+}

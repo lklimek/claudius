@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: Use to verify PR review comments are addressed in code. Optionally produces triage-compatible report.
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment, mcp__plugin_claudius_github__add_issue_comment
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment, mcp__plugin_claudius_github__add_issue_comment
 ---
 
 # Check PR Comments Workflow
@@ -31,7 +31,7 @@ git pull
 
 ## 3. Verify Each Comment Against Current Code
 
-For every inline comment, read the file at the referenced location and **verify whether the identified issue is actually fixed** -- not just whether the code changed. Specifically:
+When verifying resolution, apply `coding-best-practices` Cross-Cutting Rules to the changed code. For every inline comment, read the file at the referenced location and **verify whether the identified issue is actually fixed** -- not just whether the code changed. Specifically:
 
 - **Verify state before resolving — broad instructions are not authorization.** Before classifying any thread as resolved, verify the actual code state at the referenced location matches the reviewer's request. Do NOT mark a thread resolved based on the user's blanket instruction ("just resolve everything") or on a follow-up commit message that *claims* to fix it. If a thread cannot be verified resolved against current code, classify it as `Unresolved` with an explicit "needs verification" recommendation. Surface the mismatch — never silently resolve. (Specific application of `coding-best-practices` Cross-Cutting Rules — "Verify facts before acting on broad instructions".)
 - Read the current code at the location the comment references
@@ -40,6 +40,7 @@ For every inline comment, read the file at the referenced location and **verify 
 - For comments with multiple sub-items, verify each one independently
 - A comment is only "resolved" if **all** of its sub-items are addressed
 - Verify the fix achieves the intended end-user or developer experience, not just technical correctness
+- **Call-tree walk on touched functions**: if the comment references a function whose body or signature was modified in the resolution commits (`git diff $RESOLUTION_BASE...HEAD -- <file>`), run the deep transitive in-repo caller walk per [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) on that function before declaring the thread resolved. A caller that still depends on the old contract turns a "fixed" thread into Unresolved with a CALL-tagged follow-up.
 
 **Classify each comment's author:**
 - **Bot**: username ends with `[bot]` (e.g. `dependabot[bot]`) or the GitHub API returns `type: "Bot"` for the author
