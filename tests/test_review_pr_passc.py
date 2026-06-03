@@ -114,9 +114,11 @@ class TestPassCFloatsDeriveDocumentedBands:
         floats = {"risk": 0.2, "impact": 0.2, "scope": 0.0}
         assert derive_finding_severity(floats) == 2  # LOW
 
-    def test_scope_one_would_inflate_to_medium(self):
-        # The bug Copilot caught: at scope=1.0 the mean floors at 1/3 and both
-        # informational findings wrongly read MEDIUM — hence the scope=0.0 fix.
+    def test_scope_one_lifts_above_documented_bands(self):
+        # At scope=1.0 both informational findings rise above the intended INFO/LOW:
+        # {0.1,0.1,1.0} -> LOW(2) — IEEE-754 makes (0.1+0.1+1.0)/3 = 0.39999... land just
+        # under the 0.4 MEDIUM cutoff (the ==2 is intentional, not a typo); {0.2,0.2,1.0}
+        # -> MEDIUM(3). Neither reaches the documented INFO/LOW — hence the scope=0.0 fix.
         assert derive_finding_severity({"risk": 0.1, "impact": 0.1, "scope": 1.0}) == 2
         assert derive_finding_severity({"risk": 0.2, "impact": 0.2, "scope": 1.0}) == 3
 
