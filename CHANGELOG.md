@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-06-10
+
+### Changed
+
+- All spawnable specialist agents (`architect-nagatha`, `developer-bilby`, `project-reviewer-adams`, `qa-engineer-marvin`, `security-engineer-smythe`, `ux-designer-diziet`, `technical-writer-trillian`) now default to `model: inherit` (previously opus or sonnet). The coordinator selects model per spawn. Driven by a 14-day analysis showing 97.6% of token cost ran on Opus, including mechanical spawns. The coordinator agent (`claudius`) intentionally stays `opus[1m]`.
+- `grand-admiral` skill gains a **Token Economy** doctrine under `## Spawning`: three mandatory rules covering spawn discipline (inline small/sequential work by default — subagents were 70% of cost with 52% of spawns producing <5k output), mandatory per-spawn model tiering (sonnet/haiku for mechanical work; opus only for deep analysis), and read discipline (prefer Grep/Glob + offset/limit reads; delegate large fetches to a disposable sonnet subagent — Read was 60% of tool bytes). Existing "Model override" bullet and Anti-Pattern #7 updated to reference Token Economy rather than restate it.
+
 ## [4.6.0] - 2026-06-10
 
 ### Fixed
