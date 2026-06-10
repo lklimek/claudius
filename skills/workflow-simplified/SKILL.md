@@ -111,7 +111,7 @@ Presented ONLY when all phases complete (or max retries exhausted):
 
 ## Model Selection
 
-Agent frontmatter defaults apply. Use `model: "sonnet"` for `technical-writer-trillian`. Escalate stuck agents to `model: "opus"`.
+Agents default to `model: inherit`; set model per spawn (see `grand-admiral` Token Economy). Use `sonnet` for mechanical sub-tasks and `technical-writer-trillian`; escalate stuck or complex agents to `opus`.
 
 ## Severity & Iteration
 

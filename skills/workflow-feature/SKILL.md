@@ -143,8 +143,7 @@ Presented ONLY when all phases complete (or max retries exhausted):
 
 ## Model Selection
 
-Default to `model: "opus"` — feature work involves complex decisions.
-Use `model: "sonnet"` for `technical-writer-trillian` and routine sub-tasks (straightforward implementation, config changes).
+Agents default to `model: inherit`; set model per spawn (see `grand-admiral` Token Economy). Feature work leans `opus` for complex design and decisions; use `sonnet` for routine sub-tasks (straightforward implementation, config, docs, `technical-writer-trillian`).
 
 ## Severity & Iteration
 

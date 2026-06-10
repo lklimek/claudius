@@ -72,7 +72,7 @@ If anything noteworthy was learned, save via `claudius:lessons-learned`. Default
 
 ## Model Selection
 
-All phases use `model: "sonnet"`. Escalate to opus only for debugging non-obvious failures.
+Agents default to `model: inherit`; trivial work sets `model: "sonnet"` on every spawn, escalating to `opus` only for debugging non-obvious failures.
 
 ## Code Deduplication
 
