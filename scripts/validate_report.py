@@ -15,6 +15,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from severity_util import derive_finding_severity, derive_severity_int
+
 try:
     import jsonschema
 except ImportError:
@@ -27,6 +30,81 @@ except ImportError:
 DEFAULT_SCHEMA = (
     Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
 )
+
+# Un-rated-axis check fires only on reports with enough findings to be
+# meaningful, and only when a dimension is near-uniform — see check_consistency.
+_AXIS_MIN_FINDINGS = 5
+_AXIS_SHARE_THRESHOLD = 0.8
+
+
+def _iter_findings(report: dict) -> list[dict]:
+    """Flatten all per-section findings into one list (empty on odd shapes)."""
+    out: list[dict] = []
+    for section in report.get("findings", []) or []:
+        if isinstance(section, dict):
+            out.extend(
+                f for f in section.get("findings", []) or [] if isinstance(f, dict)
+            )
+    return out
+
+
+def check_consistency(report: dict) -> list[str]:
+    """Return non-blocking ``[consistency]`` warnings for a schema-valid report.
+
+    (i) Label/band mismatch — an explicit integer ``severity`` that disagrees
+    with the band recomputed from the finding's risk/impact/scope floats (and,
+    separately, from an explicit ``overall_severity`` when present).
+    (ii) Un-rated-axis smell — when one dimension (risk, impact, or scope) holds
+    an identical value across most findings, signalling it was defaulted rather
+    than rated per finding.
+
+    Warnings are advisory: callers print them but never fail validation.
+    """
+    findings = _iter_findings(report)
+    warnings: list[str] = []
+
+    for f in findings:
+        sev = f.get("severity")
+        has_sev = isinstance(sev, int) and not isinstance(sev, bool)
+        if not has_sev:
+            continue
+        derived = derive_finding_severity(f)
+        if derived is not None and sev != derived:
+            warnings.append(
+                f"[consistency] finding {f.get('id', '?')}: explicit severity={sev} "
+                f"disagrees with band {derived} computed from its floats "
+                f"(risk={f.get('risk')}, impact={f.get('impact')}, scope={f.get('scope')}); "
+                "labels are derived — re-rate the floats, do not hand-set severity"
+            )
+        overall = f.get("overall_severity")
+        if isinstance(overall, (int, float)) and not isinstance(overall, bool):
+            overall_band = derive_severity_int(float(overall))
+            if sev != overall_band:
+                warnings.append(
+                    f"[consistency] finding {f.get('id', '?')}: explicit severity={sev} "
+                    f"disagrees with overall_severity={float(overall):.3f} (band {overall_band})"
+                )
+
+    if len(findings) >= _AXIS_MIN_FINDINGS:
+        for axis in ("risk", "impact", "scope"):
+            values = [
+                f[axis]
+                for f in findings
+                if isinstance(f.get(axis), (int, float))
+                and not isinstance(f.get(axis), bool)
+            ]
+            if not values:
+                continue
+            top_value = max(set(values), key=values.count)
+            count = values.count(top_value)
+            if count / len(findings) >= _AXIS_SHARE_THRESHOLD:
+                warnings.append(
+                    f"[consistency] {count}/{len(findings)} findings have "
+                    f"{axis}={top_value} — {axis} may be unrated; rate it per finding "
+                    "(scope = real blast radius, per claudius:severity)"
+                )
+
+    return warnings
 
 
 def main() -> int:
@@ -65,6 +143,9 @@ def main() -> int:
     errors = sorted(validator.iter_errors(report), key=lambda e: list(e.absolute_path))
 
     if not errors:
+        # Consistency gate: advisory only — never changes the exit code.
+        for warning in check_consistency(report):
+            print(warning, file=sys.stderr)
         print(f"Valid: {args.report}")
         return 0
 

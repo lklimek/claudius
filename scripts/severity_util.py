@@ -45,6 +45,11 @@ _SEVERITY_BANDS: list[tuple[float, int]] = [
 ]
 
 
+# NOTE: scope-weighting/capping is a deliberate future consideration
+# (TODO 3cb7e842); the unweighted mean below is intentionally left unchanged
+# here to avoid rebanding every existing report. The observed inflation is a
+# mis-rating (scope defaulted to 1.0), addressed in the authoring skills and a
+# non-blocking consistency gate, not in this formula.
 def derive_overall(finding: dict[str, Any]) -> float | None:
     """Arithmetic mean of risk + impact + scope when all three are numeric floats."""
     dims = []
