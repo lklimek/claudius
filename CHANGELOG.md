@@ -6,6 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-06-10
+
+### Fixed
+
+- `grumpy-review` and `review-pr` are no longer forked subagents (`context: fork` removed). A forked subagent cannot spawn nested agents, so the parallel reviewer fan-out in both skills silently degraded to a single self-run agent. Running inline restores the `Agent` spawn tool. Because `review-pr` §2 invokes `grumpy-review`, both had to lose `context: fork` so the fork-free chain propagates and spawn capability survives the nested invocation.
+- `grumpy-review` no longer pins `model: opus` in frontmatter. On an inline skill that pin overrode the turn's model and suppressed per-invocation model requests (e.g. "review with Fable"); opus is now the in-body default that a per-review override can replace, so the requested model reaches every reviewer spawn.
+- `grumpy-review` §4 gains an anti-degradation guard: for non-trivial reviews it confirms the `Agent` tool is available before fanning out and STOPs (rather than silently running a single self-review) if it is not — the trivial single-agent path is unaffected.
+
+### Changed
+
+- `grumpy-review` and `review-pr` `allowed-tools`: the spawn tool `Task` is renamed to `Agent` (its current name; `Task` was a legacy alias), and the inert `agent: claudius` frontmatter line (only meaningful with `context: fork`) is removed. The `TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet` task-list tools are unchanged.
+- `ci-dance` Grumpy Stream: the "forked context" description of `/grumpy-review` is corrected to "runs inline and spawns its own reviewer agents" — wording only, no logic change.
+
 ## [4.5.0] - 2026-05-29
 
 ### Changed

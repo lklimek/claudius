@@ -106,7 +106,7 @@ Before fixing any finding, a stream must **claim** it via task ownership (see In
 
 #### Grumpy Stream
 
-1. **Trigger**: Invoke `/grumpy-review` locally (forked context, produces severity-ranked JSON report).
+1. **Trigger**: Invoke `/grumpy-review` locally (runs inline and spawns its own reviewer agents; produces severity-ranked JSON report).
 2. **Wait**: Grumpy-review runs locally and completes.
 3. **Collect & Classify**: Read the grumpy-review JSON report. Each finding already has severity. Verify findings exist in current code, discard outdated/false positives. Filter to MEDIUM+.
 4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
