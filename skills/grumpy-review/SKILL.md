@@ -1,10 +1,7 @@
 ---
 name: grumpy-review
 description: "Parallel-agent code review for quality, security, dependencies, and docs. Use for reviews, audits, or quality assessments. Produces deduplicated severity-ranked report."
-agent: claudius
-context: fork
-model: opus
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Task, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Agent, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage
 ---
 
 # Code Review Methodology
@@ -169,15 +166,23 @@ For each hit, judge whether the surrounding context is a genuine violation or a 
 
 ## 4. Spawn Agents
 
-Spawn all agents in parallel following the general spawning guidelines. Use `model: "opus"`
-for thorough analysis.
+This skill runs inline (not forked) specifically so it can spawn reviewer agents. For any
+non-trivial review, confirm the `Agent` tool is available before fanning out. If it is not
+(e.g. the skill is somehow executing inside a subagent, which cannot spawn nested agents), STOP
+and report that the review cannot fan out — do NOT silently fall back to a single self-run
+review. The single-agent TRIVIAL path in §1/§2 is the only legitimate one-agent review; every
+non-trivial review REQUIRES fan-out.
+
+Spawn all agents in parallel following the general spawning guidelines. Use `model: "opus"` for
+thorough analysis by default. If the user requested a specific model for this review (e.g.
+"review with Fable"), pass that model to every `Agent` spawn instead of opus.
 
 Example spawn pattern:
 
 ```
-Task(subagent_type="claudius:security-engineer-smythe", model="opus", prompt="...", name="security-auditor")
-Task(subagent_type="claudius:project-reviewer-adams", model="opus", prompt="...", name="project-reviewer")
-Task(subagent_type="claudius:developer-bilby", model="opus", prompt="...", name="rust-reviewer")
+Agent(subagent_type="claudius:security-engineer-smythe", model="opus", prompt="...", name="security-auditor")
+Agent(subagent_type="claudius:project-reviewer-adams", model="opus", prompt="...", name="project-reviewer")
+Agent(subagent_type="claudius:developer-bilby", model="opus", prompt="...", name="rust-reviewer")
 ```
 
 ## 5. Consolidate Findings
