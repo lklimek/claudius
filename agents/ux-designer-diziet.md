@@ -1,7 +1,7 @@
 ---
 name: ux-designer-diziet
 description: "Use at project start for requirements, domain analysis, stakeholder mapping, or during design for UI flows, interaction patterns, usability, accessibility, and validating plans before presenting to user."
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__list_issue_types", "mcp__plugin_claudius_github__get_label", "mcp__plugin_claudius_github__get_discussion", "mcp__plugin_claudius_github__get_discussion_comments", "mcp__plugin_claudius_github__list_discussions", "mcp__plugin_claudius_github__list_discussion_categories"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "WebSearch", "WebFetch", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__list_issue_types", "mcp__plugin_claudius_github__get_label"]
 skills: ["coding-best-practices"]
 model: inherit
 memory: user

@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.9.0] - 2026-06-11
+
+### Removed
+
+- `discussions` toolset removed from `.claude-plugin/.mcp.json` `X-MCP-Toolsets` header. GitHub Discussions is disabled/unused on target repos, so its 5 tools were unused context overhead in every session.
+- Orphaned discussion read tools (`get_discussion`, `get_discussion_comments`) removed from `tools` of `technical-writer-trillian` and `architect-nagatha`.
+- All four discussion tools (`get_discussion`, `get_discussion_comments`, `list_discussions`, `list_discussion_categories`) removed from `tools` of `ux-designer-diziet`.
+
 ## [4.8.0] - 2026-06-10
 
 ### Fixed
