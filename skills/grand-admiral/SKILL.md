@@ -104,8 +104,19 @@ See `ci-dance` and `review-pr` skills for production team patterns.
 ### Spawning Rules
 
 - Spawn independent agents **in parallel** in a single message
-- **Model override**: Agent tool `model` param overrides frontmatter defaults. Use `model: "sonnet"` for routine tasks (docs, config, straightforward implementation). Use `model: "opus"` for deep analysis (security audits, architecture, complex debugging). Consult the active workflow skill's Model Selection section for per-phase guidance.
+- **Model override**: Agents default to `inherit` — you MUST set model per spawn (see Token Economy).
 - `run_in_background: true` for very large tasks
+
+### Token Economy
+
+Spawning is the dominant token cost: every subagent rebuilds its context cache from scratch, and that cache-creation — not model output — is the bulk of the bill. The cheapest work is the spawn you don't make.
+
+Four mandatory rules:
+
+1. **Spawn discipline**: default to inline for small/sequential work in the warm parent context. Spawn ONLY for genuinely parallel independent work, large scope (~20k+ output tokens, or many files), or required context isolation.
+2. **Model tiering (mandatory)**: set model on every spawn — sonnet/haiku for mechanical work (routine code, search, QA, review, docs); opus for deep analysis (security audits, complex debugging); fable (top tier) for the architect's hardest design work (system design, dependency/tech trade-offs, plan validation). Never let a spawn default to its frontmatter model.
+3. **Read discipline**: prefer Grep/Glob first and Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary — see `git-and-github` § Context Management.
+4. **Coordinator context**: inlining keeps work in the coordinator's own context, which grows with it — so the axis is bounded-vs-bulk, not small-vs-large. Inline only BOUNDED work; when work would pull in bulk or unbounded data (large files, logs, wide searches), delegate to a disposable subagent so those bytes never enter the coordinator's context (the spawn cost buys context hygiene). For long sessions, summarise completed work to a task/file and rely on context compaction rather than carrying full history.
 
 ### Agent Reuse
 
@@ -224,7 +235,7 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 4. No output location — always specify where standalone agents write
 5. Parallelizing tightly coupled work — use single opus agent sequentially for cross-file dependencies
 6. Trusting stale diagnostics — verify with fresh build
-7. Spawning agents for tiny tasks — batch small tasks (>=100 lines per agent) within same specialization
+7. Spawning agents for tiny tasks — inline small/sequential work by default (see Token Economy § Spawn discipline)
 8. Auto-deleting data on errors — NEVER delete databases, wipe volumes, or destroy data without explicit user confirmation (see CLAUDE.md Safety section)
 9. Not verifying branch context after worktree cleanup — `git worktree remove` can change checked-out branch, causing cherry-picks into wrong branch
 10. Spawning fresh agents for follow-up work — reuse running agents via SendMessage to leverage accumulated context
