@@ -17,7 +17,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from severity_util import derive_finding_severity, derive_severity_int
+from severity_util import derive_finding_severity, derive_severity_int  # noqa: E402
 
 try:
     import jsonschema
@@ -98,10 +98,10 @@ def check_consistency(report: dict) -> list[str]:
                 continue
             top_value, count = Counter(values).most_common(1)[0]
             if count / len(findings) >= _AXIS_SHARE_THRESHOLD:
+                extra = " (scope = real blast radius, per claudius:severity)" if axis == "scope" else ""
                 warnings.append(
                     f"[consistency] {count}/{len(findings)} findings have "
-                    f"{axis}={top_value} — {axis} may be unrated; rate it per finding "
-                    "(scope = real blast radius, per claudius:severity)"
+                    f"{axis}={top_value} — {axis} may be unrated; rate it per finding{extra}"
                 )
 
     return warnings
