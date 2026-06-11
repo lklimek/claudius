@@ -58,7 +58,7 @@ Findings emit in the v3 report format. See `claudius:report-format` for the enve
 
 Run all three; emit at most one finding per axis-trigger. When the diff is large, delegate the per-axis judgment to a subagent per `git-and-github` § Context Management.
 
-Trigger hints below give `risk` / `impact` float ranges (the only severity fields a producer emits — the coordinator computes `overall_severity` and the integer band). Always cross-check the rubric and band table in `claudius:severity`.
+Trigger hints below give `risk` / `impact` float ranges (the only severity fields a producer emits — the coordinator computes `overall_severity` and the integer band). Always cross-check the rubric and band table in `claudius:severity`, including its blast-radius definition of `scope`. Never hand-type a severity label — the pipeline derives it from the floats. Pass C's `scope=1.0` for promise *mismatches* below is a genuine full-PR blast radius (reviewer trust across the whole change), not a lazy default.
 
 **Pass C `scope` exception**: the `scope=1.0` rule applies only to actual promise *mismatches* on axes 1–3 (the gap is by definition about THIS PR's diff). The two *informational* findings — "PR self-description verified" and "PR body unparseable" — describe no actionable diff work, so they use `scope=0.0` (mirroring `check-pr-comments`' RESOLVED convention), which lets their low `risk`/`impact` floats derive to INFO / LOW respectively. Pinning them at `scope=1.0` forces the mean to at least 1/3 (≈0.33, the risk=impact=0 limit) — already above INFO — so with the actual floats they derive to LOW (`0.1/0.1/1.0` → ≈0.40) and MEDIUM (`0.2/0.2/1.0` → ≈0.47), never the intended INFO and LOW.
 

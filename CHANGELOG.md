@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.8.0] - 2026-06-10
+
+### Fixed
+
+- Severity reporting: two defects that let a report's machine-derived severities drift above the true picture. (1) **scope-inflation** — `scope` was routinely defaulted to `1.0` (observed: 27/28 findings), which floors the `mean(risk, impact, scope)` band at MEDIUM and over-counts HIGH/MEDIUM versus the real blast radius. (2) **dual-label drift** — reports carried machine floats AND a separately hand-typed prose severity label that, authored in parallel, disagreed with the floats.
+- Fix A (derive-only labels): the renderer already derives every severity label from `risk`/`impact`/`scope` via `severity_util` (verified, unchanged); the `severity` skill and the producer skills now state explicitly that labels are DERIVED by the pipeline and MUST NOT be hand-typed in a companion document.
+- Fix B (scope as blast radius): `claudius:severity` redefines `scope` as the actual blast radius (fraction of users / surface / call-sites reached) with a rating rubric (`1.0` repo-wide, `~0.5` subsystem, `~0.2` single call-site, `0.0` none) — it must be rated per finding, never left at `1.0`. `grumpy-review`, `review-pr`, `check-pr-comments`, and `triage-findings` cross-reference this (no duplicated rubric).
+- Fix C (non-blocking consistency gate): `scripts/validate_report.py` now prints actionable `[consistency]` WARNINGS to stderr — a label/band mismatch when an explicit integer `severity` disagrees with the band recomputed from its floats, and an un-rated-axis smell when ≥80% of findings (≥5 findings) share one value in any of risk/impact/scope. The gate reuses `severity_util`'s banding and never fails validation (exit code stays 0 for otherwise-valid reports).
+- The `mean(risk, impact, scope)` formula and band thresholds in `severity_util.py` were intentionally left unchanged — scope-weighting/capping is a deliberate future consideration (changing it would reband every existing report).
+
 ## [4.7.0] - 2026-06-10
 
 ### Changed

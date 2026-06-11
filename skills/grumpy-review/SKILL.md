@@ -126,7 +126,7 @@ Each agent writes its output to the specified file path as valid JSON:
 ]
 ```
 
-**Required finding fields**: `id`, `risk` / `impact` / `scope` (floats 0.0–1.0), `title`, `location`, `description`, `recommendation`. See `severity` skill for the OWASP-normalized recipes that produce the three float dimensions and the band table that the coordinator uses to derive the integer `severity`.
+**Required finding fields**: `id`, `risk` / `impact` / `scope` (floats 0.0–1.0), `title`, `location`, `description`, `recommendation`. See `claudius:severity` for the OWASP-normalized recipes that produce the three float dimensions and the band table that the coordinator uses to derive the integer `severity`. Rate `scope` as real blast radius per `claudius:severity` — never default it to `1.0`. The float trio is the single source of truth; never hand-type a severity label — the pipeline derives it.
 
 **Optional**: `tags`, `impact_description` (Markdown impact narrative; the numeric `impact` float is separate), `code_snippets` (emit only when you captured the exact source during analysis — never invent one).
 

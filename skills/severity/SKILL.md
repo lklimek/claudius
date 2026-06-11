@@ -90,13 +90,18 @@ impact = average(factor_scores) / 9.0
 
 For pure code-quality findings without a security angle, score the technical factors only and treat business factors as 0 — the average still lands in a sensible band.
 
-### `scope` (PR relevance)
+### `scope` (blast radius)
 
-| Value | Meaning |
+`scope` is the **actual blast radius** — the fraction of users / surface / call-sites the finding reaches. Rate it per finding from the evidence; it is **not** a default-`1.0` field and **MUST NOT** be left at `1.0` unless the issue genuinely affects the whole surface. A lazy `1.0` floors the mean at MEDIUM and inflates every report.
+
+| Value | Blast radius |
 |-------|---------|
-| `1.0` | Directly in the PR diff — introduced or modified by this change |
-| `0.5` | Indirectly affected — pre-existing code touched or reachable via the diff |
-| `0.0` | Unrelated to the PR — pre-existing issue outside the diff |
+| `1.0` | Repo-wide — all users / the entire public surface / every call-site |
+| `~0.5` | A module or subsystem — one bounded component |
+| `~0.2` | A single call-site, rare path, or narrow edge case |
+| `0.0` | None remaining — resolved, informational, or out-of-PR (derives to INFO) |
+
+PR-relevance maps onto this axis: an issue introduced by and reaching across the diff is high-blast (`~1.0`); a resolved comment or informational note has none (`0.0`). Rate the radius — never paste `1.0`.
 
 ### Band table (`overall_severity` → integer `severity`)
 
@@ -111,3 +116,5 @@ CVSS v4.0-aligned bands, applied by the coordinator:
 | < 0.1 | 1 | INFO |
 
 Producers emit `risk`/`impact`/`scope` floats; the coordinator (or `validate-findings` when a producer omits them) writes `overall_severity` and the integer `severity`.
+
+The float trio is the **single source of truth** for severity. Producers MUST NOT hand-type a severity label (CRITICAL/HIGH/…) in a companion document or alongside the floats — every human-readable label is *derived* from `risk`/`impact`/`scope` by the pipeline. A label authored in parallel drifts from the floats and is wrong by construction.
