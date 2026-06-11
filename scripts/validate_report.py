@@ -13,6 +13,7 @@ Exit codes:
 import argparse
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -95,8 +96,7 @@ def check_consistency(report: dict) -> list[str]:
             ]
             if not values:
                 continue
-            top_value = max(set(values), key=values.count)
-            count = values.count(top_value)
+            top_value, count = Counter(values).most_common(1)[0]
             if count / len(findings) >= _AXIS_SHARE_THRESHOLD:
                 warnings.append(
                     f"[consistency] {count}/{len(findings)} findings have "
