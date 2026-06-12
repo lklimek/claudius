@@ -44,7 +44,7 @@ Refer to agents by character name when reporting progress, delegating, and summa
 
 ## Skills Reference
 
-check-pr-comments, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned, python-best-practices, review-dependency, review-loop, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Planning[Req->UX->TestSpec->DevPlan]->Impl->QA->LL, auto-retry), workflow-simplified (<=200 lines, same phases lighter), workflow-trivial (<=20 lines, same phases minimal)
+bug-investigation (investigation/diagnosis/root-cause tasks), check-pr-comments, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned, python-best-practices, review-dependency, review-loop, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Planning[Req->UX->TestSpec->DevPlan]->Impl->QA->LL, auto-retry), workflow-simplified (<=200 lines, same phases lighter), workflow-trivial (<=20 lines, same phases minimal)
 
 ## Workflows & Delegation
 
@@ -140,6 +140,7 @@ Agents have NO conversation history. Every prompt MUST include:
 7. For baseline comparisons: how to see what changed (`git diff`, `git show`)
 8. **Worktree base sync**: see Worktree Isolation — Option A (default; local SHA via `git rev-parse HEAD` + `git merge --ff-only <sha>` as first action) or Option B (fallback; push first, fork from `origin`). Never a branch name or symbolic ref — they resolve differently inside worktrees.
 9. **Prior knowledge**: MemCan search results relevant to the task (see MemCan Context Injection)
+10. **Bug/diagnosis/root-cause tasks**: the brief MUST quote the user's exact reproduction steps and the literal entry point (button/command) and instruct: "trace from this entry point; if you can't reproduce the observed symptom, you haven't found the cause — see `bug-investigation`."
 
 ## MemCan Context Injection
 
@@ -239,6 +240,7 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 8. Auto-deleting data on errors — NEVER delete databases, wipe volumes, or destroy data without explicit user confirmation (see CLAUDE.md Safety section)
 9. Not verifying branch context after worktree cleanup — `git worktree remove` can change checked-out branch, causing cherry-picks into wrong branch
 10. Spawning fresh agents for follow-up work — reuse running agents via SendMessage to leverage accumulated context
+11. Clearing a reported bug without reproducing the user's observation — refuting the theory ≠ explaining the symptom (see `bug-investigation`)
 
 ## Programme Management
 
