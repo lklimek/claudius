@@ -237,11 +237,11 @@ The harness auto-notifies on agent completion AND death (crash, rate-limit, term
 
 ### Stall Watchdog
 
-A stall is **owning an in_progress task AND idle past threshold AND no build running** — not bare idle. A healthy agent idles while waiting for its next instruction; an idle agent with **no assigned in_progress task is healthy and never flagged**. "Owns work" is read from the on-disk task store (`~/.claude/tasks/<teamName>/<id>.json`, the `owner`+`status` fields — the source of truth), rebuilt every poll. Launch ONE persistent Monitor per wave; it auto-discovers three agent kinds:
+A stall is **owning an in_progress task AND idle past threshold AND no build running *under that agent*** — not bare idle. A healthy agent idles while waiting for its next instruction; an idle agent with **no assigned in_progress task is healthy and never flagged**. "Owns work" is read from the on-disk task store (`~/.claude/tasks/<teamName>/<id>.json`, the `owner`+`status` fields — the source of truth), rebuilt every poll. Build suppression is **per-agent** (a process whose `/proc/<pid>/cwd` is under the agent's worktree/cwd running a real build/test argv), never a machine-global `pgrep` (which a shared box pins to "always building"). Launch ONE persistent Monitor per wave; it discovers:
 
-- **Team** (newest `~/.claude/teams/session-*/config.json` members, `isActive==true`, non-lead) — NAMED, **task-gated**; activity = newest mtime under its worktree (else `cwd`).
-- **Worktree-isolated** (`.claude/worktrees/agent-*`) — NAMED, **task-gated**; activity = newest mtime under the dir.
-- **Individual/background subagents** (`…/<leadSessionId>/subagents/agent-*.jsonl`) — ANONYMOUS, **not gated** (they run one task to completion and don't idle-wait; the harness notifies on completion); activity = transcript mtime, scoped to the current lead session so finished prior-session agents are never flagged.
+- **Team** (newest `~/.claude/teams/session-*/config.json` members, `isActive==true`, non-lead) — NAMED, **task-gated**; per-agent clock = newest mtime under its worktree, else its `cwd` (`.git` pruned). A cwd shared by ≥2 active members can't isolate one agent → that member is skipped (give it an isolated worktree).
+- **Worktree-isolated** (`<worktrees>/agent-*`) — NAMED, **task-gated**; clock = newest mtime under the dir. Shares ONE canonical label with the team source (leading `agent-` stripped).
+- **Individual/background subagents** (`…/subagents/agent-*.jsonl`) — ANONYMOUS, **off by default**; enable with `--watch-subagents`. Best-effort & opt-in: a finished subagent has a stale transcript by design with no reliable on-disk completion signal, and the harness already notifies on background-agent completion/death — so treat any subagent STALL as an investigate prompt.
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
@@ -250,9 +250,9 @@ Monitor(persistent=true, description="agent stall watchdog",
 
 `${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(*agent-watchdog.sh *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
 
-**Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while any build tool runs and skips agents with no signal yet (no epoch-zero false alarms — see script header). `TaskStop` the Monitor when the wave completes.
+**Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops being discovered (worktree removed, member deactivated) is auto-cleared. `TaskStop` the Monitor when the wave completes. Prefer an explicit `--team-dir` when multiple sessions exist (autodetect picks newest-by-mtime).
 
-**Events:** `STALL agent=<name> idle=<N>s reason=owns-in_progress-idle` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fires when a named agent shows fresh activity OR no longer owns an in_progress task).
+**Events:** `STALL agent=<name> idle=<N>s reason=owns-in_progress-idle` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fresh activity OR no longer owns an in_progress task) or `RESUMED agent=<key> reason=gone` (agent vanished).
 
 ### On a STALL Event (fully autonomous)
 
