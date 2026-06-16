@@ -206,37 +206,48 @@ build_subcmd() {   # $1=program basename, $2=subcommand
   esac
   return 1
 }
-is_interp() { case "$1" in sh|bash|dash|zsh|ksh|env|python|python2|python3|node|nodejs|perl|ruby) return 0 ;; esac; return 1; }
+bn() { local s="$1"; printf '%s' "${s##*/}"; }   # basename
 
 is_build_proc() {
   # True if pid $1's argv is an anchored build/test command -- matched directly
-  # on argv0, OR through a shebang/interpreter wrapper (QA-017): a script with
-  # `#!/bin/sh` (./gradlew build), `#!/usr/bin/env bash` (env adds a layer), or a
-  # console entry point (`python3 .../pytest`, `node .../jest`) presents argv0 as
-  # the interpreter, so the real tool is in argv1/argv2 -- peel one layer.
-  local cmd="/proc/$1/cmdline" a0="" a1="" a2="" a3="" b0 b1 b2 b3 p q
+  # on argv0 (native ELF: cargo build, make, rustc, ...), OR through a shebang/
+  # interpreter wrapper (QA-017). A script with `#!/bin/sh` (`./gradlew build`),
+  # `#!/usr/bin/env bash` (`env [VAR=val…] [-flags] bash ./mvnw …`), or a console
+  # entry point (`python3 .../pytest`, `node .../jest`) presents argv0 as the
+  # interpreter, so the real tool is in a later argv -- peel one interpreter
+  # layer (skipping env's VAR=val / -flag prefix) and test that token's basename.
+  local cmd="/proc/$1/cmdline" tok i n c
   [ -r "$cmd" ] || return 1
-  { IFS= read -r -d '' a0 || true
-    IFS= read -r -d '' a1 || true
-    IFS= read -r -d '' a2 || true
-    IFS= read -r -d '' a3 || true
-  } < "$cmd" 2>/dev/null || return 1
-  b0="${a0##*/}"; b1="${a1##*/}"; b2="${a2##*/}"; b3="${a3##*/}"
+  local -a argv=()
+  while IFS= read -r -d '' tok; do argv+=("$tok"); done < "$cmd" 2>/dev/null || true
+  n="${#argv[@]}"; [ "$n" -gt 0 ] || return 1
 
-  build_simple "$b0" && return 0                    # direct: make, gcc, gradlew, ...
-  build_subcmd "$b0" "$b1" && return 0              # direct: cargo build, go test, ...
-  if [ "$b0" = python ] || [ "$b0" = python2 ] || [ "$b0" = python3 ]; then
-    if [ "$a1" = "-m" ]; then                       # python -m pytest / -m pip install
-      case "$b2" in pytest|build) return 0 ;; pip) [ "$b3" = install ] && return 0 ;; esac
-    fi
+  i=0
+  if [ "$(bn "${argv[0]}")" = env ]; then           # env: skip VAR=val and -flag prefix
+    i=1
+    while [ "$i" -lt "$n" ]; do
+      case "${argv[$i]}" in -*|*=*) i=$((i + 1)) ;; *) break ;; esac
+    done
   fi
+  [ "$i" -lt "$n" ] || return 1
 
-  if is_interp "$b0"; then                          # wrapped: peel one interpreter layer
-    p="$b1"; q="$b2"
-    if [ "$b0" = env ] && is_interp "$b1"; then p="$b2"; q="$b3"; fi   # env <interp> <script> ...
-    build_simple "$p" && return 0                   # sh ./gradlew, python3 .../pytest, node .../jest
-    build_subcmd "$p" "$q" && return 0              # env make / bash -lc-less cargo build wrappers
-  fi
+  c="$(bn "${argv[$i]}")"
+  case "$c" in                                      # peel one interpreter -> next token is the tool/script
+    sh|bash|dash|zsh|ksh|perl|ruby|node|nodejs) i=$((i + 1)) ;;
+    python|python2|python3)
+      if [ "${argv[$((i + 1))]:-}" = "-m" ]; then   # python -m pytest / -m pip install
+        case "$(bn "${argv[$((i + 2))]:-}")" in
+          pytest|build) return 0 ;;
+          pip) [ "$(bn "${argv[$((i + 3))]:-}")" = install ] && return 0 ;;
+        esac
+        return 1
+      fi
+      i=$((i + 1)) ;;
+  esac
+  [ "$i" -lt "$n" ] || return 1
+
+  build_simple "$(bn "${argv[$i]}")" && return 0
+  build_subcmd "$(bn "${argv[$i]}")" "$(bn "${argv[$((i + 1))]:-}")" && return 0
   return 1
 }
 
