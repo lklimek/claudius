@@ -175,7 +175,7 @@ non-trivial review REQUIRES fan-out.
 
 Spawn all agents in parallel following the general spawning guidelines. Use `model: "opus"` for
 thorough analysis by default. If the user requested a specific model for this review (e.g.
-"review with Fable"), pass that model to every `Agent` spawn instead of opus.
+"review with Sonnet"), pass that model to every `Agent` spawn instead of opus.
 
 Example spawn pattern:
 
