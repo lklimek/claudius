@@ -359,24 +359,30 @@ while :; do
     done
   fi
 
-  unset SEEN ALIVE; declare -A SEEN ALIVE   # SEEN = dedup; ALIVE = had a live signal
+  unset SEEN ALIVE; declare -A SEEN ALIVE   # SEEN = dedup (claimed only on a real signal); ALIVE = had a live signal
 
   # ---- SOURCE A: team members (NAMED, gated) ----
+  # SEEN is claimed ONLY after a real activity signal exists (QA-016): an active
+  # member with no signal must NOT block the gone-prune, or a removed-worktree
+  # member would stay STALLED forever.
   if [ "$team_present" -eq 1 ]; then
     for i in "${!m_names[@]}"; do
       name="${m_names[$i]}"; cwd="${m_cwds[$i]}"
       [ -n "$name" ] || continue
       key="$(canon "$name")"
       [ -n "${SEEN[$key]:-}" ] && continue
-      SEEN["$key"]=1
+      a_dir=""; a_mt=""
       wt="$wt_dir/agent-$key"
       if [ -d "$wt" ]; then
-        evaluate_named "$key" "$(newest_mtime_under "$wt")" "$wt"
+        a_dir="$wt"; a_mt="$(newest_mtime_under "$wt")"
       elif [ -n "$cwd" ] && [ "${CWD_COUNT[$cwd]:-0}" -ge 2 ]; then
         warn_once "sharedcwd:$key" "no per-agent signal for $key (cwd shared by >=2 active members) — give it an isolated worktree to monitor"
       elif [ -n "$cwd" ]; then
-        evaluate_named "$key" "$(newest_mtime_cwd "$cwd")" "$cwd"
+        a_dir="$cwd"; a_mt="$(newest_mtime_cwd "$cwd")"
       fi
+      [ -n "$a_mt" ] || continue        # no signal -> don't claim SEEN; gone-prune may clear it
+      SEEN["$key"]=1
+      evaluate_named "$key" "$a_mt" "$a_dir"
     done
   fi
 
@@ -386,8 +392,10 @@ while :; do
       [ -d "$d" ] || continue
       key="$(canon "${d##*/}")"
       [ -n "${SEEN[$key]:-}" ] && continue
+      a_mt="$(newest_mtime_under "$d")"
+      [ -n "$a_mt" ] || continue
       SEEN["$key"]=1
-      evaluate_named "$key" "$(newest_mtime_under "$d")" "$d"
+      evaluate_named "$key" "$a_mt" "$d"
     done
   elif [ -n "$wt_dir" ]; then
     warn_once "nowt:$wt_dir" "worktrees dir $wt_dir absent; Source C inactive"
@@ -413,8 +421,9 @@ while :; do
         [ -e "$f" ] || continue
         base="${f##*/}"; key="${base%.jsonl}"
         [ -n "${SEEN[$key]:-}" ] && continue
-        SEEN["$key"]=1
         m="$(stat -c %Y "$f" 2>/dev/null || true)"
+        [ -n "$m" ] || continue          # no signal -> don't claim SEEN
+        SEEN["$key"]=1
         evaluate_anon "$key" "$m"
       done
     done
