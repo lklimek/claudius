@@ -23,10 +23,12 @@
 #   to STALL, scan /proc for a process whose `/proc/<pid>/cwd` resolves UNDER
 #   that agent's worktree/cwd AND whose argv is a real build/test (anchored
 #   argv0 basename + subcommand: cargo build|test|check|clippy|run, rustc, cc1,
-#   cc1plus, gcc, g++, clang, clang++, ld, make, cmake, ninja, gradle, mvn,
-#   bazel, go build|test|run, tsc, webpack, pytest, jest, dotnet build,
-#   pip install). No global boolean; no bare node/npm/yarn/pnpm; no unanchored
-#   substrings. /proc reads are guarded.
+#   cc1plus, gcc, g++, clang, clang++, ld, make, cmake, ninja, gradle, gradlew,
+#   mvn, mvnw, bazel, go build|test|run, tsc, webpack, pytest, jest, dotnet
+#   build, pip install). Shebang/interpreter wrappers are unwrapped one layer
+#   (sh ./gradlew, env bash ./mvnw, python3 .../pytest, node .../jest) so a
+#   wrapped build is matched on argv1/argv2, not just argv0. No global boolean;
+#   no bare node/npm/yarn/pnpm; no unanchored substrings. /proc reads guarded.
 #
 # PER-AGENT activity clock
 #   1. If the agent's worktree `<worktrees>/agent-<name>` exists -> newest mtime
@@ -189,27 +191,52 @@ for f in glob.glob(os.path.join(d, "*.json")):
 PY
 }
 
+build_simple() {   # basename that means "build" on its own (incl. gradlew/mvnw wrappers)
+  case "$1" in
+    rustc|cc1|cc1plus|gcc|g++|clang|clang++|ld|make|cmake|ninja|gradle|gradlew|mvn|mvnw|bazel|tsc|webpack|pytest|jest) return 0 ;;
+  esac
+  return 1
+}
+build_subcmd() {   # $1=program basename, $2=subcommand
+  case "$1" in
+    cargo)    case "$2" in build|test|check|clippy|run) return 0 ;; esac ;;
+    go)       case "$2" in build|test|run) return 0 ;; esac ;;
+    dotnet)   [ "$2" = build ] && return 0 ;;
+    pip|pip3) [ "$2" = install ] && return 0 ;;
+  esac
+  return 1
+}
+is_interp() { case "$1" in sh|bash|dash|zsh|ksh|env|python|python2|python3|node|nodejs|perl|ruby) return 0 ;; esac; return 1; }
+
 is_build_proc() {
-  # True if pid $1's argv is an anchored build/test command.
-  local pid="$1" cmd="/proc/$1/cmdline" a0="" a1="" a2="" a3=""
+  # True if pid $1's argv is an anchored build/test command -- matched directly
+  # on argv0, OR through a shebang/interpreter wrapper (QA-017): a script with
+  # `#!/bin/sh` (./gradlew build), `#!/usr/bin/env bash` (env adds a layer), or a
+  # console entry point (`python3 .../pytest`, `node .../jest`) presents argv0 as
+  # the interpreter, so the real tool is in argv1/argv2 -- peel one layer.
+  local cmd="/proc/$1/cmdline" a0="" a1="" a2="" a3="" b0 b1 b2 b3 p q
   [ -r "$cmd" ] || return 1
   { IFS= read -r -d '' a0 || true
     IFS= read -r -d '' a1 || true
     IFS= read -r -d '' a2 || true
     IFS= read -r -d '' a3 || true
   } < "$cmd" 2>/dev/null || return 1
-  a0="${a0##*/}"                       # argv0 basename
-  case "$a0" in
-    rustc|cc1|cc1plus|gcc|g++|clang|clang++|ld|make|cmake|ninja|gradle|mvn|bazel|tsc|webpack|pytest|jest) return 0 ;;
-    cargo)    case "$a1" in build|test|check|clippy|run) return 0 ;; esac ;;
-    go)       case "$a1" in build|test|run) return 0 ;; esac ;;
-    dotnet)   [ "$a1" = build ] && return 0 ;;
-    pip|pip3) [ "$a1" = install ] && return 0 ;;
-    python|python3)
-      case "$a1" in
-        -m) case "$a2" in pytest) return 0 ;; pip) [ "$a3" = install ] && return 0 ;; esac ;;
-      esac ;;
-  esac
+  b0="${a0##*/}"; b1="${a1##*/}"; b2="${a2##*/}"; b3="${a3##*/}"
+
+  build_simple "$b0" && return 0                    # direct: make, gcc, gradlew, ...
+  build_subcmd "$b0" "$b1" && return 0              # direct: cargo build, go test, ...
+  if [ "$b0" = python ] || [ "$b0" = python2 ] || [ "$b0" = python3 ]; then
+    if [ "$a1" = "-m" ]; then                       # python -m pytest / -m pip install
+      case "$b2" in pytest|build) return 0 ;; pip) [ "$b3" = install ] && return 0 ;; esac
+    fi
+  fi
+
+  if is_interp "$b0"; then                          # wrapped: peel one interpreter layer
+    p="$b1"; q="$b2"
+    if [ "$b0" = env ] && is_interp "$b1"; then p="$b2"; q="$b3"; fi   # env <interp> <script> ...
+    build_simple "$p" && return 0                   # sh ./gradlew, python3 .../pytest, node .../jest
+    build_subcmd "$p" "$q" && return 0              # env make / bash -lc-less cargo build wrappers
+  fi
   return 1
 }
 
