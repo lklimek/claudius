@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.10.0] - 2026-06-12
+
+### Added
+
+- New `bug-investigation` skill — root-cause discipline so reported bugs are diagnosed correctly by default: observation over theory; trace from the real entry point, not the well-named function; verify the exercised path; never conclude "not a bug" until the user's observation is reproduced. Born from a real 2026-06-12 failure (dash-evo-tool: a receive address derived past the SPV gap window → invisible funds, wrongly cleared as "not a bug").
+- Preloaded on `qa-engineer-marvin`, `architect-nagatha`, and `developer-bilby` via `skills:`; referenced from `grand-admiral` (Agent Prompt Requirements, Skills Reference, Anti-Patterns).
+
 ## [4.9.0] - 2026-06-11
 
 ### Removed
