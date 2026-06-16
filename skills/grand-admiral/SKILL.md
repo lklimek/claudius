@@ -1,7 +1,6 @@
 ---
 name: grand-admiral
 description: "Multi-agent orchestration doctrine: spawning, worktree isolation, team coordination, scaling, recovery, programme management. Always loaded by coordinator agents that spawn, manage, and merge work from subagents."
-allowed-tools: Bash(*agent-watchdog.sh *)
 ---
 
 # Grand Admiral — Multi-Agent Orchestration
@@ -238,29 +237,30 @@ The harness auto-notifies on agent completion AND death (crash, rate-limit, term
 
 ### Stall Watchdog
 
-Launch ONE persistent Monitor per wave — it auto-discovers all agents in the wave from transcript files and worktree directories:
+Launch ONE persistent Monitor per wave. It auto-discovers BOTH team agents (newest `~/.claude/teams/session-*/config.json` members with `isActive==true`) and individual/background subagents (nested `…/subagents/agent-*.jsonl` transcripts), autodetecting both dirs:
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
-        command="bash scripts/agent-watchdog.sh --worktrees .claude/worktrees --stall-secs 300")
+        command="bash ${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh --stall-secs 300")
 ```
 
-Adjust `--stall-secs` to expected build duration (cold Rust builds: 600+). The script emits only `STALL`/`RESUMED` lines and suppresses STALL while any build tool is running (see script header for rationale). `TaskStop` the Monitor when the wave completes.
+`${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(*agent-watchdog.sh *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
 
-**Events:** `STALL agent=<name> idle=<N>s transcript=<path>` — idle past threshold with no build detected; `RESUMED agent=<name> idle=<N>s` — output resumed.
+**Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while any build tool runs and skips agents with no files yet (no epoch-zero false alarms — see script header). `TaskStop` the Monitor when the wave completes.
+
+**Events:** `STALL agent=<key> idle=<N>s src=<team|subagent> ref=<path>`; `RESUMED agent=<key> idle=<N>s`.
 
 ### On a STALL Event (fully autonomous)
 
-`STALL` is a PRE-FILTER, **never an auto-kill** — a build-blocked agent writes nothing for many minutes while actively compiling. Investigate first, then act:
+`STALL` is a best-effort PRE-FILTER, **never an auto-kill** — a build-blocked agent writes nothing for many minutes while compiling, and a just-finished subagent can look stalled. Investigate first, then act:
 
-1. **Investigate** — `tail <transcript_path>` reveals the last tool call; `git -C <worktree> status` shows uncommitted work; `pgrep -la 'cargo|rustc|go|node|pytest'` confirms no live build. Trust file/git state over the signal (Anti-Pattern #6: stale diagnostics).
+1. **Investigate** — `tail <ref>` (the transcript) reveals the last tool call; `git -C <cwd> status` shows uncommitted work; `pgrep -la 'cargo|rustc|go|node|pytest'` confirms no live build. Trust file/git state over the signal (Anti-Pattern #6: stale diagnostics).
 2. **Live but idle** — agent is waiting on a message or lost its kickoff → `SendMessage` restating the pending task. Context preserved, no respawn needed.
-3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same worktree** with a context brief extracted from:
-   - Last N lines of `<transcript_path>` (what it was doing)
-   - `git -C <worktree> log --oneline -5` (commits landed so far)
-   - `git -C <worktree> branch --show-current` (current branch)
+3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same cwd/worktree** with a context brief extracted from:
+   - Last N lines of the transcript (what it was doing)
+   - `git -C <cwd> log --oneline -5` (commits landed so far) and `branch --show-current`
    - Re-feed open tasks via `TaskGet` + `TaskUpdate(owner=<new-agent>)`
-   - Bump to `model: opus` if the task requires deep analysis
+   - Archive its inbox (`inboxes/<name>.json` → `.killed-<ts>`) to keep the message history; bump to `model: opus` if the task needs deep analysis
    The worktree's commits and working-tree edits survive intact — only the agent process is replaced.
 4. **Escalate** — report to user after a second recovery attempt fails: agent name, stall duration, last tool call, transcript path.
 

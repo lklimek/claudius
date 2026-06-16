@@ -1,186 +1,227 @@
 #!/usr/bin/env bash
 # Agent-stall watchdog for multi-agent (grand-admiral) orchestration.
 #
-# Purpose:
+# Purpose
 #   Fill the ONE gap the Claude Code harness does not cover: an agent that is
 #   silently stuck but has NOT crashed. The harness already auto-notifies on
 #   completion AND on death (crash / rate-limit / terminal error) with no
-#   approval needed -- so this watchdog is NOT the primary death detector. It
-#   only flags "alive but went quiet" so the coordinator can investigate.
+#   approval -- so this watchdog is NOT the primary death detector. It only
+#   flags "alive but went quiet" so the coordinator can investigate.
 #
-# Monitor invocation (one persistent monitor per wave; each stdout line is one
-# notification, so output is deliberately sparse):
+# ZERO MODEL TOKENS WHEN HEALTHY (hard contract)
+#   This script is run by the `Monitor` tool, where every stdout LINE becomes a
+#   coordinator notification that costs context tokens. Therefore it is strictly
+#   EDGE-TRIGGERED: it prints a line ONLY on an OK->STALL or STALL->RESUMED
+#   transition. There is NO per-poll output, NO heartbeat, NO "all clear", NO
+#   progress, and NO debug on stdout (all diagnostics go to stderr). Healthy
+#   operation == total stdout silence == zero coordinator tokens. Tokens are
+#   spent only when a real stall fires (and then recovery is worth it).
+#
+# Monitor invocation (one persistent monitor per wave; autodetect by default):
 #   Monitor(persistent=true, description="agent stall watchdog",
-#           command="bash scripts/agent-watchdog.sh \
-#                      --worktrees .claude/worktrees --stall-secs 300")
+#           command="bash scripts/agent-watchdog.sh --stall-secs 300")
 #
-# CRITICAL -- a STALL line is a PRE-FILTER, never an auto-kill trigger:
-#   STALL means "idle long enough AND no build running" -- it is a prompt for
-#   the coordinator to INVESTIGATE (tail the transcript, `git -C <worktree>
-#   status/diff`, confirm no build), THEN decide. Restarting a busy agent
-#   destroys its in-flight work. The recovery doctrine lives in the
-#   grand-admiral skill (## Recovery).
+# CRITICAL -- a STALL line is a PRE-FILTER, never an auto-kill trigger
+#   STALL means "idle long enough AND no build running". It is a prompt for the
+#   coordinator to INVESTIGATE (tail the transcript, `git -C <cwd> status/diff`,
+#   confirm no build), THEN decide. Restarting a busy agent destroys in-flight
+#   work. The recovery doctrine lives in the grand-admiral skill (## Recovery).
 #
-# Why two design choices look "too conservative" -- they are, on purpose:
-#   * Build-activity suppression: a HEALTHY agent blocked on one long tool call
-#     (a cold `cargo` build can run 10-20 min) writes nothing, so transcript
-#     mtime alone reads as "idle". Therefore ANY running build (cargo / rustc /
-#     go / node / pytest / jest / tsc / webpack / npm / pnpm / yarn) suppresses
-#     STALL for ALL agents this poll. Attribution is intentionally coarse and
-#     global: a false "OK" is cheap (next poll re-checks); a false STALL that
-#     gets an agent killed mid-build is expensive.
-#   * No epoch fallback: liveness is the NEWEST mtime across {the agent's
-#     transcript file, every entry under its worktree}. If an agent has NO files
-#     yet this poll, it is SKIPPED -- never defaulted to mtime 0. Defaulting to
-#     the Unix epoch computes idle against 1970 and emits bogus ~56-year STALLs.
+# Two agent sources (UNION; identical thresholds/logic applied to each)
+#   SOURCE 1 -- TEAM agents: newest ~/.claude/teams/session-*/config.json ->
+#     members[] with isActive==true (this excludes BOTH the coordinator, which
+#     has no isActive field, AND finished members, isActive:false). Label = the
+#     member `name`. Activity = newest mtime under the member's `cwd` PLUS the
+#     mtime of its inbox file (inboxes/<name>.json). When members share a cwd
+#     (non-isolated runs) the cwd signal is shared; the per-name inbox mtime is
+#     then the only per-agent differentiator -- attribution is coarse by design.
+#   SOURCE 2 -- INDIVIDUAL / background subagents: nested transcripts at
+#     ~/.claude/projects/<slug>/<lead-uuid>/subagents/agent-<id>.jsonl. Label =
+#     the `agent-<id>` filename stem. Activity = the transcript file's OWN mtime
+#     (the per-agent activity clock, attributable by filename). Discovery is
+#     scoped to the NEWEST subagents dir under the project, which naturally
+#     drops completed agents from prior lead sessions. A transcript persists
+#     after an agent finishes, so a long-idle subagent + no build is a STALL
+#     CANDIDATE the coordinator confirms (the harness already notified on a real
+#     completion/crash) -- not a guaranteed hang.
+#   Dedup: a key is watched once; SOURCE 1 is processed first, so any collision
+#   prefers the team-config entry. (The two sources use distinct label spaces --
+#   `name` vs `agent-<id>` -- so real overlap is rare; the dedup set is a guard.)
 #
-# Args (all optional; sane defaults shown):
-#   --transcripts DIR   transcript dir (default: newest ~/.claude/projects/*/)
-#   --worktrees   DIR   worktree root  (default: .claude/worktrees)
-#   --stall-secs  N     idle seconds before STALL          (default: 300)
-#   --resume-secs N     idle seconds below which a STALLED  (default: 60)
-#                       agent is declared RESUMED
-#   --poll-secs   N     seconds between polls               (default: 45)
+# Cross-checks (both sources)
+#   * build_active: a single global `pgrep` (cargo|rustc|go|node|pytest|tsc|
+#     npm|pnpm|yarn) suppresses STALL for ALL agents this poll. A HEALTHY agent
+#     blocked on one long cold build (10-20 min) writes nothing, so mtime alone
+#     reads as "idle"; any running build conservatively suppresses STALL.
+#     Attribution is intentionally coarse and global: a false "OK" is cheap
+#     (next poll re-checks); a false STALL that kills a building agent is not.
+#   * NO epoch fallback: if an agent has NO files this poll, it is SKIPPED --
+#     never defaulted to mtime 0. Defaulting to the Unix epoch computes idle
+#     against 1970 and emits bogus ~56-year STALLs.
+#   * `isActive` is treated as a hint to choose WHICH members to watch; it may
+#     lag (like idle_notification) and is never the sole truth for a stall --
+#     the mtime+build evidence and coordinator investigation decide.
 #
-# Output (ONLY these two line shapes -- Monitor auto-stops noisy monitors):
-#   STALL agent=<name> idle=<N>s transcript=<path>
-#   RESUMED agent=<name> idle=<N>s
+# Args (all optional; sane defaults shown)
+#   --team-dir    DIR  team session dir w/ config.json + inboxes/
+#                      (default: newest ~/.claude/teams/session-*)
+#   --project-dir DIR  project slug dir holding <uuid>/subagents/agent-*.jsonl
+#                      (default: newest ~/.claude/projects/*)
+#   --stall-secs  N    idle seconds before STALL                  (default: 300)
+#   --resume-secs N    idle seconds below which a STALLED agent    (default: 60)
+#                      is declared RESUMED
+#   --poll-secs   N    seconds between polls                       (default: 45)
 #
-# Exit: runs forever; transient stat/find/pgrep failures are swallowed (|| true)
-# so a momentary filesystem hiccup never kills the loop.
+# Output (ONLY these two line shapes ever reach stdout)
+#   STALL agent=<key> idle=<N>s src=<team|subagent> ref=<path>
+#   RESUMED agent=<key> idle=<N>s
+#
+# Exit: runs forever; transient stat/find/pgrep/jq failures are swallowed
+# (|| true) so a momentary filesystem hiccup never kills the loop.
 
 set -euo pipefail
 
 # ---- defaults -------------------------------------------------------------
-transcripts_dir=""
-worktrees_dir=".claude/worktrees"
+team_dir=""
+project_dir=""
 stall_secs=300
 resume_secs=60
 poll_secs=45
 
-# ---- arg parsing ----------------------------------------------------------
+# ---- helpers --------------------------------------------------------------
 die() { printf 'agent-watchdog: %s\n' "$1" >&2; exit 1; }
 
-require_int() {
-  # $1 = flag name, $2 = value
-  [[ "$2" =~ ^[0-9]+$ ]] || die "$1 expects a non-negative integer, got: $2"
+require_int() { [[ "$2" =~ ^[0-9]+$ ]] || die "$1 expects a non-negative integer, got: $2"; }
+
+usage() {
+  cat >&2 <<'USAGE'
+agent-watchdog.sh -- edge-triggered agent-stall watchdog (silent when healthy)
+Usage: agent-watchdog.sh [--team-dir DIR] [--project-dir DIR]
+                         [--stall-secs N] [--resume-secs N] [--poll-secs N]
+Defaults: team-dir=newest ~/.claude/teams/session-*
+          project-dir=newest ~/.claude/projects/*
+          stall=300 resume=60 poll=45
+Emits ONLY 'STALL'/'RESUMED' transition lines to stdout; diagnostics to stderr.
+USAGE
 }
 
+newest_path_in() {
+  # Echo the newest-by-mtime entry under $1 matching the remaining find args.
+  local dir="$1"; shift
+  [ -d "$dir" ] || return 0
+  find "$dir" "$@" -printf '%T@\t%p\n' 2>/dev/null | sort -rn | head -n1 | cut -f2- || true
+}
+
+newest_mtime_under() {
+  # Echo the max integer epoch mtime of ANY entry under $1, or nothing.
+  local dir="$1" m
+  [ -d "$dir" ] || return 0
+  m="$(find "$dir" -printf '%T@\n' 2>/dev/null | sort -rn | head -n1 || true)"
+  printf '%s' "${m%.*}"
+}
+
+file_mtime() { [ -e "$1" ] || return 0; stat -c %Y "$1" 2>/dev/null || true; }
+
+# act: scratch global folded by update_max (must NOT run in a subshell).
+act=""
+update_max() {
+  # Fold candidate epoch $1 into $act, keeping the larger. An empty/non-numeric
+  # candidate is a no-op so a missing signal never lowers liveness.
+  local cand="$1"
+  [[ "$cand" =~ ^[0-9]+$ ]] || return 0
+  if [ -z "$act" ] || [ "$cand" -gt "$act" ]; then act="$cand"; fi
+}
+
+declare -A STATE   # key -> OK | STALLED  (survives across polls)
+
+evaluate() {
+  # Edge-triggered state machine. Reads globals: act, now, build_active,
+  # stall_secs, resume_secs, STATE. $1=key $2=src $3=ref-path
+  local key="$1" src="$2" ref="$3"
+  local idle=$(( now - act ))
+  local state="${STATE[$key]:-OK}"
+  if [ "$idle" -ge "$stall_secs" ] && [ "$build_active" -eq 0 ] && [ "$state" != "STALLED" ]; then
+    STATE["$key"]="STALLED"
+    printf 'STALL agent=%s idle=%ss src=%s ref=%s\n' "$key" "$idle" "$src" "$ref"
+  elif [ "$state" = "STALLED" ] && [ "$idle" -lt "$resume_secs" ]; then
+    STATE["$key"]="OK"
+    printf 'RESUMED agent=%s idle=%ss\n' "$key" "$idle"
+  fi
+}
+
+# ---- arg parsing ----------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
-    --transcripts) [ $# -ge 2 ] || die "--transcripts needs a value"; transcripts_dir="$2"; shift 2 ;;
-    --worktrees)   [ $# -ge 2 ] || die "--worktrees needs a value";   worktrees_dir="$2";   shift 2 ;;
+    --team-dir)    [ $# -ge 2 ] || die "--team-dir needs a value";    team_dir="$2";    shift 2 ;;
+    --project-dir) [ $# -ge 2 ] || die "--project-dir needs a value"; project_dir="$2"; shift 2 ;;
     --stall-secs)  [ $# -ge 2 ] || die "--stall-secs needs a value";  require_int "$1" "$2"; stall_secs="$2";  shift 2 ;;
     --resume-secs) [ $# -ge 2 ] || die "--resume-secs needs a value"; require_int "$1" "$2"; resume_secs="$2"; shift 2 ;;
     --poll-secs)   [ $# -ge 2 ] || die "--poll-secs needs a value";   require_int "$1" "$2"; poll_secs="$2";   shift 2 ;;
-    -h|--help)
-      sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//; $d'
-      exit 0 ;;
+    -h|--help)     usage; exit 0 ;;
     *) die "unknown argument: $1 (try --help)" ;;
   esac
 done
 
 [ "$poll_secs" -ge 1 ] || die "--poll-secs must be >= 1"
 
-# ---- autodetect transcripts dir if unset ----------------------------------
-if [ -z "$transcripts_dir" ]; then
-  base="$HOME/.claude/projects"
-  if [ -d "$base" ]; then
-    # newest project subdir by mtime; never hard-fail on a glob miss
-    transcripts_dir="$(
-      find "$base" -mindepth 1 -maxdepth 1 -type d -printf '%T@\t%p\n' 2>/dev/null \
-        | sort -rn | head -n1 | cut -f2- || true
-    )"
-  fi
-fi
+# jq is required only for SOURCE 1 (team config). Without it, watch subagents.
+have_jq=0
+if command -v jq >/dev/null 2>&1; then have_jq=1; fi
+[ "$have_jq" -eq 1 ] || printf 'agent-watchdog: jq not found; team-config source disabled, subagent transcripts only\n' >&2
 
-# ---- per-agent state survives across polls --------------------------------
-declare -A STATE   # key -> OK | STALLED
-
-# act: scratch global updated by update_max (must NOT run in a subshell).
-act=""
-update_max() {
-  # Fold candidate epoch $1 into $act, keeping the larger. Empty candidate is
-  # a no-op so a missing signal never resets liveness to a smaller/zero value.
-  local cand="$1"
-  [ -n "$cand" ] || return 0
-  [[ "$cand" =~ ^[0-9]+$ ]] || return 0
-  if [ -z "$act" ] || [ "$cand" -gt "$act" ]; then
-    act="$cand"
-  fi
-}
-
-printf 'agent-watchdog: poll=%ss stall=%ss resume=%ss transcripts=%s worktrees=%s\n' \
-  "$poll_secs" "$stall_secs" "$resume_secs" "${transcripts_dir:-<none>}" "$worktrees_dir" >&2
+printf 'agent-watchdog: poll=%ss stall=%ss resume=%ss team-dir=%s project-dir=%s\n' \
+  "$poll_secs" "$stall_secs" "$resume_secs" "${team_dir:-<auto>}" "${project_dir:-<auto>}" >&2
 
 # ---- main loop ------------------------------------------------------------
 while :; do
   now="$(date +%s 2>/dev/null || true)"
   if ! [[ "$now" =~ ^[0-9]+$ ]]; then
-    # clock read failed -- skip this poll rather than computing garbage idle
-    sleep "$poll_secs" || true
+    sleep "$poll_secs" || true        # clock read failed -- skip, don't guess
     continue
   fi
 
-  # Rediscover agents every poll (membership changes as waves spawn/finish).
-  unset TRANSCRIPT WORKTREE SEEN
-  declare -A TRANSCRIPT WORKTREE SEEN
+  # Resolve dirs each poll (membership + autodetect target can change).
+  td="$team_dir";    [ -n "$td" ] || td="$(newest_path_in "$HOME/.claude/teams" -maxdepth 1 -type d -name 'session-*')"
+  pd="$project_dir"; [ -n "$pd" ] || pd="$(newest_path_in "$HOME/.claude/projects" -mindepth 1 -maxdepth 1 -type d)"
 
-  if [ -n "$transcripts_dir" ] && [ -d "$transcripts_dir" ]; then
-    for f in "$transcripts_dir"/agent-*.jsonl; do
-      [ -e "$f" ] || continue          # glob miss -> literal pattern, skip
-      base="${f##*/}"; key="${base#agent-}"; key="${key%.jsonl}"
-      TRANSCRIPT["$key"]="$f"
-    done
-  fi
+  unset SEEN; declare -A SEEN
 
-  if [ -n "$worktrees_dir" ] && [ -d "$worktrees_dir" ]; then
-    for d in "$worktrees_dir"/agent-*; do
-      [ -d "$d" ] || continue
-      base="${d##*/}"; key="${base#agent-}"
-      WORKTREE["$key"]="$d"
-    done
-  fi
-
-  # build activity is global + best-effort: one check suppresses STALL for all.
+  # global, best-effort: any build suppresses STALL for every agent this poll.
   build_active=0
   if pgrep -f 'cargo|rustc|go build|go test|node |pytest|jest|tsc|webpack|npm |pnpm |yarn ' >/dev/null 2>&1; then
     build_active=1
   fi
 
-  for key in "${!TRANSCRIPT[@]}" "${!WORKTREE[@]}"; do
-    [ -n "${SEEN[$key]:-}" ] && continue   # union of both sources, once each
-    SEEN["$key"]=1
+  # ---- SOURCE 1: team members (isActive==true) ----
+  if [ "$have_jq" -eq 1 ] && [ -n "$td" ] && [ -f "$td/config.json" ]; then
+    while IFS=$'\t' read -r name cwd; do
+      [ -n "$name" ] || continue
+      [ -n "${SEEN[$name]:-}" ] && continue
+      SEEN["$name"]=1
+      act=""
+      [ -n "$cwd" ] && update_max "$(newest_mtime_under "$cwd")"
+      update_max "$(file_mtime "$td/inboxes/$name.json")"
+      [ -n "$act" ] || continue          # no files -> SKIP (never epoch-0)
+      evaluate "$name" "team" "${cwd:-$td/inboxes/$name.json}"
+    done < <(jq -r '.members[]? | select(.isActive == true) | [.name, (.cwd // "")] | @tsv' "$td/config.json" 2>/dev/null || true)
+  fi
 
-    tpath="${TRANSCRIPT[$key]:-}"
-    wpath="${WORKTREE[$key]:-}"
-
-    act=""
-    if [ -n "$tpath" ] && [ -e "$tpath" ]; then
-      update_max "$(stat -c %Y "$tpath" 2>/dev/null || true)"
+  # ---- SOURCE 2: individual / background subagent transcripts ----
+  if [ -n "$pd" ] && [ -d "$pd" ]; then
+    sub_dir="$(newest_path_in "$pd" -maxdepth 2 -type d -name subagents)"
+    if [ -n "$sub_dir" ] && [ -d "$sub_dir" ]; then
+      for f in "$sub_dir"/agent-*.jsonl; do
+        [ -e "$f" ] || continue          # glob miss -> literal pattern, skip
+        base="${f##*/}"; key="${base%.jsonl}"
+        [ -n "${SEEN[$key]:-}" ] && continue
+        SEEN["$key"]=1
+        act=""
+        update_max "$(file_mtime "$f")"
+        [ -n "$act" ] || continue
+        evaluate "$key" "subagent" "$f"
+      done
     fi
-    if [ -n "$wpath" ] && [ -d "$wpath" ]; then
-      # newest mtime of ANY entry (files + dirs) under the worktree; %T@ is a
-      # float, keep the integer seconds part.
-      wt="$(find "$wpath" -printf '%T@\n' 2>/dev/null | sort -rn | head -n1 || true)"
-      update_max "${wt%.*}"
-    fi
-
-    # No files for this agent this poll -> SKIP (never epoch-0 / ~56yr STALL).
-    [ -n "$act" ] || continue
-
-    idle=$(( now - act ))
-    state="${STATE[$key]:-OK}"
-    ref="${tpath:-$wpath}"
-
-    if [ "$idle" -ge "$stall_secs" ] && [ "$build_active" -eq 0 ] && [ "$state" != "STALLED" ]; then
-      STATE["$key"]="STALLED"
-      printf 'STALL agent=%s idle=%ss transcript=%s\n' "$key" "$idle" "$ref"
-    elif [ "$state" = "STALLED" ] && [ "$idle" -lt "$resume_secs" ]; then
-      STATE["$key"]="OK"
-      printf 'RESUMED agent=%s idle=%ss\n' "$key" "$idle"
-    fi
-  done
+  fi
 
   sleep "$poll_secs" || true
 done
