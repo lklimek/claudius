@@ -53,7 +53,7 @@
 #     mtime under the member's worktree (.claude/worktrees/agent-<name>) if it
 #     exists, else newest mtime under its `cwd`. STALL only if idle >= stall_secs
 #     AND not build_active AND the label OWNS an in_progress task
-#     (-> task-owned=in_progress).
+#     (-> reason=owns-in_progress-idle).
 #   SOURCE B -- INDIVIDUAL / background subagents (ANONYMOUS, NOT gated):
 #     ~/.claude/projects/<slug>/<leadSessionId>/subagents/agent-*.jsonl. Label =
 #     the agent-<id> filename stem. Activity = the transcript's own mtime. STALL
@@ -91,8 +91,8 @@
 #   --poll-secs    N    seconds between polls                       (default: 45)
 #
 # Output (ONLY these line shapes ever reach stdout)
-#   STALL agent=<name> idle=<N>s task-owned=in_progress     (named: A, C)
-#   STALL agent=<key>  idle=<N>s reason=subagent-idle       (anonymous: B)
+#   STALL agent=<name> idle=<N>s reason=owns-in_progress-idle   (named: A, C)
+#   STALL agent=<key>  idle=<N>s reason=subagent-idle           (anonymous: B)
 #   RESUMED agent=<key> idle=<N>s
 #
 # Exit: runs forever; transient stat/find/pgrep/python3 failures are swallowed
@@ -198,7 +198,7 @@ evaluate_named() {
   owns_work "$key" && owns=1
   if [ "$idle" -ge "$stall_secs" ] && [ "$build_active" -eq 0 ] && [ "$owns" -eq 1 ] && [ "$state" != "STALLED" ]; then
     STATE["$key"]="STALLED"
-    printf 'STALL agent=%s idle=%ss task-owned=in_progress\n' "$key" "$idle"
+    printf 'STALL agent=%s idle=%ss reason=owns-in_progress-idle\n' "$key" "$idle"
   elif [ "$state" = "STALLED" ] && { [ "$idle" -lt "$resume_secs" ] || [ "$owns" -eq 0 ]; }; then
     STATE["$key"]="OK"
     printf 'RESUMED agent=%s idle=%ss\n' "$key" "$idle"

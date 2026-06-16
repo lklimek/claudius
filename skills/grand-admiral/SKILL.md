@@ -252,7 +252,7 @@ Monitor(persistent=true, description="agent stall watchdog",
 
 **Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while any build tool runs and skips agents with no signal yet (no epoch-zero false alarms — see script header). `TaskStop` the Monitor when the wave completes.
 
-**Events:** `STALL agent=<name> idle=<N>s task-owned=in_progress` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fires when a named agent shows fresh activity OR no longer owns an in_progress task).
+**Events:** `STALL agent=<name> idle=<N>s reason=owns-in_progress-idle` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fires when a named agent shows fresh activity OR no longer owns an in_progress task).
 
 ### On a STALL Event (fully autonomous)
 
