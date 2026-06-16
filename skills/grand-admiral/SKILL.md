@@ -233,15 +233,15 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 
 ## Recovery
 
-The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) with no approval — that is the PRIMARY recovery driver. The watchdog below covers only the gap the harness misses: an agent alive but silent **with work still pending**.
+The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) with no approval — that is the PRIMARY recovery driver. The watchdog below covers only the gap the harness misses: an agent that owns assigned work yet has gone silent.
 
 ### Stall Watchdog
 
-A stall is **pending work + idle, not bare idle** — a team agent that finished and is waiting for its next message is idle by design, so flagging it is a false positive. Launch ONE persistent Monitor per wave; it auto-discovers three agent kinds and applies that rule to each:
+A stall is **owning an in_progress task AND idle past threshold AND no build running** — not bare idle. A healthy agent idles while waiting for its next instruction; an idle agent with **no assigned in_progress task is healthy and never flagged**. "Owns work" is read from the on-disk task store (`~/.claude/tasks/<teamName>/<id>.json`, the `owner`+`status` fields — the source of truth), rebuilt every poll. Launch ONE persistent Monitor per wave; it auto-discovers three agent kinds:
 
-- **Team** (newest `~/.claude/teams/session-*/config.json` members, `isActive==true`, non-lead) — judged by its inbox `inboxes/<name>.json`: an **empty inbox (`[]`) is healthy and never fires**; only one holding unprocessed messages past the threshold stalls.
-- **Individual/background subagents** (`…/<leadSessionId>/subagents/agent-*.jsonl`) — judged by transcript mtime; scoped to the current lead session so finished prior-session agents are never flagged.
-- **Worktree-isolated** (`.claude/worktrees/agent-*`) — judged by newest mtime under the dir.
+- **Team** (newest `~/.claude/teams/session-*/config.json` members, `isActive==true`, non-lead) — NAMED, **task-gated**; activity = newest mtime under its worktree (else `cwd`).
+- **Worktree-isolated** (`.claude/worktrees/agent-*`) — NAMED, **task-gated**; activity = newest mtime under the dir.
+- **Individual/background subagents** (`…/<leadSessionId>/subagents/agent-*.jsonl`) — ANONYMOUS, **not gated** (they run one task to completion and don't idle-wait; the harness notifies on completion); activity = transcript mtime, scoped to the current lead session so finished prior-session agents are never flagged.
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
@@ -252,14 +252,14 @@ Monitor(persistent=true, description="agent stall watchdog",
 
 **Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while any build tool runs and skips agents with no signal yet (no epoch-zero false alarms — see script header). `TaskStop` the Monitor when the wave completes.
 
-**Events:** `STALL agent=<key> idle=<N>s reason=<inbox-unprocessed|subagent-idle|worktree-idle>`; `RESUMED agent=<key> idle=<N>s`.
+**Events:** `STALL agent=<name> idle=<N>s task-owned=in_progress` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fires when a named agent shows fresh activity OR no longer owns an in_progress task).
 
 ### On a STALL Event (fully autonomous)
 
 `STALL` is a best-effort PRE-FILTER, **never an auto-kill** — a build-blocked agent writes nothing for many minutes while compiling, and a just-finished subagent can look stalled. Investigate first, then act:
 
 1. **Investigate** — read the agent's recent transcript for its last tool call; `git -C <cwd> status` shows uncommitted work; `pgrep -la 'cargo|rustc|go|node|pytest'` confirms no live build. Trust file/git state over the signal (Anti-Pattern #6: stale diagnostics).
-2. **Live but pending** — agent has unprocessed inbox work or lost its kickoff → `SendMessage` re-nudge restating the pending task. Context preserved, no respawn needed.
+2. **Live but idle on its task** — agent owns an in_progress task but lost its kickoff or is waiting on a message → `SendMessage` re-nudge restating the owned task. Context preserved, no respawn needed.
 3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same cwd/worktree** with a context brief extracted from:
    - Last N lines of the transcript (what it was doing)
    - `git -C <cwd> log --oneline -5` (commits landed so far) and `branch --show-current`
