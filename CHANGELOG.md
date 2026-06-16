@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.10.1] - 2026-06-16
+
+### Changed
+
+- Removed references to the no-longer-available `fable` model. `grand-admiral` model-tiering rule now folds the former top-tier design work into the `opus` tier; `grumpy-review` per-invocation model example switched from "Fable" to "Sonnet" (a genuinely non-default model, since opus is already the default there). Released changelog history (4.7.0, 4.6.0) left intact as an accurate record.
+
 ## [4.10.0] - 2026-06-12
 
 ### Added
