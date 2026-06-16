@@ -14,7 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ### Changed
 
-- `grand-admiral` `## Recovery` doctrine expanded from a single line into a full procedure: the harness death/completion notifications remain the PRIMARY driver; the watchdog covers the silently-stuck gap via one persistent Monitor (allow-listed once via `Bash(*agent-watchdog.sh *)`). On a STALL — a pre-filter, never an auto-kill — the coordinator investigates first (transcript tail + `git -C <worktree>` state), nudges a live-but-idle agent via SendMessage, or archives the inbox to `<inbox>.killed-<ts>` and respawns the same agent-type against the SAME worktree + task-list items so committed progress survives. Cross-references Anti-Pattern #6 for the verify-real-state rule rather than restating it.
+- `grand-admiral` `## Recovery` doctrine fully rewritten. Harness death/completion remains the PRIMARY driver; the watchdog covers silently-stuck agents. Monitor one-liner now uses stable relative path `scripts/agent-watchdog.sh` (no `${CLAUDE_SKILL_DIR}` substitution). `allowed-tools: Bash(*agent-watchdog.sh *)` added to skill frontmatter so coordinators never re-prompt. STALL event format documented. STALL-handling procedure (investigate-before-acting): inspect transcript tail + `git -C <worktree>` state, nudge live-but-idle agents via `SendMessage`, or spawn a replacement on the SAME worktree with a context brief (transcript tail, `git log`, branch, open tasks) so committed progress survives. Escalate to user only after a second attempt fails.
 
 ## [4.10.2] - 2026-06-16
 

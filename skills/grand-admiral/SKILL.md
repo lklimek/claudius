@@ -1,6 +1,7 @@
 ---
 name: grand-admiral
 description: "Multi-agent orchestration doctrine: spawning, worktree isolation, team coordination, scaling, recovery, programme management. Always loaded by coordinator agents that spawn, manage, and merge work from subagents."
+allowed-tools: Bash(*agent-watchdog.sh *)
 ---
 
 # Grand Admiral — Multi-Agent Orchestration
@@ -233,27 +234,35 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 
 ## Recovery
 
-The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) with no approval — that is the PRIMARY recovery driver. The watchdog below covers only the gap the harness misses: an agent that is alive but went silent.
+The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) with no approval — that is the PRIMARY recovery driver. The watchdog below covers only the gap the harness misses: an agent alive but silent.
 
-### Stall Watchdog (silently-stuck gap)
+### Stall Watchdog
 
-Launch ONE persistent Monitor per wave running the fixed script:
+Launch ONE persistent Monitor per wave — it auto-discovers all agents in the wave from transcript files and worktree directories:
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
-        command="bash ${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh --worktrees .claude/worktrees --stall-secs 300")
+        command="bash scripts/agent-watchdog.sh --worktrees .claude/worktrees --stall-secs 300")
 ```
 
-Allow-listed once via `Bash(*agent-watchdog.sh *)`, so it never re-prompts. It emits only `STALL`/`RESUMED` lines, suppresses STALL while any build runs, and skips agents with no files yet (rationale in the script header). `TaskStop` the watchdog when the wave completes.
+Adjust `--stall-secs` to expected build duration (cold Rust builds: 600+). The script emits only `STALL`/`RESUMED` lines and suppresses STALL while any build tool is running (see script header for rationale). `TaskStop` the Monitor when the wave completes.
 
-### On a STALL Event (autonomous)
+**Events:** `STALL agent=<name> idle=<N>s transcript=<path>` — idle past threshold with no build detected; `RESUMED agent=<name> idle=<N>s` — output resumed.
 
-A STALL line is a PRE-FILTER, never an auto-kill — restarting a building agent destroys its work. Investigate, then act:
+### On a STALL Event (fully autonomous)
 
-1. **Investigate first** — tail the agent's transcript, `git -C <worktree> status` + `diff`, confirm no build is running. Trust real file/git state over the signal (Anti-Pattern #6).
-2. **Live but idle** (waiting on a message, lost its kickoff) -> `SendMessage` a nudge restating the pending task. Context preserved, no respawn.
-3. **Genuinely dead/stuck** -> archive its inbox to `<inbox>.killed-<ts>`, respawn the same agent-type pointed at the SAME worktree + SAME task-list items (re-feed via `TaskGet`, bump to `model: opus` if the task is genuinely hard); mark the task `in_progress` under the new owner. Worktree commits/edits survive, so progress is preserved.
-4. **Escalate** — surface to the user only after a 2nd recovery attempt fails.
+`STALL` is a PRE-FILTER, **never an auto-kill** — a build-blocked agent writes nothing for many minutes while actively compiling. Investigate first, then act:
+
+1. **Investigate** — `tail <transcript_path>` reveals the last tool call; `git -C <worktree> status` shows uncommitted work; `pgrep -la 'cargo|rustc|go|node|pytest'` confirms no live build. Trust file/git state over the signal (Anti-Pattern #6: stale diagnostics).
+2. **Live but idle** — agent is waiting on a message or lost its kickoff → `SendMessage` restating the pending task. Context preserved, no respawn needed.
+3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same worktree** with a context brief extracted from:
+   - Last N lines of `<transcript_path>` (what it was doing)
+   - `git -C <worktree> log --oneline -5` (commits landed so far)
+   - `git -C <worktree> branch --show-current` (current branch)
+   - Re-feed open tasks via `TaskGet` + `TaskUpdate(owner=<new-agent>)`
+   - Bump to `model: opus` if the task requires deep analysis
+   The worktree's commits and working-tree edits survive intact — only the agent process is replaced.
+4. **Escalate** — report to user after a second recovery attempt fails: agent name, stall duration, last tool call, transcript path.
 
 ## Anti-Patterns
 
