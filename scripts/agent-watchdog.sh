@@ -68,10 +68,14 @@
 #     agent completion/death. Stale-STALLED keys are pruned when they stop being
 #     discovered (see below), so a STALL is never permanently leaked.
 #
-# State-machine hygiene
-#   After every poll, any STALLED key NOT discovered this poll is cleared
-#   (`RESUMED agent=<key> reason=gone`) and dropped from memory (handles removed
-#   worktrees / deactivated members and bounds state).
+# State-machine hygiene (transient-miss tolerant)
+#   Liveness is an EVALUABLE signal (a usable mtime), not mere discovery. A key
+#   is declared gone only after it produces NO live signal for `--gone-polls`
+#   CONSECUTIVE polls (default 2); then it is cleared (`RESUMED agent=<key>
+#   reason=gone`) and dropped from memory. A single-poll glitch (a partial
+#   config write, a transient find/stat failure) therefore never spuriously
+#   clears a STALL or drops state; one live poll resets the miss counter. This
+#   handles removed worktrees / deactivated members while bounding state.
 #
 # Args (all optional; sane defaults shown)
 #   --team-dir     DIR  team session dir w/ config.json
@@ -83,6 +87,8 @@
 #   --worktrees    DIR  worktree root holding agent-* dirs (default
 #                       .claude/worktrees, resolved against the team root)
 #   --watch-subagents   enable best-effort background-subagent monitoring (off)
+#   --gone-polls   N    consecutive signalless polls before an agent is        (default: 2)
+#                       declared gone (tolerates transient config/find misses)
 #   --stall-secs   N    idle seconds (>=) before STALL             (default: 300)
 #   --resume-secs  N    idle seconds (<) to declare RESUMED; must  (default: 60)
 #                       be < --stall-secs
@@ -104,6 +110,7 @@ tasks_dir=""
 projects_dir="$HOME/.claude/projects"
 worktrees_dir=".claude/worktrees"
 watch_subagents=0
+gone_polls=2
 stall_secs=300
 resume_secs=60
 poll_secs=45
@@ -116,7 +123,7 @@ usage() {
   cat >&2 <<'USAGE'
 agent-watchdog.sh -- edge-triggered agent-stall watchdog (silent when healthy)
 Usage: agent-watchdog.sh [--team-dir DIR] [--tasks-dir DIR] [--projects-dir DIR]
-                         [--worktrees DIR] [--watch-subagents]
+                         [--worktrees DIR] [--watch-subagents] [--gone-polls N]
                          [--stall-secs N] [--resume-secs N] [--poll-secs N]
 STALL = owns an in_progress task AND idle >= threshold AND no build under the
 agent's worktree/cwd. An idle agent owning no in_progress task is never flagged.
@@ -224,6 +231,8 @@ build_active_under() {
 declare -A STATE      # canonical key -> OK | STALLED (persists across polls)
 declare -A OWNERS     # owner name -> 1 (rebuilt each poll)
 declare -A WARNED     # one-time stderr notes already emitted
+declare -A MISS       # key -> consecutive polls with NO live signal (gone grace)
+declare -A ALIVE      # key -> 1 if it produced an evaluable signal THIS poll
 
 owns_work() {
   local l="$1"
@@ -237,7 +246,8 @@ warn_once() { local k="$1"; [ -n "${WARNED[$k]:-}" ] && return 0; WARNED["$k"]=1
 evaluate_named() {
   # $1=canonical label  $2=activity epoch  $3=agent dir (worktree/cwd)
   local key="$1" act_e="$2" dir="$3" idle state owns=0
-  [[ "$act_e" =~ ^[0-9]+$ ]] || return 0
+  [[ "$act_e" =~ ^[0-9]+$ ]] || return 0    # no evaluable signal -> not "alive" this poll
+  ALIVE["$key"]=1
   idle=$(( now - act_e ))
   state="${STATE[$key]:-OK}"
   owns_work "$key" && owns=1
@@ -255,6 +265,7 @@ evaluate_named() {
 evaluate_anon() {
   local key="$1" act_e="$2" idle state
   [[ "$act_e" =~ ^[0-9]+$ ]] || return 0
+  ALIVE["$key"]=1
   idle=$(( now - act_e ))
   state="${STATE[$key]:-OK}"
   if [ "$idle" -ge "$stall_secs" ] && [ "$state" != "STALLED" ]; then
@@ -274,6 +285,7 @@ while [ $# -gt 0 ]; do
     --projects-dir)   [ $# -ge 2 ] || die "--projects-dir needs a value"; projects_dir="$2"; shift 2 ;;
     --worktrees)      [ $# -ge 2 ] || die "--worktrees needs a value";    worktrees_dir="$2"; shift 2 ;;
     --watch-subagents) watch_subagents=1; shift ;;
+    --gone-polls)     [ $# -ge 2 ] || die "--gone-polls needs a value";   require_int "$1" "$2"; gone_polls="$2";  shift 2 ;;
     --stall-secs)     [ $# -ge 2 ] || die "--stall-secs needs a value";   require_int "$1" "$2"; stall_secs="$2";  shift 2 ;;
     --resume-secs)    [ $# -ge 2 ] || die "--resume-secs needs a value";  require_int "$1" "$2"; resume_secs="$2"; shift 2 ;;
     --poll-secs)      [ $# -ge 2 ] || die "--poll-secs needs a value";    require_int "$1" "$2"; poll_secs="$2";   shift 2 ;;
@@ -283,6 +295,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$poll_secs" -ge 1 ] || die "--poll-secs must be >= 1"
+[ "$gone_polls" -ge 1 ] || die "--gone-polls must be >= 1"
 [ "$resume_secs" -lt "$stall_secs" ] || die "--resume-secs ($resume_secs) must be < --stall-secs ($stall_secs)"
 
 command -v python3 >/dev/null 2>&1 || die "python3 not found (required to read team config + task store)"
@@ -290,8 +303,8 @@ command -v python3 >/dev/null 2>&1 || die "python3 not found (required to read t
 stat -c %Y "$0" >/dev/null 2>&1 || die "GNU stat (stat -c %Y) required"
 find "$0" -maxdepth 0 -printf '' >/dev/null 2>&1 || die "GNU find (find -printf) required"
 
-printf 'agent-watchdog: poll=%ss stall=%ss resume=%ss team-dir=%s tasks-dir=%s worktrees=%s watch-subagents=%s\n' \
-  "$poll_secs" "$stall_secs" "$resume_secs" "${team_dir:-<auto>}" "${tasks_dir:-<auto>}" "$worktrees_dir" "$watch_subagents" >&2
+printf 'agent-watchdog: poll=%ss stall=%ss resume=%ss gone-polls=%s team-dir=%s tasks-dir=%s worktrees=%s watch-subagents=%s\n' \
+  "$poll_secs" "$stall_secs" "$resume_secs" "$gone_polls" "${team_dir:-<auto>}" "${tasks_dir:-<auto>}" "$worktrees_dir" "$watch_subagents" >&2
 
 # ---- main loop ------------------------------------------------------------
 while :; do
@@ -346,7 +359,7 @@ while :; do
     done
   fi
 
-  unset SEEN; declare -A SEEN
+  unset SEEN ALIVE; declare -A SEEN ALIVE   # SEEN = dedup; ALIVE = had a live signal
 
   # ---- SOURCE A: team members (NAMED, gated) ----
   if [ "$team_present" -eq 1 ]; then
@@ -407,11 +420,21 @@ while :; do
     done
   fi
 
-  # ---- state-machine hygiene: clear + prune any key not seen this poll ----
+  # ---- state-machine hygiene (QA-015/QA-016): gone only after N misses ----
+  # Liveness is an EVALUABLE signal (ALIVE), not mere discovery. An agent must
+  # be signalless for `gone_polls` CONSECUTIVE polls before it is declared gone,
+  # so a one-poll config-parse glitch / find hiccup never spuriously clears a
+  # STALL or drops state. A live poll resets the miss counter.
   for key in "${!STATE[@]}"; do
-    [ -n "${SEEN[$key]:-}" ] && continue
-    [ "${STATE[$key]}" = "STALLED" ] && printf 'RESUMED agent=%s reason=gone\n' "$key"
-    unset 'STATE[$key]'
+    if [ -n "${ALIVE[$key]:-}" ]; then
+      MISS["$key"]=0
+      continue
+    fi
+    MISS["$key"]=$(( ${MISS[$key]:-0} + 1 ))
+    if [ "${MISS[$key]}" -ge "$gone_polls" ]; then
+      [ "${STATE[$key]}" = "STALLED" ] && printf 'RESUMED agent=%s reason=gone\n' "$key"
+      unset 'STATE[$key]' 'MISS[$key]'
+    fi
   done
 
   sleep "$poll_secs" || true
