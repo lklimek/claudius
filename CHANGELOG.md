@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.11.0] - 2026-06-16
+
+### Added
+
+- `scripts/agent-watchdog.sh` — a persistent agent-stall watchdog for the Monitor tool, filling the one gap the harness does not auto-notify on: an agent that is alive but went silent. Liveness fuses the newest mtime across {transcript file, every entry under the agent's worktree}; STALL fires only when idle past `--stall-secs` AND no build (cargo/rustc/go/node/pytest/jest/tsc/webpack/npm/pnpm/yarn) is running — a healthy agent blocked on one long cold build writes nothing, so build activity conservatively suppresses STALL for all agents. Agents with no files yet are SKIPPED, never defaulted to the Unix epoch (which would emit bogus ~56-year idle alerts). Output is selective (`STALL`/`RESUMED` transitions only) so Monitor does not auto-stop a noisy stream.
+
+### Changed
+
+- `grand-admiral` `## Recovery` doctrine expanded from a single line into a full procedure: the harness death/completion notifications remain the PRIMARY driver; the watchdog covers the silently-stuck gap via one persistent Monitor (allow-listed once via `Bash(*agent-watchdog.sh *)`). On a STALL — a pre-filter, never an auto-kill — the coordinator investigates first (transcript tail + `git -C <worktree>` state), nudges a live-but-idle agent via SendMessage, or archives the inbox to `<inbox>.killed-<ts>` and respawns the same agent-type against the SAME worktree + task-list items so committed progress survives. Cross-references Anti-Pattern #6 for the verify-real-state rule rather than restating it.
+
 ## [4.10.2] - 2026-06-16
 
 ### Changed

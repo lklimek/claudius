@@ -233,7 +233,27 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 
 ## Recovery
 
-**Stuck agent:** rephrase and resend with `model: "opus"`. Second failure -> shut down, reassign.
+The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) with no approval — that is the PRIMARY recovery driver. The watchdog below covers only the gap the harness misses: an agent that is alive but went silent.
+
+### Stall Watchdog (silently-stuck gap)
+
+Launch ONE persistent Monitor per wave running the fixed script:
+
+```
+Monitor(persistent=true, description="agent stall watchdog",
+        command="bash ${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh --worktrees .claude/worktrees --stall-secs 300")
+```
+
+Allow-listed once via `Bash(*agent-watchdog.sh *)`, so it never re-prompts. It emits only `STALL`/`RESUMED` lines, suppresses STALL while any build runs, and skips agents with no files yet (rationale in the script header). `TaskStop` the watchdog when the wave completes.
+
+### On a STALL Event (autonomous)
+
+A STALL line is a PRE-FILTER, never an auto-kill — restarting a building agent destroys its work. Investigate, then act:
+
+1. **Investigate first** — tail the agent's transcript, `git -C <worktree> status` + `diff`, confirm no build is running. Trust real file/git state over the signal (Anti-Pattern #6).
+2. **Live but idle** (waiting on a message, lost its kickoff) -> `SendMessage` a nudge restating the pending task. Context preserved, no respawn.
+3. **Genuinely dead/stuck** -> archive its inbox to `<inbox>.killed-<ts>`, respawn the same agent-type pointed at the SAME worktree + SAME task-list items (re-feed via `TaskGet`, bump to `model: opus` if the task is genuinely hard); mark the task `in_progress` under the new owner. Worktree commits/edits survive, so progress is preserved.
+4. **Escalate** — surface to the user only after a 2nd recovery attempt fails.
 
 ## Anti-Patterns
 
