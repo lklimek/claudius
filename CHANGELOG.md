@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.10.2] - 2026-06-16
+
+### Changed
+
+- `grand-admiral` Worktree Isolation: the team-spawn `isolation`-dropped block is restructured from a dense paragraph into a scannable bug+symptom statement followed by a numbered coordinator recipe (pre-create the worktree -> inject the absolute path into the spawn prompt -> instruct the agent to `cd` there first). Substance unchanged; the coordinator's action items are now explicit rather than buried.
+
 ## [4.10.1] - 2026-06-16
 
 ### Changed
