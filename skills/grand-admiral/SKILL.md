@@ -248,7 +248,7 @@ Monitor(persistent=true, description="agent stall watchdog",
         command="bash ${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh --stall-secs 300")
 ```
 
-`${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(*agent-watchdog.sh *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
+`${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(*/scripts/agent-watchdog.sh *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
 
 **Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops yielding a signal (worktree removed, member deactivated) is auto-cleared — but only after several consecutive signalless polls (`--gone-polls`, default 2), so a one-poll config/`find` glitch never spuriously clears a stall. `TaskStop` the Monitor when the wave completes. Prefer an explicit `--team-dir` when multiple sessions exist (autodetect picks newest-by-mtime).
 
