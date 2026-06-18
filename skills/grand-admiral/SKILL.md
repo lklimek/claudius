@@ -114,7 +114,7 @@ Spawning is the dominant token cost: every subagent rebuilds its context cache f
 Four mandatory rules:
 
 1. **Spawn discipline**: default to inline for small/sequential work in the warm parent context. Spawn ONLY for genuinely parallel independent work, large scope (~20k+ output tokens, or many files), or required context isolation.
-2. **Model tiering (mandatory)**: set model on every spawn — sonnet/haiku for mechanical work (routine code, search, QA, review, docs); opus for deep analysis (security audits, complex debugging) and the architect's hardest design work (system design, dependency/tech trade-offs, plan validation). Never let a spawn default to its frontmatter model.
+2. **Model tiering (mandatory)**: set model on every spawn — sonnet/haiku for mechanical work (routine code, search, QA, review, docs); opus for deep analysis (security audits, complex debugging) and the architect's hardest design work (system design, dependency/tech trade-offs, plan validation). Never let a spawn default to its frontmatter model. **Risk-based tiebreaker**: tier by risk, not just task type. A security-sensitive review — crypto, auth/key handling, network/transport, deserialization, untrusted input, or a large/opaque diff — is deep analysis → opus, even though generic review is sonnet. Routine low-risk reviews (clean version bumps with passing vuln scan, mechanical refactors) stay sonnet/haiku. When unsure: tier up for security, down for cost.
 3. **Read discipline**: prefer Grep/Glob first and Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary — see `git-and-github` § Context Management.
 4. **Coordinator context**: inlining keeps work in the coordinator's own context, which grows with it — so the axis is bounded-vs-bulk, not small-vs-large. Inline only BOUNDED work; when work would pull in bulk or unbounded data (large files, logs, wide searches), delegate to a disposable subagent so those bytes never enter the coordinator's context (the spawn cost buys context hygiene). For long sessions, summarise completed work to a task/file and rely on context compaction rather than carrying full history.
 
@@ -184,14 +184,15 @@ ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 2. Worktrees then fork cleanly from `origin/<branch>`.
 3. Use this option only when origin is genuinely required (cross-machine work, PR-gated CI, sharing across sessions).
 
-**Team-spawn variant (KNOWN BROKEN — `isolation` silently dropped):** spawning via `Agent(team_name=..., isolation="worktree")` ignores the `isolation` flag. The agent runs in the lead's CWD — the **main repo**, not a worktree — so it edits the live tree directly. Symptom: the agent's `pwd` returns the lead's path, not `.claude/worktrees/agent-...`.
+**`isolation` silently dropped — KNOWN BROKEN:** `isolation: "worktree"` is unreliable in two confirmed scenarios: (1) **team-spawns** — `Agent(team_name=..., isolation="worktree")` ignores the flag and the agent runs in the lead's CWD; (2) **standalone `run_in_background` spawns** — two background agents landed in the main repo with no worktree created, switched its branch, and left uncommitted edits, corrupting main. Symptom in both cases: `pwd` returns the main repo path, not `.claude/worktrees/agent-...`. An in-prompt pwd self-check ("STOP if pwd not under .claude/worktrees") is **NOT sufficient** — agents may proceed anyway. Lead pre-creation is the only reliable guard.
 
-**The coordinator must set up the worktree — the agent cannot.** For each team agent, BEFORE spawning:
-1. **Pre-create the worktree**: `git worktree add .claude/worktrees/agent-<name> -b <branch> <SHA>` — use a resolved commit SHA, never a branch name or symbolic ref (they resolve differently in worktrees).
-2. **Inject the absolute worktree path into the spawn `prompt`** — the `prompt` is delivered and runs on the agent's first turn, so no kickoff `SendMessage` is needed.
-3. **Instruct the agent to `cd` into that path as its FIRST action**, then do all work there.
+**The coordinator must set up the worktree — the agent cannot.** This is the validated stable approach for **any code-mutating background agent** (team or standalone). BEFORE spawning:
+1. **Pre-create the worktree**: `git worktree add -B <branch> <abs-path> <SHA>` — use a resolved commit SHA, never a branch name or symbolic ref (they resolve differently in worktrees).
+2. **Inject the absolute worktree path into the spawn `prompt`**.
+3. **Spawn WITHOUT the `isolation` flag** — the worktree is already set up; the flag is redundant and unreliable.
+4. **Instruct the agent to `cd` into that path as its FIRST action**, then do all work there.
 
-Do not improvise alternatives. Omitting `team_name` does **not** help: `Agent()` calls from a team-lead session are auto-joined to the lead's team and lose `isolation` the same way — there is no in-session "spawn solo" escape. The worktree must be pre-created by the coordinator, as above.
+Note for team spawns: omitting `team_name` does **not** help — `Agent()` calls from a team-lead session are auto-joined to the lead's team and lose `isolation` the same way.
 
 **Why Option A is the default**: minimizes pushes (especially in unattended/auto mode where push approval is friction), keeps work local until ready to share, plays nicely with the global "never push without explicit permission" rule.
 

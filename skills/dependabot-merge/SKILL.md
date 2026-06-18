@@ -66,6 +66,8 @@ Agent(
 )
 ```
 
+Set `model` per spawn: **sonnet** for routine version bumps; **opus** for crypto / auth / network / parser / deserialization libraries or unusually large diffs.
+
 **Agent prompt must include ALL of:**
 1. PR number, title, repo `<owner>/<repo>`
 2. CI status — green or red, which checks failed
