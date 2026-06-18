@@ -189,7 +189,7 @@ ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 **The coordinator must set up the worktree — the agent cannot.** This is the validated stable approach for **any code-mutating background agent** (team or standalone). BEFORE spawning:
 1. **Pre-create the worktree**: `git worktree add -B <branch> <abs-path> <SHA>` — use a resolved commit SHA, never a branch name or symbolic ref (they resolve differently in worktrees).
 2. **Inject the absolute worktree path into the spawn `prompt`**.
-3. **Spawn WITHOUT the `isolation` flag** — the worktree is already set up; the flag is redundant and unreliable.
+3. **Spawn WITHOUT the `isolation` flag** — it's unreliable and the worktree is already set up.
 4. **Instruct the agent to `cd` into that path as its FIRST action**, then do all work there.
 
 Note for team spawns: omitting `team_name` does **not** help — `Agent()` calls from a team-lead session are auto-joined to the lead's team and lose `isolation` the same way.
