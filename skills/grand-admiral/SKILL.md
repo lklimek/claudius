@@ -170,7 +170,7 @@ Agents have memcan tools but start with zero context. Injecting pre-searched res
 
 *Canonical source — workflow skills' Commit Discipline blocks reference this section. Keep this section authoritative; do not duplicate its content elsewhere.*
 
-ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
+Every code-mutating spawned agent MUST end up working in an isolated git worktree — no exceptions. The `isolation: "worktree"` flag nominally requests one but is silently dropped (see KNOWN BROKEN below), so it may be set yet must never be relied upon; lead pre-creation (below) is the only reliable guarantee.
 
 **Pre-flight — pick one of two options:**
 

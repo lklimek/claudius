@@ -136,21 +136,22 @@ USAGE
 newest_mtime_under() {            # newest mtime of ANY entry under $1 (incl. build dirs)
   local dir="$1" m
   [ -d "$dir" ] || return 0
-  m="$(find "$dir" -printf '%T@\n' 2>/dev/null | sort -rn | head -n1 || true)"
+  m="$(find "$dir" -printf '%T@\n' 2>/dev/null | awk '{v=$0+0; if(NR==1||v>x){x=v; s=$0}} END{if(NR)print s}' || true)"
   printf '%s' "${m%.*}"
 }
 
 newest_mtime_cwd() {              # like above but pruning .git (shared-repo noise)
   local dir="$1" m
   [ -d "$dir" ] || return 0
-  m="$(find "$dir" -name .git -prune -o -printf '%T@\n' 2>/dev/null | sort -rn | head -n1 || true)"
+  m="$(find "$dir" -name .git -prune -o -printf '%T@\n' 2>/dev/null | awk '{v=$0+0; if(NR==1||v>x){x=v; s=$0}} END{if(NR)print s}' || true)"
   printf '%s' "${m%.*}"
 }
 
 newest_path_in() {
   local dir="$1"; shift
   [ -d "$dir" ] || return 0
-  find "$dir" "$@" -printf '%T@\t%p\n' 2>/dev/null | sort -rn | head -n1 | cut -f2- || true
+  find "$dir" "$@" -printf '%T@\t%p\n' 2>/dev/null \
+    | awk -F'\t' '{v=$1+0; if(NR==1||v>x){x=v; p=substr($0,index($0,"\t")+1)}} END{if(NR)print p}' || true
 }
 
 canon() { local l="$1"; printf '%s' "${l#agent-}"; }   # strip one leading agent-
