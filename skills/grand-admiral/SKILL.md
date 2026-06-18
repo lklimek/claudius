@@ -259,7 +259,7 @@ Monitor(persistent=true, description="agent stall watchdog",
 
 `STALL` is a best-effort PRE-FILTER, **never an auto-kill** — a build-blocked agent writes nothing for many minutes while compiling, and a just-finished subagent can look stalled. Investigate first, then act:
 
-1. **Investigate** — read the agent's recent transcript for its last tool call; `git -C <cwd> status` shows uncommitted work; `pgrep -la 'cargo|rustc|go|node|pytest'` confirms no live build. Trust file/git state over the signal (Anti-Pattern #6: stale diagnostics).
+1. **Investigate** — read the agent's recent transcript for its last tool call; `git -C <cwd> status` shows uncommitted work; scan `/proc/[0-9]*/cwd` for pids whose cwd resolves under the agent's worktree/cwd to confirm no live build (per-agent scope — not a machine-global `pgrep`, which always fires on shared boxes). Trust file/git state over the signal (Anti-Pattern #6: stale diagnostics).
 2. **Live but idle on its task** — agent owns an in_progress task but lost its kickoff or is waiting on a message → `SendMessage` re-nudge restating the owned task. Context preserved, no respawn needed.
 3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same cwd/worktree** with a context brief extracted from:
    - Last N lines of the transcript (what it was doing)
