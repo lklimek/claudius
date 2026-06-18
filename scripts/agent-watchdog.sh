@@ -202,7 +202,7 @@ build_subcmd() {   # $1=program basename, $2=subcommand
   case "$1" in
     cargo)    case "$2" in build|test|check|clippy|run) return 0 ;; esac ;;
     go)       case "$2" in build|test|run) return 0 ;; esac ;;
-    dotnet)   [ "$2" = build ] && return 0 ;;
+    dotnet)   case "$2" in build|test|run) return 0 ;; esac ;;
     pip|pip3) [ "$2" = install ] && return 0 ;;
   esac
   return 1

@@ -246,7 +246,7 @@ A stall is **owning an in_progress task AND idle past threshold AND no build run
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
-        command="bash ${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh --stall-secs 300")
+        command="bash \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh\" --stall-secs 300")
 ```
 
 `${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(*/scripts/agent-watchdog.sh *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
@@ -263,7 +263,7 @@ Monitor(persistent=true, description="agent stall watchdog",
 2. **Live but idle on its task** — agent owns an in_progress task but lost its kickoff or is waiting on a message → `SendMessage` re-nudge restating the owned task. Context preserved, no respawn needed.
 3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same cwd/worktree** with a context brief extracted from:
    - Last N lines of the transcript (what it was doing)
-   - `git -C <cwd> log --oneline -5` (commits landed so far) and `branch --show-current`
+   - `git -C <cwd> log --oneline -5` (commits landed so far) and `git -C <cwd> branch --show-current`
    - Re-feed open tasks via `TaskGet` + `TaskUpdate(owner=<new-agent>)`
    - Archive its inbox (`inboxes/<name>.json` → `.killed-<ts>`) to keep the message history; bump to `model: opus` if the task needs deep analysis
    The worktree's commits and working-tree edits survive intact — only the agent process is replaced.
