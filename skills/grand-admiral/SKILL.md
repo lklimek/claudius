@@ -114,7 +114,7 @@ Spawning is the dominant token cost: every subagent rebuilds its context cache f
 Four mandatory rules:
 
 1. **Spawn discipline**: default to inline for small/sequential work in the warm parent context. Spawn ONLY for genuinely parallel independent work, large scope (~20k+ output tokens, or many files), or required context isolation.
-2. **Model tiering (mandatory)**: set model on every spawn — sonnet/haiku for mechanical work (routine code, search, QA, review, docs); opus for deep analysis (security audits, complex debugging) and the architect's hardest design work (system design, dependency/tech trade-offs, plan validation). Never let a spawn default to its frontmatter model.
+2. **Model tiering (mandatory)**: set model on every spawn — sonnet/haiku for mechanical work (routine code, search, QA, review, docs); opus for deep analysis (security audits, complex debugging) and the architect's hardest design work (system design, dependency/tech trade-offs, plan validation). Never let a spawn default to its frontmatter model. **Risk-based tiebreaker**: tier by risk, not just task type. A security-sensitive review — crypto, auth/key handling, network/transport, deserialization, untrusted input, or a large/opaque diff — is deep analysis → opus, even though generic review is sonnet. Routine low-risk reviews (clean version bumps with passing vuln scan, mechanical refactors) stay sonnet/haiku. When unsure: tier up for security, down for cost.
 3. **Read discipline**: prefer Grep/Glob first and Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary — see `git-and-github` § Context Management.
 4. **Coordinator context**: inlining keeps work in the coordinator's own context, which grows with it — so the axis is bounded-vs-bulk, not small-vs-large. Inline only BOUNDED work; when work would pull in bulk or unbounded data (large files, logs, wide searches), delegate to a disposable subagent so those bytes never enter the coordinator's context (the spawn cost buys context hygiene). For long sessions, summarise completed work to a task/file and rely on context compaction rather than carrying full history.
 
@@ -170,7 +170,7 @@ Agents have memcan tools but start with zero context. Injecting pre-searched res
 
 *Canonical source — workflow skills' Commit Discipline blocks reference this section. Keep this section authoritative; do not duplicate its content elsewhere.*
 
-ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
+Every code-mutating spawned agent MUST end up working in an isolated git worktree — no exceptions. The `isolation: "worktree"` flag nominally requests one but is silently dropped (see KNOWN BROKEN below), so it may be set yet must never be relied upon; lead pre-creation (below) is the only reliable guarantee.
 
 **Pre-flight — pick one of two options:**
 
@@ -184,7 +184,15 @@ ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
 2. Worktrees then fork cleanly from `origin/<branch>`.
 3. Use this option only when origin is genuinely required (cross-machine work, PR-gated CI, sharing across sessions).
 
-**Team-spawn variant (KNOWN BROKEN — isolation dropped)**: when spawning via `Agent(team_name=..., isolation="worktree")`, the `isolation="worktree"` flag is silently ignored. The agent lands in the lead's CWD (not a worktree); `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. The spawn `prompt` IS delivered and executed on first turn — no kickoff `SendMessage` is required. **Why "spawn solo from within the team" is not an option**: `Agent()` calls issued from a team-lead session that OMIT `team_name` are still auto-joined to the lead's team and lose `isolation` the same way. Omitting `team_name` does not escape the team context — this is an explanatory fact, not an alternative workaround. **The only stable recovery path**: lead manually pre-creates a worktree via `git worktree add .claude/worktrees/agent-<name> -b <branch> <SHA>` BEFORE spawning and includes the absolute path in the spawn prompt; the stream `cd`s into that path on its first turn and works there. Use this single path — do not improvise.
+**`isolation` silently dropped — KNOWN BROKEN:** `isolation: "worktree"` is unreliable in two confirmed scenarios: (1) **team-spawns** — `Agent(team_name=..., isolation="worktree")` ignores the flag and the agent runs in the lead's CWD; (2) **standalone `run_in_background` spawns** — two background agents landed in the main repo with no worktree created, switched its branch, and left uncommitted edits, corrupting main. Symptom in both cases: `pwd` returns the main repo path, not `.claude/worktrees/agent-...`. An in-prompt pwd self-check ("STOP if pwd not under .claude/worktrees") is **NOT sufficient** — agents may proceed anyway. Lead pre-creation is the only reliable guard.
+
+**The coordinator must set up the worktree — the agent cannot.** This is the validated stable approach for **any code-mutating background agent** (team or standalone). BEFORE spawning:
+1. **Pre-create the worktree**: `git worktree add -B <branch> <abs-path> <SHA>` — use a resolved commit SHA, never a branch name or symbolic ref (they resolve differently in worktrees).
+2. **Inject the absolute worktree path into the spawn `prompt`**.
+3. **Spawn WITHOUT the `isolation` flag** — the worktree is already pre-created, so the flag is redundant (and unreliable; never rely on it).
+4. **Instruct the agent to `cd` into that path as its FIRST action**, then do all work there.
+
+Note for team spawns: omitting `team_name` does **not** help — `Agent()` calls from a team-lead session are auto-joined to the lead's team and lose `isolation` the same way.
 
 **Why Option A is the default**: minimizes pushes (especially in unattended/auto mode where push approval is friction), keeps work local until ready to share, plays nicely with the global "never push without explicit permission" rule.
 
@@ -226,7 +234,40 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 
 ## Recovery
 
-**Stuck agent:** rephrase and resend with `model: "opus"`. Second failure -> shut down, reassign.
+The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) with no approval — that is the PRIMARY recovery driver. The watchdog below covers only the gap the harness misses: an agent that owns assigned work yet has gone silent.
+
+### Stall Watchdog
+
+A stall is **owning an in_progress task AND idle past threshold AND no build running *under that agent*** — not bare idle. A healthy agent idles while waiting for its next instruction; an idle agent with **no assigned in_progress task is healthy and never flagged**. "Owns work" is read from the on-disk task store (`~/.claude/tasks/<teamName>/<id>.json`, the `owner`+`status` fields — the source of truth), rebuilt every poll. Build suppression is **per-agent** (a process whose `/proc/<pid>/cwd` is under the agent's worktree/cwd running a real build/test argv), never a machine-global `pgrep` (which a shared box pins to "always building"). Launch ONE persistent Monitor per wave; it discovers:
+
+- **Team** (newest `~/.claude/teams/session-*/config.json` members, `isActive==true`, non-lead) — NAMED, **task-gated**; per-agent clock = newest mtime under its worktree, else its `cwd` (`.git` pruned). A cwd shared by ≥2 active members can't isolate one agent → that member is skipped (give it an isolated worktree).
+- **Worktree-isolated** (`<worktrees>/agent-*`) — NAMED, **task-gated**; clock = newest mtime under the dir. Shares ONE canonical label with the team source (leading `agent-` stripped).
+- **Individual/background subagents** (`…/subagents/agent-*.jsonl`) — ANONYMOUS, **off by default**; enable with `--watch-subagents`. Best-effort & opt-in: a finished subagent has a stale transcript by design with no reliable on-disk completion signal, and the harness already notifies on background-agent completion/death — so treat any subagent STALL as an investigate prompt.
+
+```
+Monitor(persistent=true, description="agent stall watchdog",
+        command="bash \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh\" --stall-secs 300")
+```
+
+`${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(*/scripts/agent-watchdog.sh *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
+
+**Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops yielding a signal (worktree removed, member deactivated) is auto-cleared — but only after several consecutive signalless polls (`--gone-polls`, default 2), so a one-poll config/`find` glitch never spuriously clears a stall. `TaskStop` the Monitor when the wave completes. Prefer an explicit `--team-dir` when multiple sessions exist (autodetect picks newest-by-mtime).
+
+**Events:** `STALL agent=<name> idle=<N>s reason=owns-in_progress-idle` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fresh activity OR no longer owns an in_progress task) or `RESUMED agent=<key> reason=gone` (agent vanished).
+
+### On a STALL Event (fully autonomous)
+
+`STALL` is a best-effort PRE-FILTER, **never an auto-kill** — a build-blocked agent writes nothing for many minutes while compiling, and a just-finished subagent can look stalled. Investigate first, then act:
+
+1. **Investigate** — read the agent's recent transcript for its last tool call; `git -C <cwd> status` shows uncommitted work; scan `/proc/[0-9]*/cwd` for pids whose cwd resolves under the agent's worktree/cwd to confirm no live build (per-agent scope — not a machine-global `pgrep`, which always fires on shared boxes). Trust file/git state over the signal (Anti-Pattern #6: stale diagnostics).
+2. **Live but idle on its task** — agent owns an in_progress task but lost its kickoff or is waiting on a message → `SendMessage` re-nudge restating the owned task. Context preserved, no respawn needed.
+3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same cwd/worktree** with a context brief extracted from:
+   - Last N lines of the transcript (what it was doing)
+   - `git -C <cwd> log --oneline -5` (commits landed so far) and `git -C <cwd> branch --show-current`
+   - Re-feed open tasks via `TaskGet` + `TaskUpdate(owner=<new-agent>)`
+   - Archive its inbox (rename `inboxes/<name>.json` → `inboxes/<name>.json.killed-<ts>`, keeping the per-agent `<name>` prefix so archives never collide) to keep the message history; bump to `model: opus` if the task needs deep analysis
+   The worktree's commits and working-tree edits survive intact — only the agent process is replaced.
+4. **Escalate** — report to user after a second recovery attempt fails: agent name, stall duration, last tool call, transcript path.
 
 ## Anti-Patterns
 

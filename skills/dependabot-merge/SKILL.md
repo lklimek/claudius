@@ -56,15 +56,17 @@ Present the classification table to the user and **ask for confirmation** before
 
 ### 4. Spawn Review Agents
 
-For each PR, spawn a background agent in an **isolated worktree**:
+For each PR, the coordinator **pre-creates an isolated worktree** (see `grand-admiral` § Worktree Isolation — the `isolation` flag is unreliable for `run_in_background` spawns) and spawns a background agent that `cd`s into it as its FIRST action:
 
 ```
 Agent(
-  isolation: "worktree",
   mode: "bypassPermissions",
-  run_in_background: true
+  run_in_background: true,
+  prompt: "cd <pre-created worktree abs-path> first, then review the dependabot PR ..."
 )
 ```
+
+Set `model` per spawn: **sonnet** for routine version bumps; **opus** for crypto / auth / network / parser / deserialization libraries or unusually large diffs.
 
 **Agent prompt must include ALL of:**
 1. PR number, title, repo `<owner>/<repo>`

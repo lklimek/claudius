@@ -62,7 +62,7 @@ Skills support `${CLAUDE_SKILL_DIR}` substitution — resolves to the skill's di
 - Frontmatter `description`: state **when** to use, not just what it does
 - Prefer minimal tool sets; read-only agents omit Edit/Write
 - `allowed-tools` Bash globs must be as specific as possible — match exact script names (e.g., `Bash(*gh-resolve-review-threads.sh *)`) not generic patterns (e.g., `Bash(*gh-*.sh *)`)
-- Keep all descriptions and instructions concise — fewer tokens, same signal
+- Concise by default — every change (code, docs, descriptions, instructions, commit/PR/changelog text): same value, fewer tokens.
 - Frontmatter values: single-line strings, no YAML folded/literal scalars (`>`, `|`). Use long lines instead of wrapping.
 - **No redundant content**: never duplicate information that lives in another skill, referenced doc, or well-known spec. If a skill loads `git-and-github`, don't repeat git commands. If it references [Keep a Changelog](https://keepachangelog.com/), don't reproduce the format. Delegate to the source — don't inline it.
 - **Self-review before finishing**: scan all modified agents/skills for content that restates what a loaded skill or referenced doc already provides. Remove it.

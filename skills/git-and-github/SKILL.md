@@ -78,6 +78,8 @@ The PR body **must lead with a `## Why this PR exists` section** — reviewers r
 
 `Why this PR exists` comes first; the remaining sections follow in that order. Always create PRs as drafts.
 
+**PR descriptions describe net final state only** — no development history, changelog, or step-by-step iteration/debugging narrative; that belongs in commit messages. Concise final testing/verification results (the `## Testing` section) describe the final state, not history, and are expected.
+
 ### Reviewing a PR
 
 **Never submit a final review (approve/request-changes). Always create draft/pending reviews.** The user must publish the review themselves. When using MCP, omit the `event` field in `pull_request_review_write` to create a pending review.
