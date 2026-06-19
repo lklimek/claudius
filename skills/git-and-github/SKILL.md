@@ -78,7 +78,7 @@ The PR body **must lead with a `## Why this PR exists` section** — reviewers r
 
 `Why this PR exists` comes first; the remaining sections follow in that order. Always create PRs as drafts.
 
-**PR descriptions describe net final state only** — no history, changelog, or iteration narrative; that belongs in commit messages.
+**PR descriptions describe net final state only** — no development history, changelog, or step-by-step iteration/debugging narrative; that belongs in commit messages. Concise final testing/verification results (the `## Testing` section) describe the final state, not history, and are expected.
 
 ### Reviewing a PR
 

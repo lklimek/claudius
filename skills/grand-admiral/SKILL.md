@@ -265,7 +265,7 @@ Monitor(persistent=true, description="agent stall watchdog",
    - Last N lines of the transcript (what it was doing)
    - `git -C <cwd> log --oneline -5` (commits landed so far) and `git -C <cwd> branch --show-current`
    - Re-feed open tasks via `TaskGet` + `TaskUpdate(owner=<new-agent>)`
-   - Archive its inbox (`inboxes/<name>.json` → `.killed-<ts>`) to keep the message history; bump to `model: opus` if the task needs deep analysis
+   - Archive its inbox (rename `inboxes/<name>.json` → `inboxes/<name>.json.killed-<ts>`, keeping the per-agent `<name>` prefix so archives never collide) to keep the message history; bump to `model: opus` if the task needs deep analysis
    The worktree's commits and working-tree edits survive intact — only the agent process is replaced.
 4. **Escalate** — report to user after a second recovery attempt fails: agent name, stall duration, last tool call, transcript path.
 
