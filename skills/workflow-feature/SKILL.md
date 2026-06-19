@@ -164,7 +164,7 @@ For phases with multiple agents on shared files, use teams (`TeamCreate` + `Send
 
 Agents must commit all changes before exiting — uncommitted work cannot be merged.
 
-ALL spawned agents MUST use `isolation: "worktree"` — no exceptions.
+ALL code-mutating spawned agents MUST work in an isolated git worktree — no exceptions. The `isolation` flag is unreliable (silently dropped); the coordinator pre-creates the worktree (see Pre-flight below).
 
 **Pre-flight pattern**: see `grand-admiral` skill — Worktree Isolation. Default is Option A (local-SHA injection, no push); Option B (push first) is the explicit fallback.
 

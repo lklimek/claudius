@@ -166,7 +166,12 @@ except Exception:
 print("NAME\t" + (c.get("name") or ""))
 print("LEAD\t" + (c.get("leadSessionId") or ""))
 for m in c.get("members", []):
-    if m.get("isActive") is True and m.get("agentType") != "team-lead":
+    if m.get("agentType") == "team-lead":
+        lc = m.get("cwd") or ""            # lead's cwd: a de-isolated agent may land here
+        if lc:
+            print("LEADCWD\t" + lc)
+        continue
+    if m.get("isActive") is True:
         n = m.get("name") or ""
         if n:
             print("MEMBER\t" + n + "\t" + (m.get("cwd") or ""))
@@ -356,15 +361,16 @@ while :; do
   td="$team_dir"; [ -n "$td" ] || td="$(newest_path_in "$HOME/.claude/teams" -maxdepth 1 -type d -name 'session-*')"
 
   # ---- parse team config ----
-  team_present=0; team_name=""; lead_session=""
+  team_present=0; team_name=""; lead_session=""; lead_cwd=""
   m_names=(); m_cwds=()
   if [ -n "$td" ] && [ -f "$td/config.json" ]; then
     team_present=1
     while IFS=$'\t' read -r kind a b; do
       case "$kind" in
-        NAME)   team_name="$a" ;;
-        LEAD)   lead_session="$a" ;;
-        MEMBER) m_names+=("$a"); m_cwds+=("$b") ;;
+        NAME)    team_name="$a" ;;
+        LEAD)    lead_session="$a" ;;
+        LEADCWD) lead_cwd="$a" ;;
+        MEMBER)  m_names+=("$a"); m_cwds+=("$b") ;;
       esac
     done < <(parse_team "$td/config.json")
     if [ "${#m_names[@]}" -eq 0 ] && [ -z "$lead_session" ]; then
@@ -391,8 +397,12 @@ while :; do
   esac
 
   # ---- count active-member cwds (shared-cwd detection) ----
+  # Seed the lead's cwd as an occupant: a de-isolated agent that lands in the
+  # lead's repo dir then shares it (count >=2), so it is flagged non-isolatable
+  # instead of being mis-monitored via the lead's own (noisy) file activity.
   unset CWD_COUNT; declare -A CWD_COUNT
   if [ "$team_present" -eq 1 ]; then
+    [ -n "$lead_cwd" ] && CWD_COUNT["$lead_cwd"]=$(( ${CWD_COUNT[$lead_cwd]:-0} + 1 ))
     for i in "${!m_names[@]}"; do
       c="${m_cwds[$i]}"; [ -n "$c" ] && CWD_COUNT["$c"]=$(( ${CWD_COUNT[$c]:-0} + 1 ))
     done
@@ -415,7 +425,7 @@ while :; do
       if [ -d "$wt" ]; then
         a_dir="$wt"; a_mt="$(newest_mtime_under "$wt")"
       elif [ -n "$cwd" ] && [ "${CWD_COUNT[$cwd]:-0}" -ge 2 ]; then
-        warn_once "sharedcwd:$key" "no per-agent signal for $key (cwd shared by >=2 active members) — give it an isolated worktree to monitor"
+        warn_once "sharedcwd:$key" "no per-agent signal for $key (cwd shared with the team-lead or another member, so its mtime is polluted) — give it an isolated worktree to monitor"
       elif [ -n "$cwd" ]; then
         a_dir="$cwd"; a_mt="$(newest_mtime_cwd "$cwd")"
       fi

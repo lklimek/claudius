@@ -77,7 +77,7 @@ Before launching streams, create a team for coordination:
 TeamCreate(team_name="ci-dance")
 ```
 
-Then spawn each stream as a named agent with `team_name: "ci-dance"` and `isolation: "worktree"`:
+Then spawn each stream as a named agent with `team_name: "ci-dance"`, each working in its own **pre-created** worktree (see the quirk section below — do not rely on the `isolation` flag):
 - `ci-stream`
 - `grumpy-stream`
 - `review-stream`
@@ -93,7 +93,7 @@ See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary fo
 
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
-**Isolation**: Each stream runs in its own **git worktree** (`isolation: "worktree"`). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
+**Isolation**: Each stream runs in its own **git worktree** (pre-created by the lead — the `isolation` flag is unreliable; see the quirk section above). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
 
 Before fixing any finding, a stream must **claim** it via task ownership (see Inter-Stream Communication below). If another stream already owns a task at the same location, skip it.
 
