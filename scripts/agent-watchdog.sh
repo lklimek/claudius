@@ -46,9 +46,12 @@
 #
 # Monitor invocation (one persistent monitor per wave; autodetect by default):
 #   Monitor(persistent=true, description="agent stall watchdog",
-#           command="bash scripts/agent-watchdog.sh --stall-secs 300")
-#   Prefer an explicit --team-dir when several sessions exist (autodetect picks
-#   the newest dir by mtime, which a cleanup touch could mis-rank).
+#           command='bash "${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh" --stall-secs 300')
+#   Use the portable plugin-root path -- grand-admiral resolves ${CLAUDE_SKILL_DIR}
+#   at skill-load time; a bare relative `scripts/...` fails because the Monitor's
+#   CWD is the user's repo, not the plugin root. Prefer an explicit --team-dir when
+#   several sessions exist (autodetect picks the newest dir by mtime, which a
+#   cleanup touch could mis-rank).
 #
 # CRITICAL -- a STALL line is a PRE-FILTER, never an auto-kill trigger
 #   It prompts the coordinator to INVESTIGATE (read the transcript,
@@ -389,11 +392,16 @@ while :; do
     while IFS= read -r owner; do [ -n "$owner" ] && OWNERS["$owner"]=1; done < <(build_owners "$tkdir")
   fi
 
-  # ---- resolve worktrees root (default relative -> team root) ----
+  # ---- resolve worktrees root (default relative -> the lead's repo, where
+  #      worktrees live). Fall back to a member cwd only when the lead cwd is
+  #      unknown: a member may itself be running inside its own worktree, so its
+  #      cwd is a wrong base for <cwd>/.claude/worktrees and breaks discovery. ----
   wt_dir="$worktrees_dir"
   case "$wt_dir" in
     /*) : ;;
-    *) [ -n "${m_cwds[0]:-}" ] && wt_dir="${m_cwds[0]%/}/$worktrees_dir" ;;
+    *)
+      wt_base="$lead_cwd"; [ -n "$wt_base" ] || wt_base="${m_cwds[0]:-}"
+      [ -n "$wt_base" ] && wt_dir="${wt_base%/}/$worktrees_dir" ;;
   esac
 
   # ---- count active-member cwds (shared-cwd detection) ----
