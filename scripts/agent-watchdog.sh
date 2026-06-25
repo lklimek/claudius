@@ -34,9 +34,36 @@
 #   1. If the agent's worktree `<worktrees>/agent-<name>` exists -> newest mtime
 #      under it (INCLUDING its own target/ build dirs: its own build IS liveness).
 #   2. Else its `cwd` (from config) -> newest mtime under it, EXCLUDING `.git`.
-#      But if that cwd is shared by >=2 active members it cannot isolate one
-#      agent -> SKIP that member with a one-time stderr note (give it a worktree).
-#   3. Skip if neither yields an mtime (never epoch-0 / ~56-year alerts).
+#   3. Else (cwd shared by >=2 active members, so its mtime is polluted by the
+#      lead/another member) -> TRANSCRIPT-MTIME FALLBACK: the member's own
+#      transcript jsonl (…/<leadSession>/subagents/agent-<id>.jsonl matched by the
+#      internal agentId, or …/<cwd-slug>/<ownSession>.jsonl matched by a unique
+#      agentSetting==agentType). The transcript advances on EVERY agent turn, so it
+#      is a reliable activity clock even for read-only design/QA agents that share
+#      the lead's cwd and write outputs to /tmp. Only if no transcript resolves is
+#      the member skipped with a one-time stderr note (give it a worktree).
+#   4. Skip if none yields an mtime (never epoch-0 / ~56-year alerts).
+#
+# PROCESS-LIVENESS / GONE (verified absence, distinct from STALL)
+#   STALL means "process alive but idle while owning work" -- a PRE-FILTER to
+#   investigate. GONE means the agent PROCESS is verifiably ABSENT while the team
+#   still believes it active (config isActive==true). For a tmux-backed member the
+#   recorded `tmuxPaneId` is probed each poll:
+#     pane-dead  -- the pane's `pane_current_command` reverted to a bare shell
+#                   (sh/bash/zsh/-bash/dash/ksh/fish/login); the agent's claude/
+#                   node process exited but the pane lives. (A live claude pane
+#                   reports a non-shell command such as its version string.)
+#     pid-gone   -- the recorded pane no longer exists in an otherwise-reachable
+#                   tmux server (>=1 sibling configured pane still resolves -> not
+#                   a wrong-socket false positive); pane + process destroyed.
+#     stale-active -- a process-absent signal (pane-dead or pane-gone) CORROBORATED
+#                   by a stale activity/transcript clock (idle >= stall_secs):
+#                   highest-confidence proof the isActive flag is stale.
+#   GONE requires --gone-polls CONSECUTIVE confirmations (same anti-glitch backstop
+#   as the gone-prune) and is edge-triggered. It NEVER auto-kills: it suggests the
+#   coordinator clear the stale active flag / respawn. If a GONE pane shows a live
+#   command again it recovers (`RESUMED agent=<name> reason=recovered`). Disable
+#   the whole GONE layer with --no-gone; it is a no-op without tmux or a config.
 #
 # ZERO MODEL TOKENS WHEN HEALTHY (hard contract)
 #   Run by the `Monitor` tool, where each stdout LINE is a coordinator
@@ -61,7 +88,9 @@
 # Three discovery sources (dedup by canonical label; team entry wins)
 #   SOURCE A -- TEAM members (NAMED, task-gated): newest
 #     ~/.claude/teams/session-*/config.json members with isActive==true AND
-#     agentType != "team-lead". Canonical label = member `name`.
+#     agentType != "team-lead". Canonical label = member `name`. Shared-cwd members
+#     (which used to be skipped) are now clocked by transcript mtime, and tmux-
+#     backed members additionally get process-liveness / GONE coverage.
 #   SOURCE C -- WORKTREE-isolated agents (NAMED, task-gated):
 #     <worktrees>/agent-* dirs. Canonical label = dir name with a leading
 #     "agent-" stripped, so A and C share ONE state key / output label.
@@ -92,8 +121,10 @@
 #   --worktrees    DIR  worktree root holding agent-* dirs (default
 #                       .claude/worktrees, resolved against the team root)
 #   --watch-subagents   enable best-effort background-subagent monitoring (off)
+#   --no-gone           disable tmux process-liveness / GONE detection (on)
 #   --gone-polls   N    consecutive signalless polls before an agent is        (default: 2)
-#                       declared gone (tolerates transient config/find misses)
+#                       declared gone (tolerates transient config/find misses);
+#                       ALSO the consecutive confirmations a GONE event needs
 #   --stall-secs   N    idle seconds (>=) before STALL             (default: 300)
 #   --resume-secs  N    idle seconds (<) to declare RESUMED; must  (default: 60)
 #                       be < --stall-secs
@@ -102,7 +133,10 @@
 # Output (ONLY these line shapes ever reach stdout)
 #   STALL agent=<name> idle=<N>s reason=owns-in_progress-idle   (named: A, C)
 #   STALL agent=<key>  idle=<N>s reason=subagent-idle           (anonymous: B)
-#   RESUMED agent=<key> idle=<N>s        | RESUMED agent=<key> reason=gone
+#   GONE  agent=<name> reason=pane-dead|pid-gone|stale-active   (named: A, tmux)
+#   RESUMED agent=<key> idle=<N>s          (clock back under --resume-secs / lost work)
+#   RESUMED agent=<key> reason=gone        (pruned: signalless for --gone-polls)
+#   RESUMED agent=<name> reason=recovered  (a GONE pane shows a live command again)
 #
 # Exit: runs forever; transient stat/find/proc/python3 failures are swallowed
 # (|| true) so a momentary hiccup never kills the loop.
@@ -115,6 +149,7 @@ tasks_dir=""
 projects_dir="$HOME/.claude/projects"
 worktrees_dir=".claude/worktrees"
 watch_subagents=0
+gone_detect=1
 gone_polls=2
 stall_secs=300
 resume_secs=60
@@ -128,8 +163,9 @@ usage() {
   cat >&2 <<'USAGE'
 agent-watchdog.sh -- edge-triggered agent-stall watchdog (silent when healthy)
 Usage: agent-watchdog.sh [--team-dir DIR] [--tasks-dir DIR] [--projects-dir DIR]
-                         [--worktrees DIR] [--watch-subagents] [--gone-polls N]
-                         [--stall-secs N] [--resume-secs N] [--poll-secs N]
+                         [--worktrees DIR] [--watch-subagents] [--no-gone]
+                         [--gone-polls N] [--stall-secs N] [--resume-secs N]
+                         [--poll-secs N]
 STALL = owns an in_progress task AND idle >= threshold AND no build under the
 agent's worktree/cwd. An idle agent owning no in_progress task is never flagged.
 Emits ONLY 'STALL'/'RESUMED' transition lines to stdout; diagnostics to stderr.
@@ -173,12 +209,117 @@ for m in c.get("members", []):
         lc = m.get("cwd") or ""            # lead's cwd: a de-isolated agent may land here
         if lc:
             print("LEADCWD\t" + lc)
+        lp = m.get("tmuxPaneId") or ""     # seed lead pane for the wrong-server guard
+        if lp:
+            print("LEADPANE\t" + lp)
         continue
     if m.get("isActive") is True:
         n = m.get("name") or ""
         if n:
-            print("MEMBER\t" + n + "\t" + (m.get("cwd") or ""))
+            # name, cwd, agentId, agentType, tmuxPaneId, backendType (tab-joined)
+            print("\t".join([
+                "MEMBER", n, m.get("cwd") or "", m.get("agentId") or "",
+                m.get("agentType") or "", m.get("tmuxPaneId") or "",
+                m.get("backendType") or ""]))
 PY
+}
+
+member_transcripts() {   # map shared-cwd members -> own transcript jsonl (turn-mtime clock)
+  python3 - "$1" "$2" "$3" <<'PY' 2>/dev/null || true
+import json, sys, os, glob, re, collections
+cfg, projects, lead_session = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    c = json.load(open(cfg))
+except Exception:
+    sys.exit(0)
+
+def to_secs(v):                                  # createdAt may be ms epoch / iso / num
+    try: v = float(v)
+    except Exception: return 0.0
+    return v / 1000.0 if v > 1e11 else v
+created_s = to_secs(c.get("createdAt") or 0)
+
+members, typecount = [], collections.Counter()
+for m in c.get("members", []):
+    if m.get("agentType") == "team-lead" or m.get("isActive") is not True:
+        continue
+    n = m.get("name") or ""
+    if not n:
+        continue
+    members.append((n, m.get("agentId") or "", m.get("agentType") or "", m.get("cwd") or ""))
+    if m.get("agentType"):
+        typecount[m.get("agentType")] += 1
+if not members:
+    sys.exit(0)
+
+def first_agentid(f):                            # subagent transcript: agentId is near the top
+    try:
+        with open(f, errors="ignore") as fh:
+            for _ in range(40):
+                ln = fh.readline()
+                if not ln:
+                    break
+                try: o = json.loads(ln)
+                except Exception: continue
+                if o.get("agentId"):
+                    return o["agentId"]
+    except Exception:
+        return None
+    return None
+
+byid = {}                                        # agentId -> subagent transcript (certain map)
+if lead_session:
+    for sd in glob.glob(os.path.join(projects, "*", lead_session, "subagents")):
+        for f in glob.glob(os.path.join(sd, "agent-*.jsonl")):
+            aid = first_agentid(f)
+            if aid:
+                byid.setdefault(aid, f)
+
+slug_cache = {}                                  # cwd-slug -> {agentType: [(mtime, path)]}
+def by_type_for(cwd):
+    slug = re.sub(r"[/.]", "-", cwd.rstrip("/"))
+    if slug in slug_cache:
+        return slug_cache[slug]
+    out = collections.defaultdict(list)
+    sdir = os.path.join(projects, slug)
+    if os.path.isdir(sdir):
+        for f in glob.glob(os.path.join(sdir, "*.jsonl")):
+            try: st = os.stat(f)
+            except Exception: continue
+            if created_s and st.st_mtime < created_s - 5:   # predates this team session
+                continue
+            try:
+                with open(f, errors="ignore") as fh:
+                    o = json.loads(fh.readline())
+            except Exception:
+                continue
+            if o.get("type") != "agent-setting":
+                continue
+            at, sid = o.get("agentSetting"), o.get("sessionId")
+            if not at or (lead_session and sid == lead_session):
+                continue                         # skip the lead's own transcript
+            out[at].append((st.st_mtime, f))
+    slug_cache[slug] = out
+    return out
+
+for n, aid, at, cwd in members:
+    path = None
+    if aid and aid in byid:
+        path = byid[aid]                         # unique agentId match
+    elif at and typecount[at] == 1 and cwd:      # unambiguous agentType in the member's slug
+        cand = by_type_for(cwd).get(at) or []
+        if cand:
+            path = max(cand)[1]                  # newest matching transcript
+    if path:
+        print("TS\t" + n + "\t" + path)
+PY
+}
+
+is_bare_shell() {   # pane_current_command of a pane whose claude/node process exited
+  case "$1" in
+    sh|-sh|bash|-bash|zsh|-zsh|dash|-dash|ksh|-ksh|fish|-fish|login) return 0 ;;
+  esac
+  return 1
 }
 
 build_owners() {
@@ -275,11 +416,13 @@ build_active_under() {
   return 1
 }
 
-declare -A STATE      # canonical key -> OK | STALLED (persists across polls)
+declare -A STATE      # canonical key -> OK | STALLED | GONE (persists across polls)
 declare -A OWNERS     # owner name -> 1 (rebuilt each poll)
 declare -A WARNED     # one-time stderr notes already emitted
 declare -A MISS       # key -> consecutive polls with NO live signal (gone grace)
 declare -A ALIVE      # key -> 1 if it produced an evaluable signal THIS poll
+declare -A GONE_HITS  # key -> consecutive polls a GONE candidate held (confirmation)
+declare -A PANE_CMD   # tmux pane id -> pane_current_command (rebuilt each poll)
 
 owns_work() {
   local l="$1"
@@ -309,6 +452,53 @@ evaluate_named() {
   fi
 }
 
+classify_pane() {
+  # $1=tmuxPaneId  $2=backendType -> sets PANE_STATE to alive|dead|missing|unknown.
+  # unknown == "can't tell" (no tmux, server unreachable, non-tmux backend, or a
+  # wrong-socket server where none of our panes resolve) -> NEVER drives GONE.
+  PANE_STATE=unknown
+  [ "$gone_detect" -eq 1 ] && [ "$have_tmux" -eq 1 ] && [ "$tmux_reachable" -eq 1 ] || return 0
+  local paneid="$1" bt="$2"
+  [ "$bt" = tmux ] || return 0
+  case "$paneid" in %*) ;; *) return 0 ;; esac
+  if [ -n "${PANE_CMD[$paneid]+x}" ]; then
+    if is_bare_shell "${PANE_CMD[$paneid]}"; then PANE_STATE=dead; else PANE_STATE=alive; fi
+  elif [ "$any_sibling" -eq 1 ]; then            # pane absent in a server proven to hold our panes
+    PANE_STATE=missing
+  fi
+}
+
+gone_eval() {
+  # $1=key  $2=pane state (dead|missing)  $3=activity epoch (may be empty).
+  # Edge-triggered GONE after --gone-polls consecutive confirmations; a
+  # process-absent signal corroborated by a stale clock is the strongest case.
+  local key="$1" pst="$2" act_e="$3" reason idle=-1
+  [[ "$act_e" =~ ^[0-9]+$ ]] && idle=$(( now - act_e ))
+  if [ "$idle" -ge 0 ] && [ "$idle" -ge "$stall_secs" ]; then
+    reason="stale-active"
+  elif [ "$pst" = dead ]; then
+    reason="pane-dead"
+  else
+    reason="pid-gone"
+  fi
+  GONE_HITS["$key"]=$(( ${GONE_HITS[$key]:-0} + 1 ))
+  if [ "${GONE_HITS[$key]}" -ge "$gone_polls" ] && [ "${STATE[$key]:-OK}" != "GONE" ]; then
+    STATE["$key"]="GONE"
+    printf 'GONE agent=%s reason=%s\n' "$key" "$reason"
+  fi
+}
+
+gone_recover() {   # pane verifiably ALIVE again -> reset confirmation, clear any GONE
+  local key="$1"
+  GONE_HITS["$key"]=0
+  if [ "${STATE[$key]:-OK}" = "GONE" ]; then
+    STATE["$key"]="OK"
+    printf 'RESUMED agent=%s reason=recovered\n' "$key"
+  fi
+}
+
+gone_reset() { GONE_HITS["$1"]=0; }   # liveness unknown this poll -> stop counting, keep state
+
 evaluate_anon() {
   local key="$1" act_e="$2" idle state
   [[ "$act_e" =~ ^[0-9]+$ ]] || return 0
@@ -332,6 +522,7 @@ while [ $# -gt 0 ]; do
     --projects-dir)   [ $# -ge 2 ] || die "--projects-dir needs a value"; projects_dir="$2"; shift 2 ;;
     --worktrees)      [ $# -ge 2 ] || die "--worktrees needs a value";    worktrees_dir="$2"; shift 2 ;;
     --watch-subagents) watch_subagents=1; shift ;;
+    --no-gone)        gone_detect=0; shift ;;
     --gone-polls)     [ $# -ge 2 ] || die "--gone-polls needs a value";   require_int "$1" "$2"; gone_polls="$2";  shift 2 ;;
     --stall-secs)     [ $# -ge 2 ] || die "--stall-secs needs a value";   require_int "$1" "$2"; stall_secs="$2";  shift 2 ;;
     --resume-secs)    [ $# -ge 2 ] || die "--resume-secs needs a value";  require_int "$1" "$2"; resume_secs="$2"; shift 2 ;;
@@ -350,8 +541,12 @@ command -v python3 >/dev/null 2>&1 || die "python3 not found (required to read t
 stat -c %Y "$0" >/dev/null 2>&1 || die "GNU stat (stat -c %Y) required"
 find "$0" -maxdepth 0 -printf '' >/dev/null 2>&1 || die "GNU find (find -printf) required"
 
-printf 'agent-watchdog: poll=%ss stall=%ss resume=%ss gone-polls=%s team-dir=%s tasks-dir=%s worktrees=%s watch-subagents=%s\n' \
-  "$poll_secs" "$stall_secs" "$resume_secs" "$gone_polls" "${team_dir:-<auto>}" "${tasks_dir:-<auto>}" "$worktrees_dir" "$watch_subagents" >&2
+# tmux is OPTIONAL: process-liveness / GONE just stays off when it is absent.
+have_tmux=0
+[ "$gone_detect" -eq 1 ] && command -v tmux >/dev/null 2>&1 && have_tmux=1
+
+printf 'agent-watchdog: poll=%ss stall=%ss resume=%ss gone-polls=%s gone-detect=%s tmux=%s team-dir=%s tasks-dir=%s worktrees=%s watch-subagents=%s\n' \
+  "$poll_secs" "$stall_secs" "$resume_secs" "$gone_polls" "$gone_detect" "$have_tmux" "${team_dir:-<auto>}" "${tasks_dir:-<auto>}" "$worktrees_dir" "$watch_subagents" >&2
 
 # ---- main loop ------------------------------------------------------------
 while :; do
@@ -364,16 +559,18 @@ while :; do
   td="$team_dir"; [ -n "$td" ] || td="$(newest_path_in "$HOME/.claude/teams" -maxdepth 1 -type d -name 'session-*')"
 
   # ---- parse team config ----
-  team_present=0; team_name=""; lead_session=""; lead_cwd=""
-  m_names=(); m_cwds=()
+  team_present=0; team_name=""; lead_session=""; lead_cwd=""; lead_pane=""
+  m_names=(); m_cwds=(); m_aids=(); m_types=(); m_panes=(); m_btypes=()
   if [ -n "$td" ] && [ -f "$td/config.json" ]; then
     team_present=1
-    while IFS=$'\t' read -r kind a b; do
+    while IFS=$'\t' read -r kind a b c d e f; do
       case "$kind" in
-        NAME)    team_name="$a" ;;
-        LEAD)    lead_session="$a" ;;
-        LEADCWD) lead_cwd="$a" ;;
-        MEMBER)  m_names+=("$a"); m_cwds+=("$b") ;;
+        NAME)     team_name="$a" ;;
+        LEAD)     lead_session="$a" ;;
+        LEADCWD)  lead_cwd="$a" ;;
+        LEADPANE) lead_pane="$a" ;;
+        MEMBER)   m_names+=("$a"); m_cwds+=("$b"); m_aids+=("$c")
+                  m_types+=("$d"); m_panes+=("$e"); m_btypes+=("$f") ;;
       esac
     done < <(parse_team "$td/config.json")
     if [ "${#m_names[@]}" -eq 0 ] && [ -z "$lead_session" ]; then
@@ -416,6 +613,43 @@ while :; do
     done
   fi
 
+  # ---- tmux pane snapshot (process-liveness / GONE) ----
+  # One list-panes call per poll feeds PANE_CMD. tmux_reachable distinguishes "no
+  # server" from "server up". any_sibling guards a wrong-socket server: only trust
+  # a MISSING pane as GONE when >=1 of OUR configured panes resolves here.
+  unset PANE_CMD; declare -A PANE_CMD
+  tmux_reachable=0; any_sibling=0
+  if [ "$gone_detect" -eq 1 ] && [ "$have_tmux" -eq 1 ]; then
+    while IFS=$'\t' read -r pn cmd; do
+      [ -n "$pn" ] || continue
+      PANE_CMD["$pn"]="$cmd"; tmux_reachable=1
+    done < <(tmux list-panes -a -F $'#{pane_id}\t#{pane_current_command}' 2>/dev/null || true)
+    if [ "$tmux_reachable" -eq 1 ]; then
+      { [ -n "$lead_pane" ] && [ -n "${PANE_CMD[$lead_pane]+x}" ]; } && any_sibling=1
+      if [ "$any_sibling" -eq 0 ]; then
+        for pn in "${m_panes[@]:-}"; do
+          [ -n "$pn" ] && [ -n "${PANE_CMD[$pn]+x}" ] && { any_sibling=1; break; }
+        done
+      fi
+    fi
+  fi
+
+  # ---- transcript-mtime fallback map (shared-cwd members only) ----
+  # Resolve once per poll, and only when at least one active member lacks a
+  # worktree (the case where worktree/cwd mtime cannot isolate its activity).
+  unset TS_MAP; declare -A TS_MAP
+  if [ "$team_present" -eq 1 ] && [ -n "$td" ] && [ -f "$td/config.json" ]; then
+    need_ts=0
+    for i in "${!m_names[@]}"; do
+      [ -d "$wt_dir/agent-$(canon "${m_names[$i]}")" ] || { need_ts=1; break; }
+    done
+    if [ "$need_ts" -eq 1 ]; then
+      while IFS=$'\t' read -r tag nm pth; do
+        [ "$tag" = TS ] && [ -n "$nm" ] && [ -n "$pth" ] && TS_MAP["$(canon "$nm")"]="$pth"
+      done < <(member_transcripts "$td/config.json" "$projects_dir" "$lead_session")
+    fi
+  fi
+
   unset SEEN ALIVE; declare -A SEEN ALIVE   # SEEN = dedup (claimed only on a real signal); ALIVE = had a live signal
 
   # ---- SOURCE A: team members (NAMED, gated) ----
@@ -425,19 +659,45 @@ while :; do
   if [ "$team_present" -eq 1 ]; then
     for i in "${!m_names[@]}"; do
       name="${m_names[$i]}"; cwd="${m_cwds[$i]}"
+      paneid="${m_panes[$i]:-}"; btype="${m_btypes[$i]:-}"
       [ -n "$name" ] || continue
       key="$(canon "$name")"
       [ -n "${SEEN[$key]:-}" ] && continue
+
+      # --- activity clock: worktree -> own cwd -> transcript-mtime fallback ---
       a_dir=""; a_mt=""
       wt="$wt_dir/agent-$key"
       if [ -d "$wt" ]; then
         a_dir="$wt"; a_mt="$(newest_mtime_under "$wt")"
       elif [ -n "$cwd" ] && [ "${CWD_COUNT[$cwd]:-0}" -ge 2 ]; then
-        warn_once "sharedcwd:$key" "no per-agent signal for $key (cwd shared with the team-lead or another member, so its mtime is polluted) — give it an isolated worktree to monitor"
+        tpath="${TS_MAP[$key]:-}"
+        if [ -n "$tpath" ] && [ -e "$tpath" ]; then
+          a_dir="$cwd"; a_mt="$(stat -c %Y "$tpath" 2>/dev/null || true)"   # transcript turn-mtime
+        else
+          warn_once "sharedcwd:$key" "no per-agent file signal for $key (cwd shared with the team-lead or another member, so its mtime is polluted) and no transcript resolved — give it an isolated worktree to monitor"
+        fi
       elif [ -n "$cwd" ]; then
         a_dir="$cwd"; a_mt="$(newest_mtime_cwd "$cwd")"
       fi
-      [ -n "$a_mt" ] || continue        # no signal -> don't claim SEEN; gone-prune may clear it
+
+      # --- process liveness (tmux pane) -> GONE supersedes STALL ---
+      classify_pane "$paneid" "$btype"
+      case "$PANE_STATE" in
+        dead|missing)                       # process verifiably ABSENT
+          SEEN["$key"]=1; ALIVE["$key"]=1   # we are managing it via the GONE machine
+          gone_eval "$key" "$PANE_STATE" "$a_mt"
+          continue ;;
+        alive)
+          gone_recover "$key" ;;            # positively alive -> clear any prior GONE
+        *)
+          gone_reset "$key" ;;              # unknown -> stop counting, keep state
+      esac
+
+      if [ "$PANE_STATE" = alive ] && [ -z "$a_mt" ]; then
+        SEEN["$key"]=1; ALIVE["$key"]=1     # alive but no usable clock: liveness still proven
+        continue
+      fi
+      [ -n "$a_mt" ] || continue            # no signal -> don't claim SEEN; gone-prune may clear it
       SEEN["$key"]=1
       evaluate_named "$key" "$a_mt" "$a_dir"
     done
@@ -498,8 +758,10 @@ while :; do
     fi
     MISS["$key"]=$(( ${MISS[$key]:-0} + 1 ))
     if [ "${MISS[$key]}" -ge "$gone_polls" ]; then
+      # STALLED -> announce the clear; a confirmed-GONE key was already announced,
+      # so drop it silently (no duplicate). Either way, forget all per-key state.
       [ "${STATE[$key]}" = "STALLED" ] && printf 'RESUMED agent=%s reason=gone\n' "$key"
-      unset 'STATE[$key]' 'MISS[$key]'
+      unset 'STATE[$key]' 'MISS[$key]' 'GONE_HITS[$key]'
     fi
   done
 
