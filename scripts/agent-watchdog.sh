@@ -275,31 +275,46 @@ if lead_session:
             if aid:
                 byid.setdefault(aid, f)
 
-slug_cache = {}                                  # cwd-slug -> {agentType: [(mtime, path)]}
+def first_agent_setting(f):                      # agent-setting record sits near the top
+    try:
+        with open(f, errors="ignore") as fh:
+            for _ in range(12):
+                ln = fh.readline()
+                if not ln:
+                    break
+                try: o = json.loads(ln)
+                except Exception: continue
+                if o.get("type") == "agent-setting":
+                    return o.get("agentSetting"), o.get("sessionId")
+    except Exception:
+        return None, None
+    return None, None
+
+def slug_dirs(cwd):                              # tolerate either project-dir encoding
+    c = cwd.rstrip("/")
+    dirs = []
+    for pat in (r"[^A-Za-z0-9-]", r"[/.]"):
+        d = os.path.join(projects, re.sub(pat, "-", c))
+        if d not in dirs and os.path.isdir(d):
+            dirs.append(d)
+    return dirs
+
+slug_cache = {}                                  # cwd -> {agentType: [(mtime, path)]}
 def by_type_for(cwd):
-    slug = re.sub(r"[/.]", "-", cwd.rstrip("/"))
-    if slug in slug_cache:
-        return slug_cache[slug]
+    if cwd in slug_cache:
+        return slug_cache[cwd]
     out = collections.defaultdict(list)
-    sdir = os.path.join(projects, slug)
-    if os.path.isdir(sdir):
+    for sdir in slug_dirs(cwd):
         for f in glob.glob(os.path.join(sdir, "*.jsonl")):
             try: st = os.stat(f)
             except Exception: continue
             if created_s and st.st_mtime < created_s - 5:   # predates this team session
                 continue
-            try:
-                with open(f, errors="ignore") as fh:
-                    o = json.loads(fh.readline())
-            except Exception:
-                continue
-            if o.get("type") != "agent-setting":
-                continue
-            at, sid = o.get("agentSetting"), o.get("sessionId")
+            at, sid = first_agent_setting(f)
             if not at or (lead_session and sid == lead_session):
                 continue                         # skip the lead's own transcript
             out[at].append((st.st_mtime, f))
-    slug_cache[slug] = out
+    slug_cache[cwd] = out
     return out
 
 for n, aid, at, cwd in members:
@@ -317,7 +332,7 @@ PY
 
 is_bare_shell() {   # pane_current_command of a pane whose claude/node process exited
   case "$1" in
-    sh|-sh|bash|-bash|zsh|-zsh|dash|-dash|ksh|-ksh|fish|-fish|login) return 0 ;;
+    sh|-sh|bash|-bash|zsh|-zsh|dash|-dash|ksh|-ksh|fish|-fish|login|cd) return 0 ;;
   esac
   return 1
 }
