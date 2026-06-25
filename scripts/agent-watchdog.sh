@@ -71,14 +71,24 @@
 #   OK->STALL or STALL->RESUMED transition. No heartbeat, no per-poll output, no
 #   debug on stdout (diagnostics -> stderr). Healthy == silent stdout == 0 tokens.
 #
-# Monitor invocation (one persistent monitor per wave; autodetect by default):
+# Monitor invocation (one persistent monitor per wave; session-scoped):
 #   Monitor(persistent=true, description="agent stall watchdog",
-#           command='bash "${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh" --stall-secs 300')
+#           command='bash "${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300')
 #   Use the portable plugin-root path -- grand-admiral resolves ${CLAUDE_SKILL_DIR}
 #   at skill-load time; a bare relative `scripts/...` fails because the Monitor's
-#   CWD is the user's repo, not the plugin root. Prefer an explicit --team-dir when
-#   several sessions exist (autodetect picks the newest dir by mtime, which a
-#   cleanup touch could mis-rank).
+#   CWD is the user's repo, not the plugin root.
+#
+# MULTI-SESSION SEPARATION (a shared host runs many concurrent sessions, each with
+# its own ~/.claude/teams/session-<id> team). Bind the watchdog to THIS session's
+# team so it never monitors a neighbour's agents. Team-selection precedence:
+#   --team-dir <path>  (explicit, wins) > --session-id <id> > $CLAUDE_SESSION_ID
+#   env (inherited by the Monitor process) > newest-by-mtime autodetect.
+# --session-id matches the team whose dir is session-<id> OR whose leadSessionId
+# equals/prefix-matches <id> (dir suffix is the first 8 hex of the full UUID, so
+# the match is prefix-tolerant either way). EVERY downstream lookup -- members,
+# tmux panes, transcripts, worktrees, tasks -- is scoped to that ONE team. When no
+# binding is given and >1 candidate team exists, autodetect emits a one-time stderr
+# WARNING naming the chosen session so silent mis-binding becomes visible.
 #
 # CRITICAL -- a STALL line is a PRE-FILTER, never an auto-kill trigger
 #   It prompts the coordinator to INVESTIGATE (read the transcript,
@@ -86,7 +96,7 @@
 #   doctrine: grand-admiral skill.
 #
 # Three discovery sources (dedup by canonical label; team entry wins)
-#   SOURCE A -- TEAM members (NAMED, task-gated): newest
+#   SOURCE A -- TEAM members (NAMED, task-gated): the SESSION-SELECTED
 #     ~/.claude/teams/session-*/config.json members with isActive==true AND
 #     agentType != "team-lead". Canonical label = member `name`. Shared-cwd members
 #     (which used to be skipped) are now clocked by transcript mtime, and tmux-
@@ -112,8 +122,11 @@
 #   handles removed worktrees / deactivated members while bounding state.
 #
 # Args (all optional; sane defaults shown)
-#   --team-dir     DIR  team session dir w/ config.json
-#                       (default: newest ~/.claude/teams/session-*)
+#   --session-id   ID   bind to THIS session's team (dir session-<ID> or matching
+#                       leadSessionId). Defaults to $CLAUDE_SESSION_ID. Precedence:
+#                       --team-dir > --session-id > $CLAUDE_SESSION_ID > autodetect.
+#   --team-dir     DIR  team session dir w/ config.json (explicit path, wins over
+#                       --session-id; default: session-selected, else newest dir)
 #   --tasks-dir    DIR  task store (default: ~/.claude/tasks/<teamName> from the
 #                       config `name`; fallback newest ~/.claude/tasks/session-*)
 #   --projects-dir DIR  projects base for subagent transcripts
@@ -145,6 +158,7 @@ set -euo pipefail
 
 # ---- defaults -------------------------------------------------------------
 team_dir=""
+session_id=""
 tasks_dir=""
 projects_dir="$HOME/.claude/projects"
 worktrees_dir=".claude/worktrees"
@@ -162,12 +176,14 @@ require_int() { [[ "$2" =~ ^[0-9]+$ ]] || die "$1 expects a non-negative integer
 usage() {
   cat >&2 <<'USAGE'
 agent-watchdog.sh -- edge-triggered agent-stall watchdog (silent when healthy)
-Usage: agent-watchdog.sh [--team-dir DIR] [--tasks-dir DIR] [--projects-dir DIR]
-                         [--worktrees DIR] [--watch-subagents] [--no-gone]
-                         [--gone-polls N] [--stall-secs N] [--resume-secs N]
-                         [--poll-secs N]
+Usage: agent-watchdog.sh [--session-id ID] [--team-dir DIR] [--tasks-dir DIR]
+                         [--projects-dir DIR] [--worktrees DIR] [--watch-subagents]
+                         [--no-gone] [--gone-polls N] [--stall-secs N]
+                         [--resume-secs N] [--poll-secs N]
 STALL = owns an in_progress task AND idle >= threshold AND no build under the
 agent's worktree/cwd. An idle agent owning no in_progress task is never flagged.
+--session-id (default $CLAUDE_SESSION_ID) scopes ALL discovery to THIS session's
+team; precedence --team-dir > --session-id > $CLAUDE_SESSION_ID > newest autodetect.
 Emits ONLY 'STALL'/'RESUMED' transition lines to stdout; diagnostics to stderr.
 USAGE
 }
@@ -224,10 +240,74 @@ for m in c.get("members", []):
 PY
 }
 
-member_transcripts() {   # map shared-cwd members -> own transcript jsonl (turn-mtime clock)
+select_team() {
+  # Pick THE one team dir for this session and report the leadSessionIds of every
+  # OTHER team (so transcript matching can refuse foreign artifacts). Precedence:
+  #   explicit --team-dir ($2) > --session-id/$CLAUDE_SESSION_ID ($3) > newest mtime.
+  # Output (tab-kv): MODE explicit|matched|autodetect|none, DIR, LEAD, CANDIDATES,
+  # OTHERLEAD* (one per non-selected team).
   python3 - "$1" "$2" "$3" <<'PY' 2>/dev/null || true
+import json, os, sys, glob
+teams, team_dir_arg, want = sys.argv[1], sys.argv[2], sys.argv[3]
+
+def lead_of(d):
+    try:
+        return json.load(open(os.path.join(d, "config.json"))).get("leadSessionId") or ""
+    except Exception:
+        return ""
+
+def mtime(d):
+    try:
+        return os.stat(d).st_mtime
+    except Exception:
+        return 0.0
+
+# A real team dir holds a config.json; bare placeholders never count as candidates.
+cands = [d for d in glob.glob(os.path.join(teams, "session-*"))
+         if os.path.isfile(os.path.join(d, "config.json"))]
+
+def emit(mode, sel):
+    print("MODE\t" + mode)
+    print("CANDIDATES\t%d" % len(cands))
+    if sel:
+        print("DIR\t" + sel)
+        print("LEAD\t" + lead_of(sel))
+    rsel = os.path.realpath(sel) if sel else ""
+    for d in cands:                                    # every team that is NOT ours
+        if os.path.realpath(d) == rsel:
+            continue
+        l = lead_of(d)
+        if l:
+            print("OTHERLEAD\t" + l)
+
+if team_dir_arg:                                       # explicit path wins outright
+    emit("explicit", team_dir_arg)
+elif want:                                             # bind to the invoking session only
+    sel = None
+    for d in cands:                                    # 1) dir suffix session-<id> (prefix-tolerant)
+        suf = os.path.basename(d)[len("session-"):]
+        if suf and (suf == want or want.startswith(suf) or suf.startswith(want)):
+            sel = d
+            break
+    if sel is None:                                    # 2) leadSessionId equals/prefix of <id>
+        for d in cands:
+            l = lead_of(d)
+            if l and (l == want or want.startswith(l) or l.startswith(want)):
+                sel = d
+                break
+    emit("matched" if sel else "none", sel)
+elif cands:                                            # autodetect: newest config.json by mtime
+    emit("autodetect", max(cands, key=mtime))
+else:
+    emit("none", None)
+PY
+}
+
+member_transcripts() {   # map shared-cwd members -> own transcript jsonl (turn-mtime clock)
+  python3 - "$1" "$2" "$3" "$4" <<'PY' 2>/dev/null || true
 import json, sys, os, glob, re, collections
 cfg, projects, lead_session = sys.argv[1], sys.argv[2], sys.argv[3]
+other_leads = set(filter(None, (sys.argv[4] if len(sys.argv) > 4 else "").split(",")))
 try:
     c = json.load(open(cfg))
 except Exception:
@@ -267,13 +347,29 @@ def first_agentid(f):                            # subagent transcript: agentId 
         return None
     return None
 
-byid = {}                                        # agentId -> subagent transcript (certain map)
+def meta_agenttype(f):                           # sibling agent-*.meta.json names the agentType
+    try:
+        return json.load(open(f[:-len(".jsonl")] + ".meta.json")).get("agentType") or None
+    except Exception:
+        return None
+
+# Subagent transcripts live UNDER this team's leadSession dir, so they are
+# session-scoped by construction -- no foreign artifact can reach them. byid is the
+# exact internal-agentId map; sub_by_type lets a member with a unique agentType bind
+# to its newest subagent transcript even when the config agentId is an external label.
+byid = {}                                        # internal agentId -> subagent transcript
+sub_by_type = collections.defaultdict(list)      # agentType -> [(mtime, path)] (this team only)
 if lead_session:
     for sd in glob.glob(os.path.join(projects, "*", lead_session, "subagents")):
         for f in glob.glob(os.path.join(sd, "agent-*.jsonl")):
+            try: mt = os.stat(f).st_mtime
+            except Exception: continue
             aid = first_agentid(f)
             if aid:
                 byid.setdefault(aid, f)
+            at = meta_agenttype(f)
+            if at:
+                sub_by_type[at].append((mt, f))
 
 def first_agent_setting(f):                      # agent-setting record sits near the top
     try:
@@ -311,20 +407,29 @@ def by_type_for(cwd):
             if created_s and st.st_mtime < created_s - 5:   # predates this team session
                 continue
             at, sid = first_agent_setting(f)
-            if not at or (lead_session and sid == lead_session):
-                continue                         # skip the lead's own transcript
-            out[at].append((st.st_mtime, f))
+            if not at or not sid:
+                continue
+            if lead_session and sid == lead_session:
+                continue                         # skip THIS team's own lead transcript
+            if sid in other_leads:
+                continue                         # belongs to ANOTHER session's team -> never trust
+            out[at].append((st.st_mtime, f, sid))
     slug_cache[cwd] = out
     return out
 
 for n, aid, at, cwd in members:
     path = None
-    if aid and aid in byid:
-        path = byid[aid]                         # unique agentId match
-    elif at and typecount[at] == 1 and cwd:      # unambiguous agentType in the member's slug
+    if aid and aid in byid:                       # exact internal-agentId match (session-scoped)
+        path = byid[aid]
+    elif at and typecount[at] == 1 and at in sub_by_type:   # session-scoped subagent transcript
+        path = max(sub_by_type[at])[1]            # newest subagent of this unique agentType
+    elif at and typecount[at] == 1 and cwd:       # slug fallback (the only cross-session-prone path)
         cand = by_type_for(cwd).get(at) or []
-        if cand:
-            path = max(cand)[1]                  # newest matching transcript
+        sids = {c[2] for c in cand}
+        if len(sids) == 1:                        # one session owns this type in the cwd -> trust newest
+            path = max(cand)[1]
+        # >1 distinct session of this agentType share the cwd: cannot attribute to
+        # THIS team from disk -> skip rather than clock a neighbour's transcript.
     if path:
         print("TS\t" + n + "\t" + path)
 PY
@@ -533,6 +638,7 @@ evaluate_anon() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --team-dir)       [ $# -ge 2 ] || die "--team-dir needs a value";     team_dir="$2";     shift 2 ;;
+    --session-id)     [ $# -ge 2 ] || die "--session-id needs a value";   session_id="$2";   shift 2 ;;
     --tasks-dir)      [ $# -ge 2 ] || die "--tasks-dir needs a value";    tasks_dir="$2";    shift 2 ;;
     --projects-dir)   [ $# -ge 2 ] || die "--projects-dir needs a value"; projects_dir="$2"; shift 2 ;;
     --worktrees)      [ $# -ge 2 ] || die "--worktrees needs a value";    worktrees_dir="$2"; shift 2 ;;
@@ -551,6 +657,10 @@ done
 [ "$gone_polls" -ge 1 ] || die "--gone-polls must be >= 1"
 [ "$resume_secs" -lt "$stall_secs" ] || die "--resume-secs ($resume_secs) must be < --stall-secs ($stall_secs)"
 
+# Default the session binding from the inherited env (the Monitor process carries
+# $CLAUDE_SESSION_ID). --session-id overrides it; --team-dir overrides both.
+[ -n "$session_id" ] || session_id="${CLAUDE_SESSION_ID:-}"
+
 command -v python3 >/dev/null 2>&1 || die "python3 not found (required to read team config + task store)"
 # GNU find/stat probe -- the mtime clocks are GNU-only; fail loud, not silent.
 stat -c %Y "$0" >/dev/null 2>&1 || die "GNU stat (stat -c %Y) required"
@@ -560,8 +670,8 @@ find "$0" -maxdepth 0 -printf '' >/dev/null 2>&1 || die "GNU find (find -printf)
 have_tmux=0
 [ "$gone_detect" -eq 1 ] && command -v tmux >/dev/null 2>&1 && have_tmux=1
 
-printf 'agent-watchdog: poll=%ss stall=%ss resume=%ss gone-polls=%s gone-detect=%s tmux=%s team-dir=%s tasks-dir=%s worktrees=%s watch-subagents=%s\n' \
-  "$poll_secs" "$stall_secs" "$resume_secs" "$gone_polls" "$gone_detect" "$have_tmux" "${team_dir:-<auto>}" "${tasks_dir:-<auto>}" "$worktrees_dir" "$watch_subagents" >&2
+printf 'agent-watchdog: poll=%ss stall=%ss resume=%ss gone-polls=%s gone-detect=%s tmux=%s session=%s team-dir=%s tasks-dir=%s worktrees=%s watch-subagents=%s\n' \
+  "$poll_secs" "$stall_secs" "$resume_secs" "$gone_polls" "$gone_detect" "$have_tmux" "${session_id:-<auto>}" "${team_dir:-<auto>}" "${tasks_dir:-<auto>}" "$worktrees_dir" "$watch_subagents" >&2
 
 # ---- main loop ------------------------------------------------------------
 while :; do
@@ -571,7 +681,28 @@ while :; do
     continue
   fi
 
-  td="$team_dir"; [ -n "$td" ] || td="$(newest_path_in "$HOME/.claude/teams" -maxdepth 1 -type d -name 'session-*')"
+  # ---- select THE team for this session (precedence: --team-dir > --session-id /
+  #      $CLAUDE_SESSION_ID > newest-mtime autodetect). other_leads collects every
+  #      OTHER team's leadSessionId so transcript matching can refuse foreign work. ----
+  sel_mode=""; td=""; sel_lead=""; sel_cands=0; other_leads=()
+  while IFS=$'\t' read -r kind val; do
+    case "$kind" in
+      MODE)       sel_mode="$val" ;;
+      DIR)        td="$val" ;;
+      LEAD)       sel_lead="$val" ;;
+      CANDIDATES) sel_cands="$val" ;;
+      OTHERLEAD)  [ -n "$val" ] && other_leads+=("$val") ;;
+    esac
+  done < <(select_team "$HOME/.claude/teams" "$team_dir" "$session_id")
+  [[ "$sel_cands" =~ ^[0-9]+$ ]] || sel_cands=0
+
+  if [ "$sel_mode" = autodetect ] && [ "$sel_cands" -gt 1 ] && [ -n "$td" ]; then
+    warn_once "autodetect:${td##*/}" "ambiguous team autodetect: $sel_cands candidate team dirs on this host; bound to ${td##*/} (leadSessionId=${sel_lead:-?}) by NEWEST mtime — this may be ANOTHER session's team. Pass --session-id \$CLAUDE_SESSION_ID (or --team-dir) to track THIS session's team."
+  elif { [ "$sel_mode" = matched ] || [ "$sel_mode" = explicit ]; } && [ -n "$td" ]; then
+    warn_once "bind:${td##*/}" "session-scoped to ${td##*/} (leadSessionId=${sel_lead:-?}, mode=$sel_mode)"
+  fi
+  other_leads_csv=""
+  [ "${#other_leads[@]}" -gt 0 ] && other_leads_csv="$(IFS=,; printf '%s' "${other_leads[*]}")"
 
   # ---- parse team config ----
   team_present=0; team_name=""; lead_session=""; lead_cwd=""; lead_pane=""
@@ -594,11 +725,17 @@ while :; do
   fi
 
   # ---- resolve task store + OWNERS_WITH_WORK ----
+  # When bound to a team (team_name known) use ONLY that team's task dir; never the
+  # newest-session fallback, which would import a stranger's owners. The newest
+  # fallback applies solely to the fully-unbound case (no team AND no session id).
   tkdir="$tasks_dir"
-  if [ -z "$tkdir" ] && [ -n "$team_name" ] && [ -d "$HOME/.claude/tasks/$team_name" ]; then
-    tkdir="$HOME/.claude/tasks/$team_name"
+  if [ -z "$tkdir" ]; then
+    if [ -n "$team_name" ]; then
+      [ -d "$HOME/.claude/tasks/$team_name" ] && tkdir="$HOME/.claude/tasks/$team_name"
+    elif [ -z "$session_id" ]; then
+      tkdir="$(newest_path_in "$HOME/.claude/tasks" -maxdepth 1 -type d -name 'session-*')"
+    fi
   fi
-  [ -n "$tkdir" ] || tkdir="$(newest_path_in "$HOME/.claude/tasks" -maxdepth 1 -type d -name 'session-*')"
   unset OWNERS; declare -A OWNERS
   if [ -n "$tkdir" ] && [ -d "$tkdir" ]; then
     while IFS= read -r owner; do [ -n "$owner" ] && OWNERS["$owner"]=1; done < <(build_owners "$tkdir")
@@ -661,7 +798,7 @@ while :; do
     if [ "$need_ts" -eq 1 ]; then
       while IFS=$'\t' read -r tag nm pth; do
         [ "$tag" = TS ] && [ -n "$nm" ] && [ -n "$pth" ] && TS_MAP["$(canon "$nm")"]="$pth"
-      done < <(member_transcripts "$td/config.json" "$projects_dir" "$lead_session")
+      done < <(member_transcripts "$td/config.json" "$projects_dir" "$lead_session" "$other_leads_csv")
     fi
   fi
 
@@ -739,8 +876,9 @@ while :; do
     if [ "$team_present" -eq 1 ] && [ -n "$lead_session" ]; then
       d="$(find "$projects_dir" -maxdepth 3 -type d -path "*/$lead_session/subagents" 2>/dev/null | head -n1 || true)"
       [ -n "$d" ] && sub_dirs+=("$d")
-    else
-      # no team / unparsable config -> enumerate ALL subagents dirs in newest slug
+    elif [ -z "$session_id" ]; then
+      # fully unbound (no team AND no session id) -> enumerate ALL subagents dirs in
+      # newest slug. Suppressed when session-bound: a stranger's slug is not ours.
       slug="$(newest_path_in "$projects_dir" -mindepth 1 -maxdepth 1 -type d)"
       if [ -n "$slug" ]; then
         while IFS= read -r d; do [ -n "$d" ] && sub_dirs+=("$d"); done \
