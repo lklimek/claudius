@@ -48,22 +48,35 @@
 #   STALL means "process alive but idle while owning work" -- a PRE-FILTER to
 #   investigate. GONE means the agent PROCESS is verifiably ABSENT while the team
 #   still believes it active (config isActive==true). For a tmux-backed member the
-#   recorded `tmuxPaneId` is probed each poll:
+#   recorded `tmuxPaneId` is probed each poll ON THIS SESSION'S swarm socket:
 #     pane-dead  -- the pane's `pane_current_command` reverted to a bare shell
 #                   (sh/bash/zsh/-bash/dash/ksh/fish/login); the agent's claude/
 #                   node process exited but the pane lives. (A live claude pane
 #                   reports a non-shell command such as its version string.)
-#     pid-gone   -- the recorded pane no longer exists in an otherwise-reachable
-#                   tmux server (>=1 sibling configured pane still resolves -> not
-#                   a wrong-socket false positive); pane + process destroyed.
+#     pid-gone   -- the recorded pane no longer exists on our positively-bound
+#                   swarm socket, so its absence is real (not a wrong-socket
+#                   artifact); pane + process destroyed.
 #     stale-active -- a process-absent signal (pane-dead or pane-gone) CORROBORATED
 #                   by a stale activity/transcript clock (idle >= stall_secs):
 #                   highest-confidence proof the isActive flag is stale.
+#   PER-SESSION SWARM-SOCKET DISCOVERY -- agent panes do NOT live on tmux's default
+#   socket; each Claude Code session runs its swarm on a per-session socket
+#   ${TMUX_TMPDIR:-/tmp/tmux-<uid>}/claude-swarm-<leaderPid>, and $TMUX is UNSET in
+#   the watchdog's runtime. Pane ids (%0,%1,...) RESTART per socket and therefore
+#   collide across sessions. Each poll we enumerate the claude-swarm-* sockets and
+#   POSITIVELY BIND to the one where the most of OUR team's tmux members'
+#   tmuxPaneIds resolve to panes whose pane_title carries that member's agentType
+#   (substring, glyph/whitespace tolerant); the unique best-scoring socket (>=1
+#   match) is ours. PANE_CMD is built from ONLY that socket -- never aggregated
+#   across sockets -- so a colliding %0 on a neighbour's socket can never be misread
+#   as ours. This session->socket binding REPLACES the old default-socket scan plus
+#   sibling-pane guard. tmux_reachable=1 iff our socket was found and queried.
 #   GONE requires --gone-polls CONSECUTIVE confirmations (same anti-glitch backstop
 #   as the gone-prune) and is edge-triggered. It NEVER auto-kills: it suggests the
 #   coordinator clear the stale active flag / respawn. If a GONE pane shows a live
 #   command again it recovers (`RESUMED agent=<name> reason=recovered`). Disable
-#   the whole GONE layer with --no-gone; it is a no-op without tmux or a config.
+#   the whole GONE layer with --no-gone; it is a no-op without tmux, without a
+#   config, or when no swarm socket matches this team.
 #
 # ZERO MODEL TOKENS WHEN HEALTHY (hard contract)
 #   Run by the `Monitor` tool, where each stdout LINE is a coordinator
@@ -225,9 +238,6 @@ for m in c.get("members", []):
         lc = m.get("cwd") or ""            # lead's cwd: a de-isolated agent may land here
         if lc:
             print("LEADCWD\t" + lc)
-        lp = m.get("tmuxPaneId") or ""     # seed lead pane for the wrong-server guard
-        if lp:
-            print("LEADPANE\t" + lp)
         continue
     if m.get("isActive") is True:
         n = m.get("name") or ""
@@ -442,6 +452,29 @@ is_bare_shell() {   # pane_current_command of a pane whose claude/node process e
   return 1
 }
 
+swarm_sockets() {   # candidate per-session tmux sockets (claude-swarm-*, plus $TMUX), deduped
+  local d s; local -A seen=()
+  d="${TMUX_TMPDIR:-/tmp/tmux-$(id -u 2>/dev/null || printf '%s' "${UID:-0}")}"
+  if [ -d "$d" ]; then
+    for s in "$d"/claude-swarm-*; do        # stale 0-byte files tolerated (tmux -S handles them)
+      [ -e "$s" ] || continue
+      [ -n "${seen[$s]:-}" ] && continue
+      seen["$s"]=1; printf '%s\n' "$s"
+    done
+  fi
+  if [ -n "${TMUX:-}" ]; then               # honor an explicit $TMUX socket as one more candidate
+    s="${TMUX%%,*}"
+    if [ -n "$s" ] && [ -z "${seen[$s]:-}" ]; then
+      seen["$s"]=1; printf '%s\n' "$s"
+    fi
+  fi
+}
+
+snapshot_panes() {   # 'paneid<TAB>cmd<TAB>title' for every pane on tmux socket $1 (best-effort)
+  [ -n "$1" ] || return 0
+  tmux -S "$1" list-panes -a -F $'#{pane_id}\t#{pane_current_command}\t#{pane_title}' 2>/dev/null || true
+}
+
 build_owners() {
   python3 - "$1" <<'PY' 2>/dev/null || true
 import json, sys, glob, os
@@ -574,8 +607,9 @@ evaluate_named() {
 
 classify_pane() {
   # $1=tmuxPaneId  $2=backendType -> sets PANE_STATE to alive|dead|missing|unknown.
-  # unknown == "can't tell" (no tmux, server unreachable, non-tmux backend, or a
-  # wrong-socket server where none of our panes resolve) -> NEVER drives GONE.
+  # unknown == "can't tell" (GONE off, no tmux, non-tmux backend, or no swarm socket
+  # bound this poll) -> NEVER drives GONE. PANE_CMD holds ONLY our positively-bound
+  # socket, so a configured pane absent from it is genuinely missing (collision-free).
   PANE_STATE=unknown
   [ "$gone_detect" -eq 1 ] && [ "$have_tmux" -eq 1 ] && [ "$tmux_reachable" -eq 1 ] || return 0
   local paneid="$1" bt="$2"
@@ -583,7 +617,7 @@ classify_pane() {
   case "$paneid" in %*) ;; *) return 0 ;; esac
   if [ -n "${PANE_CMD[$paneid]+x}" ]; then
     if is_bare_shell "${PANE_CMD[$paneid]}"; then PANE_STATE=dead; else PANE_STATE=alive; fi
-  elif [ "$any_sibling" -eq 1 ]; then            # pane absent in a server proven to hold our panes
+  else
     PANE_STATE=missing
   fi
 }
@@ -705,7 +739,7 @@ while :; do
   [ "${#other_leads[@]}" -gt 0 ] && other_leads_csv="$(IFS=,; printf '%s' "${other_leads[*]}")"
 
   # ---- parse team config ----
-  team_present=0; team_name=""; lead_session=""; lead_cwd=""; lead_pane=""
+  team_present=0; team_name=""; lead_session=""; lead_cwd=""
   m_names=(); m_cwds=(); m_aids=(); m_types=(); m_panes=(); m_btypes=()
   if [ -n "$td" ] && [ -f "$td/config.json" ]; then
     team_present=1
@@ -714,7 +748,6 @@ while :; do
         NAME)     team_name="$a" ;;
         LEAD)     lead_session="$a" ;;
         LEADCWD)  lead_cwd="$a" ;;
-        LEADPANE) lead_pane="$a" ;;
         MEMBER)   m_names+=("$a"); m_cwds+=("$b"); m_aids+=("$c")
                   m_types+=("$d"); m_panes+=("$e"); m_btypes+=("$f") ;;
       esac
@@ -765,24 +798,53 @@ while :; do
     done
   fi
 
-  # ---- tmux pane snapshot (process-liveness / GONE) ----
-  # One list-panes call per poll feeds PANE_CMD. tmux_reachable distinguishes "no
-  # server" from "server up". any_sibling guards a wrong-socket server: only trust
-  # a MISSING pane as GONE when >=1 of OUR configured panes resolves here.
+  # ---- tmux pane snapshot via per-session swarm socket (process-liveness / GONE) ----
+  # Agent panes live on a per-session socket claude-swarm-<pid>, NOT tmux's default
+  # socket ($TMUX is unset here). Pane ids restart per socket and collide across
+  # sessions, so we POSITIVELY BIND to OUR socket: among the claude-swarm-* sockets
+  # pick the one where the most of our tmux members' panes carry their agentType in
+  # pane_title (substring, glyph tolerant). PANE_CMD is built from ONLY that socket;
+  # tmux_reachable=1 iff it was found and queried -- the strong session->socket guard
+  # that replaced the old default-socket scan + sibling-pane heuristic.
   unset PANE_CMD; declare -A PANE_CMD
-  tmux_reachable=0; any_sibling=0
+  tmux_reachable=0
   if [ "$gone_detect" -eq 1 ] && [ "$have_tmux" -eq 1 ]; then
-    while IFS=$'\t' read -r pn cmd; do
-      [ -n "$pn" ] || continue
-      PANE_CMD["$pn"]="$cmd"; tmux_reachable=1
-    done < <(tmux list-panes -a -F $'#{pane_id}\t#{pane_current_command}' 2>/dev/null || true)
+    unset OUR_PANE_TYPE; declare -A OUR_PANE_TYPE   # OUR tmux members: paneId -> agentType
+    for i in "${!m_names[@]}"; do
+      [ "${m_btypes[$i]:-}" = tmux ] || continue
+      mp="${m_panes[$i]:-}"; at="${m_types[$i]:-}"
+      case "$mp" in %*) ;; *) continue ;; esac
+      [ -n "$at" ] && OUR_PANE_TYPE["$mp"]="$at"
+    done
+
+    best_sock=""; best_score=0; best_tie=0
+    if [ "${#OUR_PANE_TYPE[@]}" -gt 0 ]; then
+      while IFS= read -r sock; do
+        [ -n "$sock" ] || continue
+        score=0
+        while IFS=$'\t' read -r pn _ title; do      # match member panes by title-carried agentType
+          at="${OUR_PANE_TYPE[$pn]:-}"
+          [ -n "$at" ] || continue
+          case "$title" in *"$at"*) score=$(( score + 1 )) ;; esac
+        done < <(snapshot_panes "$sock")
+        if [ "$score" -gt "$best_score" ]; then
+          best_score="$score"; best_sock="$sock"; best_tie=0
+        elif [ "$score" -eq "$best_score" ] && [ "$score" -gt 0 ]; then
+          best_tie=1                                  # two sockets tie -> ambiguous, refuse to bind
+        fi
+      done < <(swarm_sockets)
+    fi
+
+    if [ "$best_score" -ge 1 ] && [ "$best_tie" -eq 0 ] && [ -n "$best_sock" ]; then
+      while IFS=$'\t' read -r pn cmd _; do            # PANE_CMD from ONLY our socket (collision-free)
+        [ -n "$pn" ] || continue
+        PANE_CMD["$pn"]="$cmd"; tmux_reachable=1
+      done < <(snapshot_panes "$best_sock")
+    fi
     if [ "$tmux_reachable" -eq 1 ]; then
-      { [ -n "$lead_pane" ] && [ -n "${PANE_CMD[$lead_pane]+x}" ]; } && any_sibling=1
-      if [ "$any_sibling" -eq 0 ]; then
-        for pn in "${m_panes[@]:-}"; do
-          [ -n "$pn" ] && [ -n "${PANE_CMD[$pn]+x}" ] && { any_sibling=1; break; }
-        done
-      fi
+      warn_once "swarmsock:${best_sock##*/}" "bound GONE detection to tmux swarm socket ${best_sock##*/} ($best_score member pane(s) matched)"
+    else
+      warn_once "noswarmsock" "no matching tmux swarm socket for this team; GONE detection idle"
     fi
   fi
 
