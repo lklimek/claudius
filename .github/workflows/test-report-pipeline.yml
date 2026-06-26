@@ -38,3 +38,6 @@ jobs:
 
       - name: Report pipeline (fixtures)
         run: ./tests/test_report_pipeline.sh
+
+      - name: Watchdog GONE detection (e2e, real tmux)
+        run: ./tests/test_agent_watchdog_gone.sh

@@ -88,7 +88,7 @@ Prefer reusing existing agents, as they already know the context.
 
 A named `Agent(name=...)` teammate is NOT in the background-task registry — it has no `TaskStop`-addressable id.
 
-- Stop a named teammate ONLY via `SendMessage({type: "shutdown_request"})`; it terminates after replying `shutdown_approved`.
+- Stop a named teammate ONLY via `SendMessage({type: "shutdown_request"})`. The teammate replies `shutdown_response` with `approve: true`, the runtime then terminates its process, and you receive a `shutdown_approved` confirmation notification.
 - NEVER `TaskStop` a named teammate (by `name` or `name@session-...`) — wrong subsystem; it always returns "No task found", which looks like an id-lookup bug but isn't.
 - A teammate that keeps emitting `idle_notification` yet never acknowledges shutdown is a STUCK runtime process: surface it to the user to clear via the `/tasks` UI or its tmux pane. Do NOT retry `TaskStop` or burn turns reacting to each idle ping.
 - **Spawn-time trade-off**: naming an agent enables mid-task `SendMessage` steering (flip a directive while it runs) but creates a lingering teammate you must explicitly shut down; an unnamed `run_in_background` Agent gets a clean `TaskStop`-able registry id but cannot be messaged mid-flight. Choose by whether mid-run steering is needed.
@@ -280,6 +280,17 @@ Monitor(persistent=true, description="agent stall watchdog",
    - Archive its inbox (rename `inboxes/<name>.json` → `inboxes/<name>.json.killed-<ts>`, keeping the per-agent `<name>` prefix so archives never collide) to keep the message history; bump to `model: opus` if the task needs deep analysis
    The worktree's commits and working-tree edits survive intact — only the agent process is replaced.
 4. **Escalate** — report to user after a second recovery attempt fails: agent name, stall duration, last tool call, transcript path.
+
+### On a GONE Event (fully autonomous)
+
+`GONE agent=<name> reason=pane-dead|pid-gone|stale-active` means the watchdog *verified the process is absent* (its tmux pane dropped to a bare shell, the pane/PID vanished, or `isActive` was stale with no live process), confirmed over `--gone-polls` polls. Unlike STALL (process alive but idle), GONE needs no liveness re-check — but you still NEVER auto-kill anything (it is already gone). The work product, if any, survives in the agent's worktree.
+
+1. **Assess** — `git -C <cwd> log --oneline -5` / `status` shows whether it committed before vanishing; `TaskGet` shows whether it still owns an in_progress task. A GONE agent whose task is already complete needs only cleanup.
+2. **Clean up the stale flag** — its registry/`isActive` entry may still read active; archive the inbox (`inboxes/<name>.json` → `.json.killed-<ts>`) so a respawn starts with a clean mailbox.
+3. **Respawn if work remains** — spawn a replacement of the same type on the **same cwd/worktree** with a context brief (transcript tail, `git log --oneline -5`, branch) and re-feed open tasks via `TaskGet` + `TaskUpdate(owner=<new-agent>)`. Committed progress is intact.
+4. **Escalate** — if the replacement also goes GONE, report to the user: agent name, GONE reason, last commit, transcript path.
+
+`RESUMED agent=<name> reason=recovered` clears a prior GONE (the pane went live again) — no action needed.
 
 ## Anti-Patterns
 

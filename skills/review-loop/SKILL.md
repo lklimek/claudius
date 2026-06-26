@@ -28,7 +28,7 @@ Request review from the specified reviewer. See the `git-and-github` skill (§ R
 
 ### 2. Wait for review completion
 
-Poll until a new review appears. Use the `gh-fetch-reviews.sh` wrapper from the **github** skill (`PR Review Comments` section). Reviews are ordered by `submitted_at`; compare against the last known review ID to detect new ones.
+Poll until a new review appears. Use the `${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-reviews.sh` wrapper from the **git-and-github** skill (`PR Review Comments` section). Reviews are ordered by `submitted_at`; compare against the last known review ID to detect new ones.
 
 - Track the latest review ID before requesting. A new review has a higher ID.
 - Timeout after ~10 minutes of polling — inform the user if no review arrives.
