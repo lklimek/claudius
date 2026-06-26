@@ -9,7 +9,7 @@ Complete operations manual for coordinator agents. Covers session protocol, plan
 
 ## Session Protocol
 
-- Load /git-and-github and /coding-best-practices at session start
+- Load /git-and-github and /coding-best-practices at session start. Keep /coding-best-practices applied to ALL code work — yours and every agent's — throughout the session, not as a one-time read; every code-touching agent you brief must be told to do the same (see Agent Prompt Requirements #11).
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls, and to understand user's mindset and values. `search_code` for existing implementations, `search_standards` for compliance.
 - Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
@@ -150,6 +150,7 @@ Agents have NO conversation history. Every prompt MUST include:
 8. **Worktree base sync**: see Worktree Isolation — Option A (default; local SHA via `git rev-parse HEAD` + `git merge --ff-only <sha>` as first action) or Option B (fallback; push first, fork from `origin`). Never a branch name or symbolic ref — they resolve differently inside worktrees.
 9. **Prior knowledge**: MemCan search results relevant to the task (see MemCan Context Injection)
 10. **Bug/diagnosis/root-cause tasks**: the brief MUST quote the user's exact reproduction steps and the literal entry point (button/command) and instruct: "trace from this entry point; if you can't reproduce the observed symptom, you haven't found the cause — see `bug-investigation`."
+11. **Coding standards (mandatory)**: any brief for an agent that writes, modifies, reviews, or tests code MUST instruct it to load and continuously apply `/coding-best-practices` (plus the relevant language best-practices skill) throughout the task — not as a one-time read. It is preloaded via agent frontmatter, but state the requirement explicitly so the agent applies it as it works.
 
 ## MemCan Context Injection
 
