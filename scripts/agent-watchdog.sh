@@ -56,7 +56,7 @@
 #     pid-gone   -- the recorded pane no longer exists on our positively-bound
 #                   swarm socket, so its absence is real (not a wrong-socket
 #                   artifact); pane + process destroyed.
-#     stale-active -- a process-absent signal (pane-dead or pane-gone) CORROBORATED
+#     stale-active -- a process-absent signal (pane-dead or pid-gone) CORROBORATED
 #                   by a stale activity/transcript clock (idle >= stall_secs):
 #                   highest-confidence proof the isActive flag is stale.
 #   PER-SESSION SWARM-SOCKET DISCOVERY -- agent panes do NOT live on tmux's default
@@ -69,8 +69,7 @@
 #   (substring, glyph/whitespace tolerant); the unique best-scoring socket (>=1
 #   match) is ours. PANE_CMD is built from ONLY that socket -- never aggregated
 #   across sockets -- so a colliding %0 on a neighbour's socket can never be misread
-#   as ours. This session->socket binding REPLACES the old default-socket scan plus
-#   sibling-pane guard. tmux_reachable=1 iff our socket was found and queried.
+#   as ours. tmux_reachable=1 iff our socket was found and queried.
 #   GONE requires --gone-polls CONSECUTIVE confirmations (same anti-glitch backstop
 #   as the gone-prune) and is edge-triggered. It NEVER auto-kills: it suggests the
 #   coordinator clear the stale active flag / respawn. If a GONE pane shows a live
@@ -112,8 +111,8 @@
 #   SOURCE A -- TEAM members (NAMED, task-gated): the SESSION-SELECTED
 #     ~/.claude/teams/session-*/config.json members with isActive==true AND
 #     agentType != "team-lead". Canonical label = member `name`. Shared-cwd members
-#     (which used to be skipped) are now clocked by transcript mtime, and tmux-
-#     backed members additionally get process-liveness / GONE coverage.
+#     are clocked by transcript mtime, and tmux-backed members additionally get
+#     process-liveness / GONE coverage.
 #   SOURCE C -- WORKTREE-isolated agents (NAMED, task-gated):
 #     <worktrees>/agent-* dirs. Canonical label = dir name with a leading
 #     "agent-" stripped, so A and C share ONE state key / output label.
@@ -514,7 +513,7 @@ bn() { local s="$1"; printf '%s' "${s##*/}"; }   # basename
 is_build_proc() {
   # True if pid $1's argv is an anchored build/test command -- matched directly
   # on argv0 (native ELF: cargo build, make, rustc, ...), OR through a shebang/
-  # interpreter wrapper (QA-017). A script with `#!/bin/sh` (`./gradlew build`),
+  # interpreter wrapper. A script with `#!/bin/sh` (`./gradlew build`),
   # `#!/usr/bin/env bash` (`env [VAR=val…] [-flags] bash ./mvnw …`), or a console
   # entry point (`python3 .../pytest`, `node .../jest`) presents argv0 as the
   # interpreter, so the real tool is in a later argv -- peel one interpreter
@@ -740,7 +739,7 @@ while :; do
 
   # ---- parse team config ----
   team_present=0; team_name=""; lead_session=""; lead_cwd=""
-  m_names=(); m_cwds=(); m_aids=(); m_types=(); m_panes=(); m_btypes=()
+  m_names=(); m_cwds=(); m_types=(); m_panes=(); m_btypes=()
   if [ -n "$td" ] && [ -f "$td/config.json" ]; then
     team_present=1
     while IFS=$'\t' read -r kind a b c d e f; do
@@ -748,7 +747,7 @@ while :; do
         NAME)     team_name="$a" ;;
         LEAD)     lead_session="$a" ;;
         LEADCWD)  lead_cwd="$a" ;;
-        MEMBER)   m_names+=("$a"); m_cwds+=("$b"); m_aids+=("$c")
+        MEMBER)   m_names+=("$a"); m_cwds+=("$b")     # c=agentId (read positionally, unused)
                   m_types+=("$d"); m_panes+=("$e"); m_btypes+=("$f") ;;
       esac
     done < <(parse_team "$td/config.json")
@@ -805,7 +804,7 @@ while :; do
   # pick the one where the most of our tmux members' panes carry their agentType in
   # pane_title (substring, glyph tolerant). PANE_CMD is built from ONLY that socket;
   # tmux_reachable=1 iff it was found and queried -- the strong session->socket guard
-  # that replaced the old default-socket scan + sibling-pane heuristic.
+  # that keeps a neighbour's colliding pane ids out of our snapshot.
   unset PANE_CMD; declare -A PANE_CMD
   tmux_reachable=0
   if [ "$gone_detect" -eq 1 ] && [ "$have_tmux" -eq 1 ]; then
@@ -817,18 +816,19 @@ while :; do
       [ -n "$at" ] && OUR_PANE_TYPE["$mp"]="$at"
     done
 
-    best_sock=""; best_score=0; best_tie=0
+    best_sock=""; best_snap=""; best_score=0; best_tie=0
     if [ "${#OUR_PANE_TYPE[@]}" -gt 0 ]; then
       while IFS= read -r sock; do
         [ -n "$sock" ] || continue
+        snap="$(snapshot_panes "$sock")"            # snapshot ONCE; reuse the winner's verbatim
         score=0
         while IFS=$'\t' read -r pn _ title; do      # match member panes by title-carried agentType
           at="${OUR_PANE_TYPE[$pn]:-}"
           [ -n "$at" ] || continue
           case "$title" in *"$at"*) score=$(( score + 1 )) ;; esac
-        done < <(snapshot_panes "$sock")
+        done <<< "$snap"
         if [ "$score" -gt "$best_score" ]; then
-          best_score="$score"; best_sock="$sock"; best_tie=0
+          best_score="$score"; best_sock="$sock"; best_snap="$snap"; best_tie=0
         elif [ "$score" -eq "$best_score" ] && [ "$score" -gt 0 ]; then
           best_tie=1                                  # two sockets tie -> ambiguous, refuse to bind
         fi
@@ -836,10 +836,10 @@ while :; do
     fi
 
     if [ "$best_score" -ge 1 ] && [ "$best_tie" -eq 0 ] && [ -n "$best_sock" ]; then
-      while IFS=$'\t' read -r pn cmd _; do            # PANE_CMD from ONLY our socket (collision-free)
+      while IFS=$'\t' read -r pn cmd _; do            # PANE_CMD from the winner's snapshot (collision-free)
         [ -n "$pn" ] || continue
         PANE_CMD["$pn"]="$cmd"; tmux_reachable=1
-      done < <(snapshot_panes "$best_sock")
+      done <<< "$best_snap"
     fi
     if [ "$tmux_reachable" -eq 1 ]; then
       warn_once "swarmsock:${best_sock##*/}" "bound GONE detection to tmux swarm socket ${best_sock##*/} ($best_score member pane(s) matched)"
@@ -867,7 +867,7 @@ while :; do
   unset SEEN ALIVE; declare -A SEEN ALIVE   # SEEN = dedup (claimed only on a real signal); ALIVE = had a live signal
 
   # ---- SOURCE A: team members (NAMED, gated) ----
-  # SEEN is claimed ONLY after a real activity signal exists (QA-016): an active
+  # SEEN is claimed ONLY after a real activity signal exists: an active
   # member with no signal must NOT block the gone-prune, or a removed-worktree
   # member would stay STALLED forever.
   if [ "$team_present" -eq 1 ]; then
@@ -961,7 +961,7 @@ while :; do
     done
   fi
 
-  # ---- state-machine hygiene (QA-015/QA-016): gone only after N misses ----
+  # ---- state-machine hygiene: gone only after N misses ----
   # Liveness is an EVALUABLE signal (ALIVE), not mere discovery. An agent must
   # be signalless for `gone_polls` CONSECUTIVE polls before it is declared gone,
   # so a one-poll config-parse glitch / find hiccup never spuriously clears a
@@ -978,6 +978,16 @@ while :; do
       [ "${STATE[$key]}" = "STALLED" ] && printf 'RESUMED agent=%s reason=gone\n' "$key"
       unset 'STATE[$key]' 'MISS[$key]' 'GONE_HITS[$key]'
     fi
+  done
+
+  # GONE_HITS is a confirmation counter that gone_eval/gone_recover/gone_reset write
+  # for keys that may never enter STATE (mid-confirmation, recovered, or unknown).
+  # Bound it like STATE/MISS: a key with no live signal this poll has a stale streak.
+  # STATE keys are owned by the prune above; every other GONE_HITS key is freed here
+  # so the map cannot grow without bound across the forever loop.
+  for key in "${!GONE_HITS[@]}"; do
+    { [ -n "${ALIVE[$key]:-}" ] || [ -n "${STATE[$key]:-}" ]; } && continue
+    unset 'GONE_HITS[$key]'
   done
 
   sleep "$poll_secs" || true
