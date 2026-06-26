@@ -92,6 +92,7 @@ pub enum MyError {
 - Don't fight the borrow checker — redesign if struggling
 - Don't ignore clippy warnings — fix or explicitly allow with reasoning
 - Don't use Arc<Mutex<T>> when RefCell or channels would work
+- Don't rely on `debug_assert!`/`debug_assert_eq!`/`cfg(debug_assertions)` for correctness or safety invariants — they are compiled out in release builds. Validate at runtime and **return a typed error** (`thiserror`/typed `Result`). `panic!`/`assert!`/`.unwrap()` are not an acceptable default — reserve them for genuinely unrecoverable invariant violations.
 
 ## Code Quality Tools
 - **Compilation + Linting**: `cargo clippy --all-features --all-targets -- -D warnings` (replaces `cargo check` — never use `cargo check`)

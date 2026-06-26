@@ -1,6 +1,6 @@
 ---
 name: coding-best-practices
-description: "Use when developing code. Universal rules for TDD, self-review, quality timing, review format, security. Preloaded on developers."
+description: "Use when developing code. Universal rules for TDD, self-review, quality timing, review format, security. MANDATORY for every agent that writes, modifies, reviews, or tests code — load at task start and apply continuously, not a one-time read."
 allowed-tools: Read
 ---
 

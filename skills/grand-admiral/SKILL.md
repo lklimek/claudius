@@ -9,7 +9,7 @@ Complete operations manual for coordinator agents. Covers session protocol, plan
 
 ## Session Protocol
 
-- Load /git-and-github and /coding-best-practices at session start
+- Load /git-and-github and /coding-best-practices at session start. Keep /coding-best-practices applied to ALL code work — yours and every agent's — throughout the session, not as a one-time read; every code-touching agent you brief must be told to do the same (see Agent Prompt Requirements #11).
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls, and to understand user's mindset and values. `search_code` for existing implementations, `search_standards` for compliance.
 - Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
@@ -84,6 +84,15 @@ Heuristic: if agents might step on each other's toes (editing same files, fixing
 Don't shutdown agents immediately if there is a chance they can get new tasks soon. 
 Prefer reusing existing agents, as they already know the context.
 
+### Terminating Teammates
+
+A named `Agent(name=...)` teammate is NOT in the background-task registry — it has no `TaskStop`-addressable id.
+
+- Stop a named teammate ONLY via `SendMessage({type: "shutdown_request"})`. The teammate replies `shutdown_response` with `approve: true`, the runtime then terminates its process, and you receive a `shutdown_approved` confirmation notification.
+- NEVER `TaskStop` a named teammate (by `name` or `name@session-...`) — wrong subsystem; it always returns "No task found", which looks like an id-lookup bug but isn't.
+- A teammate that keeps emitting `idle_notification` yet never acknowledges shutdown is a STUCK runtime process: surface it to the user to clear via the `/tasks` UI or its tmux pane. Do NOT retry `TaskStop` or burn turns reacting to each idle ping.
+- **Spawn-time trade-off**: naming an agent enables mid-task `SendMessage` steering (flip a directive while it runs) but creates a lingering teammate you must explicitly shut down; an unnamed `run_in_background` Agent gets a clean `TaskStop`-able registry id but cannot be messaged mid-flight. Choose by whether mid-run steering is needed.
+
 ### SendMessage Patterns
 
 - **Direct**: `SendMessage(to="agent-name", message="...")` — targeted coordination
@@ -141,6 +150,7 @@ Agents have NO conversation history. Every prompt MUST include:
 8. **Worktree base sync**: see Worktree Isolation — Option A (default; local SHA via `git rev-parse HEAD` + `git merge --ff-only <sha>` as first action) or Option B (fallback; push first, fork from `origin`). Never a branch name or symbolic ref — they resolve differently inside worktrees.
 9. **Prior knowledge**: MemCan search results relevant to the task (see MemCan Context Injection)
 10. **Bug/diagnosis/root-cause tasks**: the brief MUST quote the user's exact reproduction steps and the literal entry point (button/command) and instruct: "trace from this entry point; if you can't reproduce the observed symptom, you haven't found the cause — see `bug-investigation`."
+11. **Coding standards (mandatory)**: any brief for an agent that writes, modifies, reviews, or tests code MUST instruct it to load and continuously apply `/coding-best-practices` (plus the relevant language best-practices skill) throughout the task — not as a one-time read. It is preloaded via agent frontmatter, but state the requirement explicitly so the agent applies it as it works.
 
 ## MemCan Context Injection
 
@@ -198,7 +208,7 @@ Note for team spawns: omitting `team_name` does **not** help — `Agent()` calls
 
 **Post-wave:** enumerate worktrees -> verify commits -> cherry-pick/merge into the feature branch -> run tests -> clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work.
 
-**Post-wave push (explicit authorization only):** push to remote ONLY when the user has explicitly authorized it (e.g., the invoking workflow is `/push` or `/ci-dance`, or the user said "push it" / "open a PR"). Without authorization, leave merged commits local — subsequent worktree waves use Option A (local-SHA injection) to fork from local HEAD instead of `origin`. Pushing as an automatic step violates the global "never push without explicit permission" rule.
+**Post-wave push (explicit authorization only):** push to remote ONLY when the user has explicitly authorized it (e.g., the invoking workflow is `/push` or `/ci-dance`, or the user said "push it" / "open a PR"). Without authorization, leave merged commits local — subsequent worktree waves use Option A (local-SHA injection) to fork from local HEAD instead of `origin`. Pushing as an automatic step violates the global "never push without explicit permission" rule. Once authorized, the **coordinator executes the push directly** (plain `git push`, falling back to `ghsudo git push` on 403/no-write-access, then verify with `git ls-remote`) — never relayed to a dev agent, which loops or refuses when push authorization arrives second-hand via SendMessage instead of straight from the user.
 
 **Post-wave pitfalls:**
 - **Verify current branch** before cherry-picking — `git worktree remove` can leave you on the worktree's branch. Always `git branch --show-current` and `git checkout <your-branch>` if needed.
@@ -240,20 +250,22 @@ The harness auto-notifies on agent completion AND death (crash, rate-limit, term
 
 A stall is **owning an in_progress task AND idle past threshold AND no build running *under that agent*** — not bare idle. A healthy agent idles while waiting for its next instruction; an idle agent with **no assigned in_progress task is healthy and never flagged**. "Owns work" is read from the on-disk task store (`~/.claude/tasks/<teamName>/<id>.json`, the `owner`+`status` fields — the source of truth), rebuilt every poll. Build suppression is **per-agent** (a process whose `/proc/<pid>/cwd` is under the agent's worktree/cwd running a real build/test argv), never a machine-global `pgrep` (which a shared box pins to "always building"). Launch ONE persistent Monitor per wave; it discovers:
 
-- **Team** (newest `~/.claude/teams/session-*/config.json` members, `isActive==true`, non-lead) — NAMED, **task-gated**; per-agent clock = newest mtime under its worktree, else its `cwd` (`.git` pruned). A cwd shared by ≥2 active members can't isolate one agent → that member is skipped (give it an isolated worktree).
+- **Team** (the session-scoped team's members — see Multi-Session Hygiene — `isActive==true`, non-lead) — NAMED, **task-gated**; per-agent clock = newest mtime under its worktree, else its `cwd` (`.git` pruned), else — when the cwd is shared by ≥2 members (e.g. read-only design/QA agents living in the lead's cwd) — the member's own **transcript-jsonl mtime**, so shared-cwd members are tracked rather than skipped.
 - **Worktree-isolated** (`<worktrees>/agent-*`) — NAMED, **task-gated**; clock = newest mtime under the dir. Shares ONE canonical label with the team source (leading `agent-` stripped).
 - **Individual/background subagents** (`…/subagents/agent-*.jsonl`) — ANONYMOUS, **off by default**; enable with `--watch-subagents`. Best-effort & opt-in: a finished subagent has a stale transcript by design with no reliable on-disk completion signal, and the harness already notifies on background-agent completion/death — so treat any subagent STALL as an investigate prompt.
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
-        command="bash \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh\" --stall-secs 300")
+        command="bash \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300")
 ```
 
 `${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(*/scripts/agent-watchdog.sh *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
 
-**Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops yielding a signal (worktree removed, member deactivated) is auto-cleared — but only after several consecutive signalless polls (`--gone-polls`, default 2), so a one-poll config/`find` glitch never spuriously clears a stall. `TaskStop` the Monitor when the wave completes. Prefer an explicit `--team-dir` when multiple sessions exist (autodetect picks newest-by-mtime).
+**Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops yielding a signal (worktree removed, member deactivated) is auto-cleared — but only after several consecutive signalless polls (`--gone-polls`, default 2), so a one-poll config/`find` glitch never spuriously clears a stall. `TaskStop` the Monitor when the wave completes.
 
-**Events:** `STALL agent=<name> idle=<N>s reason=owns-in_progress-idle` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fresh activity OR no longer owns an in_progress task) or `RESUMED agent=<key> reason=gone` (agent vanished).
+**Events:** `STALL agent=<name> idle=<N>s reason=owns-in_progress-idle` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fresh activity OR no longer owns an in_progress task) or `RESUMED agent=<key> reason=gone` (agent vanished). Plus **`GONE agent=<name> reason=pane-dead|pid-gone|stale-active`** — the process is *verified absent* (its tmux pane dropped to a bare shell, the pane/PID vanished, or `isActive` is stale with no live process and no transcript advance), confirmed over `--gone-polls` consecutive polls; `RESUMED agent=<name> reason=recovered` when a GONE agent's pane goes live again. GONE never auto-kills — it flags a stale active flag to clear or a respawn to consider.
+
+**Multi-Session Hygiene:** On a shared host, several Claude Code sessions each own a `~/.claude/teams/session-<id>/` team, `.claude/worktrees/`, and tmux panes. **NEVER trust "newest team/config/worktree by mtime"** — it silently binds to *another* session's agents (a recurring failure: monitoring strangers, missing your own). The watchdog selects its team by precedence `--team-dir` > `--session-id` > `$CLAUDE_SESSION_ID` env > newest-mtime (last resort, with a one-time stderr warning naming the picked session); the Monitor one-liner above passes `--session-id ${CLAUDE_SESSION_ID}` so it tracks THIS session only. Apply the same discipline when investigating by hand: scope `ps`/`/proc`/team-config/worktree lookups to your own session id — do not assume the newest artifact on the box is yours (confirm via the team's `leadSessionId`).
 
 ### On a STALL Event (fully autonomous)
 
@@ -268,6 +280,17 @@ Monitor(persistent=true, description="agent stall watchdog",
    - Archive its inbox (rename `inboxes/<name>.json` → `inboxes/<name>.json.killed-<ts>`, keeping the per-agent `<name>` prefix so archives never collide) to keep the message history; bump to `model: opus` if the task needs deep analysis
    The worktree's commits and working-tree edits survive intact — only the agent process is replaced.
 4. **Escalate** — report to user after a second recovery attempt fails: agent name, stall duration, last tool call, transcript path.
+
+### On a GONE Event (fully autonomous)
+
+`GONE agent=<name> reason=pane-dead|pid-gone|stale-active` means the watchdog *verified the process is absent* (its tmux pane dropped to a bare shell, the pane/PID vanished, or `isActive` was stale with no live process), confirmed over `--gone-polls` polls. Unlike STALL (process alive but idle), GONE needs no liveness re-check — but you still NEVER auto-kill anything (it is already gone). The work product, if any, survives in the agent's worktree.
+
+1. **Assess — confirm it is actually gone first.** Match the terminated agent's name EXACTLY: a `teammate_terminated` / "X has shut down" notice may name a *different* agent than your active one — never assume it refers to your current agent. Then confirm its process/tmux-pane is truly absent (per the GONE-vs-STALL discipline: verify absence), NOT merely that its worktree looks incomplete — a slow-but-alive agent's worktree is indistinguishable from a dead one's, and respawning into it races two agents on the same files. Once absence is confirmed: `git -C <cwd> log --oneline -5` / `status` shows whether it committed before vanishing; `TaskGet` shows whether it still owns an in_progress task. A GONE agent whose task is already complete needs only cleanup.
+2. **Clean up the stale flag** — its registry/`isActive` entry may still read active; archive the inbox (`inboxes/<name>.json` → `.json.killed-<ts>`) so a respawn starts with a clean mailbox.
+3. **Respawn if work remains** — spawn a replacement of the same type on the **same cwd/worktree** with a context brief (transcript tail, `git log --oneline -5`, branch) and re-feed open tasks via `TaskGet` + `TaskUpdate(owner=<new-agent>)`. Committed progress is intact.
+4. **Escalate** — if the replacement also goes GONE, report to the user: agent name, GONE reason, last commit, transcript path.
+
+`RESUMED agent=<name> reason=recovered` clears a prior GONE (the pane went live again) — no action needed.
 
 ## Anti-Patterns
 

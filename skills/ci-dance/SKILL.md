@@ -114,7 +114,7 @@ Before fixing any finding, a stream must **claim** it via task ownership (see In
 #### Review Stream
 
 1. **Trigger**: Request copilot review: `gh pr edit --add-reviewer @copilot || true`
-2. **Wait**: Poll for new reviews using `gh-fetch-reviews.sh`. Compare review IDs to detect new ones.
+2. **Wait**: Poll for new reviews using `${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-reviews.sh`. Compare review IDs to detect new ones.
    - Poll interval: 30 seconds
    - Minimum wait: 5 minutes
    - Maximum wait: 20 minutes — proceed without if no review appears
@@ -155,7 +155,7 @@ After all three streams complete:
 
 ### Step 4: Resolve Threads
 
-Resolve addressed bot review threads using `gh-resolve-review-threads.sh`. Bot threads only, per existing convention. Do not ask — unattended mode.
+Resolve addressed bot review threads using `${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh`. Bot threads only, per existing convention. Do not ask — unattended mode.
 
 ### Step 5: Exit Check
 

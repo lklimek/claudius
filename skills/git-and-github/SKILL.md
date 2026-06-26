@@ -146,7 +146,7 @@ When passing a `body` parameter to `create_pull_request` or `update_pull_request
 Use `gh-request-reviewer.sh` for all reviewer requests — supports multiple reviewers and `@copilot`:
 
 ```bash
-gh-request-reviewer.sh <owner/repo> <pr_number> <reviewer> [reviewer ...]
+${CLAUDE_SKILL_DIR}/../../scripts/gh-request-reviewer.sh <owner/repo> <pr_number> <reviewer> [reviewer ...]
 ```
 
 `@copilot` reviewer syntax requires `gh` ≥ 2.88.0. If requesting review fails, check `gh --version` and escalate to the user if upgrade is needed.

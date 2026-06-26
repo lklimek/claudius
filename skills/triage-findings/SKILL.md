@@ -81,7 +81,7 @@ For reports with `metadata.report_type == "comment_check"` (produced by `check-p
 
 - Triage actions apply to unresolved PR review comments instead of code review findings
 - **accept_risk / false_positive**: after triage, resolve the associated GitHub review
-  thread using `gh-resolve-review-threads.sh` with the finding's `thread_id` field.
+  thread using `${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh` with the finding's `thread_id` field.
   Always ask user confirmation before resolving threads.
 - **fix**: apply the fix described in `recommendation`, then resolve the thread
 - **defer**: leave the thread unresolved; add a `TODO` comment as usual

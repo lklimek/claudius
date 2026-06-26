@@ -42,4 +42,4 @@ done
 # Join reviewers with commas for gh pr edit
 reviewers=$(IFS=,; echo "$*")
 
-gh pr edit "${owner_repo}#${pr_number}" --add-reviewer "$reviewers"
+gh pr edit "$pr_number" --repo "$owner_repo" --add-reviewer "$reviewers"
