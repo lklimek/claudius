@@ -34,10 +34,9 @@ git diff $BASE_BRANCH...HEAD -- <paths>
 ```
 
 Assess scale:
-- **Trivial** (< 200 lines, < 5 files, single language): 1 agent — single `developer-bilby` prompted with `security-best-practices` and `coding-best-practices` skills. Skip consolidation pipeline; agent writes report directly.
-- **Small** (< 500 lines, < 10 files): 2 agents
-- **Medium** (500-5000 lines, 10-50 files): 3-4 agents
-- **Large** (5000+ lines, 50+ files): 5+ agents, split by file groups
+- **Trivial** (< 200 lines, < 5 files, single language): 1 agent — the opposite-tier fallback reviewer (see §2 Trivial reviews for which one and why), prompted with `security-best-practices` and `coding-best-practices` skills. Skip consolidation pipeline; agent writes report directly.
+- **Small** (< 500 lines, < 10 files) through **Medium** (500-5000 lines, 10-50 files): the fixed 3-agent core trio (`security-engineer-smythe`, `project-reviewer-adams`, `qa-engineer-marvin` — see §2 Core agents) is spawned regardless of size. Add `technical-writer-trillian` for doc-heavy changes.
+- **Large** (5000+ lines, 50+ files): the same 3 core roles, scaled by spawning multiple parallel copies per file group — see §2 Scaling for large codebases.
 
 ## 2. Select Agent Mix
 
@@ -45,27 +44,53 @@ Choose agents based on what the code does. Not every review needs every agent ty
 
 ### Trivial reviews (single agent)
 
-For trivial reviews (< 200 lines, < 5 files, single language), skip the multi-agent pipeline.
-Spawn a single `developer-bilby` and instruct it to also apply `security-best-practices` and
-`coding-best-practices` checklists. The agent writes the report JSON directly — no consolidation needed.
+For trivial reviews (< 200 lines, < 5 files, single language), skip the multi-agent pipeline and
+skip the fixed 3-agent trio below — spawn exactly ONE fallback reviewer, chosen for maximum
+independence from however the code was authored:
 
-### Core agents (always include)
+- **Code authored on Opus** (e.g. `developer-bilby` ran at its `opus` default, or the workflow's
+  Implementation phase was pinned to opus) → fallback is **`claudius:qa-engineer-marvin` on
+  `sonnet`** — an opposite-tier independent check.
+- **Code authored on Sonnet** → fallback is **`claudius:project-reviewer-adams` on `opus`** — an
+  opposite-tier independent check.
+- **Authoring tier unknown or unclear** (human-authored code, ambiguous/absent git history, mixed
+  authorship) → default to **`claudius:qa-engineer-marvin` on `sonnet`**.
 
-| Agent (`subagent_type`) | Focus |
-|---|---|
-| `claudius:project-reviewer-adams` | Cross-artifact consistency, convention adherence, doc accuracy, specialist orchestration |
-| `claudius:security-engineer-smythe` | OWASP Top 10, injection, concurrency, panics, DoS, known vulns |
+Always pick the OPPOSITE tier from whatever implemented the change — the point is a fresh,
+independent second opinion, not a rubber stamp from the same tier that wrote the code. Determine
+the authoring tier from `git log` (commit author/trailer, PR metadata, or the invoking workflow's
+recorded model selection) before spawning; if genuinely indeterminate, use the human-authored
+default above.
 
-### Language specialists (add per language in scope)
+Instruct the single fallback agent to also apply `security-best-practices` and
+`coding-best-practices` checklists — it is standing in for the entire trio, so its prompt must
+cover security, structural, and adversarial-correctness concerns in one pass. The agent writes the
+report JSON directly — no consolidation needed.
 
-These agents handle **code quality reviews** — readability, idioms, error handling, duplication, performance. Always include the relevant language specialist; the project-reviewer does NOT cover language-specific code quality.
+### Core agents (always include — fixed trio, every non-trivial review)
 
-| Condition | Agent (`subagent_type`) | Focus |
+| Agent (`subagent_type`) | Model | Focus |
 |---|---|---|
-| Rust code | `claudius:developer-bilby` | Code quality, idioms, ownership, error handling, clippy compliance |
-| Go code | `claudius:developer-bilby` | Code quality, idioms, error wrapping, concurrency, table-driven tests |
-| Python code | `claudius:developer-bilby` | Code quality, PEP 8, type hints, async patterns, pytest |
-| Frontend code | `claudius:developer-bilby` | Code quality, TS/JS patterns, React/Vue, CSS, accessibility |
+| `claudius:security-engineer-smythe` | opus | OWASP Top 10, injection, concurrency, panics, DoS, known vulns |
+| `claudius:project-reviewer-adams` | opus | Cross-artifact consistency, convention adherence, doc accuracy, structural/idiom code quality (readability, naming, DRY, cross-file duplication, maintainability), specialist orchestration |
+| `claudius:qa-engineer-marvin` | sonnet | Adversarial/correctness code quality — actually running tests and lints, edge cases, ownership/panic/error-handling bugs, independent verification against ground truth |
+
+All three are ALWAYS included for any non-trivial review — there is no separate per-language
+conditional agent anymore. `project-reviewer-adams` and `qa-engineer-marvin` together cover the
+full code-quality slice that `developer-bilby` used to own alone: Adams takes the
+structural/idiom/consistency half (readability, naming, DRY, cross-file duplication,
+maintainability), Marvin takes the adversarial/correctness/execution half (actually running tests
+and lints, edge cases, ownership/panic/error-handling bugs, independent verification against
+ground truth). `developer-bilby` no longer participates in code review in any capacity — it is
+implementation-only.
+
+### Language best-practices preload
+
+Both `project-reviewer-adams` and `qa-engineer-marvin` preload the matching `*-best-practices`
+skill(s) — `rust-best-practices`, `python-best-practices`, `go-best-practices`,
+`frontend-best-practices` — for whichever language(s) are in scope, the same mechanism
+`developer-bilby` used to use when it filled this role. Identify the language(s) touched by the
+diff and name the specific skill(s) explicitly in each agent's spawn prompt.
 
 ### Other conditional agents
 
@@ -89,7 +114,7 @@ every review agent prompt MUST include these review-specific elements:
 1. **Comparison base**: How to see what changed (`git show <base>:<file>` or `git diff`)
 2. **Finding format**: Use the severity levels and structure defined below
 3. **Review checklists**: Embed relevant checklist content or rely on the agent's preloaded skills
-4. **BP preload**: every spawned reviewer agent (`security-engineer-smythe`, `project-reviewer-adams`, `developer-bilby`, `technical-writer-trillian`, etc.) MUST preload `coding-best-practices` so its Cross-Cutting Rules govern every finding — state this explicitly in each spawn prompt.
+4. **BP preload**: every spawned reviewer agent (`security-engineer-smythe`, `project-reviewer-adams`, `qa-engineer-marvin`, `technical-writer-trillian`, etc.) MUST preload `coding-best-practices` so its Cross-Cutting Rules govern every finding — state this explicitly in each spawn prompt.
 5. **UX/DX lens**: instruct agents to assess how findings affect end-user workflows and developer experience, not just code correctness
 6. **CI context**: When MemCan/WebSearch are unavailable (e.g., CI), instruct agents: "Do not use memcan tools or WebSearch/WebFetch."
 7. **File output**: Instruct agents to use the Write tool for creating files — never `cat > file` or heredoc redirections.
@@ -134,7 +159,7 @@ Each agent writes its output to the specified file path as valid JSON:
 
 **Metadata**: emit `metadata.commit` as the full 40-character SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` when the branch has no upstream — use the pushed commit so permalinks resolve on GitHub; not `--short`); omit when not in a git repo. The coordinator derives `metadata.repository` from `git remote get-url origin` — producers do not emit it.
 
-**ID prefixes**: `SEC-` security, `PROJ-` project, `RUST-`/`PY-`/`GO-`/`FE-` language, `DOC-` docs, `CALL-` call-tree.
+**ID prefixes**: `SEC-` security, `PROJ-` project, `QA-`/`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` code quality (jointly owned by `project-reviewer-adams` and `qa-engineer-marvin` — see `report-format`'s ID-prefix table; prefix reflects finding category/language, not a single agent identity), `DOC-` docs, `CALL-` call-tree.
 Agents assign provisional sequential IDs within their prefix (e.g., `SEC-001`, `SEC-002`).
 IDs may collide across parallel agents — the consolidation step (5c) deduplicates and reassigns
 final IDs.
@@ -173,16 +198,24 @@ and report that the review cannot fan out — do NOT silently fall back to a sin
 review. The single-agent TRIVIAL path in §1/§2 is the only legitimate one-agent review; every
 non-trivial review REQUIRES fan-out.
 
-Spawn all agents in parallel following the general spawning guidelines. Use `model: "opus"` for
-thorough analysis by default. If the user requested a specific model for this review (e.g.
-"review with Sonnet"), pass that model to every `Agent` spawn instead of opus.
+Spawn all agents in parallel following the general spawning guidelines, using the fixed per-role
+model tiering: `claudius:security-engineer-smythe` on `opus`, `claudius:project-reviewer-adams` on
+`opus`, `claudius:qa-engineer-marvin` on `sonnet` (matches `grand-admiral` Token Economy). This
+replaces the old "opus for all by default" rule with fixed per-role tiers.
+
+**Model override (user-requested; confirm before downgrading Smythe):** the user may still force a
+uniform model override across all 3 agents on explicit request (e.g. "review with Sonnet"). Apply
+the override to Adams and Marvin freely. Before applying an override that would downgrade
+`security-engineer-smythe` below `opus`, STOP and confirm the user really means it — security depth
+is not meant to be silently traded away by a blanket model request. Once confirmed, apply the
+override to all three agents including Smythe.
 
 Example spawn pattern:
 
 ```
 Agent(subagent_type="claudius:security-engineer-smythe", model="opus", prompt="...", name="security-auditor")
 Agent(subagent_type="claudius:project-reviewer-adams", model="opus", prompt="...", name="project-reviewer")
-Agent(subagent_type="claudius:developer-bilby", model="opus", prompt="...", name="rust-reviewer")
+Agent(subagent_type="claudius:qa-engineer-marvin", model="sonnet", prompt="...", name="qa-reviewer")
 ```
 
 ## 5. Consolidate Findings
@@ -200,7 +233,7 @@ scan for INTENTIONAL comments:
 python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py prepare \
     security-engineer:${TMPDIR:-/tmp}/security-findings.json \
     project-reviewer:${TMPDIR:-/tmp}/project-findings.json \
-    developer-bilby:${TMPDIR:-/tmp}/rust-findings.json \
+    qa-engineer:${TMPDIR:-/tmp}/qa-findings.json \
     --repo-root $(git rev-parse --show-toplevel) \
     --output ${TMPDIR:-/tmp}/intermediate.json \
     --metadata '{"project":"...","date":"...","branch":"...","commit":"..."}'

@@ -66,7 +66,7 @@ The `memcan` plugin requires Docker Compose for Qdrant (vector DB) and optionall
 | `claudius` | Team coordinator. Magnificently arrogant, always right. |
 | `architect-nagatha` | System architecture, module boundaries, API design, dependency review |
 | `project-reviewer-adams` | Project consistency, cross-artifact validation, convention adherence |
-| `developer-bilby` | Code changes and reviews in any language |
+| `developer-bilby` | Code changes in any language |
 | `qa-engineer-marvin` | Test plans, automated tests, edge case identification, coverage analysis |
 | `security-engineer-smythe` | OWASP Top 10, dependency scanning, secret detection, secure coding review |
 | `technical-writer-trillian` | README, API docs, tutorials, guides, changelogs, runbooks |

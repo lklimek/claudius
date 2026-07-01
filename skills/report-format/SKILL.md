@@ -97,16 +97,18 @@ When writing findings to a file, ALWAYS use the Write tool — never use Bash co
 | `SEC-` | security | security-engineer-smythe |
 | `QA-` | code_quality | qa-engineer-marvin |
 | `PROJ-` | project | project-reviewer-adams |
-| `CODE-` | code_quality | developer-bilby (generic) |
-| `RUST-` | code_quality | developer-bilby (Rust) |
-| `PY-` | code_quality | developer-bilby (Python) |
-| `GO-` | code_quality | developer-bilby (Go) |
-| `FE-` | code_quality | developer-bilby (frontend) |
+| `CODE-` | code_quality | project-reviewer-adams, qa-engineer-marvin (generic) |
+| `RUST-` | code_quality | project-reviewer-adams, qa-engineer-marvin (Rust) |
+| `PY-` | code_quality | project-reviewer-adams, qa-engineer-marvin (Python) |
+| `GO-` | code_quality | project-reviewer-adams, qa-engineer-marvin (Go) |
+| `FE-` | code_quality | project-reviewer-adams, qa-engineer-marvin (frontend) |
 | `DOC-` | documentation | technical-writer-trillian |
 | `CMT-` | pr_comments | check-pr-comments |
 | `PPM-` | pr_promises | review-pr (Pass C: promise verification) |
 | `DEP-` | dependencies | review-dependency |
 | `CALL-` | call_tree | reviewer call-tree inspection pass |
+
+`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` are category prefixes, not identity-bound — either `project-reviewer-adams` or `qa-engineer-marvin` may emit them, whichever agent's pass surfaced the finding during a review (both preload the matching `*-best-practices` skill for the language(s) in scope). `developer-bilby`, which used to own these prefixes exclusively, no longer participates in code review.
 
 IDs are provisional -- the consolidation step deduplicates and reassigns final IDs.
 

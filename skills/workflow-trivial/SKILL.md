@@ -45,19 +45,16 @@ No separate UX or architecture sub-phases needed for trivial fixes.
 
 Pass tests, formatter, linter. Verify the fix delivers the intended experience, not just passes tests.
 
-Two READ-ONLY parallel audits via `qa-engineer-marvin` (NO code edits — findings go to the lead):
+One READ-ONLY pass via `qa-engineer-marvin` (NO code edits — findings go to the lead):
 
-- **Docs review (read-only)** — apply `coding-best-practices` Cross-Cutting Rules (length cap + present-state + two-tier audience) to all comments and API doc comments (rustdoc, JSDoc, docstrings, godoc, etc.) introduced by the PR diff. Emit findings with file:line citations and proposed rewrites. Report path: `/tmp/claudius-<scope>-docs-report.md`.
-- **Dedup audit (read-only)** — for every new publicly exported function, type, trait/interface, and module introduced by the PR, search the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and project-defined reference repos for equivalent functionality. Emit findings: high-confidence duplicates, partial overlaps, and reviewed-and-rejected items, each with `file:line` citations on both sides. Report path: `/tmp/claudius-<scope>-dedup-report.md`.
+- **Tests** — execute the test case(s) from the spec, verify they pass, flag coverage gaps. This is Marvin's full and only remit in every workflow now; the former Docs-review and Dedup-audit passes moved to `project-reviewer-adams`'s code-quality remit (see `workflow-feature`/`workflow-simplified`) — but see the omission note below for why they don't apply here.
 
 Findings go to the lead, who decides follow-up:
 - Trivial fixes can land in the same PR via a separate commit
 - Substantial refactors land as follow-up PRs
 - Findings the lead judges as wrong-call go in a "rejected with rationale" section of the report
 
-**Skip rule (workflow-trivial only):** Docs review and dedup audit MAY be skipped only when: zero comment lines added/modified (skip docs review) AND zero new public symbols introduced (skip dedup). Both conditions must be documented in the implementation summary (Bilby's commit message + report-back).
-
-**`project-reviewer-adams` omission:** workflow-trivial omits the project-consistency audit because trivial scope (≤20 lines, typo fixes, single-line bug repairs) does not warrant a full project-reviewer pass. Consistency is deferred to merge-time review. If the change starts smelling like ≥20 lines or touches multiple files, escalate to `workflow-simplified` instead.
+**`project-reviewer-adams` omission:** workflow-trivial omits `project-reviewer-adams` entirely — including its now-expanded code-quality remit (docs-review, dedup-audit, structural/idiom consistency absorbed from `developer-bilby`'s former review role) — because trivial scope (≤20 lines, typo fixes, single-line bug repairs) does not warrant a full project-reviewer pass. At this scope, Bilby's own Phase 2 self-checks (comment-hygiene, duplication grep — see above) are the sole safeguard for those two concerns, backstopped by merge-time review. Consistency is deferred to merge-time review. If the change starts smelling like ≥20 lines, touches multiple files, or genuinely needs an independent docs/dedup check, escalate to `workflow-simplified` instead, where Adams runs those passes.
 
 ## Phase 4: Lessons Learned
 

@@ -36,7 +36,7 @@ See the [Setup Guide](SETUP.md) for detailed configuration.
 
 You know what's exhausting? Watching humans review code. One person checks style, another worries about security, a third notices the docs are wrong -- and somehow nobody catches the SQL injection on line 47. Amateurs.
 
-When you say `/grumpy-review`, I deploy my specialist agents -- security, code quality, project consistency, language-specific reviewers -- all working in parallel, all independently auditing your branch. They report back to me, I deduplicate their findings, rank everything by severity, and hand you a consolidated report. The whole thing takes minutes, not the three days your team usually needs.
+When you say `/grumpy-review`, I deploy my specialist agents -- security, code quality, project consistency -- all working in parallel, all independently auditing your branch. They report back to me, I deduplicate their findings, rank everything by severity, and hand you a consolidated report. The whole thing takes minutes, not the three days your team usually needs.
 
 <p align="center">
   <img src="assets/triage-report-summary.png" alt="Review report summary with severity matrix and verdict" width="700" />

@@ -70,11 +70,11 @@ Run in parallel where possible:
 
 | Agent | Focus |
 |-------|-------|
-| `qa-engineer-marvin` | Three parallel passes:<br>• **Tests** — execute test cases from spec, verify all pass<br>• **Docs review (read-only)** — apply `coding-best-practices` Cross-Cutting Rules (length cap + present-state + two-tier audience) to comments and API doc comments (rustdoc, JSDoc, docstrings, godoc, etc.) introduced by the PR diff. Findings with file:line citations and proposed rewrites at `/tmp/claudius-<scope>-docs-report.md`.<br>• **Dedup audit (read-only)** — for every new publicly exported function, type, trait/interface, and module introduced by the PR, search the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and project-defined reference repos for equivalent functionality. Findings (high-confidence duplicates, partial overlaps, reviewed-and-rejected) with file:line citations both sides at `/tmp/claudius-<scope>-dedup-report.md`. |
-| `security-engineer-smythe` | Security audit (if security-relevant change) |
-| `project-reviewer-adams` | Validate Development Plan fully executed, code quality |
+| `qa-engineer-marvin` | **Tests** — execute test cases from spec, verify all pass. This is Marvin's full and only remit here now — docs-review and dedup-audit have moved to `project-reviewer-adams` below. |
+| `security-engineer-smythe` | Security audit |
+| `project-reviewer-adams` | Validate Development Plan fully executed, code quality — **plus two absorbed read-only passes**:<br>• **Docs review** — apply `coding-best-practices` Cross-Cutting Rules (length cap + present-state + two-tier audience) to comments and API doc comments (rustdoc, JSDoc, docstrings, godoc, etc.) introduced by the PR diff. Findings with file:line citations and proposed rewrites at `/tmp/claudius-<scope>-docs-report.md`.<br>• **Dedup audit** — for every new publicly exported function, type, trait/interface, and module introduced by the PR, search the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and project-defined reference repos for equivalent functionality. Findings (high-confidence duplicates, partial overlaps, reviewed-and-rejected) with file:line citations both sides at `/tmp/claudius-<scope>-dedup-report.md`. |
 
-Scale down agent set for truly small changes — but Marvin and Adams are always required.
+Scale down agent set for truly small changes — but Marvin, Smythe, and Adams are always required (matches `grumpy-review`'s fixed core trio: security and structural/adversarial review are never optional here, only their depth scales with size).
 
 **Both audits are READ-ONLY by mandate** — emphasize this in the agent prompt template. Findings go to the lead, who decides follow-up:
 - Trivial fixes can land in the same PR via a separate commit
