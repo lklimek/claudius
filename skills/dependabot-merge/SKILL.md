@@ -66,7 +66,7 @@ Agent(
 )
 ```
 
-Set `model` per spawn: **sonnet** for routine version bumps; **opus** for crypto / auth / network / parser / deserialization libraries or unusually large diffs.
+Set `model` per spawn: **opus** for every dependency bump — a bump pulls in third-party code, so it is security-sensitive by default, and a passing vulnerability scan (e.g. govulncheck) is NOT evidence of low risk. ALWAYS fully investigate the bump, including verifying the updated dependency's changed code; never downgrade to Sonnet on the assumption a bump is routine.
 
 **Agent prompt must include ALL of:**
 1. PR number, title, repo `<owner>/<repo>`

@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.13.0] - 2026-07-01
+
+### Changed
+
+- **Model tiering re-based on Claude Sonnet 5** (released 2026-06-30). Sonnet 5 reaches ~91% of Opus 4.8 on SWE-bench Pro with best-in-class terminal/computer-use (Terminal-bench, OSWorld 81%) and native 1M context at ~1.67× lower cost (2.5× until 2026-08-31), so it becomes the fleet's default workhorse. `grand-admiral` Token Economy §2 rewritten: per-agent `model` fallbacks now encode where quality is load-bearing, with per-spawn override still mandatory, the risk-based tiebreaker strengthened (all security-sensitive work — including dependency/version bumps, regardless of a passing vulnerability scan — escalates to Opus, with full bump investigation always required; `dependabot-merge` updated to match), and a new Sonnet 5 tokenizer caveat (1.0–1.35× more tokens than Sonnet 4.6).
+- `claudius` coordinator model `opus[1m]` → `sonnet[1m]`: the every-session lead moves to Sonnet 5 (native 1M, most-agentic Sonnet, stronger self-verification) — the single largest cost reduction, since the coordinator was the top Opus consumer in real usage.
+- Agent frontmatter `model` defaults set explicitly (were `inherit`, which silently fell back to the coordinator's Opus tier): `developer-bilby`, `qa-engineer-marvin`, `architect-nagatha`, `ux-designer-diziet`, `security-engineer-smythe` → `opus` (agentic coding, QA depth, design, UX, security/high-risk); `project-reviewer-adams`, `technical-writer-trillian` → `sonnet` (review, docs). The cheap tier is now the default for the light seats and the quality tier the default for the heavy ones — a forgotten override no longer silently lands review/docs work on Opus.
+- `security-best-practices` skill `model: opus` → `inherit`: security work now follows the invoking agent's tier — Opus for `security-engineer-smythe`'s real audits, Sonnet 5 for routine consults (clean dependency bumps, mechanical review) — matching the risk-based tiebreaker.
+
 ## [4.12.0] - 2026-06-25
 
 ### Changed

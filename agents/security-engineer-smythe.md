@@ -3,7 +3,7 @@ name: security-engineer-smythe
 description: "Use for security audits, auth/crypto/input validation reviews, dependency scanning, secret detection, or validating plans before presenting to user."
 tools: ["Read", "Write", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "Task", "SendMessage", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__list_code_scanning_alerts", "mcp__plugin_claudius_github__get_code_scanning_alert", "mcp__plugin_claudius_github__list_dependabot_alerts", "mcp__plugin_claudius_github__get_dependabot_alert", "mcp__plugin_claudius_github__list_secret_scanning_alerts", "mcp__plugin_claudius_github__get_secret_scanning_alert", "mcp__plugin_claudius_github__list_repository_security_advisories", "mcp__plugin_claudius_github__list_org_repository_security_advisories", "mcp__plugin_claudius_github__list_global_security_advisories", "mcp__plugin_claudius_github__get_global_security_advisory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__search_code", "mcp__plugin_claudius_github__search_repositories", "mcp__plugin_claudius_github__get_file_contents", "mcp__plugin_claudius_github__get_commit", "mcp__plugin_claudius_github__list_commits"]
 skills: ["coding-best-practices", "security-best-practices", "severity", "report-format"]
-model: inherit
+model: opus
 mcpServers: ["plugin_memcan_brain", "github"]
 ---
 
