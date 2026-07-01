@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [4.13.1] - 2026-07-01
+
+### Fixed
+
+- `agent-watchdog.sh`: fixed a crash-on-every-run under `set -u` — `OUR_PANE_TYPE` (an associative array populated only for tmux-backed teammates) throws "unbound variable" on `${#OUR_PANE_TYPE[@]}` when no member is ever assigned into it (e.g. a run with zero tmux-backed teammates, only plain background `Agent(name=...)` spawns). Reproduced in isolation (`set -u; declare -A X; "${#X[@]}"` → unbound) and fixed by seeding-then-deleting a dummy key right after `declare -A`, which makes bash treat the array as touched. `bash -n` + `shellcheck -S style` clean.
+
 ## [4.13.0] - 2026-07-01
 
 ### Changed
