@@ -50,7 +50,7 @@ This is the producer-emitted shape. Integer `severity` and float `overall_severi
 | `id` | string | `PREFIX-NNN` -- see ID Prefixes below |
 | `risk` | float | 0.0–1.0, OWASP Likelihood normalized (see `severity` skill) |
 | `impact` | float | 0.0–1.0, OWASP Impact normalized (see `severity` skill) |
-| `scope` | float | 0.0–1.0, PR relevance (1.0 direct, 0.5 indirect, 0.0 unrelated) |
+| `scope` | float | 0.0–1.0, blast radius — fraction of users/surface/call-sites reached, not a default-1.0 (see `severity` skill) |
 | `title` | string | Short finding title |
 | `location` | string | Full file path with lines: `src/auth.rs:42-56` -- never bare line numbers |
 | `description` | string | What the issue is and why it matters |
@@ -65,7 +65,7 @@ Producers MUST emit `risk`, `impact`, and `scope` — the schema rejects finding
 Producers must NOT set these; they are populated downstream:
 
 - `overall_severity` — Python-computed mean of `risk`/`impact`/`scope`
-- `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL
+- `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL. Coordinator-derived in the standard multi-agent pipeline; producers MUST NOT emit it there. **Exception — standalone producers:** a producer that renders its own final report with no coordinator derive-pass (canonically `check-pr-comments`) MUST emit it when `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present — the standalone producer is then the only place that knows the commit. Path-only locations (no `:line`) MUST NOT carry one. See `check-pr-comments/SKILL.md`.
 - `metadata.repository` — coordinator derives from `git remote get-url origin`
 - `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by the `validate-findings` skill
 - Derived integer `severity` when emitting floats — the coordinator overrides

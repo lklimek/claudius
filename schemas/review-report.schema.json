@@ -233,7 +233,7 @@
         "severity": { "$ref": "#/$defs/severity" },
         "risk": { "$ref": "#/$defs/severity_float", "description": "OWASP Likelihood normalized to [0,1]." },
         "impact": { "$ref": "#/$defs/severity_float", "description": "OWASP Impact normalized to [0,1]." },
-        "scope": { "$ref": "#/$defs/severity_float", "description": "PR relevance: 1.0 in-diff, 0.5 indirectly affected, 0.0 pre-existing/unrelated." },
+        "scope": { "$ref": "#/$defs/severity_float", "description": "Blast radius normalized to [0,1]: fraction of users/surface/call-sites the finding actually reaches (1.0 repo-wide, ~0.5 a subsystem, ~0.2 a single call-site, 0.0 none). Not a default-1.0 field — rate the real reach. See skills/severity/SKILL.md (source of truth)." },
         "overall_severity": { "$ref": "#/$defs/severity_float", "description": "Coordinator-computed mean of risk, impact, scope." },
         "author_type": {
           "type": "string",
