@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Unit test: block-github-writes.sh PreToolUse gate must FAIL CLOSED.
 #
-# Proves the two independently-confirmed fail-open modes (SEC-001) are fixed and
+# Proves the two independently-confirmed fail-open modes are fixed and
 # that the coordinator/read-only paths still work:
 #   C1  malformed (non-JSON) stdin        -> DENY (no crash, no allow)
 #   C2  empty stdin                        -> DENY
@@ -19,6 +19,7 @@
 #   C14 main session (no agent_type) + wr. -> ALLOW  (main keeps write)
 #   C15 jq missing from PATH + valid JSON  -> DENY   (no crash-to-allow)
 #   C16 subagent + empty tool_name         -> DENY   (defensive)
+#   C17 subagent + get_me (context read)   -> ALLOW  (enabled context toolset in allowlist)
 #
 # Fully isolated: no repo state touched, all input on stdin.
 set -uo pipefail
@@ -70,7 +71,7 @@ sub() {  # build subagent hook payload: $1=tool_name
   printf '{"agent_type":"claudius:security-engineer","tool_name":"%s"}' "$1"
 }
 
-echo "=== fail-closed on bad input (SEC-001 mode 2) ==="
+echo "=== fail-closed on bad input (fail-open mode 2) ==="
 assert_deny "C1 malformed non-JSON stdin denies (no crash)" 'not json at all'
 assert_deny "C2 empty stdin denies"                          ''
 assert_deny "C3 valid JSON but not an object denies"         '[1,2,3]'
@@ -81,7 +82,7 @@ assert_allow "C4 subagent + pull_request_read allowed"  "$(sub "${P}pull_request
 assert_allow "C5 subagent + get_file_contents allowed"  "$(sub "${P}get_file_contents")"
 echo ""
 
-echo "=== default-deny closes the enabled-but-unlisted write toolsets (SEC-001 mode 1) ==="
+echo "=== default-deny closes the enabled-but-unlisted write toolsets (fail-open mode 1) ==="
 assert_deny "C6 subagent + dependabot write denied"          "$(sub "${P}update_dependabot_alert")"
 assert_deny "C7 subagent + code_security write denied"       "$(sub "${P}update_code_scanning_alert")"
 assert_deny "C8 subagent + secret_protection write denied"   "$(sub "${P}update_secret_scanning_alert")"
@@ -111,6 +112,10 @@ echo ""
 
 echo "=== defensive: empty tool_name for a subagent ==="
 assert_deny "C16 subagent + empty tool_name denied" '{"agent_type":"claudius:x","tool_name":""}'
+echo ""
+
+echo "=== enabled context toolset read tool must be allowlisted ==="
+assert_allow "C17 subagent + get_me (context read) allowed" "$(sub "${P}get_me")"
 echo ""
 
 echo "=== Results: $pass passed, $fail failed ==="

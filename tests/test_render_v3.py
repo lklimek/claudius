@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -1051,6 +1052,21 @@ def test_html_inlines_vendored_chartjs():
     html = grr.render_html(data)
     assert "Chart.js v4.5.1" in html  # vendored UMD banner proves inline embed
     assert "new Chart(" in html  # chart-drawing code still present
+
+
+def test_vendored_chartjs_matches_pinned_sha256():
+    """The vendored blob must match the sha256 pinned in generate_review_report.py.
+
+    The inline-embed test only checks the version banner, which a tampered blob can
+    keep verbatim. This pins the exact bytes so any modification to the vendored
+    Chart.js fails CI instead of silently shipping arbitrary JS into every report.
+    """
+    pinned = "ecc3cd1eeb8c34d2178e3f59fd63ec5a3d84358c11730af0b9958dc886d7652a"
+    actual = hashlib.sha256(grr._CHARTJS_VENDOR_PATH.read_bytes()).hexdigest()
+    assert actual == pinned, (
+        f"vendored chart.umd.js sha256 {actual} != pinned {pinned}; "
+        "update the pin in generate_review_report.py only for a verified Chart.js build"
+    )
 
 
 def test_triage_does_not_load_chartjs_from_unpinned_cdn():
