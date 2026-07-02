@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any
 import pytest
@@ -209,6 +211,151 @@ class TestFindDuplicateGroups:
 
     def test_empty_list(self):
         assert cr.find_duplicate_groups([]) == []
+
+
+# ---------------------------------------------------------------------------
+# find_duplicate_groups — threshold-gated degraded (bucketed) path
+# ---------------------------------------------------------------------------
+def _distinct_findings(count: int) -> list[dict[str, Any]]:
+    """`count` findings with unique file + unique title (never form a group)."""
+    cats = ["security", "code_quality", "project", "documentation"]
+    return [
+        {
+            "location": f"src/filler{i}.rs:{i}-{i + 5}",
+            "title": f"Filler finding {i}",
+            "category": cats[i % len(cats)],
+            "tags": [],
+        }
+        for i in range(count)
+    ]
+
+
+def _in_same_group(groups: list[dict[str, Any]], i: int, j: int) -> bool:
+    return any(
+        i in g["finding_indices"] and j in g["finding_indices"] for g in groups
+    )
+
+
+class TestFindDuplicateGroupsBucketed:
+    CAP = None  # set in setup_method from the module constant
+
+    def setup_method(self):
+        self.CAP = cr.DUP_DETECTION_MAX_FINDINGS
+
+    def test_below_cap_uses_exact_path_and_catches_cross_file_fuzzy(self, caplog):
+        # A cross-file / cross-category *near*-duplicate (similar not identical
+        # title) IS grouped by the untouched exact path, with no degrade warning.
+        near_a = {
+            "location": "src/a.rs:1",
+            "title": "Alpha beta gamma delta epsilon",
+            "category": "security",
+            "tags": [],
+        }
+        near_b = {
+            "location": "src/b.rs:1",
+            "title": "Alpha beta gamma delta omega",
+            "category": "code_quality",
+            "tags": [],
+        }
+        with caplog.at_level(logging.WARNING):
+            groups = cr.find_duplicate_groups([near_a, near_b])
+        assert len(groups) == 1  # exact path still groups cross-file fuzzy dups
+        assert not any("degraded" in r.message.lower() for r in caplog.records)
+
+    def test_above_cap_warns_and_runtime_bounded(self, caplog):
+        findings = _distinct_findings(self.CAP * 8)  # e.g. 4000, all distinct
+        start = time.perf_counter()
+        with caplog.at_level(logging.WARNING):
+            groups = cr.find_duplicate_groups(findings)
+        elapsed = time.perf_counter() - start
+        # Degraded path is near-linear: the old O(n^2) scan took ~70s at 3000.
+        assert elapsed < 10.0, f"bucketed dedup too slow: {elapsed:.1f}s"
+        assert any(
+            "degraded" in r.message.lower() for r in caplog.records
+        ), "expected a visible degradation warning"
+        assert groups == []  # distinct findings share no bucket or title
+
+    def test_above_cap_catches_same_bucket_fuzzy_and_cross_file_exact_title(self):
+        filler = _distinct_findings(self.CAP)
+        # Same (category, file) bucket, overlapping lines, identical title.
+        sf_a = {
+            "location": "src/same.rs:10-20",
+            "title": "Missing error handling here",
+            "category": "security",
+            "tags": [],
+        }
+        sf_b = {
+            "location": "src/same.rs:15-25",
+            "title": "Missing error handling here",
+            "category": "security",
+            "tags": [],
+        }
+        # Different files AND categories, but an identical (normalized) title.
+        xf_a = {
+            "location": "src/x.rs:1",
+            "title": "Hardcoded credentials in config",
+            "category": "security",
+            "tags": [],
+        }
+        xf_b = {
+            "location": "lib/y.py:99",
+            "title": "hardcoded credentials in config",  # case-normalized match
+            "category": "code_quality",
+            "tags": [],
+        }
+        findings = filler + [sf_a, sf_b, xf_a, xf_b]
+        assert len(findings) > self.CAP
+        groups = cr.find_duplicate_groups(findings)
+        n = len(findings)
+        assert _in_same_group(groups, n - 4, n - 3)  # same-bucket fuzzy pair
+        assert _in_same_group(groups, n - 2, n - 1)  # cross-file exact-title pair
+
+    def test_above_cap_cross_file_near_dup_is_intentionally_missed(self):
+        # Different files/categories, similar-but-NOT-identical titles.
+        near_a = {
+            "location": "src/na.rs:1",
+            "title": "Alpha beta gamma delta epsilon",
+            "category": "security",
+            "tags": [],
+        }
+        near_b = {
+            "location": "src/nb.rs:1",
+            "title": "Alpha beta gamma delta omega",
+            "category": "code_quality",
+            "tags": [],
+        }
+        # The exact path DOES group them (documents what degraded mode gives up).
+        assert len(cr.find_duplicate_groups([near_a, near_b])) == 1
+        # Above the cap they are intentionally NOT grouped.
+        findings = _distinct_findings(self.CAP) + [near_a, near_b]
+        assert len(findings) > self.CAP
+        groups = cr.find_duplicate_groups(findings)
+        n = len(findings)
+        assert not _in_same_group(groups, n - 2, n - 1)
+
+    def test_bucketed_grouping_matches_exact_when_no_cross_file_fuzzy(self):
+        # When the only dups are same-bucket fuzzy + cross-file exact-title, the
+        # degraded path produces the SAME groups (finding sets) as the exact path.
+        def _f(location, title, category):
+            return {
+                "location": location,
+                "title": title,
+                "category": category,
+                "tags": [],
+            }
+
+        findings = [
+            _f("src/same.rs:10-20", "Missing error handling", "security"),
+            _f("src/same.rs:12-22", "Missing error handling", "security"),
+            _f("src/x.rs:1", "Weak crypto default", "security"),
+            _f("lib/y.py:5", "Weak crypto default", "code_quality"),
+            _f("src/z.rs:99", "Totally unrelated thing", "project"),
+        ]
+        exact = cr.find_duplicate_groups(findings)  # below cap -> exact path
+        bucketed = cr._find_duplicate_groups_bucketed(findings, cr.SIMILARITY_THRESHOLD)
+        exact_sets = sorted(tuple(g["finding_indices"]) for g in exact)
+        bucketed_sets = sorted(tuple(g["finding_indices"]) for g in bucketed)
+        assert exact_sets == bucketed_sets == [(0, 1), (2, 3)]
 
 
 # ---------------------------------------------------------------------------

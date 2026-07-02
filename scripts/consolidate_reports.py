@@ -81,6 +81,12 @@ MAX_INPUT_SIZE = 8 * 1024 * 1024  # 8 MB
 
 SIMILARITY_THRESHOLD = 0.3
 
+# Above this many findings the exact O(n^2) fuzzy pairwise scan is replaced by a
+# bucketed near-linear pass (see find_duplicate_groups). 500 matches the volume
+# at which a real review starts risking multi-minute stalls; below it the exact
+# algorithm is kept untouched.
+DUP_DETECTION_MAX_FINDINGS = 500
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -335,8 +341,27 @@ def find_duplicate_groups(
 
     Note: uses transitive closure, so A~B and B~C groups A,B,C together even if
     A and C are dissimilar. Groups are candidates for human review, not auto-merge.
+
+    Above ``DUP_DETECTION_MAX_FINDINGS`` the exact O(n^2) fuzzy scan (below) would
+    stall for minutes, so it degrades to a near-linear bucketed pass
+    (``_find_duplicate_groups_bucketed``) with a loud warning. That degraded path
+    still catches same-(category, file) fuzzy dups and cross-bucket exact-title
+    dups, but may miss cross-file *near*-duplicate (similar-not-identical title)
+    groups — an accepted, documented trade-off for bounded runtime at scale.
     """
     n = len(findings)
+    if n > DUP_DETECTION_MAX_FINDINGS:
+        log.warning(
+            "Duplicate detection degraded: %d findings exceeds the %d limit, so "
+            "the exact O(n^2) pairwise scan is replaced by (category, file_path) "
+            "bucketing plus an exact-title cross-bucket pass. Cross-file "
+            "near-duplicate (similar but not identical title) groups may be "
+            "missed above this limit; split the review to restore exact dedup.",
+            n,
+            DUP_DETECTION_MAX_FINDINGS,
+        )
+        return _find_duplicate_groups_bucketed(findings, threshold)
+
     adj: dict[int, set[int]] = defaultdict(set)
     pair_reasons: dict[tuple[int, int], str] = {}
 
@@ -383,6 +408,111 @@ def find_duplicate_groups(
         )
 
     return groups
+
+
+def _normalize_title(title: str) -> str:
+    """Lowercase and collapse whitespace for exact-title matching."""
+    return " ".join(title.lower().split())
+
+
+def _groups_from_adjacency(
+    n: int,
+    adj: dict[int, set[int]],
+    pair_reasons: dict[tuple[int, int], str],
+) -> list[dict[str, Any]]:
+    """Build duplicate groups from a similarity adjacency graph (transitive closure).
+
+    Reasons are collected by walking each component's edges (O(edges)) rather
+    than every member pair, keeping the degraded path bounded even for the rare
+    large same-title component.
+    """
+    visited: set[int] = set()
+    groups: list[dict[str, Any]] = []
+    group_id = 0
+
+    for start in range(n):
+        if start in visited or start not in adj:
+            continue
+        group_id += 1
+        component: set[int] = set()
+        queue = [start]
+        while queue:
+            node = queue.pop()
+            if node in component:
+                continue
+            component.add(node)
+            visited.add(node)
+            for neighbor in adj[node]:
+                if neighbor not in component:
+                    queue.append(neighbor)
+
+        reasons: set[str] = set()
+        for i in component:
+            for j in adj[i]:
+                key = (i, j) if i < j else (j, i)
+                reason = pair_reasons.get(key)
+                if reason:
+                    reasons.add(reason)
+
+        groups.append(
+            {
+                "group_id": group_id,
+                "reason": "; ".join(sorted(reasons)),
+                "finding_indices": sorted(component),
+            }
+        )
+
+    return groups
+
+
+def _find_duplicate_groups_bucketed(
+    findings: list[dict[str, Any]], threshold: float
+) -> list[dict[str, Any]]:
+    """Near-linear degraded duplicate detection for large finding sets.
+
+    Two passes feed one adjacency graph:
+    1. Fuzzy ``_similarity_score`` within each ``(category, file_path)`` bucket —
+       cheap because buckets are small, and it preserves the full score's
+       location/title/tag reasoning for same-file candidates.
+    2. An O(n) exact-normalized-title pass linking identical titles across
+       buckets (chained per title, so transitive closure still groups them all)
+       — recovers cross-file *exact*-title duplicates the bucketing alone drops.
+
+    Cross-file *near*-duplicate (similar but not identical title) groups are
+    intentionally not recovered; the caller logs that degradation.
+    """
+    adj: dict[int, set[int]] = defaultdict(set)
+    pair_reasons: dict[tuple[int, int], str] = {}
+
+    buckets: dict[tuple[str, str], list[int]] = defaultdict(list)
+    by_title: dict[str, list[int]] = defaultdict(list)
+    for idx, f in enumerate(findings):
+        file_path = parse_location(f.get("location", ""))[0]
+        buckets[(f.get("category", ""), file_path)].append(idx)
+        norm = _normalize_title(f.get("title", ""))
+        if norm:
+            by_title[norm].append(idx)
+
+    for members in buckets.values():
+        for a in range(len(members)):
+            i = members[a]
+            for b in range(a + 1, len(members)):
+                j = members[b]
+                score, reason = _similarity_score(findings[i], findings[j])
+                if score >= threshold:
+                    adj[i].add(j)
+                    adj[j].add(i)
+                    pair_reasons[(i, j)] = reason
+
+    for norm, members in by_title.items():
+        for a in range(len(members) - 1):
+            i, j = members[a], members[a + 1]
+            lo, hi = (i, j) if i < j else (j, i)
+            adj[lo].add(hi)
+            adj[hi].add(lo)
+            pair_reasons.setdefault((lo, hi), f"identical title {norm!r}")
+
+    return _groups_from_adjacency(len(findings), adj, pair_reasons)
 
 
 # ---------------------------------------------------------------------------
