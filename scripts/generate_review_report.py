@@ -1937,16 +1937,16 @@ def render_triage(data: dict[str, Any]) -> str:
         "{% block extra_css %}{% endblock %}",
         _TRIAGE_EXTRA_CSS,
     )
-    assert (
-        _TRIAGE_EXTRA_CSS in triage_template
-    ), "Template patch failed: extra_css block anchor not found"
+    assert _TRIAGE_EXTRA_CSS in triage_template, (
+        "Template patch failed: extra_css block anchor not found"
+    )
     triage_template = triage_template.replace(
         "{% block extra_js %}{% endblock %}",
         _TRIAGE_EXTRA_JS,
     )
-    assert (
-        _TRIAGE_EXTRA_JS in triage_template
-    ), "Template patch failed: extra_js block anchor not found"
+    assert _TRIAGE_EXTRA_JS in triage_template, (
+        "Template patch failed: extra_js block anchor not found"
+    )
 
     # Add comment-check `data-verdict` attribute. The base template already
     # carries data-overall and data-ai-verdict; the triage filter for the
@@ -1957,9 +1957,9 @@ def render_triage(data: dict[str, Any]) -> str:
         " data-verdict=\"{{ f.verdict | default('', true) }}\">"
     )
     triage_template = triage_template.replace(old_finding_div, new_finding_div)
-    assert (
-        new_finding_div in triage_template
-    ), "Template patch failed: finding div not found in triage template"
+    assert new_finding_div in triage_template, (
+        "Template patch failed: finding div not found in triage template"
+    )
 
     # Add triage toolbar before the first section heading.
     # The base report toolbar is hidden ({% if not triage %}), so we inject
@@ -2031,9 +2031,9 @@ def render_triage(data: dict[str, Any]) -> str:
         toolbar_anchor,
         toolbar_anchor + "\n" + toolbar_block,
     )
-    assert (
-        toolbar_block in triage_template
-    ), "Template patch failed: triage toolbar anchor (sec.subtitle line) not found"
+    assert toolbar_block in triage_template, (
+        "Template patch failed: triage toolbar anchor (sec.subtitle line) not found"
+    )
 
     env = Environment(autoescape=True)
     env.filters["sev_label"] = sev_label
@@ -2218,9 +2218,7 @@ def _register_pdf_fonts() -> dict[str, str]:
             "mono": mono_name,
             "monoBold": mono_bold_name,
         }
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 -- font failure must not crash PDF rendering
+    except Exception as exc:  # noqa: BLE001 -- font failure must not crash PDF rendering
         log.warning(
             "Failed to register Unicode font %s (%s: %s); falling back to Helvetica",
             fonts.get("regular"),
@@ -2884,7 +2882,9 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         first_style = (
             md_heading_styles[first_kind]
             if first_kind in md_heading_styles
-            else md_pre_style if first_kind == "pre" else s["finding_body"]
+            else md_pre_style
+            if first_kind == "pre"
+            else s["finding_body"]
         )
         out.append(Paragraph(first_xml, first_style))
         for kind, body in blocks[1:]:

@@ -115,13 +115,13 @@ class TestBuildPermalink:
     def test_range_location(self):
         url = cr._build_permalink(self.REPO, self.SHA, "src/auth.rs:42-56")
         assert url == (
-            "https://github.com/octo/widgets/blob/" f"{self.SHA}/src/auth.rs#L42-L56"
+            f"https://github.com/octo/widgets/blob/{self.SHA}/src/auth.rs#L42-L56"
         )
 
     def test_single_line_location(self):
         url = cr._build_permalink(self.REPO, self.SHA, "src/auth.rs:42")
         assert url == (
-            "https://github.com/octo/widgets/blob/" f"{self.SHA}/src/auth.rs#L42"
+            f"https://github.com/octo/widgets/blob/{self.SHA}/src/auth.rs#L42"
         )
 
     def test_missing_repository(self):

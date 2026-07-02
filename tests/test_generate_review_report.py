@@ -264,9 +264,9 @@ def test_html_scoreboard_table_includes_all_categories():
     assert m, "Severity x category matrix table not found in HTML"
     table_html = m.group(0)
     for label in _EXPECTED_SCOREBOARD_LABELS:
-        assert (
-            label in table_html
-        ), f"HTML scoreboard table missing category column: {label}"
+        assert label in table_html, (
+            f"HTML scoreboard table missing category column: {label}"
+        )
 
 
 def test_html_js_categorychart_includes_all_categories():

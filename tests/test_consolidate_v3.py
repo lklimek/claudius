@@ -224,7 +224,7 @@ class TestAssembleDerivations:
         assert cr.cmd_assemble(args) == 0
         f = json.loads(out.read_text())["findings"][0]["findings"][0]
         assert f["location_permalink"] == (
-            "https://github.com/octo/widgets/blob/" f"{sha}/src/a.rs#L10-L20"
+            f"https://github.com/octo/widgets/blob/{sha}/src/a.rs#L10-L20"
         )
 
     def test_permalink_absent_when_no_repository(self, tmp_path):

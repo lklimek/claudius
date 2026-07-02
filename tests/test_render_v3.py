@@ -237,9 +237,9 @@ def test_markdown_snippet_language_is_sanitized_against_fence_breakout():
     for ln in fence_lines:
         # After the backtick run, only allowlist chars (or empty) are valid.
         tail = ln.lstrip("`")
-        assert re.fullmatch(
-            r"[A-Za-z0-9_+.\-]*", tail
-        ), f"fence info-string contains disallowed chars: {ln!r}"
+        assert re.fullmatch(r"[A-Za-z0-9_+.\-]*", tail), (
+            f"fence info-string contains disallowed chars: {ln!r}"
+        )
 
 
 def test_sanitize_snippet_language_legitimate_values_passthrough():
@@ -315,9 +315,9 @@ def test_html_code_snippet_content_is_escaped():
     """
     data = _load("v3-full.json")
     # Inject a script tag into a snippet content and confirm it's escaped.
-    data["findings"][0]["findings"][0]["code_snippets"][0][
-        "content"
-    ] = "<script>alert('xss')</script>\nlet x = 1;"
+    data["findings"][0]["findings"][0]["code_snippets"][0]["content"] = (
+        "<script>alert('xss')</script>\nlet x = 1;"
+    )
     html = grr.render_html(data)
     assert "&lt;script&gt;alert(" in html
     assert "<script>alert('xss')</script>" not in html
@@ -627,12 +627,12 @@ def test_triage_finding_data_category_preserves_origin_category():
     ppm_match = re.search(r'id="finding-PPM-001"[^>]*data-category="([^"]*)"', html)
     assert sec_match, "SEC-001 div not found in triage HTML"
     assert ppm_match, "PPM-001 div not found in triage HTML"
-    assert (
-        sec_match.group(1) == "security"
-    ), f'SEC-001 data-category collapsed to "{sec_match.group(1)}" — expected "security"'
-    assert (
-        ppm_match.group(1) == "pr_promises"
-    ), f'PPM-001 data-category collapsed to "{ppm_match.group(1)}" — expected "pr_promises"'
+    assert sec_match.group(1) == "security", (
+        f'SEC-001 data-category collapsed to "{sec_match.group(1)}" — expected "security"'
+    )
+    assert ppm_match.group(1) == "pr_promises", (
+        f'PPM-001 data-category collapsed to "{ppm_match.group(1)}" — expected "pr_promises"'
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -961,9 +961,9 @@ def test_triage_renders_decision_ui_when_findings_have_code_snippets():
     snippet_pos = html.find("language-rust")
     dropdown_pos = html.find('class="triage-action"')
     assert snippet_pos != -1 and dropdown_pos != -1
-    assert (
-        dropdown_pos > snippet_pos
-    ), "decision dropdown must render after the snippet inside the finding card"
+    assert dropdown_pos > snippet_pos, (
+        "decision dropdown must render after the snippet inside the finding card"
+    )
 
 
 # ---------------------------------------------------------------------------
