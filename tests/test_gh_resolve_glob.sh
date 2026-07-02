@@ -63,6 +63,12 @@ check "? matches exactly one char (match)"            true  'fileA.js'    'file?
 check "? does NOT match two chars"                    false 'fileAB.js'   'file?.js'
 check "literal dot is not a wildcard"                 false 'srcXfoo.ts'  'src.foo.ts'
 
+echo "=== anchoring: jq's test() is substring search, not full-match ==="
+check "*.rs still matches main.rs"                    true  'main.rs'          '*.rs'
+check "*.rs does NOT match main.rson (over-match)"     false 'main.rson'        '*.rs'
+check "src/*.ts still matches src/a.ts"                true  'src/a.ts'         'src/*.ts'
+check "src/*.ts does NOT match backup/src/a.ts (over-match)" false 'backup/src/a.ts' 'src/*.ts'
+
 echo ""
 echo "=== Results: $pass passed, $fail failed ==="
 [ "$fail" -eq 0 ]
