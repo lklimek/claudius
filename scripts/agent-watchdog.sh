@@ -809,6 +809,7 @@ while :; do
   tmux_reachable=0
   if [ "$gone_detect" -eq 1 ] && [ "$have_tmux" -eq 1 ]; then
     unset OUR_PANE_TYPE; declare -A OUR_PANE_TYPE   # OUR tmux members: paneId -> agentType
+    OUR_PANE_TYPE[__seed]=1; unset 'OUR_PANE_TYPE[__seed]'  # touch the array so `${#OUR_PANE_TYPE[@]}` never trips nounset when no member is ever assigned (e.g. no tmux-backed teammates this run)
     for i in "${!m_names[@]}"; do
       [ "${m_btypes[$i]:-}" = tmux ] || continue
       mp="${m_panes[$i]:-}"; at="${m_types[$i]:-}"
