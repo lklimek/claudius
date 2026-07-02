@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-07-02
+
+### Fixed
+
+- `check-pr-comments`: agents were re-verifying threads GitHub already reports as resolved (`isResolved: true`), re-reading code and re-running call-tree walks on settled questions. Step 3 now trusts `isResolved` and skips verification entirely for already-resolved threads; the summary (step 4), report finding format (step 5), and resolve/reply matrix (step 8) updated to match — already-resolved threads are reported/left as-is without a restated fix assessment or a redundant reply/resolve action.
+
 ## [5.0.0] - 2026-07-01
 
 ### Changed
