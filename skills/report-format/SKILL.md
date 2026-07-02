@@ -139,8 +139,8 @@ Rationale for the example values: `scope: 1.0` because a title/body mismatch is 
 | Tool | Purpose | Usage |
 |------|---------|-------|
 | `scripts/validate_report.py` | Validate report JSON against schema | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py report.json` |
-| `scripts/consolidate_reports.py` | Merge multiple agent reports, deduplicate findings | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py agent1.json agent2.json -o consolidated.json` |
-| `scripts/generate_review_report.py` | Render consolidated report as Markdown/HTML | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py consolidated.json` |
+| `scripts/consolidate_reports.py` | Merge multiple agent reports, deduplicate findings | Two-phase `prepare`/`assemble` subcommand CLI — see `grumpy-review/SKILL.md` §5a and §5c for exact invocation |
+| `scripts/generate_review_report.py` | Render consolidated report as Markdown/HTML/PDF/triage | Requires `--format {md,html,triage,pdf}` — see `grumpy-review/SKILL.md` §5e |
 
 ## Full Report Envelope
 
