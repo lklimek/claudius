@@ -114,7 +114,10 @@ class TestBuildSeverityStats:
         assert stats["severity_counts"]["HIGH"] == 1
         assert stats["severity_counts"]["MEDIUM"] == 1
 
-    def test_explicit_severity_preferred(self):
+    def test_derived_floats_preferred_over_conflicting_explicit_severity(self):
+        # The float trio is the single source of truth (severity skill
+        # doctrine): a derived band wins even over a conflicting explicit
+        # integer, matching cmd_assemble's precedence in consolidate_reports.py.
         sections = [
             {
                 "category": "security",
@@ -122,9 +125,18 @@ class TestBuildSeverityStats:
             }
         ]
         stats = su.build_severity_stats(sections)
-        # Explicit integer 5 (CRITICAL) wins over the floats' INFO band.
+        assert stats["severity_counts"]["INFO"] == 1
+        assert stats["severity_counts"]["CRITICAL"] == 0
+
+    def test_explicit_severity_used_when_floats_absent(self):
+        sections = [
+            {
+                "category": "security",
+                "findings": [{"severity": 5}],
+            }
+        ]
+        stats = su.build_severity_stats(sections)
         assert stats["severity_counts"]["CRITICAL"] == 1
-        assert stats["severity_counts"]["INFO"] == 0
 
     def test_floatless_finding_falls_back_to_info(self):
         sections = [{"category": "code_quality", "findings": [{"title": "x"}]}]

@@ -373,41 +373,7 @@ def find_duplicate_groups(
                 adj[j].add(i)
                 pair_reasons[(i, j)] = reason
 
-    visited: set[int] = set()
-    groups: list[dict[str, Any]] = []
-    group_id = 0
-
-    for start in range(n):
-        if start in visited or start not in adj:
-            continue
-        group_id += 1
-        component: set[int] = set()
-        queue = [start]
-        while queue:
-            node = queue.pop()
-            if node in component:
-                continue
-            component.add(node)
-            visited.add(node)
-            for neighbor in adj[node]:
-                if neighbor not in component:
-                    queue.append(neighbor)
-
-        all_reasons: list[str] = []
-        for i in component:
-            for j in component:
-                if i < j and (i, j) in pair_reasons:
-                    all_reasons.append(pair_reasons[(i, j)])
-
-        groups.append(
-            {
-                "group_id": group_id,
-                "reason": "; ".join(sorted(set(all_reasons))),
-                "finding_indices": sorted(component),
-            }
-        )
-
-    return groups
+    return _groups_from_adjacency(n, adj, pair_reasons)
 
 
 def _normalize_title(title: str) -> str:
@@ -472,11 +438,14 @@ def _find_duplicate_groups_bucketed(
 
     Two passes feed one adjacency graph:
     1. Fuzzy ``_similarity_score`` within each ``(category, file_path)`` bucket —
-       cheap because buckets are small, and it preserves the full score's
-       location/title/tag reasoning for same-file candidates.
+       cheap as long as the bucket stays under ``DUP_DETECTION_MAX_FINDINGS``;
+       larger buckets (e.g. a mega-file review) skip the fuzzy scan with a
+       warning and fall through to pass 2, preserving the full score's
+       location/title/tag reasoning only for bounded buckets.
     2. An O(n) exact-normalized-title pass linking identical titles across
        buckets (chained per title, so transitive closure still groups them all)
-       — recovers cross-file *exact*-title duplicates the bucketing alone drops.
+       — recovers cross-file *exact*-title duplicates the bucketing alone drops,
+       and is the sole recovery path for oversized buckets.
 
     Cross-file *near*-duplicate (similar but not identical title) groups are
     intentionally not recovered; the caller logs that degradation.
@@ -493,7 +462,17 @@ def _find_duplicate_groups_bucketed(
         if norm:
             by_title[norm].append(idx)
 
-    for members in buckets.values():
+    for key, members in buckets.items():
+        if len(members) > DUP_DETECTION_MAX_FINDINGS:
+            log.warning(
+                "Duplicate detection bucket %s has %d findings, exceeding the "
+                "%d per-bucket cap; skipping fuzzy comparison for this bucket "
+                "(falls back to exact-title matching only).",
+                key,
+                len(members),
+                DUP_DETECTION_MAX_FINDINGS,
+            )
+            continue
         for a in range(len(members)):
             i = members[a]
             for b in range(a + 1, len(members)):

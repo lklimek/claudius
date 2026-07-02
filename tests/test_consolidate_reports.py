@@ -7,6 +7,7 @@ import json
 import logging
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 import pytest
@@ -212,6 +213,42 @@ class TestFindDuplicateGroups:
     def test_empty_list(self):
         assert cr.find_duplicate_groups([]) == []
 
+    def test_exact_path_delegates_to_shared_adjacency_helper(self):
+        """The exact path must not carry its own inline BFS — it builds the
+        same adjacency graph and delegates to _groups_from_adjacency, the
+        helper the bucketed (degraded) path also uses."""
+        findings = [
+            {"location": "f.rs:10-20", "title": "Error handling"},
+            {"location": "f.rs:18-30", "title": "Error handling"},
+            {"location": "f.rs:28-40", "title": "Error handling"},
+        ]
+        n = len(findings)
+        adj: dict[int, set[int]] = defaultdict(set)
+        pair_reasons: dict[tuple[int, int], str] = {}
+        for i in range(n):
+            for j in range(i + 1, n):
+                score, reason = cr._similarity_score(findings[i], findings[j])
+                if score >= cr.SIMILARITY_THRESHOLD:
+                    adj[i].add(j)
+                    adj[j].add(i)
+                    pair_reasons[(i, j)] = reason
+        expected = cr._groups_from_adjacency(n, adj, pair_reasons)
+        assert cr.find_duplicate_groups(findings) == expected
+
+    def test_reason_has_no_leading_empty_segment_from_unexplained_pair(self):
+        """A pair whose only matching signal is sub-threshold title
+        similarity (score contributes, but too low to earn its own reason
+        text) must not leave a stray leading '; ' in the group's combined
+        reason string."""
+        a = {"location": "", "title": "alpha beta gamma delta", "tags": ["x"]}
+        b = {"location": "", "title": "zzzz yyyy xxxx alpha", "tags": ["x"]}
+        score, reason = cr._similarity_score(a, b)
+        assert reason == ""  # confirms the empty-reason precondition
+        assert score >= cr.SIMILARITY_THRESHOLD
+        groups = cr.find_duplicate_groups([a, b])
+        assert len(groups) == 1
+        assert groups[0]["reason"] == ""
+
 
 # ---------------------------------------------------------------------------
 # find_duplicate_groups — threshold-gated degraded (bucketed) path
@@ -356,6 +393,30 @@ class TestFindDuplicateGroupsBucketed:
         exact_sets = sorted(tuple(g["finding_indices"]) for g in exact)
         bucketed_sets = sorted(tuple(g["finding_indices"]) for g in bucketed)
         assert exact_sets == bucketed_sets == [(0, 1), (2, 3)]
+
+    def test_oversized_single_bucket_stays_bounded(self, caplog):
+        # A mega-file review: 600+ findings all share one (category, file_path)
+        # bucket. Without a per-bucket cap, the "degraded" path's own fuzzy
+        # scan reproduces the O(n^2) stall it was supposed to avoid.
+        count = self.CAP + 100
+        findings = [
+            {
+                "location": "src/mega.rs:1-10",
+                "title": f"Finding number {i} about something",
+                "category": "security",
+                "tags": [],
+            }
+            for i in range(count)
+        ]
+        start = time.perf_counter()
+        with caplog.at_level(logging.WARNING):
+            cr.find_duplicate_groups(findings)
+        elapsed = time.perf_counter() - start
+        assert elapsed < 10.0, f"oversized-bucket dedup too slow: {elapsed:.1f}s"
+        assert any(
+            "bucket" in r.message.lower() and "src/mega.rs" in r.message
+            for r in caplog.records
+        ), "expected a warning naming the oversized bucket"
 
 
 # ---------------------------------------------------------------------------

@@ -59,10 +59,10 @@ _SEVERITY_BANDS: list[tuple[float, int]] = [
 ]
 
 
-# NOTE: scope-weighting/capping is a deliberate future consideration
-# (TODO 3cb7e842); the unweighted mean below is intentionally left unchanged
-# here to avoid rebanding every existing report. The observed inflation is a
-# mis-rating (scope defaulted to 1.0), addressed in the authoring skills and a
+# NOTE: scope-weighting/capping is a deliberate future consideration; the
+# unweighted mean below is intentionally left unchanged here to avoid
+# rebanding every existing report. The observed inflation is a mis-rating
+# (scope defaulted to 1.0), addressed in the authoring skills and a
 # non-blocking consistency gate, not in this formula.
 def derive_overall(finding: dict[str, Any]) -> float | None:
     """Arithmetic mean of risk + impact + scope when all three are finite floats.
@@ -105,15 +105,19 @@ def derive_finding_severity(finding: dict[str, Any]) -> int | None:
 def _effective_severity(finding: dict[str, Any]) -> int:
     """Resolve a finding's integer severity for counting.
 
-    Prefers an explicit integer ``severity``; otherwise derives one from the
-    OWASP floats; falls back to 1 (INFO) when neither is available.
+    Prefers the band derived from the OWASP risk/impact/scope floats — per the
+    severity skill's doctrine, the float trio is the single source of truth,
+    so a derived band wins even over a conflicting explicit integer
+    ``severity`` (matching ``cmd_assemble``'s precedence in
+    ``consolidate_reports.py``). Falls back to the explicit integer when the
+    floats are absent or invalid, then to 1 (INFO) when neither is available.
     """
-    sev = finding.get("severity")
-    if isinstance(sev, int) and not isinstance(sev, bool) and 1 <= sev <= 5:
-        return sev
     derived = derive_finding_severity(finding)
     if derived is not None:
         return derived
+    sev = finding.get("severity")
+    if isinstance(sev, int) and not isinstance(sev, bool) and 1 <= sev <= 5:
+        return sev
     return 1
 
 
