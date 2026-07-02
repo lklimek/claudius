@@ -84,7 +84,7 @@ Use Markdown — renderers handle formatting; you write content. Single-line fie
 
 **Markdown style for agents**: separate lists, code blocks, and headings from preceding text with a blank line (CommonMark requires this for parsing).
 
-**For consumers**: parse long-text fields as CommonMark Markdown. Reference renderer: `scripts/generate_review_report.py` — HTML uses the `markdown` Python package sanitised through `bleach`, PDF walks the parsed HTML to ReportLab mini-XML. Markdown output passes through verbatim.
+**For consumers**: parse long-text fields as CommonMark Markdown. Reference renderer: `scripts/generate_review_report.py` — HTML uses the `markdown` Python package sanitised through `nh3`, PDF walks the parsed HTML to ReportLab mini-XML. Markdown output passes through verbatim.
 
 ## File Output
 
