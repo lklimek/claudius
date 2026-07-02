@@ -5,7 +5,7 @@ Long-text finding fields (``description``, ``impact_description``,
 ``recommendation``, ``ai_assessment``, executive summary text) are rendered as
 Markdown in HTML and PDF outputs.
 Markdown output passes the source through verbatim (Markdown in, Markdown out).
-HTML output is sanitised via ``bleach`` so untrusted Markdown cannot inject
+HTML output is sanitised via ``nh3`` so untrusted Markdown cannot inject
 ``<script>`` or other active content.
 
 Requires ``markdown >= 3.4`` and ``beautifulsoup4 >= 4.10`` for HTML/PDF rendering
@@ -35,6 +35,7 @@ PDF malformed Markdown:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import logging
 import re
@@ -366,7 +367,7 @@ _RL_HEADING_SIZES = {"h1": 14, "h2": 13, "h3": 12, "h4": 11, "h5": 10, "h6": 10}
 # available, so inline ``code`` and fenced code blocks render emoji/CJK.
 _RL_MONO_FONT = "Courier"
 
-# Allowlist for bleach sanitisation of Markdown-produced HTML. Covers tags
+# Allowlist for nh3 sanitisation of Markdown-produced HTML. Covers tags
 # the ``markdown`` library emits with ``fenced_code`` + ``tables``; anything
 # else (script, iframe, on* handlers, javascript: URIs) is stripped.
 _HTML_ALLOWED_TAGS = {
@@ -395,35 +396,55 @@ _HTML_ALLOWED_TAGS = {
     "th",
     "td",
 }
-_HTML_ALLOWED_ATTRS = {"a": ["href", "title"]}
-_HTML_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+_HTML_ALLOWED_ATTRS = {"a": {"href", "title"}}
+_HTML_ALLOWED_PROTOCOLS = {"http", "https", "mailto"}
 
 
 def render_markdown_to_html(s: str) -> Any:
     """Render a Markdown string to safe HTML for Jinja2 templates.
 
-    Output is sanitised via ``bleach`` against an allowlist of standard
-    Markdown-produced tags; raw ``<script>``, ``<iframe>``, ``on*`` handlers,
-    and ``javascript:`` URIs are stripped. Returns a ``markupsafe.Markup`` so
-    the template does not double-escape. Empty / whitespace-only input returns
-    an empty Markup.
+    Output is sanitised via ``nh3`` (Rust/ammonia) against an allowlist of
+    standard Markdown-produced tags; raw ``<script>``, ``<iframe>``, ``on*``
+    handlers, and ``javascript:`` URIs are stripped. ``nh3`` drops disallowed
+    tags (keeping their text) by default, matching the previous ``strip=True``
+    behaviour. Returns a ``markupsafe.Markup`` so the template does not
+    double-escape. Empty / whitespace-only input returns an empty Markup.
     """
     from markupsafe import Markup
-    import bleach as _bleach
+    import nh3
     import markdown as _markdown_lib
 
     if not s or not s.strip():
         return Markup("")
     md = _markdown_lib.Markdown(extensions=["fenced_code", "tables"])
     raw_html = md.convert(s)
-    safe_html = _bleach.clean(
+    safe_html = nh3.clean(
         raw_html,
         tags=_HTML_ALLOWED_TAGS,
         attributes=_HTML_ALLOWED_ATTRS,
-        protocols=_HTML_ALLOWED_PROTOCOLS,
-        strip=True,
+        url_schemes=_HTML_ALLOWED_PROTOCOLS,
     )
     return Markup(safe_html)
+
+
+# Chart.js is vendored and inlined (never fetched from a CDN) so the generated
+# report is genuinely self-contained and safe to open offline. Pinned build:
+#   chart.js v4.5.1  dist/chart.umd.js  (MIT)
+#   sha256 ecc3cd1eeb8c34d2178e3f59fd63ec5a3d84358c11730af0b9958dc886d7652a
+# To update: fetch dist/chart.umd.js for the target version from
+# https://cdn.jsdelivr.net/npm/chart.js@<version>/dist/chart.umd.js into
+# scripts/vendor/, then refresh the version/hash above.
+_CHARTJS_VENDOR_PATH = Path(__file__).resolve().parent / "vendor" / "chart.umd.js"
+
+
+@functools.lru_cache(maxsize=1)
+def _chartjs_inline_source() -> str:
+    """Return the vendored Chart.js UMD source for inline ``<script>`` embedding.
+
+    The upstream build carries no ``</script>`` sequence, so it embeds verbatim
+    without breaking out of the inline script element.
+    """
+    return _CHARTJS_VENDOR_PATH.read_text(encoding="utf-8")
 
 
 def _rl_inline(node: Any) -> str:
@@ -1162,7 +1183,7 @@ details summary:hover{color:{{ ACCENT }}}
 
 <div class="footer">Co-authored by Claudius the Magnificent AI Agent</div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>{{ chartjs_source }}</script>
 <script>
 (function(){
   const sevColors = {{ sev_colors_json }};
@@ -1829,6 +1850,8 @@ def _build_html_context(
         ),
         "verdict_colors": {"RESOLVED": GREEN, "UNRESOLVED": RED},
         "triage": triage,
+        # Vendored Chart.js UMD source, inlined so the report is self-contained.
+        "chartjs_source": _chartjs_inline_source(),
     }
 
 
@@ -1873,6 +1896,10 @@ def _mark_safe_values(ctx: dict[str, Any]) -> None:
     for key in safe_keys | json_keys:
         if key in ctx and isinstance(ctx[key], str):
             ctx[key] = Markup(ctx[key])
+    # Vendored Chart.js UMD source — inlined verbatim (integrity-pinned, carries
+    # no </script>); must not be autoescaped or </-mangled.
+    if isinstance(ctx.get("chartjs_source"), str):
+        ctx["chartjs_source"] = Markup(ctx["chartjs_source"])
 
 
 def render_html(data: dict[str, Any]) -> str:
