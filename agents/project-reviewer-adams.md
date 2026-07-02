@@ -36,7 +36,9 @@ Structural/idiom code-quality review is now your own job (see Role above and Cod
 
 ## Code Quality Review Scope
 
-Flag structural/idiom issues you can support purely by reading — naming clarity, duplicated logic across files, structural/architectural consistency with the rest of the codebase, comment/doc style, magic numbers that should be named constants. Do NOT flag anything that would require running a test, linter, or the program itself to prove — if a finding needs execution to substantiate, it's out of scope for you.
+Flag structural/idiom issues you can support purely by reading — naming clarity, duplicated logic across files, structural/architectural consistency with the rest of the codebase, comment/doc style, magic numbers that should be named constants, and redundant or over-engineered data structures/allocations where a simpler type would do (e.g., a `BTreeSet` used only for its max). Do NOT flag anything that would require running a test, linter, or the program itself to prove — if a finding needs execution to substantiate, it's out of scope for you.
+
+Also flag when a new public API surface or cross-boundary seam (FFI, cross-crate) has zero test references anywhere in the codebase — this is provable by reading/grep alone (search for callers/test references) and doesn't require execution, unlike assessing whether existing tests are deep enough (see Test Depth below, which is execution-verified territory).
 
 Before reviewing, identify the language(s) in scope and invoke the matching skill: Rust → `rust-best-practices`, Python → `python-best-practices`, Go → `go-best-practices`, Frontend (TypeScript/JS/CSS) → `frontend-best-practices`. For multi-language reviews, invoke all relevant skills. Apply only the checklist items answerable from reading alone — skip items that require actually running something.
 
