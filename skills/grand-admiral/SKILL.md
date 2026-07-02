@@ -33,14 +33,14 @@ Refer to agents by character name when reporting progress, delegating, and summa
 | Agent | Name | Role |
 |-------|------|------|
 | `architect-nagatha` | Nagatha | System design, architecture |
-| `developer-bilby` | Bilby | Code changes, language reviews — builds and fixes code |
-| `project-reviewer-adams` | Adams | Project consistency, PR audits |
-| `qa-engineer-marvin` | Marvin | Proves code wrong — finds bugs, logic errors, edge cases, spec mismatches, duplication, architecture issues. Never fixes code. |
+| `developer-bilby` | Bilby | Code changes — builds and fixes code (implementation-only; no longer participates in code review) |
+| `project-reviewer-adams` | Adams | Project consistency, PR audits, structural/idiom code quality |
+| `qa-engineer-marvin` | Marvin | Proves code wrong — finds bugs, logic errors, edge cases, spec mismatches, architecture issues. Never fixes code. |
 | `security-engineer-smythe` | Smythe | Security audits, vuln scanning |
 | `technical-writer-trillian` | Trillian | Documentation |
 | `ux-designer-diziet` | Diziet | Requirements, UX design |
 
-**Bilby vs Marvin**: Bilby builds, Marvin breaks. Marvin's job is to prove Bilby's code is wrong — bugs, logic errors, edge cases, spec mismatches, code duplication, architecture issues. Marvin reports findings but NEVER fixes code. Fixes go back to Bilby (via SendMessage if still running, or a new spawn).
+**Bilby vs Marvin**: Bilby builds, Marvin breaks. Marvin's job is to prove Bilby's code is wrong — bugs, logic errors, edge cases, spec mismatches, architecture issues. Marvin reports findings but NEVER fixes code. Fixes go back to Bilby (via SendMessage if still running, or a new spawn).
 
 ## Skills Reference
 
@@ -124,8 +124,8 @@ Four mandatory rules:
 
 1. **Spawn discipline**: default to inline for small/sequential work in the warm parent context. Spawn ONLY for genuinely parallel independent work, large scope (~20k+ output tokens, or many files), or required context isolation.
 2. **Model tiering (mandatory)**: set model on every spawn — the agent's frontmatter `model:` is only the fallback when you don't. **Sonnet 5** (the `sonnet` alias, which auto-resolves to it) is the capable default workhorse: ~91% of Opus on SWE-bench Pro, best-in-class terminal/computer-use, strong self-verification, native 1M context, ~1.67× cheaper than Opus (2.5× cheaper until 2026-08-31). Tier per agent by where quality is load-bearing:
-   - **Opus** — quality-critical reasoning / agentic depth: `developer-bilby` (agentic coding), `qa-engineer-marvin` (QA depth), `architect-nagatha` (system design, dependency/tech trade-offs, plan validation), `ux-designer-diziet` (UX), `security-engineer-smythe` (security / high-risk). These carry `model: opus` as their frontmatter fallback.
-   - **Sonnet 5** — agentic-but-routine: the coordinator, `project-reviewer-adams` (review), `technical-writer-trillian` (docs), `Explore` / `general-purpose` (search), and terminal / GUI / browser-automation verification (Sonnet 5 leads OSWorld / Terminal-bench).
+   - **Opus** — quality-critical reasoning / agentic depth: `developer-bilby` (agentic coding), `project-reviewer-adams` (project consistency + structural/idiom code-quality review — absorbed from `developer-bilby`'s former code-review remit), `architect-nagatha` (system design, dependency/tech trade-offs, plan validation), `ux-designer-diziet` (UX), `security-engineer-smythe` (security / high-risk). These carry `model: opus` as their frontmatter fallback.
+   - **Sonnet 5** — agentic-but-routine: the coordinator, `qa-engineer-marvin` (adversarial correctness/QA execution — tests, lints, edge cases, independent verification against ground truth), `technical-writer-trillian` (docs), `Explore` / `general-purpose` (search), and terminal / GUI / browser-automation verification (Sonnet 5 leads OSWorld / Terminal-bench).
    - **Haiku** — trivial mechanical (bulk search, formatting).
    Override per task, both ways: downgrade a quality-critical agent to Sonnet 5 for a trivial job; upgrade a routine agent to Opus for a genuinely hard one. **Risk-based tiebreaker — security always escalates to Opus**: every security-sensitive task goes to Opus regardless of its generic tier — crypto, auth/key handling, network/transport, deserialization, untrusted input, dependency/version bumps, or a large/opaque diff. A passing vulnerability scan (e.g. govulncheck) is NOT evidence of low risk and never justifies a downgrade; ALWAYS fully investigate a version bump, including verifying the updated dependency's changed code. Cost breaks ties only among non-security work — when unsure, tier up. **Tokenizer caveat**: Sonnet 5 emits 1.0–1.35× more tokens than Sonnet 4.6 — still net cheaper, but watch cache-heavy sessions.
 3. **Read discipline**: prefer Grep/Glob first and Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary — see `git-and-github` § Context Management.

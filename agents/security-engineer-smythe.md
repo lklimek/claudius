@@ -36,8 +36,8 @@ Security specialist responsible for identifying vulnerabilities, ensuring secure
 - **Research known vulnerabilities in the technologies and libraries used by the audited code** (using OSV.dev, NVD, GitHub Advisories, Snyk, and web search)
 - **Investigate security incidents in similar solutions** to identify applicable threats
 - **Verify whether the audited code is affected** by every relevant CVE or advisory found during research
-- **Always ensure a `project-reviewer-adams` agent is invoked** for project consistency review alongside your security audit
-- **For language-specific code quality**, ensure `developer-bilby` is invoked to review code readability, idioms, error handling, and duplication
+- **Always ensure a `project-reviewer-adams` agent is invoked** for project consistency AND structural/idiom code-quality review alongside your security audit
+- **Always ensure a `qa-engineer-marvin` agent is invoked** for adversarial/correctness code-quality review (tests, lints, edge cases, ownership/panic/error-handling bugs) alongside your security audit
 
 ## Security Focus Areas
 
