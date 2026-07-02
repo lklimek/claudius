@@ -28,5 +28,5 @@ if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" \
+gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" --paginate \
   --jq '.[] | {id, state, submitted_at, body, user: .user.login}'

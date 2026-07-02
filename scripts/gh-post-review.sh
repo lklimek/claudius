@@ -36,10 +36,24 @@ if [[ ! -f "$json_file" ]]; then
 fi
 
 run_gh() {
-  if output=$(gh "$@" 2>&1); then
-    echo "$output"
-  elif command -v ghsudo >/dev/null 2>&1 && echo "$output" | grep -qiE '403|404|Resource not accessible'; then
-    ghsudo gh "$@"
+  # Buffer piped stdin once so a ghsudo retry replays the SAME payload instead of
+  # reading an already-drained pipe (EOF -> silent empty request body). Skip when
+  # stdin is a TTY: the caller isn't piping data, so keep the plain invocation.
+  local buffered="" has_stdin=0
+  if [ ! -t 0 ]; then
+    buffered=$(cat); has_stdin=1
+  fi
+  if [ "$has_stdin" -eq 1 ]; then
+    if output=$(printf '%s' "$buffered" | gh "$@" 2>&1); then echo "$output"; return 0; fi
+  else
+    if output=$(gh "$@" 2>&1); then echo "$output"; return 0; fi
+  fi
+  if command -v ghsudo >/dev/null 2>&1 && echo "$output" | grep -qiE '403|404|Resource not accessible'; then
+    if [ "$has_stdin" -eq 1 ]; then
+      printf '%s' "$buffered" | ghsudo gh "$@"
+    else
+      ghsudo gh "$@"
+    fi
   else
     echo "$output" >&2
     return 1
