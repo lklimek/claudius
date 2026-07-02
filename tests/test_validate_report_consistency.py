@@ -241,6 +241,20 @@ class TestCliExitCodes:
         assert code == 1
         assert "Validation failed" in err
 
+    @pytest.mark.parametrize(
+        "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
+    )
+    def test_non_finite_float_rejected_at_parse(
+        self, tmp_path, monkeypatch, capsys, bad
+    ):
+        """A bare NaN/Infinity must be a parse error (exit 2), never reported
+        'Valid' — jsonschema's numeric range check silently passes NaN."""
+        report = _report([_section([_finding(1, scope=bad)])])
+        code, out, err = _run_cli(report, tmp_path, monkeypatch, capsys)
+        assert code == 2
+        assert "Valid:" not in out
+        assert "Invalid JSON" in err
+
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

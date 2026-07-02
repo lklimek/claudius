@@ -17,7 +17,11 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from severity_util import derive_finding_severity, derive_severity_int  # noqa: E402
+from severity_util import (  # noqa: E402
+    derive_finding_severity,
+    derive_severity_int,
+    reject_non_finite_constant,
+)
 
 try:
     import jsonschema
@@ -124,11 +128,13 @@ def main() -> int:
         return 2
 
     try:
-        report = json.loads(Path(args.report).read_text())
+        report = json.loads(
+            Path(args.report).read_text(), parse_constant=reject_non_finite_constant
+        )
     except FileNotFoundError:
         print(f"Report not found: {args.report}", file=sys.stderr)
         return 2
-    except json.JSONDecodeError as e:
+    except ValueError as e:
         print(f"Invalid JSON in {args.report}: {e}", file=sys.stderr)
         return 2
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any
 import pytest
@@ -209,6 +211,151 @@ class TestFindDuplicateGroups:
 
     def test_empty_list(self):
         assert cr.find_duplicate_groups([]) == []
+
+
+# ---------------------------------------------------------------------------
+# find_duplicate_groups — threshold-gated degraded (bucketed) path
+# ---------------------------------------------------------------------------
+def _distinct_findings(count: int) -> list[dict[str, Any]]:
+    """`count` findings with unique file + unique title (never form a group)."""
+    cats = ["security", "code_quality", "project", "documentation"]
+    return [
+        {
+            "location": f"src/filler{i}.rs:{i}-{i + 5}",
+            "title": f"Filler finding {i}",
+            "category": cats[i % len(cats)],
+            "tags": [],
+        }
+        for i in range(count)
+    ]
+
+
+def _in_same_group(groups: list[dict[str, Any]], i: int, j: int) -> bool:
+    return any(
+        i in g["finding_indices"] and j in g["finding_indices"] for g in groups
+    )
+
+
+class TestFindDuplicateGroupsBucketed:
+    CAP = None  # set in setup_method from the module constant
+
+    def setup_method(self):
+        self.CAP = cr.DUP_DETECTION_MAX_FINDINGS
+
+    def test_below_cap_uses_exact_path_and_catches_cross_file_fuzzy(self, caplog):
+        # A cross-file / cross-category *near*-duplicate (similar not identical
+        # title) IS grouped by the untouched exact path, with no degrade warning.
+        near_a = {
+            "location": "src/a.rs:1",
+            "title": "Alpha beta gamma delta epsilon",
+            "category": "security",
+            "tags": [],
+        }
+        near_b = {
+            "location": "src/b.rs:1",
+            "title": "Alpha beta gamma delta omega",
+            "category": "code_quality",
+            "tags": [],
+        }
+        with caplog.at_level(logging.WARNING):
+            groups = cr.find_duplicate_groups([near_a, near_b])
+        assert len(groups) == 1  # exact path still groups cross-file fuzzy dups
+        assert not any("degraded" in r.message.lower() for r in caplog.records)
+
+    def test_above_cap_warns_and_runtime_bounded(self, caplog):
+        findings = _distinct_findings(self.CAP * 8)  # e.g. 4000, all distinct
+        start = time.perf_counter()
+        with caplog.at_level(logging.WARNING):
+            groups = cr.find_duplicate_groups(findings)
+        elapsed = time.perf_counter() - start
+        # Degraded path is near-linear: the old O(n^2) scan took ~70s at 3000.
+        assert elapsed < 10.0, f"bucketed dedup too slow: {elapsed:.1f}s"
+        assert any(
+            "degraded" in r.message.lower() for r in caplog.records
+        ), "expected a visible degradation warning"
+        assert groups == []  # distinct findings share no bucket or title
+
+    def test_above_cap_catches_same_bucket_fuzzy_and_cross_file_exact_title(self):
+        filler = _distinct_findings(self.CAP)
+        # Same (category, file) bucket, overlapping lines, identical title.
+        sf_a = {
+            "location": "src/same.rs:10-20",
+            "title": "Missing error handling here",
+            "category": "security",
+            "tags": [],
+        }
+        sf_b = {
+            "location": "src/same.rs:15-25",
+            "title": "Missing error handling here",
+            "category": "security",
+            "tags": [],
+        }
+        # Different files AND categories, but an identical (normalized) title.
+        xf_a = {
+            "location": "src/x.rs:1",
+            "title": "Hardcoded credentials in config",
+            "category": "security",
+            "tags": [],
+        }
+        xf_b = {
+            "location": "lib/y.py:99",
+            "title": "hardcoded credentials in config",  # case-normalized match
+            "category": "code_quality",
+            "tags": [],
+        }
+        findings = filler + [sf_a, sf_b, xf_a, xf_b]
+        assert len(findings) > self.CAP
+        groups = cr.find_duplicate_groups(findings)
+        n = len(findings)
+        assert _in_same_group(groups, n - 4, n - 3)  # same-bucket fuzzy pair
+        assert _in_same_group(groups, n - 2, n - 1)  # cross-file exact-title pair
+
+    def test_above_cap_cross_file_near_dup_is_intentionally_missed(self):
+        # Different files/categories, similar-but-NOT-identical titles.
+        near_a = {
+            "location": "src/na.rs:1",
+            "title": "Alpha beta gamma delta epsilon",
+            "category": "security",
+            "tags": [],
+        }
+        near_b = {
+            "location": "src/nb.rs:1",
+            "title": "Alpha beta gamma delta omega",
+            "category": "code_quality",
+            "tags": [],
+        }
+        # The exact path DOES group them (documents what degraded mode gives up).
+        assert len(cr.find_duplicate_groups([near_a, near_b])) == 1
+        # Above the cap they are intentionally NOT grouped.
+        findings = _distinct_findings(self.CAP) + [near_a, near_b]
+        assert len(findings) > self.CAP
+        groups = cr.find_duplicate_groups(findings)
+        n = len(findings)
+        assert not _in_same_group(groups, n - 2, n - 1)
+
+    def test_bucketed_grouping_matches_exact_when_no_cross_file_fuzzy(self):
+        # When the only dups are same-bucket fuzzy + cross-file exact-title, the
+        # degraded path produces the SAME groups (finding sets) as the exact path.
+        def _f(location, title, category):
+            return {
+                "location": location,
+                "title": title,
+                "category": category,
+                "tags": [],
+            }
+
+        findings = [
+            _f("src/same.rs:10-20", "Missing error handling", "security"),
+            _f("src/same.rs:12-22", "Missing error handling", "security"),
+            _f("src/x.rs:1", "Weak crypto default", "security"),
+            _f("lib/y.py:5", "Weak crypto default", "code_quality"),
+            _f("src/z.rs:99", "Totally unrelated thing", "project"),
+        ]
+        exact = cr.find_duplicate_groups(findings)  # below cap -> exact path
+        bucketed = cr._find_duplicate_groups_bucketed(findings, cr.SIMILARITY_THRESHOLD)
+        exact_sets = sorted(tuple(g["finding_indices"]) for g in exact)
+        bucketed_sets = sorted(tuple(g["finding_indices"]) for g in bucketed)
+        assert exact_sets == bucketed_sets == [(0, 1), (2, 3)]
 
 
 # ---------------------------------------------------------------------------
@@ -537,6 +684,21 @@ class TestGenerateTopFindings:
 
     def test_empty_sections(self):
         assert cr.generate_top_findings([]) == []
+
+    def test_missing_title_and_location_no_crash(self, make_section):
+        """A high-severity finding missing title/location must not raise KeyError —
+        generate_top_findings guards every field it reads."""
+        sections = [
+            make_section(
+                category="security",
+                findings=[{"id": "SEC-001", "severity": 5}],
+            ),
+        ]
+        top = cr.generate_top_findings(sections)
+        assert len(top) == 1
+        assert top[0]["id"] == "SEC-001"
+        assert top[0]["title"] == ""
+        assert top[0]["location"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -1030,3 +1192,222 @@ class TestSchemaVersionDerivation:
     def test_schema_version_is_newest_enum_entry(self):
         assert cr.SCHEMA_VERSION == self._schema_enum()[-1]
         assert cr.SCHEMA_VERSION in cr.ACCEPTED_SCHEMA_VERSIONS
+
+
+# ---------------------------------------------------------------------------
+# Non-finite (NaN/Infinity) rejection at parse time
+# ---------------------------------------------------------------------------
+class TestNonFiniteRejection:
+    """Bare NaN/Infinity JSON constants must be rejected at load, not silently
+    fed into the severity math (NaN sinks CRITICAL to INFO; +Inf forces CRITICAL)."""
+
+    def _finding(self, **over: Any) -> dict[str, Any]:
+        f = {
+            "id": "SEC-001",
+            "severity": 4,
+            "title": "T",
+            "location": "src/db.rs:1",
+            "description": "D",
+            "recommendation": "R",
+            "risk": 0.95,
+            "impact": 0.95,
+            "scope": 0.95,
+        }
+        f.update(over)
+        return f
+
+    @pytest.mark.parametrize(
+        "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
+    )
+    def test_prepare_rejects_non_finite_axis(self, tmp_path, bad):
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [self._finding(scope=bad)],
+            }
+        ]
+        agent = tmp_path / "agent.json"
+        agent.write_text(json.dumps(sections))  # json.dumps emits bare NaN/Infinity
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(
+            agent_reports=[f"sec:{agent}"],
+            repo_root=str(tmp_path),
+            output=str(output),
+            metadata=None,
+        )
+        assert cr.cmd_prepare(args) == 2
+        assert not output.exists()
+
+    @pytest.mark.parametrize(
+        "bad", [float("nan"), float("inf")], ids=["nan", "inf"]
+    )
+    def test_assemble_rejects_non_finite_axis(self, tmp_path, bad):
+        data = {
+            "metadata": {"project": "x", "date": "2026-01-01"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "findings": [
+                {
+                    "title": "Sec",
+                    "category": "security",
+                    "findings": [self._finding(risk=bad)],
+                }
+            ],
+            "agent_stats": [],
+        }
+        inp = tmp_path / "in.json"
+        inp.write_text(json.dumps(data))
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(input=str(inp), output=str(output))
+        assert cr.cmd_assemble(args) == 2
+        assert not output.exists()
+
+
+# ---------------------------------------------------------------------------
+# Required-field guard in cmd_assemble (Bug: bare KeyError on dropped field)
+# ---------------------------------------------------------------------------
+class TestAssembleRequiredFieldGuard:
+    def _input_missing_field(self, tmp_path, drop: str) -> Path:
+        finding = {
+            "severity": 5,  # high enough to reach generate_top_findings
+            "title": "Critical bug",
+            "location": "src/db.rs:1",
+            "description": "D",
+            "recommendation": "R",
+        }
+        finding.pop(drop)
+        data = {
+            "metadata": {"project": "x", "date": "2026-01-01"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "findings": [
+                {"title": "Sec", "category": "security", "findings": [finding]}
+            ],
+            "agent_stats": [],
+        }
+        p = tmp_path / "in.json"
+        p.write_text(json.dumps(data))
+        return p
+
+    @pytest.mark.parametrize(
+        "drop", ["title", "location", "description", "recommendation"]
+    )
+    def test_missing_required_field_exits_1_cleanly(self, tmp_path, caplog, drop):
+        inp = self._input_missing_field(tmp_path, drop)
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(input=str(inp), output=str(output))
+        # Must be a clean rc==1, NOT a bare KeyError traceback.
+        rc = cr.cmd_assemble(args)
+        assert rc == 1
+        assert not output.exists()
+        assert drop in caplog.text
+        assert "required field" in caplog.text
+
+    def test_valid_input_still_assembles(self, tmp_path):
+        finding = {
+            "severity": 5,
+            "title": "Critical bug",
+            "location": "src/db.rs:1",
+            "description": "D",
+            "recommendation": "R",
+            "risk": 0.9,
+            "impact": 0.9,
+            "scope": 0.9,
+        }
+        data = {
+            "metadata": {"project": "x", "date": "2026-01-01"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "findings": [
+                {"title": "Sec", "category": "security", "findings": [finding]}
+            ],
+            "agent_stats": [],
+        }
+        inp = tmp_path / "in.json"
+        inp.write_text(json.dumps(data))
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(input=str(inp), output=str(output))
+        assert cr.cmd_assemble(args) == 0
+        assert output.exists()
+
+
+# ---------------------------------------------------------------------------
+# Surrogate-safe JSON output (Bug: UnicodeEncodeError kills the pipeline)
+# ---------------------------------------------------------------------------
+class TestSurrogateSafeWrite:
+    _SURROGATE_TITLE = "Bad title \ud800 lone surrogate"
+
+    def test_prepare_survives_lone_surrogate(self, tmp_path, caplog):
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [
+                    {
+                        "id": "SEC-001",
+                        "severity": 4,
+                        "title": self._SURROGATE_TITLE,
+                        "location": "src/db.rs:1",
+                        "description": "D",
+                        "recommendation": "R",
+                    }
+                ],
+            }
+        ]
+        agent = tmp_path / "agent.json"
+        # ensure_ascii=True escapes the surrogate to \ud800 (ASCII-safe on disk);
+        # it decodes back to a real lone surrogate on load.
+        agent.write_text(json.dumps(sections))
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(
+            agent_reports=[f"sec:{agent}"],
+            repo_root=str(tmp_path),
+            output=str(output),
+            metadata=None,
+        )
+        rc = cr.cmd_prepare(args)
+        assert rc == 0
+        assert output.exists()
+        text = output.read_text(encoding="utf-8")  # must be valid UTF-8, no crash
+        data = json.loads(text)
+        # Finding preserved (not silently dropped); surrogate replaced but the
+        # surrounding excerpt text is intact.
+        assert len(data["raw_findings"]) == 1
+        title = data["raw_findings"][0]["title"]
+        assert "\ud800" not in text
+        assert "\ud800" not in title
+        assert "Bad title" in title and "lone surrogate" in title
+        assert "SEC-001" in caplog.text  # diagnostic names the offending finding
+
+    def test_assemble_survives_lone_surrogate(self, tmp_path):
+        data = {
+            "metadata": {"project": "x", "date": "2026-01-01"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "findings": [
+                {
+                    "title": "Sec",
+                    "category": "security",
+                    "findings": [
+                        {
+                            "severity": 4,
+                            "title": self._SURROGATE_TITLE,
+                            "location": "src/db.rs:1",
+                            "description": "D",
+                            "recommendation": "R",
+                            "risk": 0.9,
+                            "impact": 0.9,
+                            "scope": 0.9,
+                        }
+                    ],
+                }
+            ],
+            "agent_stats": [],
+        }
+        inp = tmp_path / "in.json"
+        inp.write_text(json.dumps(data))
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(input=str(inp), output=str(output))
+        rc = cr.cmd_assemble(args)
+        assert rc == 0
+        assert output.exists()
+        text = output.read_text(encoding="utf-8")
+        assert "\ud800" not in text
+        assert json.loads(text)["summary_statistics"]["total_findings"] == 1

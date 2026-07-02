@@ -45,7 +45,12 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
-from severity_util import build_severity_stats, derive_overall, derive_severity_int
+from severity_util import (
+    build_severity_stats,
+    derive_overall,
+    derive_severity_int,
+    reject_non_finite_constant,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -3218,7 +3223,14 @@ def main() -> None:
 
     # Load and validate
     log.info("Loading report: %s", report_path)
-    data = json.loads(report_path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(
+            report_path.read_text(encoding="utf-8"),
+            parse_constant=reject_non_finite_constant,
+        )
+    except ValueError as e:
+        log.error("Invalid JSON in %s: %s", report_path, e)
+        sys.exit(1)
 
     if not SCHEMA_PATH.is_file():
         log.warning("Schema file not found at %s, skipping validation", SCHEMA_PATH)

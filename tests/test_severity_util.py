@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import math
 import sys
 from pathlib import Path
 import pytest
@@ -50,6 +52,18 @@ class TestDeriveFindingSeverity:
 
     def test_bool_is_not_numeric(self):
         f = {"risk": True, "impact": 0.5, "scope": 0.5}
+        assert su.derive_finding_severity(f) is None
+
+    @pytest.mark.parametrize("axis", ["risk", "impact", "scope"])
+    @pytest.mark.parametrize(
+        "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
+    )
+    def test_non_finite_dimension_returns_none(self, axis, bad):
+        """A NaN scope must NOT silently sink a CRITICAL finding to INFO, nor may
+        +Infinity force it to CRITICAL — non-finite floats yield None (can't derive)."""
+        f = {"risk": 0.95, "impact": 0.95, "scope": 0.95}
+        f[axis] = bad
+        assert su.derive_overall(f) is None
         assert su.derive_finding_severity(f) is None
 
 
@@ -147,3 +161,27 @@ class TestBuildSeverityStats:
         stats = su.build_severity_stats([])
         assert stats["total_findings"] == 0
         assert all(v == 0 for v in stats["severity_counts"].values())
+
+
+# ---------------------------------------------------------------------------
+# reject_non_finite_constant — json parse_constant callback
+# ---------------------------------------------------------------------------
+class TestRejectNonFiniteConstant:
+    @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+    def test_json_loads_rejects_bare_constant(self, literal):
+        """Wired as parse_constant, bare non-finite literals raise ValueError."""
+        with pytest.raises(ValueError):
+            json.loads(
+                f'{{"scope": {literal}}}',
+                parse_constant=su.reject_non_finite_constant,
+            )
+
+    def test_default_json_loads_would_accept_nan(self):
+        """Guard rationale: without the callback, json silently decodes NaN."""
+        assert math.isnan(json.loads('{"scope": NaN}')["scope"])
+
+    def test_finite_json_still_parses(self):
+        data = json.loads(
+            '{"scope": 0.5}', parse_constant=su.reject_non_finite_constant
+        )
+        assert data == {"scope": 0.5}
