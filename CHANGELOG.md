@@ -21,6 +21,22 @@ All 15 MEDIUM findings from the same-day whole-repo self-audit (PR #56; audit 20
 - **`SETUP.md`**: agent roster updated for the v5.0.0 crew restructuring — Adams' and Marvin's rows now state their structural/idiom and adversarial/execution-focused code-quality roles, matching their own current agent files.
 - **`skills/report-format/SKILL.md`**: added a standalone-producer carve-out to the `location_permalink` DO-NOT-emit rule, reconciling it with `check-pr-comments`' already-correct requirement to emit it when no coordinator derive-pass runs.
 
+A follow-up solo re-review (same PR, single `project-reviewer-adams` agent, no fan-out) independently re-verified all 15 fixes above hold, then surfaced 15 new LOW findings — several self-inflicted by the fix wave itself — fixed by 4 more worktree-isolated `developer-bilby` agents and merged into the same PR:
+
+- **`hooks/block-github-writes.sh`**: allowlist gained the enabled `context` toolset's read-only tools (`get_me`, `get_teams`, `get_team_members`), closing a spurious-denial trap; comment corrected to list all nine enabled toolsets.
+- **`.github/workflows/test-report-pipeline.yml`, `.github/workflows/notify-marketplace.yml`**: added least-privilege `permissions:` blocks and pinned actions to full commit SHAs (verified against the live GitHub API); added a `ruff format --check .` gate.
+- **`scripts/generate_review_report.py`**: vendored Chart.js hash is now asserted by a test (`sha256` recomputed fresh from the real file), not just documented in a comment — a tampered vendor file now fails CI.
+- **`scripts/triage_server.py`**: wired the non-finite-JSON guard (added earlier in this same PR for the other report-loading call sites) into the triage server's report load path, the one site the original fix missed.
+- **`scripts/consolidate_reports.py`**: deduplicated the earlier-in-this-PR duplicate-detection fix's graph-traversal BFS (was implemented twice); the degraded (>500-finding) dedup path now caps per-bucket fuzzy scans, closing a residual stall under a single dominant `(category, file_path)` bucket.
+- **`scripts/severity_util.py`**: `_effective_severity` now prefers the derived band from `risk`/`impact`/`scope` over a conflicting explicit integer, matching the coordinator's precedence and the `severity` skill's doctrine; dropped a dangling internal `TODO` token.
+- **`scripts/gh-resolve-review-threads.sh`**: `--path` glob matching is now anchored (was unanchored substring search — `*.rs` matched `main.rson`, `src/*.ts` matched `backup/src/a.ts`).
+- **`scripts/gh-list-review-threads.sh`, `scripts/gh-resolve-review-threads.sh`, `scripts/gh-post-review.sh`**: extracted shared `scripts/gh-common.sh` (`run_gh` + cursor-pagination walk) — the two had already drifted independently since the MEDIUM fix wave.
+- **`skills/report-format/SKILL.md`**: "Report Pipeline Tools" table no longer documents two commands that fail as written; now points to `grumpy-review`'s canonical invocation forms.
+- **`agents/technical-writer-trillian.md`, `agents/developer-bilby.md`**: `severity` skill moved from Bilby (implementation-only, no longer reviews) to Trillian (a finding-producing agent that was missing it).
+- **`pyproject.toml`** (new), plus a repo-wide `ruff format` pass: formatter config was previously uncommitted and unenforced.
+- **`skills/check-pr-comments/SKILL.md`**: corrected a factually-wrong rationale for omitting `metadata.repository`.
+- **`skills/git-and-github/SKILL.md`, `skills/review-loop/SKILL.md`**: the canonical commit-trailer example hardcoded a specific model name and had already gone stale, causing 6 of this PR's own commits to be misattributed; now instructs substituting the agent's actual current model, and the duplicate copy was removed in favor of the single source.
+
 ## [5.0.1] - 2026-07-02
 
 ### Fixed
