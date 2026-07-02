@@ -538,6 +538,21 @@ class TestGenerateTopFindings:
     def test_empty_sections(self):
         assert cr.generate_top_findings([]) == []
 
+    def test_missing_title_and_location_no_crash(self, make_section):
+        """A high-severity finding missing title/location must not raise KeyError —
+        generate_top_findings guards every field it reads."""
+        sections = [
+            make_section(
+                category="security",
+                findings=[{"id": "SEC-001", "severity": 5}],
+            ),
+        ]
+        top = cr.generate_top_findings(sections)
+        assert len(top) == 1
+        assert top[0]["id"] == "SEC-001"
+        assert top[0]["title"] == ""
+        assert top[0]["location"] == ""
+
 
 # ---------------------------------------------------------------------------
 # scan_intentional
@@ -1030,3 +1045,222 @@ class TestSchemaVersionDerivation:
     def test_schema_version_is_newest_enum_entry(self):
         assert cr.SCHEMA_VERSION == self._schema_enum()[-1]
         assert cr.SCHEMA_VERSION in cr.ACCEPTED_SCHEMA_VERSIONS
+
+
+# ---------------------------------------------------------------------------
+# Non-finite (NaN/Infinity) rejection at parse time
+# ---------------------------------------------------------------------------
+class TestNonFiniteRejection:
+    """Bare NaN/Infinity JSON constants must be rejected at load, not silently
+    fed into the severity math (NaN sinks CRITICAL to INFO; +Inf forces CRITICAL)."""
+
+    def _finding(self, **over: Any) -> dict[str, Any]:
+        f = {
+            "id": "SEC-001",
+            "severity": 4,
+            "title": "T",
+            "location": "src/db.rs:1",
+            "description": "D",
+            "recommendation": "R",
+            "risk": 0.95,
+            "impact": 0.95,
+            "scope": 0.95,
+        }
+        f.update(over)
+        return f
+
+    @pytest.mark.parametrize(
+        "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
+    )
+    def test_prepare_rejects_non_finite_axis(self, tmp_path, bad):
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [self._finding(scope=bad)],
+            }
+        ]
+        agent = tmp_path / "agent.json"
+        agent.write_text(json.dumps(sections))  # json.dumps emits bare NaN/Infinity
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(
+            agent_reports=[f"sec:{agent}"],
+            repo_root=str(tmp_path),
+            output=str(output),
+            metadata=None,
+        )
+        assert cr.cmd_prepare(args) == 2
+        assert not output.exists()
+
+    @pytest.mark.parametrize(
+        "bad", [float("nan"), float("inf")], ids=["nan", "inf"]
+    )
+    def test_assemble_rejects_non_finite_axis(self, tmp_path, bad):
+        data = {
+            "metadata": {"project": "x", "date": "2026-01-01"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "findings": [
+                {
+                    "title": "Sec",
+                    "category": "security",
+                    "findings": [self._finding(risk=bad)],
+                }
+            ],
+            "agent_stats": [],
+        }
+        inp = tmp_path / "in.json"
+        inp.write_text(json.dumps(data))
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(input=str(inp), output=str(output))
+        assert cr.cmd_assemble(args) == 2
+        assert not output.exists()
+
+
+# ---------------------------------------------------------------------------
+# Required-field guard in cmd_assemble (Bug: bare KeyError on dropped field)
+# ---------------------------------------------------------------------------
+class TestAssembleRequiredFieldGuard:
+    def _input_missing_field(self, tmp_path, drop: str) -> Path:
+        finding = {
+            "severity": 5,  # high enough to reach generate_top_findings
+            "title": "Critical bug",
+            "location": "src/db.rs:1",
+            "description": "D",
+            "recommendation": "R",
+        }
+        finding.pop(drop)
+        data = {
+            "metadata": {"project": "x", "date": "2026-01-01"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "findings": [
+                {"title": "Sec", "category": "security", "findings": [finding]}
+            ],
+            "agent_stats": [],
+        }
+        p = tmp_path / "in.json"
+        p.write_text(json.dumps(data))
+        return p
+
+    @pytest.mark.parametrize(
+        "drop", ["title", "location", "description", "recommendation"]
+    )
+    def test_missing_required_field_exits_1_cleanly(self, tmp_path, caplog, drop):
+        inp = self._input_missing_field(tmp_path, drop)
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(input=str(inp), output=str(output))
+        # Must be a clean rc==1, NOT a bare KeyError traceback.
+        rc = cr.cmd_assemble(args)
+        assert rc == 1
+        assert not output.exists()
+        assert drop in caplog.text
+        assert "required field" in caplog.text
+
+    def test_valid_input_still_assembles(self, tmp_path):
+        finding = {
+            "severity": 5,
+            "title": "Critical bug",
+            "location": "src/db.rs:1",
+            "description": "D",
+            "recommendation": "R",
+            "risk": 0.9,
+            "impact": 0.9,
+            "scope": 0.9,
+        }
+        data = {
+            "metadata": {"project": "x", "date": "2026-01-01"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "findings": [
+                {"title": "Sec", "category": "security", "findings": [finding]}
+            ],
+            "agent_stats": [],
+        }
+        inp = tmp_path / "in.json"
+        inp.write_text(json.dumps(data))
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(input=str(inp), output=str(output))
+        assert cr.cmd_assemble(args) == 0
+        assert output.exists()
+
+
+# ---------------------------------------------------------------------------
+# Surrogate-safe JSON output (Bug: UnicodeEncodeError kills the pipeline)
+# ---------------------------------------------------------------------------
+class TestSurrogateSafeWrite:
+    _SURROGATE_TITLE = "Bad title \ud800 lone surrogate"
+
+    def test_prepare_survives_lone_surrogate(self, tmp_path, caplog):
+        sections = [
+            {
+                "category": "security",
+                "title": "Sec",
+                "findings": [
+                    {
+                        "id": "SEC-001",
+                        "severity": 4,
+                        "title": self._SURROGATE_TITLE,
+                        "location": "src/db.rs:1",
+                        "description": "D",
+                        "recommendation": "R",
+                    }
+                ],
+            }
+        ]
+        agent = tmp_path / "agent.json"
+        # ensure_ascii=True escapes the surrogate to \ud800 (ASCII-safe on disk);
+        # it decodes back to a real lone surrogate on load.
+        agent.write_text(json.dumps(sections))
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(
+            agent_reports=[f"sec:{agent}"],
+            repo_root=str(tmp_path),
+            output=str(output),
+            metadata=None,
+        )
+        rc = cr.cmd_prepare(args)
+        assert rc == 0
+        assert output.exists()
+        text = output.read_text(encoding="utf-8")  # must be valid UTF-8, no crash
+        data = json.loads(text)
+        # Finding preserved (not silently dropped); surrogate replaced but the
+        # surrounding excerpt text is intact.
+        assert len(data["raw_findings"]) == 1
+        title = data["raw_findings"][0]["title"]
+        assert "\ud800" not in text
+        assert "\ud800" not in title
+        assert "Bad title" in title and "lone surrogate" in title
+        assert "SEC-001" in caplog.text  # diagnostic names the offending finding
+
+    def test_assemble_survives_lone_surrogate(self, tmp_path):
+        data = {
+            "metadata": {"project": "x", "date": "2026-01-01"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "findings": [
+                {
+                    "title": "Sec",
+                    "category": "security",
+                    "findings": [
+                        {
+                            "severity": 4,
+                            "title": self._SURROGATE_TITLE,
+                            "location": "src/db.rs:1",
+                            "description": "D",
+                            "recommendation": "R",
+                            "risk": 0.9,
+                            "impact": 0.9,
+                            "scope": 0.9,
+                        }
+                    ],
+                }
+            ],
+            "agent_stats": [],
+        }
+        inp = tmp_path / "in.json"
+        inp.write_text(json.dumps(data))
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(input=str(inp), output=str(output))
+        rc = cr.cmd_assemble(args)
+        assert rc == 0
+        assert output.exists()
+        text = output.read_text(encoding="utf-8")
+        assert "\ud800" not in text
+        assert json.loads(text)["summary_statistics"]["total_findings"] == 1

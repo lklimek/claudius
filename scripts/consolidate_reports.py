@@ -42,6 +42,7 @@ from severity_util import (
     SEV_ORDER,
     derive_overall,
     derive_severity_int,
+    reject_non_finite_constant,
 )
 
 try:
@@ -98,9 +99,14 @@ def _load_json_file(path: Path, max_size: int = MAX_INPUT_SIZE) -> dict | list:
     if size > max_size:
         raise ValueError(f"File too large (>{max_size // (1024 * 1024)} MB): {path}")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(
+            path.read_text(encoding="utf-8"),
+            parse_constant=reject_non_finite_constant,
+        )
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in {path}: {e}") from e
+    except ValueError as e:
+        raise ValueError(f"Non-finite JSON constant in {path}: {e}") from e
 
 
 def _iter_findings(
@@ -115,6 +121,32 @@ def _iter_findings(
 def _strip_none_values(d: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of dict with None and empty-string values removed."""
     return {k: v for k, v in d.items() if v is not None and v != ""}
+
+
+_REQUIRED_FINDING_FIELDS = ("title", "location", "description", "recommendation")
+
+
+def _find_missing_finding_fields(sections: list[dict[str, Any]]) -> list[str]:
+    """Return one error string per finding missing a required non-empty string field.
+
+    The assemble generators (``generate_top_findings`` / ``generate_remediation``)
+    and the renderer index these fields directly; a field dropped during an
+    LLM-authored merge would otherwise surface as a bare ``KeyError`` before
+    schema validation could report it cleanly.
+    """
+    errors: list[str] = []
+    for idx, (_section, f) in enumerate(_iter_findings(sections)):
+        if not isinstance(f, dict):
+            errors.append(f"finding #{idx}: expected an object")
+            continue
+        ident = f.get("id") or f.get("original_id") or f.get("title") or f"#{idx}"
+        for field in _REQUIRED_FINDING_FIELDS:
+            value = f.get(field)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(
+                    f"finding {ident!r}: missing or empty required field {field!r}"
+                )
+    return errors
 
 
 def _read_schema_versions() -> list[str]:
@@ -578,18 +610,80 @@ def generate_top_findings(
     """Extract CRITICAL and HIGH findings as top findings."""
     top: list[dict[str, Any]] = []
     for _section, f in _iter_findings(sections):
-        if f.get("severity", 1) >= 4:
+        sev = f.get("severity", 1)
+        if sev >= 4:
             entry: dict[str, Any] = {
-                "id": f["id"],
-                "severity": f["severity"],
-                "title": f["title"],
-                "location": f["location"],
+                "id": f.get("id", ""),
+                "severity": sev,
+                "title": f.get("title", ""),
+                "location": f.get("location", ""),
             }
             if "location_permalink" in f:
                 entry["location_permalink"] = f["location_permalink"]
             top.append(entry)
     top.sort(key=lambda f: f["severity"], reverse=True)
     return top
+
+
+# ---------------------------------------------------------------------------
+# Output writing (surrogate-safe)
+# ---------------------------------------------------------------------------
+_SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
+
+
+def _iter_surrogate_fields(obj: Any, path: str = "") -> Iterator[str]:
+    """Yield the JSON path of every string value carrying a lone surrogate."""
+    if isinstance(obj, str):
+        if _SURROGATE_RE.search(obj):
+            yield path or "(value)"
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            yield from _iter_surrogate_fields(v, f"{path}.{k}" if path else str(k))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            yield from _iter_surrogate_fields(v, f"{path}[{i}]")
+
+
+def _log_surrogate_findings(findings: list[dict[str, Any]]) -> int:
+    """Log each finding field carrying a lone surrogate; return the count found."""
+    count = 0
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        fid = f.get("id") or f.get("original_id") or f.get("title") or "<unknown>"
+        for field_path in _iter_surrogate_fields(f):
+            count += 1
+            log.warning(
+                "Lone Unicode surrogate in finding %r at %s — sanitizing "
+                "(lossy replacement) before write",
+                fid,
+                field_path,
+            )
+    return count
+
+
+def _write_json_output(
+    out_path: Path, obj: Any, findings: list[dict[str, Any]]
+) -> None:
+    """Write ``obj`` as pretty UTF-8 JSON, sanitizing lone surrogates if present.
+
+    ``json.dumps(..., ensure_ascii=False)`` happily emits lone surrogates that
+    UTF-8 cannot encode, so one garbled excerpt would otherwise abort the write
+    with a ``UnicodeEncodeError`` pointing at a byte offset, not a finding. On
+    that error we name the offending finding(s) and re-encode with a lossy
+    replacement so no finding is silently dropped.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(obj, indent=2, ensure_ascii=False) + "\n"
+    try:
+        out_path.write_text(text, encoding="utf-8")
+    except UnicodeEncodeError:
+        if _log_surrogate_findings(findings) == 0:
+            log.warning(
+                "Non-encodable Unicode (lone surrogate) outside finding fields; "
+                "sanitizing (lossy replacement) before write"
+            )
+        out_path.write_text(text, encoding="utf-8", errors="replace")
 
 
 # ---------------------------------------------------------------------------
@@ -734,8 +828,10 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     metadata: dict[str, Any] = {}
     if args.metadata:
         try:
-            metadata = json.loads(args.metadata)
-        except json.JSONDecodeError as e:
+            metadata = json.loads(
+                args.metadata, parse_constant=reject_non_finite_constant
+            )
+        except ValueError as e:
             log.error("Invalid metadata JSON: %s", e)
             return 2
 
@@ -759,8 +855,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     }
 
     out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n")
+    _write_json_output(out_path, output, raw_findings)
     log.info(
         "Wrote intermediate file: %s (%d findings, %d dup groups, %d intentional)",
         out_path,
@@ -792,6 +887,20 @@ def cmd_assemble(args: argparse.Namespace) -> int:
     agent_stats = data.get("agent_stats", [])
     top_override = data.get("top_findings_override")
     remediation_override = data.get("remediation_override")
+
+    # Fail fast on findings missing required fields — the generators below index
+    # these directly, so a field dropped during an LLM merge must produce a clean
+    # error here rather than a bare KeyError mid-assembly.
+    field_errors = _find_missing_finding_fields(findings_sections)
+    if field_errors:
+        for err in field_errors:
+            log.error("%s", err)
+        log.error(
+            "Input findings failed required-field check (%d error(s)); "
+            "fix the merged-findings input and re-run assemble",
+            len(field_errors),
+        )
+        return 1
 
     repository = metadata.get("repository")
     sha = metadata.get("commit")
@@ -838,8 +947,9 @@ def cmd_assemble(args: argparse.Namespace) -> int:
         return 1
 
     out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+    _write_json_output(
+        out_path, report, [f for _s, f in _iter_findings(findings_sections)]
+    )
     log.info("Wrote report: %s (%d findings)", out_path, stats["total_findings"])
     return 0
 
