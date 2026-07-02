@@ -29,10 +29,24 @@ set -euo pipefail
 trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
 run_gh() {
-  if output=$(gh "$@" 2>&1); then
-    echo "$output"
-  elif command -v ghsudo >/dev/null 2>&1 && echo "$output" | grep -qiE '403|404|Resource not accessible'; then
-    ghsudo gh "$@"
+  # Buffer piped stdin once so a ghsudo retry replays the SAME payload instead of
+  # reading an already-drained pipe (EOF -> silent empty request body). Skip when
+  # stdin is a TTY: the caller isn't piping data, so keep the plain invocation.
+  local buffered="" has_stdin=0
+  if [ ! -t 0 ]; then
+    buffered=$(cat); has_stdin=1
+  fi
+  if [ "$has_stdin" -eq 1 ]; then
+    if output=$(printf '%s' "$buffered" | gh "$@" 2>&1); then echo "$output"; return 0; fi
+  else
+    if output=$(gh "$@" 2>&1); then echo "$output"; return 0; fi
+  fi
+  if command -v ghsudo >/dev/null 2>&1 && echo "$output" | grep -qiE '403|404|Resource not accessible'; then
+    if [ "$has_stdin" -eq 1 ]; then
+      printf '%s' "$buffered" | ghsudo gh "$@"
+    else
+      ghsudo gh "$@"
+    fi
   else
     echo "$output" >&2
     return 1
@@ -58,6 +72,20 @@ extract_database_id() {
   else
     echo "$id"
   fi
+}
+
+# Convert a --path glob into a regex for embedding in jq's test("..."). Escapes
+# the full regex metacharacter set (incl. []{}()+^$| — e.g. Next.js '[id].tsx')
+# so those chars match literally. Order matters: escape literal metacharacters
+# BEFORE expanding the * / ? wildcards, or the .* / . we introduce get re-escaped.
+# The doubled backslashes are intentional: the result lands inside a jq string
+# literal, whose parser collapses each '\\' to one '\' before the regex engine.
+glob_to_regex() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' \
+    -e 's/"/\\"/g' \
+    -e 's/[].(){}+^$|[]/\\\\&/g' \
+    -e 's/[*]/.*/g' \
+    -e 's/[?]/./g'
 }
 
 resolve_by_ids() {
@@ -91,6 +119,12 @@ resolve_by_ids() {
 is_enhanced_mode() {
   [[ "${1:-}" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] && [[ "${2:-}" =~ ^[0-9]+$ ]]
 }
+
+# When sourced (e.g. by tests), stop here so callers can reuse the helpers above
+# without triggering the CLI logic below.
+if [[ "${BASH_SOURCE[0]:-$0}" != "${0}" ]]; then
+  return 0
+fi
 
 # Legacy mode: direct thread IDs
 if [[ $# -lt 1 ]]; then
@@ -314,7 +348,7 @@ if $filter_outdated || $filter_all \
   if [[ ${#filter_paths[@]} -gt 0 ]]; then
     path_conditions=()
     for p in "${filter_paths[@]}"; do
-      regex=$(echo "$p" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\./\\\\./g; s/\*/.*/g; s/\?/./g')
+      regex=$(glob_to_regex "$p")
       path_conditions+=("(.comments.nodes[0].path | test(\"${regex}\"))")
     done
     combined=$(IFS=" or "; echo "${path_conditions[*]}")
