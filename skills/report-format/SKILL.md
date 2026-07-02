@@ -65,7 +65,7 @@ Producers MUST emit `risk`, `impact`, and `scope` — the schema rejects finding
 Producers must NOT set these; they are populated downstream:
 
 - `overall_severity` — Python-computed mean of `risk`/`impact`/`scope`
-- `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL. Coordinator-derived in the standard multi-agent pipeline; producers MUST NOT emit it there. **Exception — standalone producers:** a producer that renders its own final report with no coordinator derive-pass (canonically `check-pr-comments`) MUST emit it when `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present — the standalone producer is then the only place that knows the commit. Path-only locations (no `:line`) MUST NOT carry one. See `check-pr-comments/SKILL.md`.
+- `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL. Coordinator-derived in the standard multi-agent pipeline; producers MUST NOT emit it there. **Exception — standalone producers** (a producer rendering its own final report with no coordinator derive-pass, canonically `check-pr-comments`): see `check-pr-comments/SKILL.md` § `location_permalink` — rules for the exact emit condition.
 - `metadata.repository` — coordinator derives from `git remote get-url origin`
 - `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by the `validate-findings` skill
 - Derived integer `severity` when emitting floats — the coordinator overrides
