@@ -43,10 +43,13 @@ fi
 
 # Subagent: allow only known read-only GitHub tools; deny everything else. New or
 # renamed write tools therefore default-deny instead of silently slipping through.
-# Ordered by the toolsets enabled in .claude-plugin/.mcp.json (repos, issues,
-# pull_requests, actions, code_security, secret_protection, dependabot,
+# Ordered by the toolsets enabled in .claude-plugin/.mcp.json (context, repos,
+# issues, pull_requests, actions, code_security, secret_protection, dependabot,
 # security_advisories) for auditability.
 case "$tool_name" in
+  mcp__plugin_claudius_github__get_me|\
+  mcp__plugin_claudius_github__get_teams|\
+  mcp__plugin_claudius_github__get_team_members|\
   mcp__plugin_claudius_github__get_file_contents|\
   mcp__plugin_claudius_github__get_commit|\
   mcp__plugin_claudius_github__list_commits|\
