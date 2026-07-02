@@ -32,6 +32,6 @@ if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-# Only the head comment is needed for listing (comments_first=1); no ghsudo
-# retry (use_run_gh=0) since this is a plain read. See gh-common.sh.
+# comments_first=1, use_run_gh=0 — see fetch_all_review_threads in
+# gh-common.sh for why this script uses these values.
 fetch_all_review_threads "$owner" "$repo" "$pr_number" 1 0

@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r scripts/requirements.txt
-          pip install pytest ruff
+          pip install pytest ruff==0.15.20
 
       - name: Unit tests
         run: python3 -m pytest tests/ -q

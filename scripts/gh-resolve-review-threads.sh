@@ -219,10 +219,8 @@ for id in "${explicit_ids[@]+"${explicit_ids[@]}"}"; do
   fi
 done
 
-# Fetch every reviewThread on the PR (comments_first=100: REST/numeric --id
-# values match against any comment's databaseId, not just the head comment,
-# since review replies have their own databaseId; use_run_gh=1 for ghsudo
-# retry, matching this script's write-side resolve mutation). See gh-common.sh.
+# comments_first=100, use_run_gh=1 — see fetch_all_review_threads in
+# gh-common.sh for why this script uses these values.
 threads_json=""
 if $need_threads_fetch; then
   threads_json=$(fetch_all_review_threads "$owner" "$repo" "$pr_number" 100 1)

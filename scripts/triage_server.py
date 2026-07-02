@@ -109,7 +109,7 @@ def _save_triage(decisions: list[dict], triaged_by: str = "user") -> dict:
             "decisions": decisions,
         }
         REPORT_PATH.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+            json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
             encoding="utf-8",
         )
         log.info(
@@ -232,7 +232,7 @@ class TriageHandler(BaseHTTPRequestHandler):
             log.debug("POST /api/decisions: reading %d bytes", content_len)
             body = self.rfile.read(content_len)
             try:
-                payload = json.loads(body)
+                payload = json.loads(body, parse_constant=reject_non_finite_constant)
                 decisions = payload.get("decisions", [])
                 triaged_by = payload.get("triaged_by", "user")
                 report = _save_triage(decisions, triaged_by)

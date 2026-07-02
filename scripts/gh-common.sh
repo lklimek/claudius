@@ -32,11 +32,8 @@ run_gh() {
 }
 
 # GraphQL query for one page of a PR's reviewThreads, parameterized by how
-# many comments to request per thread. gh-list-review-threads.sh only ever
-# needs the head comment (comments_first=1, per its documented "first
-# comment's ..." output contract); gh-resolve-review-threads.sh needs
-# comments_first=100 because its REST/numeric --id matching checks EVERY
-# comment's databaseId, not just the head (review replies have their own).
+# many comments to request per thread. See fetch_all_review_threads below
+# for why each caller passes a different comments_first value.
 _review_threads_query() {
   local comments_first="$1"
   local query='
