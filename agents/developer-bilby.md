@@ -2,7 +2,7 @@
 name: developer-bilby
 description: "Bilby. Use for code changes in any language (Rust, Python, Go, TypeScript/JS, frontend)."
 tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "SendMessage", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__search_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__search_code", "mcp__plugin_claudius_github__search_repositories", "mcp__plugin_claudius_github__get_file_contents", "mcp__plugin_claudius_github__get_commit", "mcp__plugin_claudius_github__list_commits"]
-skills: ["coding-best-practices", "severity", "bug-investigation"]
+skills: ["coding-best-practices", "bug-investigation"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]
 ---
@@ -20,7 +20,6 @@ Software developer. Implement features, fix bugs, write tests — in any languag
 ## Skills
 
 - **coding-best-practices** — follow for workflow discipline (TDD → Implement → Self-review) on every task
-- **severity** — use when rating findings in code reviews
 - **rust-best-practices** — invoke when working on Rust code
 - **python-best-practices** — invoke when working on Python code
 - **go-best-practices** — invoke when working on Go code

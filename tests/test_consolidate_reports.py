@@ -231,9 +231,7 @@ def _distinct_findings(count: int) -> list[dict[str, Any]]:
 
 
 def _in_same_group(groups: list[dict[str, Any]], i: int, j: int) -> bool:
-    return any(
-        i in g["finding_indices"] and j in g["finding_indices"] for g in groups
-    )
+    return any(i in g["finding_indices"] and j in g["finding_indices"] for g in groups)
 
 
 class TestFindDuplicateGroupsBucketed:
@@ -270,9 +268,9 @@ class TestFindDuplicateGroupsBucketed:
         elapsed = time.perf_counter() - start
         # Degraded path is near-linear: the old O(n^2) scan took ~70s at 3000.
         assert elapsed < 10.0, f"bucketed dedup too slow: {elapsed:.1f}s"
-        assert any(
-            "degraded" in r.message.lower() for r in caplog.records
-        ), "expected a visible degradation warning"
+        assert any("degraded" in r.message.lower() for r in caplog.records), (
+            "expected a visible degradation warning"
+        )
         assert groups == []  # distinct findings share no bucket or title
 
     def test_above_cap_catches_same_bucket_fuzzy_and_cross_file_exact_title(self):
@@ -1239,9 +1237,7 @@ class TestNonFiniteRejection:
         assert cr.cmd_prepare(args) == 2
         assert not output.exists()
 
-    @pytest.mark.parametrize(
-        "bad", [float("nan"), float("inf")], ids=["nan", "inf"]
-    )
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf")], ids=["nan", "inf"])
     def test_assemble_rejects_non_finite_axis(self, tmp_path, bad):
         data = {
             "metadata": {"project": "x", "date": "2026-01-01"},

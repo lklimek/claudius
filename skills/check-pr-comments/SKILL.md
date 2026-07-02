@@ -103,7 +103,7 @@ Produce a `report.json` file following the unified report schema (`../../schemas
 }
 ```
 
-`metadata.commit` must be the full 40-character SHA when present (omit for non-git directories). `metadata.repository` is coordinator-derived — do NOT emit it from this skill.
+`metadata.commit` must be the full 40-character SHA when present (omit for non-git directories). Omit `metadata.repository` — no consumer of standalone comment-check reports needs it; permalinks (below) are built from `metadata.project` instead.
 
 ### Finding format
 
