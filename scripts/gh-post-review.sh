@@ -8,6 +8,10 @@
 set -euo pipefail
 trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./gh-common.sh
+source "$SCRIPT_DIR/gh-common.sh"
+
 if [[ $# -ne 3 ]]; then
   echo "Usage: $0 <owner/repo> <pr_number> <json_file>" >&2
   exit 1
@@ -34,17 +38,6 @@ if [[ ! -f "$json_file" ]]; then
   echo "Error: file not found: $json_file" >&2
   exit 1
 fi
-
-run_gh() {
-  if output=$(gh "$@" 2>&1); then
-    echo "$output"
-  elif command -v ghsudo >/dev/null 2>&1 && echo "$output" | grep -qiE '403|404|Resource not accessible'; then
-    ghsudo gh "$@"
-  else
-    echo "$output" >&2
-    return 1
-  fi
-}
 
 # Strip "event" field to enforce draft mode — omitting it makes GitHub create
 # a pending (draft) review that the user must publish manually.

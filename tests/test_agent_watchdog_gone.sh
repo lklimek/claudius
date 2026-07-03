@@ -7,6 +7,8 @@
 #       misread -- a neighbour's LIVE %1 cannot mask our DEAD %1
 #   T3  no matching socket  -> GONE stays a no-op + one-time stderr idle note
 #   T4  a dead/bare-shell pane on OUR socket drives GONE through the gone-polls gate
+#   T5  ZERO tmux-backed members -> the empty pane-type map stays nounset-safe
+#       (regression guard for the OUR_PANE_TYPE unbound-variable crash, PR #54)
 #
 # tmux is required; the test skips (rc 0) when tmux is unavailable. Fully isolated:
 # HOME + TMUX_TMPDIR point at a private mktemp tree, $TMUX is unset (the prod case).
@@ -86,7 +88,7 @@ JSON
   printf '%s' "$dir"
 }
 
-run_watchdog() {   # $1=team-dir  $2=seconds-to-observe  -> sets OUT/ERR globals
+run_watchdog() {   # $1=team-dir  $2=seconds-to-observe  -> sets OUT/ERR/SURVIVED globals
   OUT="$BASE/out.$RANDOM"; ERR="$BASE/err.$RANDOM"
   bash "$WATCHDOG" --team-dir "$1" --worktrees "$BASE/wt" \
        --tasks-dir "$HOME/.claude/tasks" --projects-dir "$HOME/.claude/projects" \
@@ -94,6 +96,7 @@ run_watchdog() {   # $1=team-dir  $2=seconds-to-observe  -> sets OUT/ERR globals
        >"$OUT" 2>"$ERR" &
   WPID=$!
   sleep "$2"
+  SURVIVED=no; kill -0 "$WPID" 2>/dev/null && SURVIVED=yes   # still polling, or already crashed?
   kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null; WPID=""
 }
 
@@ -123,6 +126,23 @@ run_watchdog "$TD2" 4
 expect "T3 emitted the one-time no-matching-socket idle note" \
        'no matching tmux swarm socket for this team; GONE detection idle' "$ERR"
 refute "T3 GONE stayed a no-op (sockets exist but none carry our agentType)" '^GONE ' "$OUT"
+echo ""
+
+# === Scenario 3: ZERO tmux-backed members -> empty pane-type map (T5) ===
+# tmux is installed and GONE detection is on, but the only worker uses backendType
+# != tmux, so no pane ever populates OUR_PANE_TYPE. That empty-array path (skipped
+# by every tmux-member scenario above) is the one that crashed with
+# "OUR_PANE_TYPE: unbound variable" before PR #54 seeded the array.
+echo "=== zero tmux-backed members -> no crash (T5) ==="
+TD3="$(write_team notmux \
+  '{"agentType":"claudius:developer-bilby","name":"bilby","cwd":"'"$BASE"'/cwd-bilby","agentId":"aid-bilby","backendType":"local","isActive":true}')"
+run_watchdog "$TD3" 4
+
+if [ "${SURVIVED:-no}" = yes ]; then ok "T5 survived multiple polls without crashing"
+else bad "T5 exited early (SURVIVED=${SURVIVED:-no}); $(tr '\n' '|' < "$ERR")"; fi
+refute "T5 no OUR_PANE_TYPE unbound-variable crash"       'OUR_PANE_TYPE.*unbound variable' "$ERR"
+expect "T5 reached GONE block (idle note emitted)"        'no matching tmux swarm socket for this team; GONE detection idle' "$ERR"
+refute "T5 GONE stayed a no-op (no tmux-backed members)"  '^GONE '                          "$OUT"
 echo ""
 
 echo "=== Results: $pass passed, $fail failed ==="

@@ -14,7 +14,7 @@ When asked to check/triage/verify existing PR review comments, follow this workf
 
 Use GitHub MCP tools to fetch all comment types:
 
-- **Review threads** (inline comments with resolution status): `pull_request_read` with `method: "get_review_comments"` — returns threads with `isResolved`, `isOutdated`, `isCollapsed` metadata and grouped comments.
+- **Review threads** (inline comments with resolution status): `pull_request_read` with `method: "get_review_comments"` — returns threads with `isResolved`, `isOutdated`, `isCollapsed` metadata and grouped comments. Carry `isResolved` forward per thread — step 3 uses it to skip re-verification of already-resolved threads.
 - **Review summaries**: `pull_request_read` with `method: "get_reviews"` — returns review state, body, and author.
 - **PR-level comments** (non-diff): `pull_request_read` with `method: "get_comments"` — returns general PR discussion.
 
@@ -31,9 +31,11 @@ git pull
 
 ## 3. Verify Each Comment Against Current Code
 
-When verifying resolution, apply `coding-best-practices` Cross-Cutting Rules to the changed code. For every inline comment, read the file at the referenced location and **verify whether the identified issue is actually fixed** -- not just whether the code changed. Specifically:
+**Trust GitHub's resolved status — do not re-verify already-resolved threads.** For any thread where step 1's fetch returned `isResolved: true`, classify it as **Resolved** and skip the rest of this section for that thread: do not re-read the referenced code, do not re-run the call-tree walk, do not second-guess a resolution someone already made. Re-checking settled threads burns the review budget on questions that are no longer open. Apply the verification steps below only to threads with `isResolved: false`.
 
-- **Verify state before resolving — broad instructions are not authorization.** Before classifying any thread as resolved, verify the actual code state at the referenced location matches the reviewer's request. Do NOT mark a thread resolved based on the user's blanket instruction ("just resolve everything") or on a follow-up commit message that *claims* to fix it. If a thread cannot be verified resolved against current code, classify it as `Unresolved` with an explicit "needs verification" recommendation. Surface the mismatch — never silently resolve. (Specific application of `coding-best-practices` Cross-Cutting Rules — "Verify facts before acting on broad instructions".)
+When verifying resolution, apply `coding-best-practices` Cross-Cutting Rules to the changed code. For every **unresolved** inline comment, read the file at the referenced location and **verify whether the identified issue is actually fixed** -- not just whether the code changed. Specifically:
+
+- **Verify state before resolving — broad instructions are not authorization.** Before classifying an unresolved thread as resolved *in this session*, verify the actual code state at the referenced location matches the reviewer's request. Do NOT mark a thread resolved based on the user's blanket instruction ("just resolve everything") or on a follow-up commit message that *claims* to fix it. If a thread cannot be verified resolved against current code, classify it as `Unresolved` with an explicit "needs verification" recommendation. Surface the mismatch — never silently resolve. (Specific application of `coding-best-practices` Cross-Cutting Rules — "Verify facts before acting on broad instructions". This governs threads you are about to resolve yourself; it does not reopen threads already resolved on GitHub — see above.)
 - Read the current code at the location the comment references
 - Understand what the comment is asking for
 - Determine if the current code satisfies the request (semantically, not just syntactically)
@@ -51,7 +53,8 @@ When verifying resolution, apply `coding-best-practices` Cross-Cutting Rules to 
 Present a concise summary directly to the user:
 - Total comments checked, how many resolved vs unresolved
 - For **each comment**, include Claude's assessment:
-  - **Resolved**: confirm the fix is adequate, or flag remaining concerns if the resolution is technically present but semantically incomplete. State whether you agree the original comment was valid.
+  - **Already resolved** (`isResolved: true` at fetch time): report it as resolved, citing GitHub's own status — do not restate a fix assessment you didn't perform (see step 3).
+  - **Resolved by verification this session** (`isResolved: false` at fetch time, confirmed fixed against current code): confirm the fix is adequate, or flag remaining concerns if the resolution is technically present but semantically incomplete. State whether you agree the original comment was valid.
   - **Unresolved**: state your recommendation (priority and suggested approach). If you disagree with the reviewer's concern, say so with a brief reason.
 - Lead with unresolved comments, then resolved
 - Include the **author type** (bot/human) and the **planned action** (auto-resolve, reply, etc.) for each comment
@@ -100,7 +103,7 @@ Produce a `report.json` file following the unified report schema (`../../schemas
 }
 ```
 
-`metadata.commit` must be the full 40-character SHA when present (omit for non-git directories). `metadata.repository` is coordinator-derived — do NOT emit it from this skill.
+`metadata.commit` must be the full 40-character SHA when present (omit for non-git directories). Omit `metadata.repository` — no consumer of standalone comment-check reports needs it; permalinks (below) are built from `metadata.project` instead.
 
 ### Finding format
 
@@ -172,7 +175,7 @@ Examples:
 
 Omit `location_permalink` (do NOT emit an empty string) when commit or project is missing, when `location` lacks a `:line` or `:start-end` suffix, or when the line suffix isn't a valid integer (or a valid integer-integer range).
 
-- **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (the comment is satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done. The coordinator will derive `severity = 1` (INFO) from those floats.
+- **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (the comment is satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted as already-resolved via `isResolved: true` (see step 3), state that it was already resolved on GitHub rather than inventing a fix description you didn't verify. The coordinator will derive `severity = 1` (INFO) from those floats.
 - **Unresolved** comments: assess `risk`, `impact`, AND `scope` per the OWASP recipes in `claudius:severity`. Rate `scope` as the comment's real blast radius (a single call-site / narrow path ≈ `0.2`; a subsystem ≈ `0.5`; repo-wide ≈ `1.0`) — do NOT default to `1.0`. The coordinator derives the integer `severity` band; never hand-type a label. Set `verdict: "UNRESOLVED"` and let `recommendation` describe what still needs doing.
 - `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 8.
 
@@ -212,9 +215,10 @@ Apply the following matrix **without asking for confirmation**, except where not
 
 | Author | Status | Action |
 |--------|--------|--------|
-| Bot | Fixed | Auto-resolve the thread (no confirmation needed) |
+| Any | Already resolved (`isResolved: true`) | No action — already resolved, do not reply or attempt to resolve again |
+| Bot | Fixed (verified this session) | Auto-resolve the thread (no confirmation needed) |
 | Bot | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
-| Human | Fixed | Post a reply explaining what was done. Do NOT resolve. |
+| Human | Fixed (verified this session) | Post a reply explaining what was done. Do NOT resolve. |
 | Human | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
 
 **NEVER auto-resolve human-created threads** unless the user gives explicit per-invocation permission (e.g. "resolve all fixed threads" or "resolve human threads too"). Even when fully fixed, the human reviewer should resolve their own threads.

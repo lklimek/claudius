@@ -29,7 +29,7 @@ Stage specific files -- never `git add .` or `git add -A`.
 
 Use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`). Append `!` for breaking changes.
 
-Commit message format (always use HEREDOC):
+Commit message format (always use HEREDOC). Substitute `<your-model-name>` with your own actual current model — never copy a version literally from this doc, it will always eventually go stale:
 
 ```bash
 git add <file1> <file2>
@@ -38,7 +38,7 @@ git commit -m "$(cat <<'EOF'
 
 <optional body>
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude <your-model-name> <noreply@anthropic.com>
 EOF
 )"
 ```

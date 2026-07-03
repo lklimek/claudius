@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -236,9 +237,9 @@ def test_markdown_snippet_language_is_sanitized_against_fence_breakout():
     for ln in fence_lines:
         # After the backtick run, only allowlist chars (or empty) are valid.
         tail = ln.lstrip("`")
-        assert re.fullmatch(
-            r"[A-Za-z0-9_+.\-]*", tail
-        ), f"fence info-string contains disallowed chars: {ln!r}"
+        assert re.fullmatch(r"[A-Za-z0-9_+.\-]*", tail), (
+            f"fence info-string contains disallowed chars: {ln!r}"
+        )
 
 
 def test_sanitize_snippet_language_legitimate_values_passthrough():
@@ -314,9 +315,9 @@ def test_html_code_snippet_content_is_escaped():
     """
     data = _load("v3-full.json")
     # Inject a script tag into a snippet content and confirm it's escaped.
-    data["findings"][0]["findings"][0]["code_snippets"][0][
-        "content"
-    ] = "<script>alert('xss')</script>\nlet x = 1;"
+    data["findings"][0]["findings"][0]["code_snippets"][0]["content"] = (
+        "<script>alert('xss')</script>\nlet x = 1;"
+    )
     html = grr.render_html(data)
     assert "&lt;script&gt;alert(" in html
     assert "<script>alert('xss')</script>" not in html
@@ -626,12 +627,12 @@ def test_triage_finding_data_category_preserves_origin_category():
     ppm_match = re.search(r'id="finding-PPM-001"[^>]*data-category="([^"]*)"', html)
     assert sec_match, "SEC-001 div not found in triage HTML"
     assert ppm_match, "PPM-001 div not found in triage HTML"
-    assert (
-        sec_match.group(1) == "security"
-    ), f'SEC-001 data-category collapsed to "{sec_match.group(1)}" — expected "security"'
-    assert (
-        ppm_match.group(1) == "pr_promises"
-    ), f'PPM-001 data-category collapsed to "{ppm_match.group(1)}" — expected "pr_promises"'
+    assert sec_match.group(1) == "security", (
+        f'SEC-001 data-category collapsed to "{sec_match.group(1)}" — expected "security"'
+    )
+    assert ppm_match.group(1) == "pr_promises", (
+        f'PPM-001 data-category collapsed to "{ppm_match.group(1)}" — expected "pr_promises"'
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -960,6 +961,116 @@ def test_triage_renders_decision_ui_when_findings_have_code_snippets():
     snippet_pos = html.find("language-rust")
     dropdown_pos = html.find('class="triage-action"')
     assert snippet_pos != -1 and dropdown_pos != -1
-    assert (
-        dropdown_pos > snippet_pos
-    ), "decision dropdown must render after the snippet inside the finding card"
+    assert dropdown_pos > snippet_pos, (
+        "decision dropdown must render after the snippet inside the finding card"
+    )
+
+
+# ---------------------------------------------------------------------------
+# HTML sanitizer (Markdown -> safe HTML). The `| markdown` filter feeds
+# attacker-influenced finding text (e.g. PR comment bodies) into a
+# browser-opened report, so the allowlist must strip all active content.
+# ---------------------------------------------------------------------------
+def test_render_markdown_strips_script_tag():
+    """A raw <script> in Markdown must never survive as a live tag."""
+    out = str(grr.render_markdown_to_html("hi <script>alert(1)</script> bye"))
+    assert "<script>" not in out
+    assert "</script>" not in out
+    # The literal call must not be reconstructable as executable markup.
+    assert "<script" not in out.lower()
+
+
+def test_render_markdown_strips_event_handler_attribute():
+    """`on*` handler attributes (onerror, onclick, ...) must be dropped."""
+    out = str(grr.render_markdown_to_html('<img src=x onerror="alert(1)">'))
+    assert "onerror" not in out.lower()
+    assert "alert(1)" not in out or "onerror" not in out.lower()
+
+
+def test_render_markdown_strips_javascript_uri():
+    """A javascript: URI must not survive as a live href."""
+    out = str(grr.render_markdown_to_html("[click](javascript:alert(1))"))
+    assert "javascript:" not in out.lower()
+    assert 'href="javascript:' not in out.lower()
+
+
+def test_render_markdown_strips_iframe():
+    """<iframe> is active content and must be stripped."""
+    out = str(grr.render_markdown_to_html('text <iframe src="evil"></iframe>'))
+    assert "<iframe" not in out.lower()
+
+
+def test_render_markdown_preserves_allowed_markup():
+    """The migration must NOT weaken rendering of legitimate Markdown: bold,
+    inline code, and http(s) links stay intact."""
+    out = str(grr.render_markdown_to_html("**bold** `code` [x](https://example.com)"))
+    assert "<strong>bold</strong>" in out
+    assert "<code>code</code>" in out
+    assert 'href="https://example.com"' in out
+
+
+def test_render_markdown_empty_returns_empty_markup():
+    from markupsafe import Markup
+
+    assert grr.render_markdown_to_html("") == Markup("")
+    assert grr.render_markdown_to_html("   ") == Markup("")
+
+
+def test_html_end_to_end_strips_script_in_description():
+    """Defense-in-depth end-to-end: a <script> injected into a finding's
+    Markdown description must not reach the rendered HTML as a live tag."""
+    finding = {
+        "id": "X-001",
+        "severity": 3,
+        "title": "T",
+        "location": "src/x.rs:1",
+        "description": "before <script>alert(document.cookie)</script> after",
+        "recommendation": "R",
+    }
+    html = grr.render_html(_wrap_section(finding))
+    assert "<script>alert(document.cookie)</script>" not in html
+    assert "alert(document.cookie)" in html or "before" in html  # text survives
+
+
+# ---------------------------------------------------------------------------
+# Chart.js supply chain: the report is documented as "self-contained", so it
+# must not fetch third-party JS from a CDN at open time (a CDN compromise or a
+# malicious `latest` publish would run arbitrary JS in the report's origin).
+# ---------------------------------------------------------------------------
+def test_html_does_not_load_chartjs_from_unpinned_cdn():
+    data = _load("v3-full.json")
+    html = grr.render_html(data)
+    assert 'src="https://cdn.jsdelivr.net/npm/chart.js"' not in html
+    assert "cdn.jsdelivr.net/npm/chart.js<" not in html
+    # No remote <script src=...> for charts at all — Chart.js is vendored inline.
+    assert 'src="https://cdn.jsdelivr.net/npm/chart.js' not in html
+
+
+def test_html_inlines_vendored_chartjs():
+    """Chart.js must be embedded inline (self-contained) and drives real charts."""
+    data = _load("v3-full.json")
+    html = grr.render_html(data)
+    assert "Chart.js v4.5.1" in html  # vendored UMD banner proves inline embed
+    assert "new Chart(" in html  # chart-drawing code still present
+
+
+def test_vendored_chartjs_matches_pinned_sha256():
+    """The vendored blob must match the sha256 pinned in generate_review_report.py.
+
+    The inline-embed test only checks the version banner, which a tampered blob can
+    keep verbatim. This pins the exact bytes so any modification to the vendored
+    Chart.js fails CI instead of silently shipping arbitrary JS into every report.
+    """
+    pinned = "ecc3cd1eeb8c34d2178e3f59fd63ec5a3d84358c11730af0b9958dc886d7652a"
+    actual = hashlib.sha256(grr._CHARTJS_VENDOR_PATH.read_bytes()).hexdigest()
+    assert actual == pinned, (
+        f"vendored chart.umd.js sha256 {actual} != pinned {pinned}; "
+        "update the pin in generate_review_report.py only for a verified Chart.js build"
+    )
+
+
+def test_triage_does_not_load_chartjs_from_unpinned_cdn():
+    data = _load("v3-full.json")
+    html = grr.render_triage(data)
+    assert 'src="https://cdn.jsdelivr.net/npm/chart.js"' not in html
+    assert "Chart.js v4.5.1" in html

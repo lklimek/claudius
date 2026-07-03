@@ -23,6 +23,8 @@ from http import HTTPStatus
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
+from severity_util import reject_non_finite_constant
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
@@ -85,7 +87,10 @@ def _generate_triage_html() -> str:
 def _load_report() -> dict:
     """Load the report JSON."""
     t0 = time.monotonic()
-    report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+    report = json.loads(
+        REPORT_PATH.read_text(encoding="utf-8"),
+        parse_constant=reject_non_finite_constant,
+    )
     log.debug("Loaded report in %.1fms", (time.monotonic() - t0) * 1000)
     return report
 
@@ -104,7 +109,7 @@ def _save_triage(decisions: list[dict], triaged_by: str = "user") -> dict:
             "decisions": decisions,
         }
         REPORT_PATH.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+            json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
             encoding="utf-8",
         )
         log.info(
@@ -160,6 +165,17 @@ class TriageHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _load_report_or_500(self) -> dict | None:
+        """Load the report for a GET handler; sends 500 and returns None on failure."""
+        try:
+            with _lock:
+                return _load_report()
+        except ValueError as exc:
+            self.send_error(
+                HTTPStatus.INTERNAL_SERVER_ERROR, f"Invalid report JSON: {exc}"
+            )
+            return None
+
     def do_GET(self) -> None:
         t0 = time.monotonic()
         if self.path == "/" or self.path == "/index.html":
@@ -176,15 +192,17 @@ class TriageHandler(BaseHTTPRequestHandler):
                 len(html),
             )
         elif self.path == "/api/report":
-            with _lock:
-                report = _load_report()
+            report = self._load_report_or_500()
+            if report is None:
+                return
             self._send_json(report)
             log.debug(
                 "GET /api/report served in %.0fms", (time.monotonic() - t0) * 1000
             )
         elif self.path == "/api/status":
-            with _lock:
-                report = _load_report()
+            report = self._load_report_or_500()
+            if report is None:
+                return
             self._send_json(_triage_status(report))
             log.debug(
                 "GET /api/status served in %.0fms", (time.monotonic() - t0) * 1000
@@ -214,7 +232,7 @@ class TriageHandler(BaseHTTPRequestHandler):
             log.debug("POST /api/decisions: reading %d bytes", content_len)
             body = self.rfile.read(content_len)
             try:
-                payload = json.loads(body)
+                payload = json.loads(body, parse_constant=reject_non_finite_constant)
                 decisions = payload.get("decisions", [])
                 triaged_by = payload.get("triaged_by", "user")
                 report = _save_triage(decisions, triaged_by)
@@ -234,7 +252,7 @@ class TriageHandler(BaseHTTPRequestHandler):
                     # Prevent capturing `self` (and its socket) in the thread.
                     srv = self.server
                     threading.Thread(target=srv.shutdown, daemon=True).start()
-            except (json.JSONDecodeError, KeyError) as exc:
+            except (ValueError, KeyError) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=400)
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -296,7 +314,7 @@ def main() -> None:
             sum(len(s.get("findings", [])) for s in report.get("findings", [])),
         )
         log.debug("Report load took %.0fms", (time.monotonic() - t0) * 1000)
-    except (json.JSONDecodeError, KeyError) as exc:
+    except (ValueError, KeyError) as exc:
         log.error("Invalid report JSON: %s", exc)
         sys.exit(1)
 

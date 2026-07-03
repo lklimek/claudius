@@ -90,18 +90,18 @@ class TestProducerShapeAccepted:
         data = self._producer_report()
         del data["findings"][0]["findings"][0]["risk"]
         errors = list(VALIDATOR.iter_errors(data))
-        assert (
-            errors
-        ), "Expected schema to reject finding missing producer-required `risk`"
+        assert errors, (
+            "Expected schema to reject finding missing producer-required `risk`"
+        )
 
     def test_producer_shape_missing_required_text_is_still_rejected(self):
         """The qualitative LLM judgements (title/location/description/...) stay required."""
         data = self._producer_report()
         del data["findings"][0]["findings"][0]["description"]
         errors = list(VALIDATOR.iter_errors(data))
-        assert (
-            errors
-        ), "Expected schema to reject finding missing required `description`"
+        assert errors, (
+            "Expected schema to reject finding missing required `description`"
+        )
 
 
 class TestCallTreeCategory:

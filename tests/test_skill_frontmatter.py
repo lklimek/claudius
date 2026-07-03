@@ -36,14 +36,14 @@ def _extract_frontmatter(path: Path) -> str:
 def test_frontmatter_parses(path: Path) -> None:
     raw = _extract_frontmatter(path)
     data = yaml.safe_load(raw)
-    assert isinstance(
-        data, dict
-    ), f"{path}: frontmatter parsed to {type(data).__name__}, expected dict"
+    assert isinstance(data, dict), (
+        f"{path}: frontmatter parsed to {type(data).__name__}, expected dict"
+    )
     assert "name" in data, f"{path}: frontmatter missing required `name` field"
 
 
 def test_corpus_not_empty() -> None:
     """Guard against the glob silently matching nothing (e.g. after a directory rename)."""
-    assert (
-        FRONTMATTER_FILES
-    ), "No SKILL.md or agent .md files discovered — glob is broken"
+    assert FRONTMATTER_FILES, (
+        "No SKILL.md or agent .md files discovered — glob is broken"
+    )

@@ -7,6 +7,10 @@ on:
       - '.claude-plugin/plugin.json'
   workflow_dispatch:
 
+# The job authenticates with AGENTES_PAT (below), never the default GITHUB_TOKEN,
+# so no default-token scopes are needed.
+permissions: {}
+
 jobs:
   notify:
     runs-on: ubuntu-latest

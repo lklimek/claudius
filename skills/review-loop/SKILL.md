@@ -57,13 +57,7 @@ If **no actionable comments** remain → exit the loop successfully.
 
 ### 6. Push fixes
 
-```bash
-git add <changed-files>
-git commit -m "<type>: address review feedback
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-git push
-```
+Commit per the `git-and-github` skill's commit message format (§ Committing), then push.
 
 ### 7. Re-request review
 

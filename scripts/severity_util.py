@@ -11,8 +11,22 @@ exactly one place.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from typing import Any
+
+
+def reject_non_finite_constant(constant: str) -> Any:
+    """json ``parse_constant`` callback: reject bare NaN/Infinity/-Infinity.
+
+    Python's ``json`` module decodes these non-finite literals by default. They
+    slip past ``isinstance(x, float)`` and range checks (``nan >= t`` is always
+    False; ``jsonschema`` min/max treats NaN as valid), silently corrupting
+    severity math. Wiring this into every report-loading ``json.loads`` rejects
+    them at parse time with a clear error instead.
+    """
+    raise ValueError(f"non-finite JSON constant not allowed: {constant}")
+
 
 SEV_LABELS: dict[int, str] = {
     5: "CRITICAL",
@@ -45,17 +59,24 @@ _SEVERITY_BANDS: list[tuple[float, int]] = [
 ]
 
 
-# NOTE: scope-weighting/capping is a deliberate future consideration
-# (TODO 3cb7e842); the unweighted mean below is intentionally left unchanged
-# here to avoid rebanding every existing report. The observed inflation is a
-# mis-rating (scope defaulted to 1.0), addressed in the authoring skills and a
+# NOTE: scope-weighting/capping is a deliberate future consideration; the
+# unweighted mean below is intentionally left unchanged here to avoid
+# rebanding every existing report. The observed inflation is a mis-rating
+# (scope defaulted to 1.0), addressed in the authoring skills and a
 # non-blocking consistency gate, not in this formula.
 def derive_overall(finding: dict[str, Any]) -> float | None:
-    """Arithmetic mean of risk + impact + scope when all three are numeric floats."""
+    """Arithmetic mean of risk + impact + scope when all three are finite floats.
+
+    Returns None when any dimension is absent, non-numeric, or non-finite
+    (NaN/Infinity) — NaN would sink a CRITICAL finding to INFO and +Infinity
+    would force it to CRITICAL regardless of the other two dimensions.
+    """
     dims = []
     for key in ("risk", "impact", "scope"):
         value = finding.get(key)
         if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return None
+        if math.isnan(value) or math.isinf(value):
             return None
         dims.append(float(value))
     return sum(dims) / 3.0
@@ -84,15 +105,19 @@ def derive_finding_severity(finding: dict[str, Any]) -> int | None:
 def _effective_severity(finding: dict[str, Any]) -> int:
     """Resolve a finding's integer severity for counting.
 
-    Prefers an explicit integer ``severity``; otherwise derives one from the
-    OWASP floats; falls back to 1 (INFO) when neither is available.
+    Prefers the band derived from the OWASP risk/impact/scope floats — per the
+    severity skill's doctrine, the float trio is the single source of truth,
+    so a derived band wins even over a conflicting explicit integer
+    ``severity`` (matching ``cmd_assemble``'s precedence in
+    ``consolidate_reports.py``). Falls back to the explicit integer when the
+    floats are absent or invalid, then to 1 (INFO) when neither is available.
     """
-    sev = finding.get("severity")
-    if isinstance(sev, int) and not isinstance(sev, bool) and 1 <= sev <= 5:
-        return sev
     derived = derive_finding_severity(finding)
     if derived is not None:
         return derived
+    sev = finding.get("severity")
+    if isinstance(sev, int) and not isinstance(sev, bool) and 1 <= sev <= 5:
+        return sev
     return 1
 
 

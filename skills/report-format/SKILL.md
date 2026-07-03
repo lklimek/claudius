@@ -50,7 +50,7 @@ This is the producer-emitted shape. Integer `severity` and float `overall_severi
 | `id` | string | `PREFIX-NNN` -- see ID Prefixes below |
 | `risk` | float | 0.0–1.0, OWASP Likelihood normalized (see `severity` skill) |
 | `impact` | float | 0.0–1.0, OWASP Impact normalized (see `severity` skill) |
-| `scope` | float | 0.0–1.0, PR relevance (1.0 direct, 0.5 indirect, 0.0 unrelated) |
+| `scope` | float | 0.0–1.0, blast radius — fraction of users/surface/call-sites reached, not a default-1.0 (see `severity` skill) |
 | `title` | string | Short finding title |
 | `location` | string | Full file path with lines: `src/auth.rs:42-56` -- never bare line numbers |
 | `description` | string | What the issue is and why it matters |
@@ -65,7 +65,7 @@ Producers MUST emit `risk`, `impact`, and `scope` — the schema rejects finding
 Producers must NOT set these; they are populated downstream:
 
 - `overall_severity` — Python-computed mean of `risk`/`impact`/`scope`
-- `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL
+- `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL. Coordinator-derived in the standard multi-agent pipeline; producers MUST NOT emit it there. **Exception — standalone producers** (a producer rendering its own final report with no coordinator derive-pass, canonically `check-pr-comments`): see `check-pr-comments/SKILL.md` § `location_permalink` — rules for the exact emit condition.
 - `metadata.repository` — coordinator derives from `git remote get-url origin`
 - `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by the `validate-findings` skill
 - Derived integer `severity` when emitting floats — the coordinator overrides
@@ -84,7 +84,7 @@ Use Markdown — renderers handle formatting; you write content. Single-line fie
 
 **Markdown style for agents**: separate lists, code blocks, and headings from preceding text with a blank line (CommonMark requires this for parsing).
 
-**For consumers**: parse long-text fields as CommonMark Markdown. Reference renderer: `scripts/generate_review_report.py` — HTML uses the `markdown` Python package sanitised through `bleach`, PDF walks the parsed HTML to ReportLab mini-XML. Markdown output passes through verbatim.
+**For consumers**: parse long-text fields as CommonMark Markdown. Reference renderer: `scripts/generate_review_report.py` — HTML uses the `markdown` Python package sanitised through `nh3`, PDF walks the parsed HTML to ReportLab mini-XML. Markdown output passes through verbatim.
 
 ## File Output
 
@@ -139,8 +139,8 @@ Rationale for the example values: `scope: 1.0` because a title/body mismatch is 
 | Tool | Purpose | Usage |
 |------|---------|-------|
 | `scripts/validate_report.py` | Validate report JSON against schema | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py report.json` |
-| `scripts/consolidate_reports.py` | Merge multiple agent reports, deduplicate findings | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py agent1.json agent2.json -o consolidated.json` |
-| `scripts/generate_review_report.py` | Render consolidated report as Markdown/HTML | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py consolidated.json` |
+| `scripts/consolidate_reports.py` | Merge multiple agent reports, deduplicate findings | Two-phase `prepare`/`assemble` subcommand CLI — see `grumpy-review/SKILL.md` §5a and §5c for exact invocation |
+| `scripts/generate_review_report.py` | Render consolidated report as Markdown/HTML/PDF/triage | Requires `--format {md,html,triage,pdf}` — see `grumpy-review/SKILL.md` §5e |
 
 ## Full Report Envelope
 

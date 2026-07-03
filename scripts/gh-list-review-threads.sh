@@ -7,6 +7,10 @@
 set -euo pipefail
 trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./gh-common.sh
+source "$SCRIPT_DIR/gh-common.sh"
+
 if [[ $# -ne 2 ]]; then
   echo "Usage: $0 <owner/repo> <pr_number>" >&2
   exit 1
@@ -28,24 +32,6 @@ if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-gh api graphql \
-  -F owner="$owner" \
-  -F repo="$repo" \
-  -F pr_number="$pr_number" \
-  -f query='
-    query($owner: String!, $repo: String!, $pr_number: Int!) {
-      repository(owner: $owner, name: $repo) {
-        pullRequest(number: $pr_number) {
-          reviewThreads(first: 100) {
-            nodes {
-              id
-              isResolved
-              isOutdated
-              comments(first: 1) {
-                nodes { databaseId path body author { login } }
-              }
-            }
-          }
-        }
-      }
-    }'
+# comments_first=1, use_run_gh=0 — see fetch_all_review_threads in
+# gh-common.sh for why this script uses these values.
+fetch_all_review_threads "$owner" "$repo" "$pr_number" 1 0
