@@ -40,6 +40,7 @@ Use the `report-format` skill for output structure. IDs are provisional (consoli
 - **UX/DX awareness**: before fixing an issue, understand the desired end-user or developer experience — a technically correct fix that breaks the user's mental model is not correct.
 - **Standards lookup**: use `search_standards` MCP tool (if available) to check coding and security standards when facing unfamiliar patterns or compliance questions.
 - **Verify dependency versions**: when adding new crates or packages, use WebSearch to check the latest published version on the official registry (crates.io, PyPI, npm, pkg.go.dev) and specify that exact version. Never guess or rely on memory for version numbers.
+- **Unmerged code isn't released**: backward compatibility and version-bump policies bind only to what's already merged into a base branch. A still-open PR (yours or another) is free to reshape its own earlier, unmerged commits without preserving compatibility with them, and doesn't need a fresh version bump per follow-up commit — bump once, before merge, re-bumping only if the change's severity grows.
 
 ## Test Isolation
 
