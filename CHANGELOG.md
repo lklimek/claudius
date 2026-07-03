@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.1.2] - 2026-07-03
+
+### Changed
+
+- **`CLAUDE.md`**, **`skills/push/SKILL.md`**, **`skills/coding-best-practices/SKILL.md`**: version bumps and backward compatibility now explicitly bind only once a PR/version merges to a base branch — bump `plugin.json` exactly once per PR (not per commit, not skipped just because it's unmerged), and don't preserve compatibility with a still-open PR's own earlier commits.
+
 ## [5.1.1] - 2026-07-03
 
 ### Added
