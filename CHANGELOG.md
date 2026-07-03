@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-07-03
+
+### Added
+
+- **`skills/bye/`**: end-of-session teardown — shuts down spawned teammates/agents, removes their worktrees, and reconciles uncommitted/unpushed session work (fix if obvious, escalate otherwise).
+
 ## [5.0.3] - 2026-07-03
 
 ### Changed
