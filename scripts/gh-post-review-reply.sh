@@ -34,7 +34,7 @@ fi
 owner="${owner_repo%/*}"
 repo="${owner_repo##*/}"
 
-if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+if ! [[ "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
   echo "Error: pr_number must be a positive integer" >&2
   exit 1
 fi
