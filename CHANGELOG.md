@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.0.3] - 2026-07-03
+
+### Changed
+
+- **`agents/architect-nagatha.md`, `agents/developer-bilby.md`, `agents/project-reviewer-adams.md`, `agents/qa-engineer-marvin.md`, `agents/security-engineer-smythe.md`, `agents/technical-writer-trillian.md`, `agents/ux-designer-diziet.md`**: every specialist's Voice section now requires concise, precise, formal output — no obvious or redundant explanations — since Claudius alone talks to the user. Trillian's published documentation deliverables (README, guides, changelogs) are exempted; only its reports/comments/commit messages are affected.
+- **`agents/claudius.md`**: added an explicit translation duty — Claudius must unpack terse specialist output into clear, friendly, in-character explanation before it reaches the user, never relay it verbatim.
+
 ## [5.0.2] - 2026-07-02
 
 ### Fixed
