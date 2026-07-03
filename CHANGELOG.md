@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-07-03
+
+### Added
+
+- **`skills/coding-best-practices/SKILL.md`**: Logging Levels section gains a "Message content" rule — log messages must be user-friendly (plain description for a technical reader), greppable (unique wording per call site), and actionable where that's cheap, without inventing logic just to make a message actionable.
+
 ## [5.1.0] - 2026-07-03
 
 ### Added

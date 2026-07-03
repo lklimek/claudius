@@ -65,5 +65,10 @@ Tests must never touch real user data. Override `XDG_CONFIG_HOME`/`XDG_DATA_HOME
 
 **Never log inside hot loops** or frequently called code paths — even at `trace` level. Log before/after the loop, or log a summary (count, duration) once it completes.
 
+**Message content**: write for a technical reader who's grepping logs under pressure.
+- **User-friendly**: plain description of what happened, not an internal jargon dump — a technical reader unfamiliar with this specific function should understand it.
+- **Greppable**: unique wording per call site — no two distinct log statements share the same message text, so a message uniquely locates its source.
+- **Actionable**: state what to do next when that's cheap (a config key to check, a retry that already happened) — but never invent logic or a lookup just to make a message actionable.
+
 ## Commit Discipline
 Before finishing, **commit all changes** with a descriptive message. Never leave uncommitted work. Never commit to main/master. Run `git status` to confirm clean state before exiting.
