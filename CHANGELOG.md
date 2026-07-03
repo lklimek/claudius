@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-07-03
+
+### Added
+
+- **`scripts/gh-post-review-reply.sh`**: new wrapper to POST an inline review-thread reply (`repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}/replies`) with the body read from a file via `-F body=@file`, closing the missing gh-CLI fallback for step 8 of `check-pr-comments` when the GitHub MCP reply tool is unavailable. Documented under a new "Posting a Reply" section in `skills/check-pr-comments/references/gh-cli-fallback.md`; `check-pr-comments/SKILL.md` frontmatter `allowed-tools` gains `Bash(*gh-post-review-reply.sh *)`.
+- **`references/source-of-truth.md`**: quality gate gains criterion 6 "Not code-mechanics" (reject facts readable straight from source unless they carry rationale, a gotcha, a contract, or a decision) plus an "Authoring rules" subsection (self-contained phrasing, timeless present tense). `skills/lessons-learned/SKILL.md` Phase 1 "Tone" line now points to those authoring rules.
+- **`skills/coding-best-practices/SKILL.md`**: TDD step gains three sub-rules — assert the contract not current code, repro tests must go RED first against the buggy revision, and a behavior/name/docs/spec mismatch is itself a bug. `skills/bug-investigation/SKILL.md` rule 4 cross-references the "repro tests go RED first" rule.
+- **`skills/validate-findings/SKILL.md`**: warns never to pre-build an id-keyed assessment lookup before `assemble` runs — `assign_ids()` reassigns ids by severity sort, so lookups must key on a field `assemble` never mutates (`comment_id`, `thread_id`, `location`, content hash).
+
+### Changed
+
+- **`skills/git-and-github/references/gh-cli-fallback.md`**: "Using `gh api`" section documents the `-f` vs `-F` footgun — `-f key=@file` posts the literal string `"@file"`; only `-F key=@file` reads the file.
+- **`scripts/gh-post-review.sh`, `gh-post-review-reply.sh`, `gh-fetch-review-comments.sh`, `gh-fetch-reviews.sh`, `gh-resolve-review-threads.sh`, `gh-request-reviewer.sh`, `gh-list-review-threads.sh`, `gh-pr-base-sha.sh`**: `pr_number` validation now rejects `0` (regex tightened from `^[0-9]+$` to `^[1-9][0-9]*$`), matching the existing "must be a positive integer" error message.
+
 ## [5.1.2] - 2026-07-03
 
 ### Changed

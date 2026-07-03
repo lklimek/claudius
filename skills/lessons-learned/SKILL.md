@@ -17,7 +17,7 @@ Scan the conversation for items worth remembering. Use the categories, quality g
 
 Collect as a numbered list. Search existing knowledge (`memcan:recall`) and drop duplicates.
 
-**Tone**: factual, third-person, present tense. Pattern: "[Subject]: [what/what to do] — [why/context]"
+**Tone**: factual, third-person, present tense. Pattern: "[Subject]: [what/what to do] — [why/context]". Apply the Source of Truth **Authoring rules** — self-contained phrasing (no pronouns/anaphora; inline the subject) and timeless present tense (strip "now"/"previously"/"currently"/"no longer").
 
 ### Opportunistic Cleanup
 

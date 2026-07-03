@@ -59,6 +59,8 @@ See [pr-review.md](pr-review.md) for the full procedure: fetching PR context, de
 
 When using `gh api`, prefer `--jq` over `| jq` -- `--jq` is processed internally by `gh`, avoiding shell expansion issues (`!` triggers history expansion).
 
+**`-f` vs `-F` footgun**: `-f key=value` ALWAYS sends a raw string, even when the value starts with `@` — it does NOT read the file. Only `-F key=@filename` (capital F) triggers type detection and reads the file. Using `-f body=@c1.md` silently posts the literal string `"@c1.md"` instead of the file's contents. To send a body from a file, always use `-F body=@file`.
+
 ## Issues
 
 Check for issue templates before creating:
