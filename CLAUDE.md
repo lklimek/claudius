@@ -76,7 +76,7 @@ claude plugin validate .                         # validate manifest
 
 ## Versioning
 
-Bump version in `plugin.json` once per PR, before it merges to a base branch (main/master/vX.Y-dev) — not on every commit. Follow-up commits on a still-open, unmerged PR revise the same unreleased change; only re-bump if the change's nature grows (e.g. patch → minor). Follow [SemVer 2](https://semver.org/).
+**Every PR that changes plugin content MUST bump `plugin.json`'s version — exactly once per PR, before it merges** to a base branch (main/master/vX.Y-dev). Do it once you know the PR is ready, not on the first commit and not again on every follow-up commit: follow-up commits on a still-open, unmerged PR revise the same unreleased change, so re-bump only if the change's nature grows (e.g. patch → minor) — never skip the bump entirely just because it's "only one commit so far" or "not merged yet." Follow [SemVer 2](https://semver.org/).
 
 - **Major** (x.0.0): breaking changes to agent/skill interfaces, removed components, incompatible frontmatter changes
 - **Minor** (0.x.0): new agents/skills, new frontmatter fields, significant behavior changes
