@@ -32,3 +32,13 @@ ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <owner/repo> <pr_
 ```
 
 Resolves all given threads in a single GraphQL API call. The `--id` form accepts `PRRT_*`, `discussion_r<n>`, and bare numeric `databaseId` (auto-converted via PR context). Always ask the user before resolving.
+
+## Posting a Reply
+
+When `mcp__plugin_claudius_github__add_reply_to_pull_request_comment` (step 8) is unavailable, post an inline review-thread reply via the wrapper:
+
+```bash
+${CLAUDE_SKILL_DIR}/../../scripts/gh-post-review-reply.sh <owner/repo> <pr> <comment_id> <body_file>
+```
+
+`comment_id` is the databaseId of the thread's first comment. The reply body is read from `body_file` (Markdown) — write the reply to a temp file first, since the body comes from a file, not an inline argument. Retries once via `ghsudo` on a 403. Outputs the new reply's html_url.

@@ -18,6 +18,8 @@ Opt-in coordinator-only step that runs an LLM validation pass over a consolidate
 
 ## Per-finding loop
 
+**Never pre-build an id-keyed assessment lookup before `consolidate_reports.py assemble` runs.** `assemble` calls `assign_ids()`, which sorts each section's findings by `overall_severity` desc (then integer `severity` desc) and ONLY THEN assigns sequential `CMT-`/`SEC-`/`CODE-` IDs — so the finding that lands in any given ID slot is decided by the severity sort, not by fetch order. Assuming "this is the 5th item fetched, so it will be CMT-005" breaks silently the moment the sort lands a different finding there, cross-attaching one finding's assessment onto another's id/location. This is exactly why the loop below must run in-place on the already-assembled report, reading each finding's own current fields — never on values pre-computed by assumed id. If you must pre-compute in bulk elsewhere, key the lookup by a field `assemble` never mutates (`comment_id`, `thread_id`, `location`, or a content hash) and join by that, never by `id`.
+
 For each finding that does not already carry `ai_verdict`:
 
 1. **Read context** — pull `description`, `recommendation`, any `code_snippets` (when absent, work from `description` alone), and optionally `git show <metadata.commit>:<path>` for the file referenced by `location`. Skip the `git show` lookup silently when `metadata.commit` is absent (non-git directory) or the command fails.

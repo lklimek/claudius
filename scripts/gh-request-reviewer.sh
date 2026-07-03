@@ -22,7 +22,7 @@ if ! [[ "$owner_repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
   exit 1
 fi
 
-if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+if ! [[ "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
   echo "Error: pr_number must be a positive integer" >&2
   exit 1
 fi

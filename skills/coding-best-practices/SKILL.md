@@ -13,6 +13,9 @@ Universal rules for all developer agents. Language-specific guidance lives in ea
 Steps 3-5 of every developer workflow (after build environment and prior art check):
 
 3. **TDD — tests first**: Define test scenarios (including edge cases and error paths) BEFORE writing implementation code. Write the test stubs/cases first, then implement to make them pass.
+   - **Assert the contract, not the code**: tests assert the intended behavior (name/docs/spec), never merely restate what the code currently does. A test that passes only because it mirrors current behavior is tautological — it locks in bugs instead of catching them.
+   - **Repro tests go RED first**: a regression/repro test for a known bug must assert the correct/documented behavior and be confirmed FAILING against the buggy code, THEN fixed to green. A repro test that is green from the start proves nothing.
+   - **A mismatch is a bug**: when behavior disagrees with its name/docs/spec, that is itself a defect (code bug or doc bug) — never silently accept it or codify the wrong side in a passing test. Resolve which side is correct, fix it, and test the correct side.
 4. **Implement**: Write the production code to satisfy the tests.
 5. **Self-review**: Review your own code before considering it complete. Check for correctness, edge cases, naming, error handling, and adherence to the architectural design.
 

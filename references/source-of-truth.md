@@ -25,6 +25,14 @@ Every candidate memory must pass ALL criteria:
 3. **Actionable** — future session can use it to avoid a mistake or make a decision
 4. **Durable** — will matter in 30 days; won't be invalidated by next commit
 5. **Not redundant** — not in source code, linter rules, or existing memories
+6. **Not code-mechanics** — reject facts readable straight from source ("function/struct X does/has Y") UNLESS they carry non-obvious rationale, a gotcha, a contract, or a decision. The bare mechanic already lives in the code; only the *why*, the trap, or the invariant earns storage.
+
+### Authoring rules
+
+Phrase every stored memory to survive out of context and out of time:
+
+- **Self-contained** — no pronouns or anaphora pointing back at the conversation ("it", "this function", "the change above"). Inline the subject: name the function, type, file, or decision.
+- **Timeless present tense** — state a durable fact, not a before/after transition. Strip "now", "previously", "currently", "no longer", "used to" — a memory that narrates a change dies when the next change lands.
 
 ## Search Priority
 
@@ -46,7 +54,13 @@ Every candidate memory must pass ALL criteria:
 - "Fixed typo in README" — no future value
 - "PR #42 merged" — VCS history tracks this
 - "Well-structured error handling" — vague, not actionable
-- "severity_counts uses string label keys" — implementation detail in code
+
+**Bad — code-mechanics (criterion 6), readable straight from source:**
+- "severity_counts uses string label keys" — implementation detail; the code shows it
+- "maybe_auto_compact consults the in-flight set" — a call the function makes; read the body
+- "TypedTable has no back-reference to its parent" — a struct shape, visible in the definition
+
+Each becomes storable only if paired with a *why* — e.g. "maybe_auto_compact skips the in-flight set to avoid double-compacting a table already queued — omitting the check causes silent data loss" carries a gotcha, so it passes.
 
 ## Opportunistic Cleanup
 
