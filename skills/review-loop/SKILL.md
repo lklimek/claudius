@@ -71,7 +71,5 @@ Go back to **Step 1** and repeat.
 
 ## Notes
 
-- Always filter comments by review ID to avoid re-addressing already-fixed issues from prior review rounds.
-- After force-pushes, old inline comments may appear on outdated diffs — verify against current code before acting.
 - If the reviewer requests changes that conflict with the PR's intent, flag it to the user rather than making the change autonomously.
 - Update the PR description if review feedback reveals missing context (e.g., unrelated fixes bundled into the PR).

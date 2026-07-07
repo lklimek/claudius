@@ -80,7 +80,7 @@ These fields are **Markdown** by default — agents emit Markdown markup, render
 - `ai_assessment`
 - `executive_summary.summary_text`, `executive_summary.verdict_text`
 
-Use Markdown — renderers handle formatting; you write content. Single-line fields (`title`, `severity`, `category`, `location`, etc.) stay plain text.
+Single-line fields (`title`, `severity`, `category`, `location`, etc.) stay plain text.
 
 **Markdown style for agents**: separate lists, code blocks, and headings from preceding text with a blank line (CommonMark requires this for parsing).
 
@@ -132,7 +132,7 @@ Agents may add context to `description` and `tags` per their domain:
 }
 ```
 
-Rationale for the example values: `scope: 1.0` because a title/body mismatch is by definition about THIS PR. `location` is the synthetic string `PR-title` because the finding has no commit-relative file:line target — renderers leave it as plain text and skip the permalink. `risk: 0.6` reflects moderate likelihood the next reviewer is misled (the title is the densest hint in the UI); `impact: 0.5` covers reviewer-time cost plus risk of approving unintended changes. The coordinator computes `overall_severity` and integer `severity` from these floats per `claudius:severity`.
+Rationale: `location` is the synthetic string `PR-title` because the finding has no commit-relative file:line target — renderers leave it as plain text and skip the permalink. `scope: 1.0` reflects that a title/body mismatch is inherently about this PR. The coordinator computes `overall_severity` and integer `severity` from the floats per `claudius:severity`.
 
 ## Report Pipeline Tools
 

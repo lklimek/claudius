@@ -93,7 +93,7 @@ See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary fo
 
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
-**Isolation**: Each stream runs in its own **git worktree** (pre-created by the lead — the `isolation` flag is unreliable; see the quirk section above). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
+**Isolation**: Each stream runs in its own **git worktree** (see quirk section above). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
 
 Before fixing any finding, a stream must **claim** it via task ownership (see Inter-Stream Communication below). If another stream already owns a task at the same location, skip it.
 
@@ -233,7 +233,6 @@ On exit (any condition), report:
 ## Notes
 
 - Do not duplicate sub-skill logic — delegate to `/push`, `/grumpy-review`, `/check-pr-comments`
-- When sub-skills have confirmation steps, skip them — this skill's invocation is the blanket confirmation
 - Give GitHub ~5 seconds after push before listing new workflow runs
 - Clean up team with `TeamDelete` after merging stream results
 - **Not for GitHub Actions** — this skill pushes commits that trigger CI, so running it inside a workflow causes concurrency cancellation loops. Use from CLI only.

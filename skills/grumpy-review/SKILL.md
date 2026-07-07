@@ -56,11 +56,9 @@ independence from however the code was authored:
 - **Authoring tier unknown or unclear** (human-authored code, ambiguous/absent git history, mixed
   authorship) → default to **`claudius:qa-engineer-marvin` on `sonnet`**.
 
-Always pick the OPPOSITE tier from whatever implemented the change — the point is a fresh,
-independent second opinion, not a rubber stamp from the same tier that wrote the code. Determine
-the authoring tier from `git log` (commit author/trailer, PR metadata, or the invoking workflow's
-recorded model selection) before spawning; if genuinely indeterminate, use the human-authored
-default above.
+Determine the authoring tier from `git log` (commit author/trailer, PR metadata, or the invoking
+workflow's recorded model selection) before spawning; if genuinely indeterminate, use the
+human-authored default above.
 
 Instruct the single fallback agent to also apply `security-best-practices` and
 `coding-best-practices` checklists — it is standing in for the entire trio, so its prompt must
@@ -76,21 +74,16 @@ report JSON directly — no consolidation needed.
 | `claudius:qa-engineer-marvin` | sonnet | Adversarial/correctness code quality — actually running tests and lints, edge cases, ownership/panic/error-handling bugs, independent verification against ground truth |
 
 All three are ALWAYS included for any non-trivial review — there is no separate per-language
-conditional agent anymore. `project-reviewer-adams` and `qa-engineer-marvin` together cover the
-full code-quality slice that `developer-bilby` used to own alone: Adams takes the
-structural/idiom/consistency half (readability, naming, DRY, cross-file duplication,
-maintainability), Marvin takes the adversarial/correctness/execution half (actually running tests
-and lints, edge cases, ownership/panic/error-handling bugs, independent verification against
-ground truth). `developer-bilby` no longer participates in code review in any capacity — it is
-implementation-only.
+conditional agent anymore. Adams and Marvin jointly cover the code-quality slice `developer-bilby`
+used to own alone (see Focus column above for the split); `developer-bilby` no longer participates
+in code review in any capacity — it is implementation-only.
 
 ### Language best-practices preload
 
 Both `project-reviewer-adams` and `qa-engineer-marvin` preload the matching `*-best-practices`
 skill(s) — `rust-best-practices`, `python-best-practices`, `go-best-practices`,
-`frontend-best-practices` — for whichever language(s) are in scope, the same mechanism
-`developer-bilby` used to use when it filled this role. Identify the language(s) touched by the
-diff and name the specific skill(s) explicitly in each agent's spawn prompt.
+`frontend-best-practices` — for whichever language(s) are in scope. Identify the language(s)
+touched by the diff and name the specific skill(s) explicitly in each agent's spawn prompt.
 
 ### Other conditional agents
 

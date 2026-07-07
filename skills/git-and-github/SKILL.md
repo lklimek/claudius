@@ -51,9 +51,7 @@ When editing `CHANGELOG.md`, follow [Keep a Changelog](https://keepachangelog.co
 
 If a push fails with 403 or "Resource not accessible" and `ghsudo` is installed, retry through ghsudo (see [Elevated Permissions](#elevated-permissions-ghsudo--optional-fallback)).
 
-**Always ask the user for explicit confirmation before every push.** Never push automatically -- even after committing or creating a PR. Even if the user agreed to push earlier, ask again before next push.
-
-**Never force-push. Never amend commits.** Always create new commits. If force-push is required, ask the user to do it manually.
+Always ask explicit confirmation before every push, even if the user agreed earlier -- see Safety Rules below.
 
 ## Pull Requests
 

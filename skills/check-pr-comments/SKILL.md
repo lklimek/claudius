@@ -10,7 +10,7 @@ When asked to check/triage/verify existing PR review comments, follow this workf
 
 ## 1. Fetch All Comments
 
-**ALWAYS fetch fresh comments from GitHub on every invocation.** Never assume you already have them or that there are no new ones -- comments may have just appeared.
+**ALWAYS fetch fresh comments from GitHub on every invocation** -- never assume none are new; comments may have just appeared.
 
 Use GitHub MCP tools to fetch all comment types:
 
@@ -31,7 +31,7 @@ git pull
 
 ## 3. Verify Each Comment Against Current Code
 
-**Trust GitHub's resolved status — do not re-verify already-resolved threads.** For any thread where step 1's fetch returned `isResolved: true`, classify it as **Resolved** and skip the rest of this section for that thread: do not re-read the referenced code, do not re-run the call-tree walk, do not second-guess a resolution someone already made. Re-checking settled threads burns the review budget on questions that are no longer open. Apply the verification steps below only to threads with `isResolved: false`.
+**Trust GitHub's resolved status — do not re-verify already-resolved threads.** For any thread where step 1's fetch returned `isResolved: true`, classify it as **Resolved** and skip the rest of this section: do not re-read the referenced code, re-run the call-tree walk, or second-guess a prior resolution. Apply the verification steps below only to threads with `isResolved: false`.
 
 When verifying resolution, apply `coding-best-practices` Cross-Cutting Rules to the changed code. For every **unresolved** inline comment, read the file at the referenced location and **verify whether the identified issue is actually fixed** -- not just whether the code changed. Specifically:
 
@@ -141,12 +141,9 @@ The `title` is the column users see at a glance in the rendered report. The `rev
 Good (what the comment *asks for*):
 - `Add fee-headroom guard to transfer_with_change_address`
 - `Rename transfer_inner to transfer`
-- `Type FeeStrategyResolveError variants`
-- `Clarify which dispatcher the error message refers to`
 
 Bad (quotes / markup / prefix / truncation):
 - `thepastaclaw: **🟡 Suggestion: \`transfer_with_change_address\` skips the \`Re...`
-- `lklimek: Looks like we can rename transfer_inner back to transfer and...`
 - `> Explain when to use transfer() and when to use transfer_with...`
 
 #### `location_permalink` — rules

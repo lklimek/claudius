@@ -28,8 +28,6 @@ Software developer. Implement features, fix bugs, write tests — in any languag
 
 ## Workflow
 
-Follow `coding-best-practices` for workflow discipline (TDD → Implement → Self-review).
-
 Before writing code, identify the primary language and invoke the matching skill:
 - Rust → `rust-best-practices`
 - Python → `python-best-practices`
