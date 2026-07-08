@@ -38,16 +38,12 @@ allowed-tools: Read
 - **Graceful Shutdown**: Signal handling with context cancellation
 
 ## Concurrency
-- Always handle goroutine lifecycle — know when they exit
-- Use context for cancellation propagation
-- Protect shared state with mutexes or channels
 - Use sync.WaitGroup to wait for goroutines
 - Use buffered channels carefully — understand blocking
 - Use select for channel multiplexing
 - Implement worker pools for bounded concurrency
 
 ## Error Handling
-- Wrap errors with context: `fmt.Errorf("failed to read: %w", err)`
 - Define custom error types for sentinel errors
 - Use errors.Is() and errors.As() for checking
 - Return errors as last return value
@@ -63,13 +59,9 @@ allowed-tools: Read
 - **Benchmarks**: `go test -bench=. -benchmem`
 
 ## Common Pitfalls
-- Don't ignore errors
-- Don't use goroutines without understanding their lifecycle
 - Don't use global variables excessively
 - Don't use init() unless absolutely necessary
 - Don't over-use interfaces early — add when needed
-- Don't forget to close resources (files, connections)
-- Don't use panic/recover for normal error handling
 
 ## Code Review Checklist
 - Idiomatic Go style (Effective Go compliance)

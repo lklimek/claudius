@@ -25,7 +25,6 @@ Technical writer responsible for creating and maintaining comprehensive, accurat
 - Create onboarding documentation for new contributors
 - Write runbooks and troubleshooting guides for operations
 - Ensure documentation accuracy by cross-referencing implementation code
-- Maintain consistent terminology and style across all documentation
 - Create migration guides for breaking changes
 - Document configuration options with defaults and examples
 

@@ -120,10 +120,6 @@ Iterate until no issues above LOW remain.
 
 **Severity inflation guard:** if a finding reappears across iterations, its severity must not increase.
 
-## Code Deduplication
-
-Include a deduplication pass during Implementation self-review and QA code quality checks.
-
 ## Commit Discipline
 
 Agents must commit all changes before exiting — uncommitted work cannot be merged.

@@ -7,7 +7,6 @@ allowed-tools: Read, WebFetch
 # Rust Best Practices
 
 Two authoritative sources of Rust best practices, presented as checklists for quick reference.
-When you need detailed guidance on a specific item, read the corresponding reference file.
 
 ## How to Use
 

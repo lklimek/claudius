@@ -54,7 +54,7 @@ Findings go to the lead, who decides follow-up:
 - Substantial refactors land as follow-up PRs
 - Findings the lead judges as wrong-call go in a "rejected with rationale" section of the report
 
-**`project-reviewer-adams` omission:** workflow-trivial omits `project-reviewer-adams` entirely — including its now-expanded code-quality remit (docs-review, dedup-audit, structural/idiom consistency absorbed from `developer-bilby`'s former review role) — because trivial scope (≤20 lines, typo fixes, single-line bug repairs) does not warrant a full project-reviewer pass. At this scope, Bilby's own Phase 2 self-checks (comment-hygiene, duplication grep — see above) are the sole safeguard for those two concerns, backstopped by merge-time review. Consistency is deferred to merge-time review. If the change starts smelling like ≥20 lines, touches multiple files, or genuinely needs an independent docs/dedup check, escalate to `workflow-simplified` instead, where Adams runs those passes.
+**`project-reviewer-adams` omission:** workflow-trivial omits `project-reviewer-adams` entirely — including its now-expanded code-quality remit (docs-review, dedup-audit, structural/idiom consistency absorbed from `developer-bilby`'s former review role) — because trivial scope (≤20 lines, typo fixes, single-line bug repairs) does not warrant a full project-reviewer pass. At this scope, Bilby's own Phase 2 self-checks (comment-hygiene, duplication grep — see above) are the sole safeguard for those two concerns, backstopped by merge-time review. If the change starts smelling like ≥20 lines, touches multiple files, or genuinely needs an independent docs/dedup check, escalate to `workflow-simplified` instead, where Adams runs those passes.
 
 ## Phase 4: Lessons Learned
 

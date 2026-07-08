@@ -51,8 +51,8 @@ the local base branch, which may be stale.
 
 ## Phase 3: Pre-Merge Analysis
 
-Understand both sides of the merge internally. Read the diffs and logs to build context for
-conflict resolution and behavioral analysis. Do NOT output diffs or source — only summaries.
+Read diffs and logs internally to build context for conflict resolution and behavioral analysis
+(see Output philosophy above — no diff/source output).
 
 ```bash
 MERGE_BASE=$(git merge-base origin/$BASE_BRANCH HEAD)
@@ -122,8 +122,8 @@ If the user rejects a resolution, apply their feedback and re-present.
 
 ## Phase 5: Behavioral Change Report
 
-This is the most important deliverable. Analyze the merge result for anything that could change
-runtime behavior. Read the merged files internally — do not dump diffs to the user.
+The most important deliverable. Analyze the merge result for anything that could change runtime
+behavior. Read the merged files internally — no diff dumps.
 
 Assign an overall **Risk Factor (0-100%)** reflecting the likelihood that the merge introduced
 unintended behavioral changes:
@@ -171,7 +171,6 @@ conflicts or semantic issues — not every upstream contributor.
 
 Show safe changes first so the user can quickly confirm the routine stuff and focus attention on
 what matters. If the report is clean (risk ~0%), say so in one line and skip the sections.
-Only list contributors whose changes caused conflicts or semantic issues — skip unrelated authors.
 
 ## Error Recovery
 

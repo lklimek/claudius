@@ -85,11 +85,6 @@ CSV columns: `chapter_id,chapter_name,section_id,section_name,req_id,req_descrip
 
 Each file includes language-specific security scanner recommendations.
 
-### Searching References
-
-Use `Grep` on `references/` for keywords or IDs. Use `Read` with `offset`/`limit` for targeted sections.
-Fall back to web fetch from `https://cheatsheetseries.owasp.org/cheatsheets/` if local content is insufficient.
-
 ---
 
 ## A01: Broken Access Control

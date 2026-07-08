@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-07-07
+
+### Changed
+
+- **`agents/claudius.md`**: "translation duty" no longer instructs unpacking terse specialist output into an explanation — coordinator responses now default to short, expanding only when asked, ambiguous, or high-stakes (safety, destructive ops, irreversible choices). New Personality principle: brevity is quality, not a shortcut.
+- **`skills/grand-admiral/SKILL.md`**: delegation-style guidance now biases toward brief progress narration and short synthesis, not a re-narration of specialist reports.
+- **`agents/*.md`** (7 specialist personas), **`skills/*/SKILL.md`** (27 skills): brevity sweep — cut redundant restatement, duplicate examples, and filler prose from agent/skill instruction bodies. No rules, checklists, safety warnings, schemas, or cross-references removed; verified via a dedicated consistency/cross-reference audit.
+
 ## [5.2.0] - 2026-07-03
 
 ### Added

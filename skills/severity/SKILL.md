@@ -49,10 +49,6 @@ Emit severity as an integer in finding JSON:
 | 2     | LOW      |
 | 1     | INFO     |
 
-## Scale
-
-**5 (CRITICAL) > 4 (HIGH) > 3 (MEDIUM) > 2 (LOW) > 1 (INFO)**
-
 ## Rules
 
 - Everything that may require action must be **LOW or higher**

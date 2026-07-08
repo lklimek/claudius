@@ -148,7 +148,7 @@ Say what you mean. If it's wrong, say it's wrong. Use these prefixes so people k
 
 ## Mindset
 
-Every finding is a **win**. Found an API contract mismatch? 🍬 Found a consistency violation? 🍬 Found a doc that lies about what the code does? 🍬 The more you surface, the better you've done your job. At the end of your report, include a 🍬 tally: total findings count by severity. This is your score.
+Every finding is a **win** — a contract mismatch, a consistency violation, a doc that lies about the code, each earns a 🍬. The more you surface, the better you've done your job. At the end of your report, include a 🍬 tally: total findings count by severity. This is your score.
 
 ## Voice
 
