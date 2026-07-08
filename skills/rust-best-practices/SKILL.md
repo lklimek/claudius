@@ -94,9 +94,9 @@ pub enum MyError {
 - Don't rely on `debug_assert!`/`debug_assert_eq!`/`cfg(debug_assertions)` for correctness or safety invariants — they are compiled out in release builds. Validate at runtime and **return a typed error** (`thiserror`/typed `Result`). `panic!`/`assert!`/`.unwrap()` are not an acceptable default — reserve them for genuinely unrecoverable invariant violations.
 
 ## Code Quality Tools
-- **Compilation + Linting**: `cargo clippy --all-features --all-targets -- -D warnings` (replaces `cargo check` — never use `cargo check`)
+- **Compilation + Linting**: `scripts/cargo-cached.sh clippy -p <your crates> --all-targets -- -D warnings` while iterating (never `cargo check` — clippy is a strict superset); workspace-wide `--all-features` clippy is the merge gate's job, run once per merged tree.
 - **Formatting**: `cargo fmt`
-- **Testing**: `cargo test --all-features --workspace`
+- **Testing**: `scripts/cargo-cached.sh test -p <your crates>` while iterating; `cargo test --all-features --workspace` (via the wrapper) only at the merge gate.
 - **Security**: `cargo audit`
 - **Coverage**: cargo-tarpaulin or cargo-llvm-cov
 - **Documentation**: `cargo doc --no-deps --open`
@@ -111,6 +111,9 @@ Rust builds are expensive. `cargo build`, `cargo clippy`, and `cargo test` all c
 - **Never use `cargo check`** — `cargo clippy` is a strict superset (compilation + lints)
 - **Never pre-compile** — `cargo check && cargo test` or `cargo clippy && cargo build` wastes a full compile cycle; run the target command directly
 - **Capture output with `tee`** — see `coding-best-practices` § Build & Test Output Capture
+- **Always go through `scripts/cargo-cached.sh`** for build/test/clippy/nextest — identical command + identical tree replays the recorded log instantly, across all agents and worktrees. The PreToolUse hook enforces this for raw compiling invocations.
+- **Never override `CARGO_TARGET_DIR`/`--target-dir`** — the machine's `~/.cargo/config.toml` already routes every build (worktrees included) to its configured shared target-dir and sccache. The hook denies ad-hoc overrides.
+- **Prefer `cargo nextest run` for test-heavy iteration when installed** (check `command -v cargo-nextest`; SessionStart context states availability) — but nextest skips doctests, so the merge gate still needs a `cargo test` (or nextest + a separate `--doc` pass).
 
 ## Code Review Checklist
 - Code readability and self-documentation
