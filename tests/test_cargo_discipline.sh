@@ -19,6 +19,8 @@
 #   D10 `scripts/cargo-cached.sh test`           -> ALLOW (Rule 4, via wrapper)
 #   D11 `cargo fmt` alone                        -> ALLOW (not a compiling cmd)
 #   D12 `cargo audit` alone                      -> ALLOW (not matched)
+#   D13 commit message mentioning "cargo test"   -> ALLOW (data, not an invocation)
+#   D14 echoed string mentioning "cargo check"   -> ALLOW (data, not an invocation)
 #
 # Fully isolated: no repo state touched, all input on stdin.
 set -uo pipefail
@@ -106,6 +108,13 @@ echo ""
 echo "=== non-compiling cargo subcommands pass through ==="
 assert_allow "D11 cargo fmt alone allowed"                  "$(payload 'cargo fmt')"
 assert_allow "D12 cargo audit alone allowed"                "$(payload 'cargo audit')"
+echo ""
+
+echo "=== quoted mentions are data, not invocations (false-positive guard) ==="
+assert_allow "D13 commit message mentioning cargo test allowed" \
+  "$(payload 'git commit -m "fix: cargo test now passes"')"
+assert_allow "D14 echoed string mentioning cargo check allowed" \
+  "$(payload 'echo "remember: never run cargo check directly"')"
 echo ""
 
 echo "=== Results: $pass passed, $fail failed ==="

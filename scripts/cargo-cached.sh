@@ -21,6 +21,12 @@ RECORDS="$LEDGER_DIR/records.jsonl"
 TTL_HOURS=24
 
 command -v jq >/dev/null 2>&1 || exec cargo "$@"
+# sha256sum is GNU coreutils, not universal (e.g. stock macOS ships `shasum`
+# instead) — every hash below, INCLUDING the key itself, silently collapses to
+# an empty string without it, and an empty key matches every other empty-key
+# record in the ledger (cross-command replay poisoning). Fail open instead.
+command -v sha256sum >/dev/null 2>&1 || exec cargo "$@"
+command -v xargs >/dev/null 2>&1 || exec cargo "$@"
 mkdir -p "$LEDGER_DIR/logs" "$LEDGER_DIR/locks" 2>/dev/null || exec cargo "$@"
 git rev-parse --show-toplevel >/dev/null 2>&1 || exec cargo "$@"
 
@@ -32,9 +38,17 @@ untracked_hash=$(git ls-files --others --exclude-standard -z 2>/dev/null \
   | sort -z | xargs -0r sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1)
 env_hash=$(env | grep -E '^(RUSTFLAGS|RUSTDOCFLAGS|CARGO_)' | sort | sha256sum | cut -d' ' -f1)
 toolchain=$(rustc -V 2>/dev/null || echo unknown)
+# Repo-relative invocation dir: `cargo test` without `-p` scopes to the cwd's
+# workspace member, so the same command string means something different from
+# a member dir vs the workspace root — that must be part of what makes a tree+
+# command combination unique.
+rel_dir=$(git rev-parse --show-prefix 2>/dev/null)
 cmd_norm=$(printf '%s' "cargo $*" | tr -s '[:space:]' ' ')
-key=$(printf '%s' "$head_oid:$diff_hash:$untracked_hash:$toolchain:$env_hash:$cmd_norm" \
+key=$(printf '%s' "$head_oid:$diff_hash:$untracked_hash:$toolchain:$env_hash:$rel_dir:$cmd_norm" \
       | sha256sum | cut -c1-32)
+# Belt-and-braces: an empty key (e.g. a hashing tool failed silently above)
+# must never be looked up or recorded — it would alias every other empty key.
+[[ -n "$key" ]] || exec cargo "$@"
 
 # Replay the newest live record for $key, if fresh and unforced. Returns 1 on miss.
 replay_if_hit() {
@@ -66,17 +80,34 @@ if command -v flock >/dev/null 2>&1; then
   exec 9>"$LEDGER_DIR/locks/$key.lock" 2>/dev/null || true
   if ! flock -n 9 2>/dev/null; then
     echo "=== identical command already running under another agent; waiting for its result ==="
-    # -w below the session Bash timeout; on timeout we degrade to running (never wedge).
-    if flock -w 570 9 2>/dev/null; then replay_if_hit "$@"; fi
+    # -w assumes the CALLER's Bash-tool timeout, not this script's. The Bash
+    # tool defaults to 120s (callers may raise it up to 600s); 100s stays under
+    # the common default so a timed-out wait still degrades to running instead
+    # of the wait itself getting killed mid-flock.
+    if flock -w 100 9 2>/dev/null; then replay_if_hit "$@"; fi
   fi
+fi
+
+# Opportunistic prune (best-effort, not every run — rewriting records.jsonl is
+# O(n); ~1-in-20 misses is enough to keep it bounded without taxing every
+# invocation). TTL only ever gated replay; nothing deleted logs/records before.
+find "$LEDGER_DIR/logs" -type f -mmin "+$(( TTL_HOURS * 60 ))" -delete 2>/dev/null || true
+if [[ -f "$RECORDS" ]] && (( RANDOM % 20 == 0 )); then
+  tmp_records="$RECORDS.tmp.$$"
+  : > "$tmp_records" 2>/dev/null
+  while IFS= read -r line; do
+    rec_log=$(jq -r '.log // empty' <<<"$line" 2>/dev/null)
+    [[ -n "$rec_log" && -f "$rec_log" ]] && printf '%s\n' "$line" >> "$tmp_records"
+  done < "$RECORDS"
+  mv "$tmp_records" "$RECORDS" 2>/dev/null || rm -f "$tmp_records" 2>/dev/null
 fi
 
 # --- Miss: run for real, capture full log, record the outcome --------------
 logf="$LEDGER_DIR/logs/$(date +%Y%m%dT%H%M%S)-$key.log"
-start=$EPOCHSECONDS
+start=$(date +%s)
 cargo "$@" 2>&1 | tee "$logf" | tail -100
 rc=${PIPESTATUS[0]}
-dur=$(( EPOCHSECONDS - start ))
+dur=$(( $(date +%s) - start ))
 # duration_s is recorded on purpose: a corrupted cargo fingerprint can make a
 # suite falsely report "Finished" in ~0.3s (a false green). Recorded duration
 # turns that invisible trap into an auditable anomaly.

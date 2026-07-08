@@ -42,7 +42,7 @@ Before implementing or fixing, understand the desired end-user or developer expe
 
 Before writing new code, study similar existing code in the project to identify established design patterns, naming conventions, error handling styles, and structural idioms. Adhere to those conventions — consistency with the codebase trumps personal preference or textbook ideals.
 
-Before reporting a task done, run the narrowest command that verifies your scope — exactly once — through `scripts/cargo-cached.sh` (the PreToolUse hook routes compiling cargo commands through it, so don't fight it). Include its ledger evidence line — command, tree key, exit code, log path — in your final report. That line is your proof: without it, "tests pass" is just a claim, and Marvin will treat it as unverified.
+Before reporting a task done, run the narrowest command that verifies your scope — exactly once — through the `cargo-cached.sh` wrapper (absolute path announced in the SessionStart Rust build environment context; the PreToolUse hook routes test/clippy/nextest through it, so don't fight it). Include its ledger evidence line — command, tree key, exit code, log path — in your final report. That line is your proof: without it, "tests pass" is just a claim, and Marvin will treat it as unverified.
 
 ## Prior Art Check
 

@@ -7,7 +7,13 @@
 # command. This is the DELIBERATE OPPOSITE of hooks/block-github-writes.sh, which
 # fails CLOSED because it guards a real capability. Do not "harmonize" the two.
 #
-# Rules (all overridable with a leading CLAUDIUS_FORCE=1):
+# Quoting/escaping bypasses (e.g. `cargo "test"`, backslash-continued `cargo\
+# test`, CLAUDIUS_FORCE=1 appearing anywhere rather than command-leading) are
+# accepted limitations, not gaps to close — this hook has no real shell lexer,
+# and hardening it further isn't worth the false-positive risk for what remains
+# an efficiency gate on cooperative agents, not a security boundary.
+#
+# Rules (all overridable with CLAUDIUS_FORCE=1 anywhere in the command):
 #   1. bare `cargo check` is banned — clippy is a strict superset.
 #   2. no 2+ chained COMPILING cargo subcommands in one Bash call (`cargo fmt`
 #      may still chain — it does not compile).
@@ -53,8 +59,15 @@ LEAD='(^|[;&|(]|[[:space:]])'
 CARGO='cargo[[:space:]]+(\+[^[:space:]]+[[:space:]]+)?'
 TRAIL='([[:space:]]|;|&|\||$)'
 
+# Data, not invocation: a commit message, grep pattern, or echoed string can
+# contain the literal text "cargo test" without invoking anything — matching
+# raw $cmd would deny e.g. `git commit -m "fix: cargo test now passes"`. Best-
+# effort quote-blanking (not a real shell lexer — doesn't handle nested/escaped
+# quotes) so Rules 1/2/4 only see text that could plausibly BE a command.
+scan=$(sed -E 's/"[^"]*"/""/g; s/'"'"'[^'"'"']*'"'"'/'"''"'/g' <<<"$cmd")
+
 # --- Rule 1: cargo check is banned -----------------------------------------
-if grep -qE "${LEAD}${CARGO}check${TRAIL}" <<<"$cmd"; then
+if grep -qE "${LEAD}${CARGO}check${TRAIL}" <<<"$scan"; then
   deny "cargo check is banned (rust-best-practices): clippy is a strict superset and check artifacts do not seed the clippy cache, so check->clippy compiles twice. Run: $WRAPPER clippy <same scope> -- -D warnings. Rarely-justified override: prefix CLAUDIUS_FORCE=1."
 fi
 
@@ -62,7 +75,7 @@ fi
 # Split on ; & | so each subcommand lands on its own line, then count matching
 # lines. `cargo fmt` is not in the compiling set, so fmt && build == 1 (allowed).
 n=$(grep -cE "${LEAD}${CARGO}(build|test|clippy|nextest|check|doc|bench)${TRAIL}" \
-      <<<"$(tr ';&|' '\n' <<<"$cmd")")
+      <<<"$(tr ';&|' '\n' <<<"$scan")")
 if (( n >= 2 )); then
   deny "Chained cargo compile commands waste full compile cycles (rust-best-practices: never chain, never pre-compile). Run ONE command for the outcome you need; combine crate scopes as '-p a -p b' instead of '&&'. cargo fmt may still be chained (it does not compile). Override: prefix CLAUDIUS_FORCE=1."
 fi
@@ -71,9 +84,10 @@ fi
 # Resolve the canonical dir dynamically (whatever ~/.cargo/config.toml / env this
 # machine has). Never compare against a literal path. Resolution failure => allow.
 resolve_target_dir() {
-  local dir="$1"
+  local dir="$1" mc="cargo"
+  command -v timeout >/dev/null 2>&1 && mc="timeout 3 cargo"
   ( if [[ -n "$dir" && -d "$dir" ]]; then cd "$dir" 2>/dev/null || exit 0; fi
-    cargo metadata --format-version 1 --no-deps 2>/dev/null \
+    $mc metadata --format-version 1 --no-deps 2>/dev/null \
       | jq -r '.target_directory // empty' 2>/dev/null )
 }
 extract_target_dirs() {
@@ -98,8 +112,8 @@ fi
 
 # --- Rule 4: route verification invocations through the ledger --------------
 # test|clippy|nextest only — see the header note on why plain build is excluded.
-if grep -qE "${LEAD}${CARGO}(test|clippy|nextest)${TRAIL}" <<<"$cmd" \
-   && [[ "$cmd" != *cargo-cached.sh* ]]; then
+if grep -qE "${LEAD}${CARGO}(test|clippy|nextest)${TRAIL}" <<<"$scan" \
+   && [[ "$scan" != *cargo-cached.sh* ]]; then
   deny "Use the verification ledger instead of raw cargo: $WRAPPER <same args, without the leading 'cargo'>. If this exact command already ran on this exact tree (by ANY agent) it replays the recorded log instantly; otherwise it runs, captures the full log, and records the result. Force a real re-run on an identical tree: prefix CLAUDIUS_FORCE=1."
 fi
 

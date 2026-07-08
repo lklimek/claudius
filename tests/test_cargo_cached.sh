@@ -9,6 +9,8 @@
 #   K2 identical run, same tree -> REPLAY, stub NOT re-run (counter stays 1)
 #   K3 tree changed (new file)  -> cache MISS, stub re-runs (counter 1->2)
 #   K4 CLAUDIUS_FORCE=1         -> forced real run even on a hit (counter 2->3)
+#   K5 sha256sum absent on PATH -> fails OPEN to real cargo, no key-collapse
+#   K6 same cmd, different cwd  -> cache MISS (cwd is part of the key)
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -87,6 +89,37 @@ if [ "$(counter)" = "3" ] && grep -q "STUB CARGO INVOCATION 3" <<<"$OUT"; then
   ok "K4 forced real re-run despite an available hit (counter 3)"
 else
   bad "K4 (counter=$(counter) rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K5: sha256sum absent falls open to real cargo (no key-collapse) ==="
+MINBIN="$WORK/minbin"; mkdir -p "$MINBIN"
+for t in bash jq git sort xargs cut date tr mkdir grep tee rm mv cat; do
+  src=$(command -v "$t" 2>/dev/null) && ln -sf "$src" "$MINBIN/$t"
+done
+ln -sf "$STUBDIR/cargo" "$MINBIN/cargo"   # deliberately no sha256sum in $MINBIN
+BEFORE=$(counter)
+OUT=$(cd "$REPO" && env -i PATH="$MINBIN" HOME="$WORK" \
+      CLAUDIUS_CACHE_DIR="$CLAUDIUS_CACHE_DIR" COUNTER="$COUNTER" CLAUDIUS_FORCE=0 \
+      "$MINBIN/bash" "$WRAPPER" test 2>&1); RC=$?
+AFTER=$(counter)
+if [ "$AFTER" = "$((BEFORE + 1))" ] && grep -q "STUB CARGO INVOCATION" <<<"$OUT"; then
+  ok "K5 sha256sum absent: fails open to real cargo instead of corrupting the ledger"
+else
+  bad "K5 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K6: same command from a different cwd is a cache miss (cwd is part of the key) ==="
+# Tree/command are identical to the already-cached root invocation (K1-K4) —
+# without cwd in the key material this would replay; it must instead miss.
+mkdir -p "$REPO/member"
+BEFORE=$(counter)
+OUT=$(cd "$REPO/member" && CLAUDIUS_FORCE=0 env PATH="$STUBDIR:$PATH" \
+      "$BASHBIN" "$WRAPPER" test 2>&1); RC=$?
+AFTER=$(counter)
+if [ "$AFTER" = "$((BEFORE + 1))" ] && grep -q "STUB CARGO INVOCATION" <<<"$OUT"; then
+  ok "K6 same command from a different cwd is a cache miss (cwd is part of the key)"
+else
+  bad "K6 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
 fi
 
 echo ""
