@@ -34,8 +34,11 @@ git rev-parse --show-toplevel >/dev/null 2>&1 || exec cargo "$@"
 head_oid=$(git rev-parse HEAD 2>/dev/null) || exec cargo "$@"
 diff_hash=$(git diff HEAD 2>/dev/null | sha256sum | cut -d' ' -f1)
 # Untracked, non-ignored files: agents routinely create new source before testing.
+# `-r`/--no-run-if-empty is a GNU xargs extension BSD/macOS xargs rejects.
+# Without it, zero untracked files still runs sha256sum once with an already-
+# drained stdin, hashing empty input — deterministic and portable either way.
 untracked_hash=$(git ls-files --others --exclude-standard -z 2>/dev/null \
-  | sort -z | xargs -0r sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1)
+  | sort -z | xargs -0 sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1)
 env_hash=$(env | grep -E '^(RUSTFLAGS|RUSTDOCFLAGS|CARGO_)' | sort | sha256sum | cut -d' ' -f1)
 toolchain=$(rustc -V 2>/dev/null || echo unknown)
 # Repo-relative invocation dir: `cargo test` without `-p` scopes to the cwd's
@@ -111,7 +114,11 @@ dur=$(( $(date +%s) - start ))
 # duration_s is recorded on purpose: a corrupted cargo fingerprint can make a
 # suite falsely report "Finished" in ~0.3s (a false green). Recorded duration
 # turns that invisible trap into an auditable anomaly.
-record=$(jq -cn --arg ts "$(date -Is)" --arg key "$key" --arg cmd "$cmd_norm" \
+# `date -Is` is a GNU extension; BSD/macOS date lacks it and would write an
+# empty $ts, permanently un-replayable (replay treats a missing ts as a miss).
+# `-u +%Y-%m-%dT%H:%M:%SZ` is identical output on GNU and BSD date, and GNU
+# `date -d` (the read side, above) parses it back without trouble.
+record=$(jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg key "$key" --arg cmd "$cmd_norm" \
   --arg head "$head_oid" --arg log "$logf" \
   --argjson exit "$rc" --argjson dur "$dur" --arg sid "${CLAUDE_SESSION_ID:-}" \
   '{ts:$ts,key:$key,cmd:$cmd,head:$head,exit:$exit,duration_s:$dur,log:$log,session:$sid}')
