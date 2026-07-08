@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.4.0] - 2026-07-08
+
+### Added
+
+- **`hooks/cargo-discipline.sh`**: new fail-open PreToolUse hook (matcher `Bash`) enforcing four cargo rules already in prose — deny bare `cargo check` (clippy supersedes it), deny chained compiling cargo subcommands in one call, deny ad-hoc `CARGO_TARGET_DIR`/`--target-dir` overrides that diverge from the dynamically-resolved configured target dir, and route raw compiling invocations (`test`/`clippy`/`nextest`) through the new wrapper. Escape hatch: `CLAUDIUS_FORCE=1`. Wired via `hooks/hooks.json`.
+- **`scripts/cargo-cached.sh`**: verification-ledger wrapper — keys on tree content (HEAD oid, tracked+untracked diff hashes, toolchain, relevant env, normalized command) so an identical command on an identical tree, by any agent or worktree, replays the recorded log and exit code instead of recompiling. Records `duration_s` to surface corrupted-fingerprint false-greens. Ledger location is portable: `${CLAUDIUS_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claudius}/ledger`, never a hardcoded machine path.
+- **`hooks/session-start.sh`**: appends a cargo-guarded Rust-environment probe (sccache/cargo-nextest availability, resolved shared target-dir, ledger location) to session context.
+- **`tests/test_cargo_discipline.sh`**, **`tests/test_cargo_cached.sh`**: fixture tests for the new hook and wrapper.
+
+### Changed
+
+- **`skills/grand-admiral/SKILL.md`**: new "Verification Economy" section — verification is a role (Bilby narrow-scope-once via the wrapper, Marvin adversarial, coordinator reads ledger records, never re-executes), a ledger record for the current tree key IS the verification, merge gate re-executes once for free on the merged tree. Anti-Pattern #6 no longer instructs "verify with fresh build" — check the ledger first. New Agent Prompt Requirement #12 (narrowest scope + ledger evidence line in reports). Candy Economy: no candy for findings that just re-run an identical ledger record.
+- **`agents/qa-engineer-marvin.md`**: "Run it, don't read it" retargeted — a green ledger record for the current tree already is an execution; skepticism redirects to untried scopes/feature combos/doctests and to auditing ledger anomalies (implausibly low `duration_s` = corrupted-fingerprint false-green).
+- **`agents/developer-bilby.md`**: must run its verifying command once via the wrapper and include the ledger evidence line (command, tree key, exit, log path) in its report.
+- **`skills/rust-best-practices/SKILL.md`**: Code Quality Tools defaults rescoped to narrow `-p` scope through the wrapper while iterating; `--all-features --workspace` reserved for the merge gate. Build Optimization gains wrapper/target-dir/nextest guidance.
+- **`skills/coding-best-practices/SKILL.md`**: Build & Test Output Capture notes the wrapper performs capture/replay automatically for cargo commands.
+
 ## [5.3.0] - 2026-07-07
 
 ### Changed
