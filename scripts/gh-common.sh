@@ -134,8 +134,16 @@ fetch_all_review_threads() {
     fi
     mv "$accum_file.next" "$accum_file"
 
-    has_next=$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' "$resp_file")
-    end_cursor=$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor' "$resp_file")
+    if ! has_next=$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' "$resp_file"); then
+      echo "Error: failed to read pageInfo.hasNextPage on $owner/$repo#$pr_number" >&2
+      _cleanup_review_threads_tmp
+      return 1
+    fi
+    if ! end_cursor=$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor' "$resp_file"); then
+      echo "Error: failed to read pageInfo.endCursor on $owner/$repo#$pr_number" >&2
+      _cleanup_review_threads_tmp
+      return 1
+    fi
 
     pages=$((pages + 1))
     if [[ "$has_next" != "true" ]]; then
