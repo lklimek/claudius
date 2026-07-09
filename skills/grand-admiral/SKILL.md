@@ -140,6 +140,16 @@ Four mandatory rules:
 
 Only shut down agents when their scope is fully complete or they need to be replaced (stuck, wrong specialization).
 
+## Verification Economy
+
+Every cargo build/test/clippy pays a real compile-time floor (linking, freshness checks, clippy-driver mode-switch) that no cache erases. The cargo-discipline hook (`hooks/cargo-discipline.sh`) and the verification ledger (`scripts/cargo-cached.sh`; location: `CLAUDIUS_CACHE_DIR` env var, XDG cache dir by default) make redundant runs visible and replay recorded log/exit instead of recompiling.
+
+- **Verification is a role, not a step every agent repeats.** Bilby (implementer) runs the narrowest relevant scope once through the wrapper before committing; Marvin owns adversarial execution; the coordinator (per Coordinator Restrictions in Programme Management) executes nothing — it verifies by reading ledger records and logs.
+- **A ledger record IS the verification.** A record `{command, tree key, exit 0, log path}` for the CURRENT tree means that command passed on exactly this code. Require the ledger line in every code-mutating agent's report.
+- **The merge gate re-executes for free.** A merged tree is a new tree key, so the full gate (clippy + tests) runs exactly once post-merge on the merged tree; contributing agents run only their own scope pre-merge, never the full workspace gate.
+- **Feature matrices are per-tree, not per-agent.** Never brief two agents to run the same feature-combination sweep.
+- **Never prescribe command chains.** Brief the OUTCOME ("clippy clean and tests green for `-p X`"), never a command sequence — chains violate `rust-best-practices` and the hook denies them.
+
 ## Agent Prompt Requirements
 
 Agents have NO conversation history. Every prompt MUST include:
@@ -155,6 +165,7 @@ Agents have NO conversation history. Every prompt MUST include:
 9. **Prior knowledge**: MemCan search results relevant to the task (see MemCan Context Injection)
 10. **Bug/diagnosis/root-cause tasks**: the brief MUST quote the user's exact reproduction steps and the literal entry point (button/command) and instruct: "trace from this entry point; if you can't reproduce the observed symptom, you haven't found the cause — see `bug-investigation`."
 11. **Coding standards (mandatory)**: any brief for an agent that writes, modifies, reviews, or tests code MUST instruct it to load and continuously apply `/coding-best-practices` (plus the relevant language best-practices skill) throughout the task — not as a one-time read. It is preloaded via agent frontmatter, but state the requirement explicitly so the agent applies it as it works.
+12. **Cargo scope (code agents)**: name the narrowest cargo scope the agent may run (`-p` covering its files) and require the ledger evidence line (command, tree key, exit, log path) in its report. Workspace-wide runs are reserved for the merge gate unless the brief explicitly grants them (see Verification Economy).
 
 ## MemCan Context Injection
 
@@ -219,6 +230,8 @@ Note for team spawns: omitting `team_name` does **not** help — `Agent()` calls
 - **Use absolute paths** with `git -C` — relative paths break if shell CWD drifts during the session.
 - **Delete stale worktree branches** after cherry-picking — worktree branches (`worktree-agent-xxx` + feature branches) accumulate fast. Clean with `git branch -D <worktree-branches>` after merging.
 
+**Shared target-dir:** worktrees inherit the machine's configured shared target-dir and sccache setup from `~/.cargo/config.toml` — never override `CARGO_TARGET_DIR` (the hook denies it). After ledger dedup, target-dir contention across parallel agents is rare, and queueing on it beats a cold cache.
+
 **Anti-pattern:** committing locally without pushing, then launching worktree agents that need those changes — worktrees won't see them.
 
 ## Scaling
@@ -243,6 +256,7 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 - **Trillian** (Writer): earns a candy for each confirmed doc gap or inaccuracy
 - **Nagatha** (Architect): earns a candy for each confirmed architecture issue or design improvement
 - **Diziet** (UX): earns a candy for each confirmed UX/accessibility issue
+- **No candy for recomputation**: a finding produced by re-running a command that already has an identical ledger record for an identical tree earns nothing — findings must rest on new evidence (a new test, a scope nobody ran, a ledger anomaly).
 
 **Workflow tally**: At workflow end, the coordinator collects each agent's candy count from their reports and announces the winner. Agent with the most findings in their domain gets bragging rights.
 
@@ -303,7 +317,7 @@ Monitor(persistent=true, description="agent stall watchdog",
 3. Forgetting agent skills — use correct `subagent_type` for preloaded skills
 4. No output location — always specify where standalone agents write
 5. Parallelizing tightly coupled work — use single opus agent sequentially for cross-file dependencies
-6. Trusting stale diagnostics — verify with fresh build
+6. Trusting stale diagnostics — check the ledger for the current tree key first; a fresh build is warranted only when no record exists for the current tree (`CLAUDIUS_FORCE=1` for the rare justified exception — suspected flake or corrupted fingerprint)
 7. Spawning agents for tiny tasks — inline small/sequential work by default (see Token Economy § Spawn discipline)
 8. Auto-deleting data on errors — NEVER delete databases, wipe volumes, or destroy data without explicit user confirmation (see CLAUDE.md Safety section)
 9. Not verifying branch context after worktree cleanup — `git worktree remove` can change checked-out branch, causing cherry-picks into wrong branch

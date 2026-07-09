@@ -1,5 +1,5 @@
 {
-  "description": "Claudius plugin hooks — GitHub write access control",
+  "description": "Claudius plugin hooks — GitHub write access control + cargo discipline",
   "hooks": {
     "PreToolUse": [
       {
@@ -9,6 +9,16 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/block-github-writes.sh",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/cargo-discipline.sh",
+            "timeout": 15
           }
         ]
       }

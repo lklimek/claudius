@@ -25,7 +25,7 @@ Only run formatting, linting, and tests right before committing (or when the use
 
 ## Build & Test Output Capture
 
-Never re-run a build, test, or lint command just to see more of its output. Capture full output on the first run using `tee`: `f=$(mktemp /tmp/build-XXXXXX.txt) && <command> 2>&1 | tee "$f" | tail -80 && echo "Full output: $f"`. If the visible tail is insufficient, read the temp file — do not re-execute the command.
+Never re-run a build, test, or lint command just to see more of its output. Capture full output on the first run using `tee`: `f=$(mktemp /tmp/build-XXXXXX.txt) && <command> 2>&1 | tee "$f" | tail -80 && echo "Full output: $f"`. If the visible tail is insufficient, read the temp file — do not re-execute the command. For cargo specifically, the `cargo-cached.sh` wrapper (absolute path announced in the SessionStart Rust build environment context) performs this capture automatically and replays it on identical re-runs; the mktemp+tee pattern above applies to non-cargo commands.
 
 ## Code Review Output Format
 

@@ -3,6 +3,7 @@ name: Report Pipeline Tests
 on:
   push:
     paths:
+      - 'hooks/**'
       - 'scripts/**'
       - 'schemas/**'
       - 'skills/**'
@@ -11,6 +12,7 @@ on:
       - '.github/workflows/test-report-pipeline.yml'
   pull_request:
     paths:
+      - 'hooks/**'
       - 'scripts/**'
       - 'schemas/**'
       - 'skills/**'
@@ -44,6 +46,15 @@ jobs:
 
       - name: Watchdog GONE detection (e2e, real tmux)
         run: ./tests/test_agent_watchdog_gone.sh
+
+      - name: block-github-writes hook fixtures
+        run: ./tests/test_block_github_writes.sh
+
+      - name: cargo-discipline hook fixtures
+        run: ./tests/test_cargo_discipline.sh
+
+      - name: cargo-cached wrapper fixtures
+        run: ./tests/test_cargo_cached.sh
 
       - name: Format check
         run: ruff format --check .
