@@ -225,6 +225,36 @@ else
   bad "fetch_all_review_threads failed under BSD-style mktemp: $(cat "$BASE/mktemp.err")"
 fi
 
+echo "=== fetch_all_review_threads: partial mktemp failure cleans up (no leak) ==="
+# If the 1st mktemp call succeeds but a later one fails, the already-created
+# file must not leak into $TMPDIR.
+BIN8="$BASE/bin8"; mkdir -p "$BIN8"
+TMPDIR8="$BASE/tmpdir8"; mkdir -p "$TMPDIR8"
+cat > "$BIN8/mktemp" <<CAP
+#!/usr/bin/env bash
+counter_file="$TMPDIR8/.mktemp-calls"
+n=\$(cat "\$counter_file" 2>/dev/null || echo 0); n=\$((n + 1)); echo "\$n" > "\$counter_file"
+if [[ "\$n" -eq 1 ]]; then
+  exec "$REAL_MKTEMP" "\$@"
+else
+  echo "mktemp: simulated failure" >&2
+  exit 1
+fi
+CAP
+chmod +x "$BIN8/mktemp"
+
+if PATH="$BIN8:$PATH" TMPDIR="$TMPDIR8" bash -c '
+  set -euo pipefail
+  source "$1"
+  fetch_all_review_threads owner repo 42 1 0
+' _ "$GH_COMMON" >/dev/null 2>"$BASE/partial.err"; then
+  bad "expected fetch_all_review_threads to fail when a later mktemp call fails"
+else
+  after8=$(find "$TMPDIR8" -maxdepth 1 -type f ! -name '.mktemp-calls' | wc -l)
+  if [ "$after8" = "0" ]; then ok "partial mktemp failure cleans up the already-created temp file (no leak)"
+  else bad "expected 0 leftover temp files after partial mktemp failure, found $after8"; fi
+fi
+
 echo ""
 echo "=== Results: $pass passed, $fail failed ==="
 [ "$fail" -eq 0 ]

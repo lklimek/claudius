@@ -73,8 +73,19 @@ fetch_all_review_threads() {
   local PAGE_LIMIT=50
   local cursor="null"
   local pages=0
-  local resp_file accum_file new_file result
+  local resp_file="" accum_file="" new_file="" result
   local has_next end_cursor cursor_arg
+
+  # Defined before any mktemp call (and guarded per-variable) so a failure
+  # partway through the mktemp sequence below still cleans up whichever
+  # temp file(s) were already created, instead of leaking them. Guarding on
+  # non-empty also means a still-unset accum_file can't turn "$accum_file.next"
+  # into the literal ".next" and delete an unrelated file in the caller's cwd.
+  _cleanup_review_threads_tmp() {
+    [[ -n "$accum_file" ]] && rm -f "$accum_file" "$accum_file.next" 2>/dev/null
+    [[ -n "$new_file" ]] && rm -f "$new_file" 2>/dev/null
+    [[ -n "$resp_file" ]] && rm -f "$resp_file" 2>/dev/null
+  }
 
   # Page merging goes through temp files, never a growing shell variable: an
   # --argjson value built from accumulated JSON (all thread nodes incl. full
@@ -87,9 +98,9 @@ fetch_all_review_threads() {
   local tmpl="${TMPDIR:-/tmp}/gh-threads.XXXXXX"
   if ! accum_file=$(mktemp "$tmpl") || ! new_file=$(mktemp "$tmpl") || ! resp_file=$(mktemp "$tmpl"); then
     echo "Error: mktemp failed while fetching review threads" >&2
+    _cleanup_review_threads_tmp
     return 1
   fi
-  _cleanup_review_threads_tmp() { rm -f "$accum_file" "$new_file" "$resp_file" "$accum_file.next" 2>/dev/null; }
   printf '[]' > "$accum_file"
 
   while :; do
