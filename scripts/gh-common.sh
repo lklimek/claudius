@@ -143,7 +143,11 @@ fetch_all_review_threads() {
       _cleanup_review_threads_tmp
       return 1
     fi
-    mv "$accum_file.next" "$accum_file"
+    if ! mv "$accum_file.next" "$accum_file"; then
+      echo "Error: failed to move merged reviewThreads page into place on $owner/$repo#$pr_number" >&2
+      _cleanup_review_threads_tmp
+      return 1
+    fi
 
     if ! has_next=$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' "$resp_file"); then
       echo "Error: failed to read pageInfo.hasNextPage on $owner/$repo#$pr_number" >&2

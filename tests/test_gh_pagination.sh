@@ -250,9 +250,34 @@ if PATH="$BIN8:$PATH" TMPDIR="$TMPDIR8" bash -c '
 ' _ "$GH_COMMON" >/dev/null 2>"$BASE/partial.err"; then
   bad "expected fetch_all_review_threads to fail when a later mktemp call fails"
 else
-  after8=$(find "$TMPDIR8" -maxdepth 1 -type f ! -name '.mktemp-calls' | wc -l)
+  after8=$(find "$TMPDIR8" -maxdepth 1 -type f ! -name '.mktemp-calls' | wc -l | tr -d '[:space:]')
   if [ "$after8" = "0" ]; then ok "partial mktemp failure cleans up the already-created temp file (no leak)"
   else bad "expected 0 leftover temp files after partial mktemp failure, found $after8"; fi
+fi
+
+echo "=== fetch_all_review_threads: mv failure on page merge is caught (no stale/silent result) ==="
+# A failing `mv "$accum_file.next" "$accum_file"` (cross-device TMPDIR, disk
+# full, permissions) must not be silently ignored — the function must error
+# out and clean up rather than continuing with a stale accum_file.
+BIN9="$BASE/bin9"; mkdir -p "$BIN9"
+cat > "$BIN9/mv" <<'CAP'
+#!/usr/bin/env bash
+echo "mv: simulated failure" >&2
+exit 1
+CAP
+chmod +x "$BIN9/mv"
+mk_paged_gh "$BIN9" "$BASE/cap9"
+
+if PATH="$BIN9:$PATH" bash -c '
+  set -euo pipefail
+  source "$1"
+  fetch_all_review_threads owner repo 42 1 0
+' _ "$GH_COMMON" >/dev/null 2>"$BASE/mv.err"; then
+  bad "expected fetch_all_review_threads to fail when mv fails on the page merge"
+else
+  if grep -q "failed to move merged reviewThreads page" "$BASE/mv.err"; then
+    ok "mv failure on page merge is caught and reported, not silently ignored"
+  else bad "mv failure did not produce the expected error message: $(cat "$BASE/mv.err")"; fi
 fi
 
 echo ""
