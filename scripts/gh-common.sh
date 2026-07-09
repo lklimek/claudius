@@ -81,10 +81,15 @@ fetch_all_review_threads() {
   # comment bodies) hits the OS ARG_MAX limit on PRs with ~75+ threads,
   # failing execve with "Argument list too long" and resolving/listing zero
   # threads. Files have no such limit — only command-line argument strings do.
-  if ! accum_file=$(mktemp) || ! new_file=$(mktemp) || ! resp_file=$(mktemp); then
+  #
+  # mktemp needs an explicit template: BSD/macOS mktemp has no built-in
+  # default template and errors ("too few arguments") when called bare.
+  local tmpl="${TMPDIR:-/tmp}/gh-threads.XXXXXX"
+  if ! accum_file=$(mktemp "$tmpl") || ! new_file=$(mktemp "$tmpl") || ! resp_file=$(mktemp "$tmpl"); then
     echo "Error: mktemp failed while fetching review threads" >&2
     return 1
   fi
+  _cleanup_review_threads_tmp() { rm -f "$accum_file" "$new_file" "$resp_file" "$accum_file.next" 2>/dev/null; }
   printf '[]' > "$accum_file"
 
   while :; do
@@ -94,18 +99,39 @@ fetch_all_review_threads() {
       cursor_arg=(-f cursor="$cursor")
     fi
 
+    # Every gh/jq call below is explicitly checked and cleans up on failure —
+    # do not rely on the caller's `set -e` alone: it doesn't fire in every
+    # shell context (command substitutions, conditionals), and a caller
+    # without `-e` at all would otherwise print an empty line and return
+    # success on a corrupt/partial response.
     if [[ "$use_run_gh" == "1" ]]; then
-      run_gh api graphql \
+      if ! run_gh api graphql \
         -F owner="$owner" -F repo="$repo" -F pr_number="$pr_number" \
-        "${cursor_arg[@]}" -f query="$(_review_threads_query "$comments_first")" > "$resp_file"
+        "${cursor_arg[@]}" -f query="$(_review_threads_query "$comments_first")" > "$resp_file"; then
+        echo "Error: gh api graphql failed while fetching review threads on $owner/$repo#$pr_number" >&2
+        _cleanup_review_threads_tmp
+        return 1
+      fi
     else
-      gh api graphql \
+      if ! gh api graphql \
         -F owner="$owner" -F repo="$repo" -F pr_number="$pr_number" \
-        "${cursor_arg[@]}" -f query="$(_review_threads_query "$comments_first")" > "$resp_file"
+        "${cursor_arg[@]}" -f query="$(_review_threads_query "$comments_first")" > "$resp_file"; then
+        echo "Error: gh api graphql failed while fetching review threads on $owner/$repo#$pr_number" >&2
+        _cleanup_review_threads_tmp
+        return 1
+      fi
     fi
 
-    jq -c '.data.repository.pullRequest.reviewThreads.nodes' "$resp_file" > "$new_file"
-    jq -c -s '.[0] + .[1]' "$accum_file" "$new_file" > "$accum_file.next"
+    if ! jq -c '.data.repository.pullRequest.reviewThreads.nodes' "$resp_file" > "$new_file"; then
+      echo "Error: failed to parse reviewThreads response on $owner/$repo#$pr_number" >&2
+      _cleanup_review_threads_tmp
+      return 1
+    fi
+    if ! jq -c -s '.[0] + .[1]' "$accum_file" "$new_file" > "$accum_file.next"; then
+      echo "Error: failed to merge reviewThreads page on $owner/$repo#$pr_number" >&2
+      _cleanup_review_threads_tmp
+      return 1
+    fi
     mv "$accum_file.next" "$accum_file"
 
     has_next=$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' "$resp_file")
@@ -117,7 +143,7 @@ fetch_all_review_threads() {
     fi
     if [[ $pages -ge $PAGE_LIMIT ]]; then
       echo "Error: reviewThreads pagination exceeded $PAGE_LIMIT pages on $owner/$repo#$pr_number" >&2
-      rm -f "$accum_file" "$new_file" "$resp_file"
+      _cleanup_review_threads_tmp
       return 1
     fi
     cursor="$end_cursor"
@@ -125,8 +151,12 @@ fetch_all_review_threads() {
 
   # --slurpfile reads the accumulated array from disk, not argv — the one
   # remaining --argjson-shaped value here is just the small query skeleton.
-  result=$(jq -c -n --slurpfile nodes "$accum_file" \
-    '{data: {repository: {pullRequest: {reviewThreads: {nodes: $nodes[0]}}}}}')
-  rm -f "$accum_file" "$new_file" "$resp_file"
+  if ! result=$(jq -c -n --slurpfile nodes "$accum_file" \
+    '{data: {repository: {pullRequest: {reviewThreads: {nodes: $nodes[0]}}}}}'); then
+    echo "Error: failed to assemble merged reviewThreads result on $owner/$repo#$pr_number" >&2
+    _cleanup_review_threads_tmp
+    return 1
+  fi
+  _cleanup_review_threads_tmp
   printf '%s\n' "$result"
 }

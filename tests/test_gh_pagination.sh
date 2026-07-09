@@ -196,6 +196,35 @@ else
   bad "fetch_all_review_threads failed on large payload: $(cat "$argmax_err")"
 fi
 
+echo "=== fetch_all_review_threads: mktemp always gets an explicit template (BSD regression) ==="
+# BSD/macOS mktemp has no built-in default template and errors on a bare call
+# ("too few arguments"). This stub reproduces that behavior on top of the real
+# (GNU) mktemp so the test runs portably here while still catching a bare call.
+BIN7="$BASE/bin7"; mkdir -p "$BIN7"
+REAL_MKTEMP="$(command -v mktemp)"
+cat > "$BIN7/mktemp" <<CAP
+#!/usr/bin/env bash
+if [[ \$# -eq 0 ]]; then
+  echo "mktemp: too few arguments" >&2
+  exit 1
+fi
+exec "$REAL_MKTEMP" "\$@"
+CAP
+chmod +x "$BIN7/mktemp"
+mk_paged_gh "$BIN7" "$BASE/cap7"
+
+if out7=$(PATH="$BIN7:$PATH" bash -c '
+  set -euo pipefail
+  source "$1"
+  fetch_all_review_threads owner repo 42 1 0
+' _ "$GH_COMMON" 2>"$BASE/mktemp.err"); then
+  n7=$(echo "$out7" | jq '.data.repository.pullRequest.reviewThreads.nodes | length')
+  if [ "$n7" = "3" ]; then ok "mktemp always called with an explicit template (BSD-style bare-call rejection survived)"
+  else bad "expected 3 nodes with template-only mktemp, got $n7"; fi
+else
+  bad "fetch_all_review_threads failed under BSD-style mktemp: $(cat "$BASE/mktemp.err")"
+fi
+
 echo ""
 echo "=== Results: $pass passed, $fail failed ==="
 [ "$fail" -eq 0 ]
