@@ -21,6 +21,7 @@
 #   D12 `cargo audit` alone                      -> ALLOW (not matched)
 #   D13 commit message mentioning "cargo test"   -> ALLOW (data, not an invocation)
 #   D14 echoed string mentioning "cargo check"   -> ALLOW (data, not an invocation)
+#   D15 quoted CARGO_TARGET_DIR mention          -> ALLOW (Rule 3 must scan $scan too)
 #
 # Fully isolated: no repo state touched, all input on stdin.
 set -uo pipefail
@@ -115,6 +116,8 @@ assert_allow "D13 commit message mentioning cargo test allowed" \
   "$(payload 'git commit -m "fix: cargo test now passes"')"
 assert_allow "D14 echoed string mentioning cargo check allowed" \
   "$(payload 'echo "remember: never run cargo check directly"')"
+assert_allow "D15 quoted CARGO_TARGET_DIR mention allowed (Rule 3 false-positive guard)" \
+  "$(payload 'git commit -m "note: cargo ignores ad-hoc CARGO_TARGET_DIR=/tmp/adhoc overrides"')" "$STUB_PATH"
 echo ""
 
 echo "=== Results: $pass passed, $fail failed ==="

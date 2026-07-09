@@ -64,8 +64,10 @@ replay_if_hit() {
   logf=$(jq -r '.log // empty' <<<"$hit" 2>/dev/null)
   [[ -n "$ts" && -n "$rc" && -n "$logf" && -f "$logf" ]] || return 1
   # TTL guards against environment drift (system libs, network deps) the key
-  # can't see. Non-GNU `date -d` => treat as a miss (re-run) rather than trust it.
-  rec_epoch=$(date -d "$ts" +%s 2>/dev/null) || return 1
+  # can't see. `date -d` is a GNU extension BSD/macOS date lacks; the log file's
+  # own mtime is portable (GNU `stat -c`, BSD `stat -f`) and free either way.
+  rec_epoch=$(stat -c %Y "$logf" 2>/dev/null) || rec_epoch=$(stat -f %m "$logf" 2>/dev/null)
+  [[ -n "$rec_epoch" ]] || return 1
   now=$(date +%s)
   (( now - rec_epoch < TTL_HOURS * 3600 )) || return 1
   echo "=== CACHED verification: identical command on identical tree, recorded $ts, exit $rc ==="
@@ -106,7 +108,9 @@ if [[ -f "$RECORDS" ]] && (( RANDOM % 20 == 0 )); then
 fi
 
 # --- Miss: run for real, capture full log, record the outcome --------------
-logf="$LEDGER_DIR/logs/$(date +%Y%m%dT%H%M%S)-$key.log"
+# PID suffix avoids two concurrent identical runs in the same second colliding
+# on one log file (interleaved/corrupted output) when flock is unavailable.
+logf="$LEDGER_DIR/logs/$(date +%Y%m%dT%H%M%S)-$key-$$.log"
 start=$(date +%s)
 cargo "$@" 2>&1 | tee "$logf" | tail -100
 rc=${PIPESTATUS[0]}

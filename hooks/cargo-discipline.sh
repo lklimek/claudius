@@ -96,7 +96,7 @@ extract_target_dirs() {
     grep -oE '\-\-target-dir[=[:space:]][^[:space:];&|]+' <<<"$c" | sed -E 's/^--target-dir[=[:space:]]//'
   } 2>/dev/null
 }
-if grep -qE 'CARGO_TARGET_DIR=|--target-dir' <<<"$cmd"; then
+if grep -qE 'CARGO_TARGET_DIR=|--target-dir' <<<"$scan"; then
   canonical=$(resolve_target_dir "$hook_cwd")
   if [[ -n "$canonical" ]]; then
     canonical="${canonical%/}"
@@ -106,7 +106,7 @@ if grep -qE 'CARGO_TARGET_DIR=|--target-dir' <<<"$cmd"; then
       if [[ -n "$ov" && "$ov" != "$canonical" ]]; then
         deny "Ad-hoc target-dir override ('$ov') opts out of the shared cargo target dir ('$canonical', resolved from cargo metadata) and its sccache. Drop the override so builds stay shared. If isolation is genuinely required, raise it with the coordinator — do not invent a path. Override: prefix CLAUDIUS_FORCE=1."
       fi
-    done <<<"$(extract_target_dirs "$cmd")"
+    done <<<"$(extract_target_dirs "$scan")"
   fi
 fi
 
