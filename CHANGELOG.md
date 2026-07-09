@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.4.1] - 2026-07-09
+
+### Fixed
+
+- **`scripts/gh-common.sh`**: `fetch_all_review_threads()` accumulated paginated GraphQL results in a shell variable and passed it to `jq` via `--argjson`, hitting Linux's per-argument execve limit (`MAX_ARG_STRLEN`, 128 KiB) on PRs with ~75+ review threads or long comment bodies — failing with "Argument list too long" and silently resolving/listing zero threads (`check-pr-comments`/`gh-resolve-review-threads.sh` callers affected). Page merging now flows through temp files (`jq -s` file-to-file merge, final read via `--slurpfile`), which have no such limit. New regression fixture in `tests/test_gh_pagination.sh` (~360KB payload across 60 threads) verified to fail against the pre-fix code and pass against the fix; wired into CI (`.github/workflows/test-report-pipeline.yml` gains a "gh review-thread pagination fixtures" step — it was previously unwired).
+
 ## [5.4.0] - 2026-07-08
 
 ### Added

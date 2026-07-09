@@ -73,8 +73,19 @@ fetch_all_review_threads() {
   local PAGE_LIMIT=50
   local cursor="null"
   local pages=0
-  local accumulated="[]"
-  local resp nodes_chunk has_next end_cursor cursor_arg
+  local resp_file accum_file new_file result
+  local has_next end_cursor cursor_arg
+
+  # Page merging goes through temp files, never a growing shell variable: an
+  # --argjson value built from accumulated JSON (all thread nodes incl. full
+  # comment bodies) hits the OS ARG_MAX limit on PRs with ~75+ threads,
+  # failing execve with "Argument list too long" and resolving/listing zero
+  # threads. Files have no such limit — only command-line argument strings do.
+  if ! accum_file=$(mktemp) || ! new_file=$(mktemp) || ! resp_file=$(mktemp); then
+    echo "Error: mktemp failed while fetching review threads" >&2
+    return 1
+  fi
+  printf '[]' > "$accum_file"
 
   while :; do
     if [[ "$cursor" == "null" ]]; then
@@ -84,20 +95,21 @@ fetch_all_review_threads() {
     fi
 
     if [[ "$use_run_gh" == "1" ]]; then
-      resp=$(run_gh api graphql \
+      run_gh api graphql \
         -F owner="$owner" -F repo="$repo" -F pr_number="$pr_number" \
-        "${cursor_arg[@]}" -f query="$(_review_threads_query "$comments_first")")
+        "${cursor_arg[@]}" -f query="$(_review_threads_query "$comments_first")" > "$resp_file"
     else
-      resp=$(gh api graphql \
+      gh api graphql \
         -F owner="$owner" -F repo="$repo" -F pr_number="$pr_number" \
-        "${cursor_arg[@]}" -f query="$(_review_threads_query "$comments_first")")
+        "${cursor_arg[@]}" -f query="$(_review_threads_query "$comments_first")" > "$resp_file"
     fi
 
-    nodes_chunk=$(echo "$resp" | jq -c '.data.repository.pullRequest.reviewThreads.nodes')
-    accumulated=$(jq -c -n --argjson a "$accumulated" --argjson b "$nodes_chunk" '$a + $b')
+    jq -c '.data.repository.pullRequest.reviewThreads.nodes' "$resp_file" > "$new_file"
+    jq -c -s '.[0] + .[1]' "$accum_file" "$new_file" > "$accum_file.next"
+    mv "$accum_file.next" "$accum_file"
 
-    has_next=$(echo "$resp" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
-    end_cursor=$(echo "$resp" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+    has_next=$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' "$resp_file")
+    end_cursor=$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor' "$resp_file")
 
     pages=$((pages + 1))
     if [[ "$has_next" != "true" ]]; then
@@ -105,11 +117,16 @@ fetch_all_review_threads() {
     fi
     if [[ $pages -ge $PAGE_LIMIT ]]; then
       echo "Error: reviewThreads pagination exceeded $PAGE_LIMIT pages on $owner/$repo#$pr_number" >&2
+      rm -f "$accum_file" "$new_file" "$resp_file"
       return 1
     fi
     cursor="$end_cursor"
   done
 
-  jq -c -n --argjson nodes "$accumulated" \
-    '{data: {repository: {pullRequest: {reviewThreads: {nodes: $nodes}}}}}'
+  # --slurpfile reads the accumulated array from disk, not argv — the one
+  # remaining --argjson-shaped value here is just the small query skeleton.
+  result=$(jq -c -n --slurpfile nodes "$accum_file" \
+    '{data: {repository: {pullRequest: {reviewThreads: {nodes: $nodes[0]}}}}}')
+  rm -f "$accum_file" "$new_file" "$resp_file"
+  printf '%s\n' "$result"
 }

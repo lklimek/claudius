@@ -159,6 +159,43 @@ if grep -q 'comments(first: 100)' "$CAP5/queries.log" 2>/dev/null; then
   ok "gh-resolve-review-threads.sh still fetches comments(first: 100)"
 else bad "comments(first: 100) not found for gh-resolve-review-threads.sh"; fi
 
+echo "=== fetch_all_review_threads: large payload does not hit ARG_MAX (regression) ==="
+# Regression guard for the bug this repo's TODO tracker flagged: accumulating
+# pages into a shell variable and passing it via `jq --argjson` blows past
+# Linux's per-argument execve limit (MAX_ARG_STRLEN, 128 KiB) on PRs with many
+# threads / long comment bodies, failing with "Argument list too long" and
+# silently resolving/listing zero threads. 60 threads x ~6KB bodies (~360KB)
+# comfortably exceeds that limit; the file-based merge must not care.
+BIN6="$BASE/bin6"; mkdir -p "$BIN6"
+cat > "$BIN6/gh" <<'CAP'
+#!/usr/bin/env bash
+args="$*"
+if [[ "$args" == *"cursor=CURSOR1"* ]]; then
+  echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}'
+else
+  jq -nc --arg body "$(head -c 6000 /dev/zero | tr '\0' 'x')" '
+    { data: { repository: { pullRequest: { reviewThreads: {
+        pageInfo: { hasNextPage: true, endCursor: "CURSOR1" },
+        nodes: [ range(60) | { id: ("t" + (. | tostring)), isResolved: false, isOutdated: false,
+                                comments: { nodes: [ { databaseId: ., path: "f.txt", body: $body, author: { login: "bob" } } ] } } ]
+      } } } } }'
+fi
+CAP
+chmod +x "$BIN6/gh"
+
+argmax_err="$BASE/argmax.err"
+if out6=$(PATH="$BIN6:$PATH" bash -c '
+  set -euo pipefail
+  source "$1"
+  fetch_all_review_threads owner repo 42 100 0
+' _ "$GH_COMMON" 2>"$argmax_err"); then
+  n=$(echo "$out6" | jq '.data.repository.pullRequest.reviewThreads.nodes | length')
+  if [ "$n" = "60" ]; then ok "large payload (~360KB of comment bodies) merged without hitting ARG_MAX"
+  else bad "expected 60 nodes in large-payload merge, got $n"; fi
+else
+  bad "fetch_all_review_threads failed on large payload: $(cat "$argmax_err")"
+fi
+
 echo ""
 echo "=== Results: $pass passed, $fail failed ==="
 [ "$fail" -eq 0 ]
