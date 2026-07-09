@@ -56,5 +56,8 @@ jobs:
       - name: cargo-cached wrapper fixtures
         run: ./tests/test_cargo_cached.sh
 
+      - name: gh review-thread pagination fixtures
+        run: ./tests/test_gh_pagination.sh
+
       - name: Format check
         run: ruff format --check .

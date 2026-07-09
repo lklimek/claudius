@@ -159,6 +159,127 @@ if grep -q 'comments(first: 100)' "$CAP5/queries.log" 2>/dev/null; then
   ok "gh-resolve-review-threads.sh still fetches comments(first: 100)"
 else bad "comments(first: 100) not found for gh-resolve-review-threads.sh"; fi
 
+echo "=== fetch_all_review_threads: large payload does not hit ARG_MAX (regression) ==="
+# Regression guard for the bug this repo's TODO tracker flagged: accumulating
+# pages into a shell variable and passing it via `jq --argjson` blows past
+# Linux's per-argument execve limit (MAX_ARG_STRLEN, 128 KiB) on PRs with many
+# threads / long comment bodies, failing with "Argument list too long" and
+# silently resolving/listing zero threads. 60 threads x ~6KB bodies (~360KB)
+# comfortably exceeds that limit; the file-based merge must not care.
+BIN6="$BASE/bin6"; mkdir -p "$BIN6"
+cat > "$BIN6/gh" <<'CAP'
+#!/usr/bin/env bash
+args="$*"
+if [[ "$args" == *"cursor=CURSOR1"* ]]; then
+  echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}'
+else
+  jq -nc --arg body "$(head -c 6000 /dev/zero | tr '\0' 'x')" '
+    { data: { repository: { pullRequest: { reviewThreads: {
+        pageInfo: { hasNextPage: true, endCursor: "CURSOR1" },
+        nodes: [ range(60) | { id: ("t" + (. | tostring)), isResolved: false, isOutdated: false,
+                                comments: { nodes: [ { databaseId: ., path: "f.txt", body: $body, author: { login: "bob" } } ] } } ]
+      } } } } }'
+fi
+CAP
+chmod +x "$BIN6/gh"
+
+argmax_err="$BASE/argmax.err"
+if out6=$(PATH="$BIN6:$PATH" bash -c '
+  set -euo pipefail
+  source "$1"
+  fetch_all_review_threads owner repo 42 100 0
+' _ "$GH_COMMON" 2>"$argmax_err"); then
+  n=$(echo "$out6" | jq '.data.repository.pullRequest.reviewThreads.nodes | length')
+  if [ "$n" = "60" ]; then ok "large payload (~360KB of comment bodies) merged without hitting ARG_MAX"
+  else bad "expected 60 nodes in large-payload merge, got $n"; fi
+else
+  bad "fetch_all_review_threads failed on large payload: $(cat "$argmax_err")"
+fi
+
+echo "=== fetch_all_review_threads: mktemp always gets an explicit template (BSD regression) ==="
+# BSD/macOS mktemp has no built-in default template and errors on a bare call
+# ("too few arguments"). This stub reproduces that behavior on top of the real
+# (GNU) mktemp so the test runs portably here while still catching a bare call.
+BIN7="$BASE/bin7"; mkdir -p "$BIN7"
+REAL_MKTEMP="$(command -v mktemp)"
+cat > "$BIN7/mktemp" <<CAP
+#!/usr/bin/env bash
+if [[ \$# -eq 0 ]]; then
+  echo "mktemp: too few arguments" >&2
+  exit 1
+fi
+exec "$REAL_MKTEMP" "\$@"
+CAP
+chmod +x "$BIN7/mktemp"
+mk_paged_gh "$BIN7" "$BASE/cap7"
+
+if out7=$(PATH="$BIN7:$PATH" bash -c '
+  set -euo pipefail
+  source "$1"
+  fetch_all_review_threads owner repo 42 1 0
+' _ "$GH_COMMON" 2>"$BASE/mktemp.err"); then
+  n7=$(echo "$out7" | jq '.data.repository.pullRequest.reviewThreads.nodes | length')
+  if [ "$n7" = "3" ]; then ok "mktemp always called with an explicit template (BSD-style bare-call rejection survived)"
+  else bad "expected 3 nodes with template-only mktemp, got $n7"; fi
+else
+  bad "fetch_all_review_threads failed under BSD-style mktemp: $(cat "$BASE/mktemp.err")"
+fi
+
+echo "=== fetch_all_review_threads: partial mktemp failure cleans up (no leak) ==="
+# If the 1st mktemp call succeeds but a later one fails, the already-created
+# file must not leak into $TMPDIR.
+BIN8="$BASE/bin8"; mkdir -p "$BIN8"
+TMPDIR8="$BASE/tmpdir8"; mkdir -p "$TMPDIR8"
+cat > "$BIN8/mktemp" <<CAP
+#!/usr/bin/env bash
+counter_file="$TMPDIR8/.mktemp-calls"
+n=\$(cat "\$counter_file" 2>/dev/null || echo 0); n=\$((n + 1)); echo "\$n" > "\$counter_file"
+if [[ "\$n" -eq 1 ]]; then
+  exec "$REAL_MKTEMP" "\$@"
+else
+  echo "mktemp: simulated failure" >&2
+  exit 1
+fi
+CAP
+chmod +x "$BIN8/mktemp"
+
+if PATH="$BIN8:$PATH" TMPDIR="$TMPDIR8" bash -c '
+  set -euo pipefail
+  source "$1"
+  fetch_all_review_threads owner repo 42 1 0
+' _ "$GH_COMMON" >/dev/null 2>"$BASE/partial.err"; then
+  bad "expected fetch_all_review_threads to fail when a later mktemp call fails"
+else
+  after8=$(find "$TMPDIR8" -maxdepth 1 -type f ! -name '.mktemp-calls' | wc -l | tr -d '[:space:]')
+  if [ "$after8" = "0" ]; then ok "partial mktemp failure cleans up the already-created temp file (no leak)"
+  else bad "expected 0 leftover temp files after partial mktemp failure, found $after8"; fi
+fi
+
+echo "=== fetch_all_review_threads: mv failure on page merge is caught (no stale/silent result) ==="
+# A failing `mv "$accum_file.next" "$accum_file"` (cross-device TMPDIR, disk
+# full, permissions) must not be silently ignored — the function must error
+# out and clean up rather than continuing with a stale accum_file.
+BIN9="$BASE/bin9"; mkdir -p "$BIN9"
+cat > "$BIN9/mv" <<'CAP'
+#!/usr/bin/env bash
+echo "mv: simulated failure" >&2
+exit 1
+CAP
+chmod +x "$BIN9/mv"
+mk_paged_gh "$BIN9" "$BASE/cap9"
+
+if PATH="$BIN9:$PATH" bash -c '
+  set -euo pipefail
+  source "$1"
+  fetch_all_review_threads owner repo 42 1 0
+' _ "$GH_COMMON" >/dev/null 2>"$BASE/mv.err"; then
+  bad "expected fetch_all_review_threads to fail when mv fails on the page merge"
+else
+  if grep -q "failed to move merged reviewThreads page" "$BASE/mv.err"; then
+    ok "mv failure on page merge is caught and reported, not silently ignored"
+  else bad "mv failure did not produce the expected error message: $(cat "$BASE/mv.err")"; fi
+fi
+
 echo ""
 echo "=== Results: $pass passed, $fail failed ==="
 [ "$fail" -eq 0 ]
