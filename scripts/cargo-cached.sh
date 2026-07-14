@@ -132,4 +132,43 @@ else
   printf '%s\n' "$record" >> "$RECORDS"
 fi
 echo "=== exit $rc | full log: $logf | recorded in verification ledger (key $key) ==="
+
+# --- Fake-green guard: implausibly fast verification ------------------------
+# A test/clippy/nextest MISS must compile and run for real, so a ~0s finish means
+# cargo built nothing and ran a PRE-EXISTING binary. Cargo records dep-info paths
+# relative to the crate root, so two worktrees at the same HEAD collide on one
+# artifact path in a shared target dir: the binary that ran can be a CONCURRENT
+# agent's build — green without ever containing this agent's tests. A legitimate
+# no-op re-run looks identical from here, so this only WARNS: rc is never touched
+# and any internal failure degrades to silence (fail-open, per the header).
+warn_if_implausibly_fast() {
+  local min sub arg
+  # 2s: a genuine compile+link+run of a test/clippy target costs seconds even on a
+  # warm cache; below that, cargo has done no build work at all. 0 disables.
+  min="${CLAUDIUS_MIN_PLAUSIBLE_DUR:-2}"
+  [[ "$min" =~ ^[0-9]+$ ]] || min=2
+  (( min > 0 )) || return 0
+  [[ "${dur:-}" =~ ^[0-9]+$ ]] || return 0
+  (( dur < min )) || return 0
+  # The subcommand is the first non-flag arg (`+toolchain` and flags precede it).
+  for arg in "$@"; do
+    case "$arg" in -*|+*) ;; *) sub="$arg"; break ;; esac
+  done
+  case "${sub:-}" in test|clippy|nextest) ;; *) return 0 ;; esac
+  cat <<BANNER
+!!! --------------------------------------------------------------------------
+!!! WARNING: POSSIBLE FAKE GREEN — this run finished in ${dur}s (below ${min}s),
+!!! so cargo compiled nothing and executed a PRE-EXISTING binary. Worktrees at
+!!! this same HEAD ($head_oid) share one target dir and collide on the same
+!!! artifact path, so that binary may be ANOTHER agent's build.
+!!! 1. Before trusting this result, confirm YOUR new/renamed test names appear
+!!!    in the output above (full log: $logf).
+!!! 2. If they do not, this is NOT evidence. Re-run genuinely isolated:
+!!!      CARGO_TARGET_DIR=<your-own-dir> CLAUDIUS_FORCE=1 $0 $*
+!!! Tune or silence this guard with CLAUDIUS_MIN_PLAUSIBLE_DUR (0 = off).
+!!! --------------------------------------------------------------------------
+BANNER
+}
+warn_if_implausibly_fast "$@" || true
+
 exit "$rc"

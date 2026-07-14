@@ -11,6 +11,10 @@
 #   K4 CLAUDIUS_FORCE=1         -> forced real run even on a hit (counter 2->3)
 #   K5 sha256sum absent on PATH -> fails OPEN to real cargo, no key-collapse
 #   K6 same cmd, different cwd  -> cache MISS (cwd is part of the key)
+#   K7 real `test` finishing ~0s -> fake-green WARNING, exit code untouched
+#   K8 real `test` past threshold-> no warning (a genuine compile takes time)
+#   K9 replay (legitimately fast)-> no warning (only real runs can be fake-green)
+#   K10 fast non-verification cmd-> no warning (guard is test|clippy|nextest only)
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -29,12 +33,15 @@ COUNTER="$WORK/counter"; echo 0 > "$COUNTER"; export COUNTER
 
 # Stub cargo: count real invocations, emit an identifiable line. (The wrapper's
 # own cargo-metadata resolution is a hook concern; this stub only needs `run`.)
+# STUB_SLEEP fakes a real compile's wall clock, STUB_RC its verdict — both default
+# to the fast/green stub the key-logic cases (K1-K6) rely on.
 STUBDIR="$WORK/bin"; mkdir -p "$STUBDIR"
 cat > "$STUBDIR/cargo" <<'EOF'
 #!/usr/bin/env bash
 n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"
 echo "STUB CARGO INVOCATION $n: $*"
-exit 0
+[ "${STUB_SLEEP:-0}" != 0 ] && sleep "${STUB_SLEEP}"
+exit "${STUB_RC:-0}"
 EOF
 chmod +x "$STUBDIR/cargo"
 
@@ -120,6 +127,57 @@ if [ "$AFTER" = "$((BEFORE + 1))" ] && grep -q "STUB CARGO INVOCATION" <<<"$OUT"
   ok "K6 same command from a different cwd is a cache miss (cwd is part of the key)"
 else
   bad "K6 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+# --- Fake-green guard (implausibly fast verification) -----------------------
+WARN="POSSIBLE FAKE GREEN"
+bust() { echo "$1" > "$REPO/$1.rs"; }   # untracked file => brand-new key => miss
+
+echo "=== K7: an implausibly fast REAL test run warns without touching the exit code ==="
+bust k7
+BEFORE=$(counter)
+export STUB_RC=7          # a verdict the guard must pass through untouched
+run_wrapper 0 test        # stub returns instantly => dur 0s < default threshold
+unset STUB_RC
+if [ "$(counter)" = "$((BEFORE + 1))" ] && [ "$RC" = "7" ] \
+   && grep -q "$WARN" <<<"$OUT" && grep -q "CLAUDIUS_FORCE=1" <<<"$OUT"; then
+  ok "K7 fake-green warning raised, exit code still 7 (warn-only, fail-open)"
+else
+  bad "K7 (counter=$(counter) rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K8: a run past the plausibility threshold does not warn ==="
+bust k8
+BEFORE=$(counter)
+export CLAUDIUS_MIN_PLAUSIBLE_DUR=1 STUB_SLEEP=2   # a 2s "compile" clears a 1s bar
+run_wrapper 0 test
+unset CLAUDIUS_MIN_PLAUSIBLE_DUR STUB_SLEEP
+if [ "$(counter)" = "$((BEFORE + 1))" ] && [ "$RC" = "0" ] && ! grep -q "$WARN" <<<"$OUT"; then
+  ok "K8 real run slower than the threshold: no warning"
+else
+  bad "K8 (counter=$(counter) rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K9: a replay is fast BY DESIGN and must never warn ==="
+bust k9
+run_wrapper 0 test        # miss: real (fast) run, warns
+BEFORE=$(counter)
+run_wrapper 0 test        # hit: replays the record above
+if [ "$(counter)" = "$BEFORE" ] && grep -q "CACHED verification" <<<"$OUT" \
+   && ! grep -q "$WARN" <<<"$OUT"; then
+  ok "K9 replay stayed silent (only a real run can be a fake green)"
+else
+  bad "K9 (counter=$(counter) rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K10: the guard is scoped to verification subcommands only ==="
+bust k10
+BEFORE=$(counter)
+run_wrapper 0 build       # equally fast, but `build` produces no verdict to fake
+if [ "$(counter)" = "$((BEFORE + 1))" ] && ! grep -q "$WARN" <<<"$OUT"; then
+  ok "K10 fast build does not warn (guard covers test|clippy|nextest only)"
+else
+  bad "K10 (counter=$(counter) rc=$RC out='${OUT//$'\n'/ }')"
 fi
 
 echo ""
