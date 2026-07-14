@@ -72,12 +72,7 @@ If nothing to commit or push, proceed to Step 2.
 
 **Fresh results required**: On iteration 2+, every stream must operate on the LATEST state. CI Stream watches runs from the most recent push (not cached results). Grumpy Stream runs a new `/grumpy-review` against current code. Review Stream checks for new reviews since the last iteration.
 
-Before launching streams, create a team for coordination:
-```
-TeamCreate(team_name="ci-dance")
-```
-
-Then spawn each stream as a named agent with `team_name: "ci-dance"`, each working in its own **pre-created** worktree (see the quirk section below — do not rely on the `isolation` flag):
+Spawn each stream as a named `Agent()` — every session has one implicit team, so a named spawn joins it automatically with no create/destroy step (see `grand-admiral` § Spawning). Each stream works in its own **pre-created** worktree (see the quirk section below — do not rely on the `isolation` flag):
 - `ci-stream`
 - `grumpy-stream`
 - `review-stream`
@@ -86,8 +81,7 @@ Then spawn each stream as a named agent with `team_name: "ci-dance"`, each worki
 
 See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary for ci-dance:
 
-- **`isolation="worktree"` silently dropped for team-spawned agents.** `Agent(team_name=..., isolation="worktree")` lands the agent in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
-- **Team context inheritance** — explanatory note, NOT a recovery path. `Agent()` calls issued from within a team-lead session that OMIT `team_name` are auto-joined to the lead's team and lose `isolation` the same way. Omitting `team_name` does not escape the team context, which is why the lead cannot rely on an in-session "spawn solo" trick — the worktree must be pre-created externally.
+- **`isolation="worktree"` silently dropped for agents in the session's implicit team.** Every named `Agent()` spawned from the lead's session joins that one implicit team automatically, and `isolation="worktree"` is ignored either way — the agent lands in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
 
 **Workaround (single canonical path)**: the lead pre-creates one worktree per stream via `git worktree add .claude/worktrees/agent-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and includes the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s into its assigned path on its first turn and works there. This is the stable path; do not attempt other workarounds.
 
@@ -95,21 +89,21 @@ All three streams run concurrently. Each stream is a **complete unit** that find
 
 **Isolation**: Each stream runs in its own **git worktree** (see quirk section above). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
 
-Before fixing any finding, a stream must **claim** it via task ownership (see Inter-Stream Communication below). If another stream already owns a task at the same location, skip it.
+Before fixing any finding, a stream must broadcast a **claim** via `SendMessage` (see Inter-Stream Communication below). If another stream already claimed the same location, skip it.
 
 #### CI Stream
 
 1. **Trigger**: CI runs automatically on push. Nothing to do.
 2. **Wait**: Watch runs using the Watch and Collect procedure (see below).
 3. **Collect & Classify**: For each failed run, diagnose from logs. Record as findings with severity, location, description. Verify each finding exists in current code.
-4. **Fix**: For each valid finding — create a task via `TaskCreate`, claim ownership via `TaskUpdate`. If another stream already owns a task at that location, skip. Apply fix, commit, mark task `completed`.
+4. **Fix**: For each valid finding — broadcast a claim per Inter-Stream Communication. If another stream already claimed that location, skip. Apply fix, commit, broadcast completion.
 
 #### Grumpy Stream
 
 1. **Trigger**: Invoke `/grumpy-review` locally (runs inline and spawns its own reviewer agents; produces severity-ranked JSON report).
 2. **Wait**: Grumpy-review runs locally and completes.
 3. **Collect & Classify**: Read the grumpy-review JSON report. Each finding already has severity. Verify findings exist in current code, discard outdated/false positives. Filter to MEDIUM+.
-4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
+4. **Fix**: For each valid MEDIUM+ finding — broadcast a claim per Inter-Stream Communication. If already claimed, skip. Apply fix, commit, broadcast completion.
 
 #### Review Stream
 
@@ -120,22 +114,24 @@ Before fixing any finding, a stream must **claim** it via task ownership (see In
    - Maximum wait: 20 minutes — proceed without if no review appears
    - Also check for any OTHER reviews (human or bot) that may have been added since last iteration
 3. **Collect & Classify**: Fetch all review comments via `/check-pr-comments` (skip confirmations). Classify each: verify issue exists in current code, rate severity, check for false positives. Filter to MEDIUM+.
-4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
+4. **Fix**: For each valid MEDIUM+ finding — broadcast a claim per Inter-Stream Communication. If already claimed, skip. Apply fix, commit, broadcast completion.
 
 ### Inter-Stream Communication
 
-Streams coordinate via the Teams infrastructure to prevent duplicate fixes.
+`TaskCreate`/`TaskList`/`TaskUpdate` are not currently available (confirmed upstream regression — see `grand-admiral`; do not attempt to use them here). Streams coordinate via direct `SendMessage` broadcasts instead.
 
-**Finding Discovery**: When a stream finds something worth fixing, create a task:
+**Claiming**: Before fixing a finding, broadcast the claim to the other two streams:
 ```
-TaskCreate(subject="Fix: unused import in src/main.rs:42", description="CI failure: ...", metadata={stream: "ci", file: "src/main.rs", line: 42, severity: 3})
+SendMessage(to="*", message="Claiming src/main.rs:42 (unused import) — CI stream")
+```
+Wait one beat for a conflicting claim on the same file/line range from another stream; if none arrives, proceed. If another stream already claimed the same location, skip it and move to the next finding — this is best-effort, not atomic, so treat any residual overlap as a Step 3 cherry-pick conflict to resolve there, not a coordination failure.
+
+**Completion**: After fixing and committing, broadcast completion:
+```
+SendMessage(to="*", message="Done: src/main.rs:42 (unused import) — CI stream")
 ```
 
-**Claiming**: Before fixing, check `TaskList` for existing tasks at the same file/line range. If none, create the task and set `owner` to self via `TaskUpdate`. If another stream already owns a task at that location, skip it. `TaskUpdate` ownership is atomic — no race conditions.
-
-**Completion**: After fixing, mark the task `completed` via `TaskUpdate(status="completed")`.
-
-**Direct Coordination**: Use `SendMessage` for real-time alerts between streams:
+**Direct Coordination**: Use targeted `SendMessage` for alerts between specific streams:
 ```
 SendMessage(to="grumpy-stream", message="I'm fixing src/auth.rs:17-25, skip this area")
 ```
@@ -145,11 +141,11 @@ Use for: overlapping finding alerts, completion summaries, conflict flags.
 
 After all three streams complete:
 
-1. `TaskList` — review all tasks, their status and outcomes
+1. Collect each stream's final report (findings fixed/skipped, from its completion `SendMessage`) and its worktree commit log (`git -C <worktree> log --oneline`)
 2. Enumerate worktree branches — collect commits from each stream's worktree
 3. Cherry-pick each stream's commits into the main working branch
-4. If cherry-pick conflicts (two streams edited overlapping lines despite task coordination), resolve — prefer the more comprehensive fix
-5. Clean up team with `TeamDelete`
+4. If cherry-pick conflicts (two streams edited overlapping lines despite claim coordination), resolve — prefer the more comprehensive fix
+5. Shut down each stream agent via `SendMessage({type: "shutdown_request"})` (see `grand-admiral` § Terminating Teammates)
 6. Clean up worktrees (`git worktree remove` + `prune`)
 7. The merged working tree is ready for the next push
 
@@ -234,5 +230,5 @@ On exit (any condition), report:
 
 - Do not duplicate sub-skill logic — delegate to `/push`, `/grumpy-review`, `/check-pr-comments`
 - Give GitHub ~5 seconds after push before listing new workflow runs
-- Clean up team with `TeamDelete` after merging stream results
+- Shut down stream agents via `SendMessage({type: "shutdown_request"})` after merging results — there is no team to tear down (see `grand-admiral` § Terminating Teammates)
 - **Not for GitHub Actions** — this skill pushes commits that trigger CI, so running it inside a workflow causes concurrency cancellation loops. Use from CLI only.
