@@ -22,6 +22,14 @@
 #   D13 commit message mentioning "cargo test"   -> ALLOW (data, not an invocation)
 #   D14 echoed string mentioning "cargo check"   -> ALLOW (data, not an invocation)
 #   D15 quoted CARGO_TARGET_DIR mention          -> ALLOW (Rule 3 must scan $scan too)
+#   D16 CLAUDIUS_ISOLATE_TARGET=1 + override, `cargo build` (Rule 4 N/A)
+#                                                 -> ALLOW (scoped hatch clears Rule 3 only)
+#   D17 CLAUDIUS_ISOLATE_TARGET=1 + override, raw `cargo test` (not via wrapper)
+#                                                 -> DENY  (scoped hatch does NOT clear Rule 4)
+#   D18 CLAUDIUS_ISOLATE_TARGET=1 + override, wrapper-routed `cargo test`
+#                                                 -> ALLOW (Rule 3 cleared, Rule 4 satisfied)
+#   D19 CLAUDIUS_ISOLATE_TARGET=1, no override, bare `cargo check`
+#                                                 -> DENY  (scoped hatch does NOT clear Rule 1)
 #
 # Fully isolated: no repo state touched, all input on stdin.
 set -uo pipefail
@@ -99,6 +107,17 @@ assert_allow "D7 override == canonical allowed" \
   "$(payload "CARGO_TARGET_DIR=$CANON cargo build")" "$STUB_PATH"
 assert_deny  "D8 override != canonical denied" \
   "$(payload 'CARGO_TARGET_DIR=/some/adhoc/dir cargo build')" "$STUB_PATH"
+echo ""
+
+echo "=== Rule 3 scoped escape hatch: CLAUDIUS_ISOLATE_TARGET=1 clears Rule 3 only ==="
+assert_allow "D16 CLAUDIUS_ISOLATE_TARGET=1 + override, cargo build allowed" \
+  "$(payload 'CARGO_TARGET_DIR=/some/adhoc/dir CLAUDIUS_ISOLATE_TARGET=1 cargo build')" "$STUB_PATH"
+assert_deny  "D17 CLAUDIUS_ISOLATE_TARGET=1 + override, raw cargo test still denied (Rule 4)" \
+  "$(payload 'CARGO_TARGET_DIR=/some/adhoc/dir CLAUDIUS_ISOLATE_TARGET=1 cargo test -p foo')" "$STUB_PATH"
+assert_allow "D18 CLAUDIUS_ISOLATE_TARGET=1 + override, wrapper-routed test allowed" \
+  "$(payload 'CARGO_TARGET_DIR=/some/adhoc/dir CLAUDIUS_ISOLATE_TARGET=1 bash scripts/cargo-cached.sh test -p foo')" "$STUB_PATH"
+assert_deny  "D19 CLAUDIUS_ISOLATE_TARGET=1, no override, bare cargo check still denied (Rule 1)" \
+  "$(payload 'CLAUDIUS_ISOLATE_TARGET=1 cargo check')"
 echo ""
 
 echo "=== Rule 4: route compiling invocations through the wrapper ==="

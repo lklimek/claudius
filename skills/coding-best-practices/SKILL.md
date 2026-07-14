@@ -23,6 +23,10 @@ Steps 3-5 of every developer workflow (after build environment and prior art che
 
 Only run formatting, linting, and tests right before committing (or when the user explicitly asks). Don't run them after every edit — it wastes time and tokens.
 
+**Targeted scope, always — including at merge.** Run the narrowest command that verifies what you touched — the specific test, module, or package — not the whole suite. This applies mid-iteration AND at the merge gate (declaring a branch/PR done, or landing independently-developed branches together): CI runs the full suite anyway, so a local full run is redundant work, not extra safety. Widen scope only when you judge real regression risk spills outside it (funds, auth, crypto, shared signatures, cross-cutting refactors) — say so when you do.
+
+- **CI is the full-suite backstop, not an afterthought.** It's where flaky, environment-, and scheduling-dependent failures surface, and where the full suite actually runs — local verification stays targeted precisely because CI covers the rest.
+
 ## Build & Test Output Capture
 
 Never re-run a build, test, or lint command just to see more of its output. Capture full output on the first run using `tee`: `f=$(mktemp /tmp/build-XXXXXX.txt) && <command> 2>&1 | tee "$f" | tail -80 && echo "Full output: $f"`. If the visible tail is insufficient, read the temp file — do not re-execute the command. For cargo specifically, the `cargo-cached.sh` wrapper (absolute path announced in the SessionStart Rust build environment context) performs this capture automatically and replays it on identical re-runs; the mktemp+tee pattern above applies to non-cargo commands.

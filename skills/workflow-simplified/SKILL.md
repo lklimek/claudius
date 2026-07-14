@@ -76,6 +76,8 @@ Run in parallel where possible:
 
 Scale down agent set for truly small changes — but Marvin, Smythe, and Adams are always required (matches `grumpy-review`'s fixed core trio: security and structural/adversarial review are never optional here, only their depth scales with size).
 
+**Only `qa-engineer-marvin` executes the build/test/lint suite.** `security-engineer-smythe` and `project-reviewer-adams` review via diff/read/grep and MUST NOT independently re-run build, test, or lint commands unless investigating a specific Marvin-reported failure — redundant compiles waste wall-clock and tokens and risk lock contention on a shared target dir. Word each spawn prompt accordingly; do not leave build ownership implicit.
+
 **Both audits are READ-ONLY by mandate** — emphasize this in the agent prompt template. Findings go to the lead, who decides follow-up:
 - Trivial fixes can land in the same PR via a separate commit
 - Substantial refactors land as follow-up PRs

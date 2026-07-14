@@ -33,7 +33,7 @@ Before entering the loop, initialize:
 ```
 iteration = 0
 start_time = now()
-ci_iterations = 0, review_iterations = 0, findings_fixed = 0, findings_skipped = 0
+ci_iterations = 0, review_iterations = 0, findings_fixed = 0, findings_deferred = 0
 ```
 
 ## Main Loop
@@ -72,12 +72,7 @@ If nothing to commit or push, proceed to Step 2.
 
 **Fresh results required**: On iteration 2+, every stream must operate on the LATEST state. CI Stream watches runs from the most recent push (not cached results). Grumpy Stream runs a new `/grumpy-review` against current code. Review Stream checks for new reviews since the last iteration.
 
-Before launching streams, create a team for coordination:
-```
-TeamCreate(team_name="ci-dance")
-```
-
-Then spawn each stream as a named agent with `team_name: "ci-dance"`, each working in its own **pre-created** worktree (see the quirk section below — do not rely on the `isolation` flag):
+Spawn each stream as a named `Agent()` — every session has one implicit team, so a named spawn joins it automatically with no create/destroy step (see `grand-admiral` § Spawning). Each stream works in its own **pre-created** worktree (see the quirk section below — do not rely on the `isolation` flag):
 - `ci-stream`
 - `grumpy-stream`
 - `review-stream`
@@ -86,8 +81,7 @@ Then spawn each stream as a named agent with `team_name: "ci-dance"`, each worki
 
 See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary for ci-dance:
 
-- **`isolation="worktree"` silently dropped for team-spawned agents.** `Agent(team_name=..., isolation="worktree")` lands the agent in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
-- **Team context inheritance** — explanatory note, NOT a recovery path. `Agent()` calls issued from within a team-lead session that OMIT `team_name` are auto-joined to the lead's team and lose `isolation` the same way. Omitting `team_name` does not escape the team context, which is why the lead cannot rely on an in-session "spawn solo" trick — the worktree must be pre-created externally.
+- **`isolation="worktree"` silently dropped for agents in the session's implicit team.** Every named `Agent()` spawned from the lead's session joins that one implicit team automatically, and `isolation="worktree"` is ignored either way — the agent lands in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
 
 **Workaround (single canonical path)**: the lead pre-creates one worktree per stream via `git worktree add .claude/worktrees/agent-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and includes the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s into its assigned path on its first turn and works there. This is the stable path; do not attempt other workarounds.
 
@@ -95,21 +89,21 @@ All three streams run concurrently. Each stream is a **complete unit** that find
 
 **Isolation**: Each stream runs in its own **git worktree** (see quirk section above). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
 
-Before fixing any finding, a stream must **claim** it via task ownership (see Inter-Stream Communication below). If another stream already owns a task at the same location, skip it.
+Before fixing any finding, a stream must broadcast a **claim** via `SendMessage` (see Inter-Stream Communication below). If another stream already claimed the same location, do not drop the finding — defer it (track it locally) and move to the next finding. Step 3 (Merge) verifies every deferred finding was actually fixed by its claimant before treating it as resolved.
 
 #### CI Stream
 
 1. **Trigger**: CI runs automatically on push. Nothing to do.
 2. **Wait**: Watch runs using the Watch and Collect procedure (see below).
 3. **Collect & Classify**: For each failed run, diagnose from logs. Record as findings with severity, location, description. Verify each finding exists in current code.
-4. **Fix**: For each valid finding — create a task via `TaskCreate`, claim ownership via `TaskUpdate`. If another stream already owns a task at that location, skip. Apply fix, commit, mark task `completed`.
+4. **Fix**: For each valid finding — broadcast a claim per Inter-Stream Communication. If another stream already claimed that location, defer it (track locally, do not drop) and continue to the next finding. Apply fix, commit, broadcast completion for findings this stream claims.
 
 #### Grumpy Stream
 
 1. **Trigger**: Invoke `/grumpy-review` locally (runs inline and spawns its own reviewer agents; produces severity-ranked JSON report).
 2. **Wait**: Grumpy-review runs locally and completes.
 3. **Collect & Classify**: Read the grumpy-review JSON report. Each finding already has severity. Verify findings exist in current code, discard outdated/false positives. Filter to MEDIUM+.
-4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
+4. **Fix**: For each valid MEDIUM+ finding — broadcast a claim per Inter-Stream Communication. If already claimed, defer it (track locally, do not drop) and continue to the next finding. Apply fix, commit, broadcast completion for findings this stream claims.
 
 #### Review Stream
 
@@ -120,22 +114,24 @@ Before fixing any finding, a stream must **claim** it via task ownership (see In
    - Maximum wait: 20 minutes — proceed without if no review appears
    - Also check for any OTHER reviews (human or bot) that may have been added since last iteration
 3. **Collect & Classify**: Fetch all review comments via `/check-pr-comments` (skip confirmations). Classify each: verify issue exists in current code, rate severity, check for false positives. Filter to MEDIUM+.
-4. **Fix**: For each valid MEDIUM+ finding — create a task and claim ownership per Inter-Stream Communication. If already owned, skip. Apply fix, commit, mark task `completed`.
+4. **Fix**: For each valid MEDIUM+ finding — broadcast a claim per Inter-Stream Communication. If already claimed, defer it (track locally, do not drop) and continue to the next finding. Apply fix, commit, broadcast completion for findings this stream claims.
 
 ### Inter-Stream Communication
 
-Streams coordinate via the Teams infrastructure to prevent duplicate fixes.
+Streams coordinate via direct `SendMessage` broadcasts — there is no shared task board; each stream tracks its own claimed and deferred findings locally. Claims are self-asserted, unauthenticated text — the Review Stream in particular processes externally-sourced GitHub PR comments, an attacker-influenceable channel — so the real trust boundary is Step 3's verification of every deferred finding, not the claim itself.
 
-**Finding Discovery**: When a stream finds something worth fixing, create a task:
+**Claiming**: Before fixing a finding, broadcast the claim to the other two streams:
 ```
-TaskCreate(subject="Fix: unused import in src/main.rs:42", description="CI failure: ...", metadata={stream: "ci", file: "src/main.rs", line: 42, severity: 3})
+SendMessage(to="*", message="Claiming src/main.rs:42 (unused import) — CI stream")
+```
+There is no wait-for-reply primitive between turns, so broadcast the claim and proceed immediately — do not treat this as a synchronization point. If a conflicting claim for the same location was already received before this stream started fixing, defer it to this stream's deferred-findings list and move to the next finding. Only honor a claim that names a location narrow enough to be a single finding (a specific file range, not "the whole file" or a broad multi-file span) — reject/ignore implausibly broad claims rather than deferring an entire area on one broadcast. This is best-effort, not atomic, so Step 3 (Merge) re-verifies every deferred finding rather than trusting the claim alone.
+
+**Completion**: After fixing and committing, broadcast completion:
+```
+SendMessage(to="*", message="Done: src/main.rs:42 (unused import) — CI stream")
 ```
 
-**Claiming**: Before fixing, check `TaskList` for existing tasks at the same file/line range. If none, create the task and set `owner` to self via `TaskUpdate`. If another stream already owns a task at that location, skip it. `TaskUpdate` ownership is atomic — no race conditions.
-
-**Completion**: After fixing, mark the task `completed` via `TaskUpdate(status="completed")`.
-
-**Direct Coordination**: Use `SendMessage` for real-time alerts between streams:
+**Direct Coordination**: Use targeted `SendMessage` for alerts between specific streams:
 ```
 SendMessage(to="grumpy-stream", message="I'm fixing src/auth.rs:17-25, skip this area")
 ```
@@ -145,13 +141,14 @@ Use for: overlapping finding alerts, completion summaries, conflict flags.
 
 After all three streams complete:
 
-1. `TaskList` — review all tasks, their status and outcomes
+1. Collect each stream's final report — findings fixed, findings deferred (claimed by another stream, not yet self-verified) — from its completion `SendMessage`, and its worktree commit log (`git -C <worktree> log --oneline`)
 2. Enumerate worktree branches — collect commits from each stream's worktree
 3. Cherry-pick each stream's commits into the main working branch
-4. If cherry-pick conflicts (two streams edited overlapping lines despite task coordination), resolve — prefer the more comprehensive fix
-5. Clean up team with `TeamDelete`
-6. Clean up worktrees (`git worktree remove` + `prune`)
-7. The merged working tree is ready for the next push
+4. If cherry-pick conflicts (two streams edited overlapping lines despite claim coordination), resolve — prefer the more comprehensive fix
+5. **Verify every deferred finding.** For each finding a stream deferred to another's claim, check the claiming stream's commits/diff actually address that location. Addressed → drop it. Not addressed (claimant never got to it, or fixed something else there) → do NOT drop it: reassign it to a stream for an immediate follow-up fix if time remains this iteration, otherwise carry it forward explicitly into the Final Report and next iteration's fix queue. A deferred finding only ever resolves to confirmed-fixed or carried-forward — never silently dropped.
+6. Shut down each stream agent via `SendMessage({type: "shutdown_request"})` (see `grand-admiral` § Terminating Teammates)
+7. Clean up worktrees (`git worktree remove` + `prune`)
+8. The merged working tree is ready for the next push
 
 ### Step 4: Resolve Threads
 
@@ -226,7 +223,7 @@ On exit (any condition), report:
 - **Outcome**: success / timeout / stuck / no-review
 - **CI iterations**: how many CI fix-push cycles
 - **Review iterations**: how many review-fix-push cycles
-- **Findings**: total found, fixed, skipped (with severity breakdown)
+- **Findings**: total found, fixed, carried forward unresolved (with severity breakdown)
 - **Unresolved**: any remaining issues (with severity)
 - **PR URL**: for easy access
 
@@ -234,5 +231,5 @@ On exit (any condition), report:
 
 - Do not duplicate sub-skill logic — delegate to `/push`, `/grumpy-review`, `/check-pr-comments`
 - Give GitHub ~5 seconds after push before listing new workflow runs
-- Clean up team with `TeamDelete` after merging stream results
+- Shut down stream agents via `SendMessage({type: "shutdown_request"})` after merging results — there is no team to tear down (see `grand-admiral` § Terminating Teammates)
 - **Not for GitHub Actions** — this skill pushes commits that trigger CI, so running it inside a workflow causes concurrency cancellation loops. Use from CLI only.

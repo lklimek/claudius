@@ -86,6 +86,8 @@ Separate agent per concern — run in parallel:
 | `technical-writer-trillian` | End-user, developer, deployment docs |
 | `project-reviewer-adams` | Validate Development Plan fully executed, code quality — **plus two absorbed read-only passes**:<br>• **Docs review** — apply `coding-best-practices` Cross-Cutting Rules (length cap + present-state + two-tier audience) to comments and API doc comments (rustdoc, JSDoc, docstrings, godoc, etc.) introduced by the PR diff. Findings with file:line citations and proposed rewrites at `/tmp/claudius-<scope>-docs-report.md`.<br>• **Dedup audit** — for every new publicly exported function, type, trait/interface, and module introduced by the PR, search the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and project-defined reference repos for equivalent functionality. Findings (high-confidence duplicates, partial overlaps, reviewed-and-rejected) with file:line citations both sides at `/tmp/claudius-<scope>-dedup-report.md`. |
 
+**Only `qa-engineer-marvin` executes the build/test/lint suite.** `security-engineer-smythe`, `ux-designer-diziet`, `technical-writer-trillian`, and `project-reviewer-adams` review via diff/read/grep and MUST NOT independently re-run build, test, or lint commands unless investigating a specific Marvin-reported failure — redundant compiles waste wall-clock and tokens and risk lock contention on a shared target dir. Word each spawn prompt accordingly; do not leave build ownership implicit.
+
 **Both audits are READ-ONLY by mandate** — emphasize this in the agent prompt template. Findings go to the lead, who decides follow-up:
 - Trivial fixes can land in the same PR via a separate commit
 - Substantial refactors land as follow-up PRs
@@ -158,7 +160,7 @@ Include a deduplication pass — scan for duplicated logic, extract shared helpe
 
 ## Multi-Agent Coordination
 
-For phases with multiple agents on shared files, use teams (`TeamCreate` + `SendMessage` + Task tools) to prevent duplicate work and conflicts. See the Claudius agent's Spawning section for team patterns.
+For phases with multiple agents on shared files, coordinate via named spawns + `SendMessage` claim/completion broadcasts to prevent duplicate work and conflicts. See `grand-admiral` § Spawning and `ci-dance` § Inter-Stream Communication for the pattern.
 
 ## Commit Discipline
 

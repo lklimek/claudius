@@ -66,6 +66,7 @@ Skills support `${CLAUDE_SKILL_DIR}` substitution — resolves to the skill's di
 - Frontmatter values: single-line strings, no YAML folded/literal scalars (`>`, `|`). Use long lines instead of wrapping.
 - **No redundant content**: never duplicate information that lives in another skill, referenced doc, or well-known spec. If a skill loads `git-and-github`, don't repeat git commands. If it references [Keep a Changelog](https://keepachangelog.com/), don't reproduce the format. Delegate to the source — don't inline it.
 - **Self-review before finishing**: scan all modified agents/skills for content that restates what a loaded skill or referenced doc already provides. Remove it.
+- **New helper scripts default to Python, not Bash** — better error handling, unit-testability, and no GNU/BSD portability split to work around (see the defensive comments throughout `scripts/cargo-cached.sh` for how much that split already costs). Reserve Bash for trivial one-off glue (a handful of lines, no branching) or where the invocation context is inherently shell (a hook's `command` field). Existing Bash scripts (`scripts/cargo-cached.sh`, `scripts/gh-*.sh`, `hooks/*.sh`) are not required to be rewritten — this governs new scripts going forward.
 
 ## Development
 

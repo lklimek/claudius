@@ -6,6 +6,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-07-14
+
+### Added
+
+- **`scripts/cargo-cached.sh`**, **`hooks/cargo-discipline.sh`**: fake-green detection for suspiciously-fast `test`/`clippy`/`nextest` runs (`CLAUDIUS_MIN_PLAUSIBLE_DUR`, default 2s, warn-only/fail-open), and a new `CLAUDIUS_ISOLATE_TARGET=1` hook override scoped to the target-dir rule only (unlike the global `CLAUDIUS_FORCE=1`, it leaves ledger routing and replay intact). Test coverage in `tests/test_cargo_cached.sh` and `tests/test_cargo_discipline.sh`.
+- **`skills/grand-admiral/SKILL.md`**: documents the same-HEAD shared-target-dir hazard, the mandatory per-agent target-dir isolation pattern with its provenance check, tmux-pane/shutdown recovery procedures, and the `[COORDINATOR CORRECTION from <name>]` tagging convention.
+- **`CLAUDE.md`**: new scripts default to Python over Bash.
+
+### Changed
+
+- **`skills/ci-dance/SKILL.md`**: implicit-team + `SendMessage` broadcasts replace the `TeamCreate`/`TeamDelete`/`TaskCreate`/`TaskList`/`TaskUpdate` choreography — none of those six tools are available this session (`TeamCreate`/`TeamDelete` absent since v2.1.178, tracked as anthropics/claude-code#68721; task-board tools separately flaky, #23816; reverify via `ToolSearch` rather than assume either way). Claim conflicts between streams now defer-and-verify at Step 3 (Merge) instead of silently dropping a finding, and claims are explicitly scope-bounded, self-asserted text — Step 3's verification is the real trust boundary, not the claim.
+- **`skills/grand-admiral/SKILL.md`**, **`skills/review-pr/SKILL.md`**, **`skills/workflow-feature/SKILL.md`**, **`skills/grumpy-review/SKILL.md`**: repo-wide sweep for the same stale `TeamCreate`/`Task*` references the `ci-dance` rewrite missed — all now match the implicit-team/`SendMessage` model.
+- **`skills/coding-best-practices/SKILL.md`**, **`skills/grand-admiral/SKILL.md`**: merge gate now runs targeted tests only, not a mandatory full local suite — CI is the sole full-suite backstop. The separate, bug-motivated per-agent target-dir isolation mandate for concurrent worktree waves is a different mechanism and unchanged.
+- **`skills/workflow-simplified/SKILL.md`**, **`skills/workflow-feature/SKILL.md`**: only `qa-engineer-marvin` executes the build/test/lint suite in a review fan-out; other reviewers stay diff/read/grep-only.
+- **`skills/check-pr-comments/SKILL.md`**: replies/resolves now gate on the settled fix/no-fix decision instead of firing during triage.
+- **`skills/grand-admiral/SKILL.md`**: the per-agent isolation mandate now uses the new scoped `CLAUDIUS_ISOLATE_TARGET=1` instead of the global `CLAUDIUS_FORCE=1`, which silently disabled ledger replay and hook-enforced ledger routing for the whole wave; also reworked the `[COORDINATOR CORRECTION from <name>]` convention so the tag alone isn't treated as authenticating — a correction must reference specifics unique to the receiving agent's own assignment.
+- **`hooks/session-start.sh`**, **`skills/rust-best-practices/SKILL.md`**: carve out the concurrent-worktree isolation exception in the "never override CARGO_TARGET_DIR" guidance, which previously contradicted `grand-admiral`'s mandate outright.
+
+Several of the above (`CLAUDIUS_FORCE=1` scope, the target-dir contradiction, the forgeable correction tag, and the fake-green guard's own gaps) were caught by an independent security/QA review of this PR's earlier commits.
+
 ## [5.4.1] - 2026-07-09
 
 ### Fixed
