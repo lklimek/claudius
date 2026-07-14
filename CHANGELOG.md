@@ -6,6 +6,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-07-14
+
+### Added
+
+- **`scripts/cargo-cached.sh`**: per-checkout `CARGO_TARGET_DIR` isolation is now structural and automatic — every invocation routed through the wrapper derives its own target dir from the checkout's absolute path (`<canonical>/claudius-checkouts/<hash>`), replacing the coordinator-doctrine-dependent manual assignment that kept failing in practice. An explicit caller-set `CARGO_TARGET_DIR` (the `CLAUDIUS_ISOLATE_TARGET=1` escape hatch) is respected as-is and now correctly participates in the ledger's cache key, so it can't cross-replay against a different explicit override. `SCCACHE_BASEDIRS` (version-gated to sccache >= 0.14.0) keeps rlib caching shared across isolated dirs where supported. Fake-green banners now record and report the actual isolation state of the run being displayed, including on cross-checkout replay. New tests K19-K31 in `tests/test_cargo_cached.sh`.
+
+### Fixed
+
+- **`scripts/cargo-cached.sh`**: a failed target-dir creation no longer presses ahead into an unusable path — it now abandons isolation and falls through to cargo's default resolution, preventing a false test failure from being ledgered and replayed to other checkouts. Silent fail-open paths that drop the isolation protection (metadata resolution failure, directory-creation failure) now emit a stderr warning instead of failing silently.
+
+### Changed
+
+- **`skills/grand-admiral/SKILL.md`**, **`skills/rust-best-practices/SKILL.md`**, **`hooks/session-start.sh`**, **`hooks/cargo-discipline.sh`**: doctrine updated to reflect automatic isolation — the manual per-agent `CARGO_TARGET_DIR` assignment mandate is gone; `CLAUDIUS_ISOLATE_TARGET=1` is now documented purely as a manual escape hatch. Also clarifies that isolation applies to any wrapper-routed invocation (not just test/clippy/nextest), notes the sccache mitigation's version requirement (confirmed no-op on this machine's installed sccache 0.7.7), and flags that isolated target dirs accumulate with no automatic cleanup.
+
+Caught by a two-round, 3-agent adversarial review (`security-engineer-smythe`, `project-reviewer-adams`, `qa-engineer-marvin`) of this refactor: an explicit-override cache-key regression that silently defeated the manual re-verification escape hatch, a wrong-and-crash-prone sccache mitigation value, a false-failure propagation path, and banner/doctrine accuracy gaps — all confirmed by direct reproduction (including against the actual installed sccache binary) before and after each fix.
+
 ## [5.5.0] - 2026-07-14
 
 ### Added

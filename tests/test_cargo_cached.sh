@@ -23,6 +23,19 @@
 #   K16 threshold non-numeric    -> falls back to the 2s default, still warns
 #   K17 concurrent flock replay  -> 2nd proc blocks, replays (rc kept, no re-run)
 #   K18 arg with metacharacters  -> re-run recipe stays quoted (boundaries kept)
+#   K19 worktree of same repo    -> different auto-derived CARGO_TARGET_DIR
+#   K20 two independent clones    -> different auto-derived CARGO_TARGET_DIR
+#   K21 same checkout invoked 2x -> SAME derived dir (deterministic, stays warm)
+#   K22 explicit CARGO_TARGET_DIR-> respected, not overridden by auto-derivation
+#   K23 identical tree, 2 checkouts -> ledger REPLAY across different target dirs
+#   K24 fake-green banner (auto-isolated) -> names own dir, no manual recipe
+#   K25 two DIFFERENT explicit CARGO_TARGET_DIRs -> must NOT cross-replay (in key)
+#   K26 sccache present + HOME unset -> no crash (SCCACHE_BASEDIRS=toplevel)
+#   K27 sccache < 0.14.0 -> SCCACHE_BASEDIRS NOT set (version gate)
+#   K28 underivable target dir (mkdir fails) -> isolation abandoned, cargo runs
+#   K29 cargo metadata resolution fails -> loud stderr warning, cargo still runs
+#   K30 fake-green REPLAY from other checkout -> banner names RECORD's dir
+#   K31 explicit (shared) override -> banner says hazard LIVE, not "auto-isolated"
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -38,20 +51,44 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 export CLAUDIUS_CACHE_DIR="$WORK/cache"   # ledger lives here, outside the repo
 COUNTER="$WORK/counter"; echo 0 > "$COUNTER"; export COUNTER
+# Fixed "canonical" target dir the stub reports for `cargo metadata` — the wrapper
+# derives each checkout's isolated dir UNDER this (see K19-K24).
+export STUB_TARGET_DIR="$WORK/canonical-target"
 
-# Stub cargo: count real invocations, emit an identifiable line. (The wrapper's
-# own cargo-metadata resolution is a hook concern; this stub only needs `run`.)
+# Stub cargo. `metadata` is the wrapper's canonical-target-dir probe, not a real
+# build: emit a fixed target_directory and do NOT count it, so the counter still
+# tracks only real runs (every existing K-case asserts exact counts). Any other
+# subcommand is a real run: count it, echo an identifiable line, and echo the
+# effective CARGO_TARGET_DIR so the isolation tests can see what got derived.
 # STUB_SLEEP fakes a real compile's wall clock, STUB_RC its verdict — both default
 # to the fast/green stub the key-logic cases (K1-K6) rely on.
 STUBDIR="$WORK/bin"; mkdir -p "$STUBDIR"
 cat > "$STUBDIR/cargo" <<'EOF'
 #!/usr/bin/env bash
+if [ "${1:-}" = metadata ]; then
+  [ "${STUB_NO_METADATA:-0}" = 1 ] && exit 0   # emit nothing => canonical empty
+  echo "{\"target_directory\":\"${STUB_TARGET_DIR:-$HOME/target}\"}"
+  exit 0
+fi
 n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"
 echo "STUB CARGO INVOCATION $n: $*"
+echo "STUB_TGT=${CARGO_TARGET_DIR:-}"           # what the wrapper auto-derived/kept
+echo "STUB_SCC_BASEDIRS=${SCCACHE_BASEDIRS:-}"  # what the wrapper set for sccache
 [ "${STUB_SLEEP:-0}" != 0 ] && sleep "${STUB_SLEEP}"
 exit "${STUB_RC:-0}"
 EOF
 chmod +x "$STUBDIR/cargo"
+
+# Stub sccache (only prepended to PATH for the sccache-specific cases). Reports
+# SCC_VER (default 0.14.0, the version SCCACHE_BASEDIRS support landed in) so the
+# wrapper's version gate can be exercised both above and below the threshold.
+SCCDIR="$WORK/sccbin"; mkdir -p "$SCCDIR"
+cat > "$SCCDIR/sccache" <<'EOF'
+#!/usr/bin/env bash
+[ "${1:-}" = --version ] && { echo "sccache ${SCC_VER:-0.14.0}"; exit 0; }
+exit 0
+EOF
+chmod +x "$SCCDIR/sccache"
 
 # Throwaway git repo (the tree the wrapper keys on).
 REPO="$WORK/repo"; mkdir -p "$REPO"
@@ -302,6 +339,237 @@ if grep -q "POSSIBLE FAKE GREEN" <<<"$OUT" \
   ok "K18 re-run recipe escapes the metacharacter arg (no raw 'boom; echo PWNED' in the recipe)"
 else
   bad "K18 (recipe='${recipe//$'\n'/ }')"
+fi
+
+# --- Structural per-checkout target-dir isolation (K19-K24) -----------------
+# Force a REAL run and echo the CARGO_TARGET_DIR the wrapper auto-derived/exported.
+# CLAUDIUS_FORCE=1 skips replay so the stub always runs (and prints STUB_TGT=).
+derived_tgt() {  # $1=dir to run in; echoes the effective CARGO_TARGET_DIR
+  local d="$1"; shift
+  ( cd "$d" && CLAUDIUS_FORCE=1 env PATH="$STUBDIR:$PATH" \
+      "$BASHBIN" "$WRAPPER" test "$@" 2>&1 ) | sed -n 's/^STUB_TGT=//p' | tail -1
+}
+
+echo "=== K19: a git worktree of the same repo gets its own derived target dir ==="
+# A worktree shares the object store (identical HEAD) but lives at a different
+# path — the exact production same-HEAD collision scenario. Path-keyed isolation
+# must hand it a DIFFERENT target dir from the base checkout.
+WT19="$WORK/repo-wt19"
+( cd "$REPO" && git worktree add -q --detach "$WT19" HEAD ) 2>/dev/null || { echo "worktree add failed"; exit 1; }
+tgt_repo=$(derived_tgt "$REPO")
+tgt_wt=$(derived_tgt "$WT19")
+if [ -n "$tgt_repo" ] && [ -n "$tgt_wt" ] && [ "$tgt_repo" != "$tgt_wt" ] \
+   && [[ "$tgt_repo" == "$STUB_TARGET_DIR/claudius-checkouts/"* ]]; then
+  ok "K19 worktree derives a distinct target dir under the canonical root (repo=$tgt_repo wt=$tgt_wt)"
+else
+  bad "K19 (repo='$tgt_repo' wt='$tgt_wt')"
+fi
+
+echo "=== K20: two independent clones at the same commit get different derived dirs ==="
+# Independent init/clone (not a worktree) is each its own 'primary' tree yet
+# collides identically on a shared target dir — Nagatha flagged this case. Path-
+# keying covers it because the toplevel paths differ.
+IND_A="$WORK/indep-a"; IND_B="$WORK/indep-b"
+for d in "$IND_A" "$IND_B"; do
+  mkdir -p "$d"
+  ( cd "$d" && git init -q && git config user.email test@example.com && git config user.name test \
+    && echo "fn main() {}" > src.rs && git add -A && git commit -qm init ) \
+    || { echo "independent repo setup failed"; exit 1; }
+done
+tgt_a=$(derived_tgt "$IND_A"); tgt_b=$(derived_tgt "$IND_B")
+if [ -n "$tgt_a" ] && [ -n "$tgt_b" ] && [ "$tgt_a" != "$tgt_b" ]; then
+  ok "K20 independent clones derive distinct target dirs (a=$tgt_a b=$tgt_b)"
+else
+  bad "K20 (a='$tgt_a' b='$tgt_b')"
+fi
+
+echo "=== K21: the same checkout invoked twice derives the SAME dir (deterministic) ==="
+# Determinism is what keeps a checkout's own repeat builds warm — the derived dir
+# is a pure function of the absolute path, so it must not drift run to run.
+tgt_1=$(derived_tgt "$REPO"); tgt_2=$(derived_tgt "$REPO")
+if [ -n "$tgt_1" ] && [ "$tgt_1" = "$tgt_2" ]; then
+  ok "K21 same checkout path -> same derived target dir across runs ($tgt_1)"
+else
+  bad "K21 (run1='$tgt_1' run2='$tgt_2')"
+fi
+
+echo "=== K22: an explicit caller-set CARGO_TARGET_DIR is respected, not overridden ==="
+# The manual escape hatch: if the caller sets CARGO_TARGET_DIR the wrapper must
+# leave it exactly as-is (auto-derivation only fills the UNSET case).
+EXPLICIT="$WORK/explicit-tgt"
+OUT=$( cd "$REPO" && CLAUDIUS_FORCE=1 CARGO_TARGET_DIR="$EXPLICIT" \
+       env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 )
+tgt_explicit=$(sed -n 's/^STUB_TGT=//p' <<<"$OUT" | tail -1)
+if [ "$tgt_explicit" = "$EXPLICIT" ]; then
+  ok "K22 explicit CARGO_TARGET_DIR left untouched (got '$tgt_explicit')"
+else
+  bad "K22 (expected '$EXPLICIT' got '$tgt_explicit')"
+fi
+
+echo "=== K23: a byte-identical tree in two checkouts REPLAYS across different target dirs ==="
+# The core regression: two checkouts of one repo (shared object store => identical
+# head_oid/diff_hash/untracked_hash/rel_dir/cmd) differ ONLY in path, hence in the
+# auto-derived CARGO_TARGET_DIR. The key must EXCLUDE CARGO_TARGET_DIR so the 2nd
+# checkout replays the 1st's record. RED against the old env_hash (which folded
+# CARGO_TARGET_DIR in => distinct keys => a miss instead of a replay).
+KREPO="$WORK/krepo"; mkdir -p "$KREPO"
+( cd "$KREPO" && git init -q && git config user.email test@example.com && git config user.name test \
+  && echo "fn main() {}" > lib.rs && git add -A && git commit -qm init ) \
+  || { echo "krepo setup failed"; exit 1; }
+KWT="$WORK/krepo-wt"
+( cd "$KREPO" && git worktree add -q --detach "$KWT" HEAD ) 2>/dev/null || { echo "krepo worktree failed"; exit 1; }
+K23CACHE="$WORK/cache-k23"
+BEFORE=$(counter)
+OUT=$( cd "$KREPO" && CLAUDIUS_CACHE_DIR="$K23CACHE" CLAUDIUS_FORCE=0 \
+       env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 )
+tgt_krepo=$(sed -n 's/^STUB_TGT=//p' <<<"$OUT" | tail -1)
+MID=$(counter)
+OUT2=$( cd "$KWT" && CLAUDIUS_CACHE_DIR="$K23CACHE" CLAUDIUS_FORCE=0 \
+        env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 ); RC2=$?
+AFTER=$(counter)
+if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER" = "$MID" ] \
+   && grep -q "STUB CARGO INVOCATION" <<<"$OUT" \
+   && grep -q "CACHED verification" <<<"$OUT2"; then
+  ok "K23 2nd checkout ($KWT, target $tgt_krepo <- 1st's) replayed the 1st's record (no re-run)"
+else
+  bad "K23 (before=$BEFORE mid=$MID after=$AFTER rc2=$RC2 out2='${OUT2//$'\n'/ }')"
+fi
+
+echo "=== K24: an auto-isolated fake-green banner names its own dir, no manual recipe ==="
+# Isolation is structural now, so the old 'CARGO_TARGET_DIR=<your-own-dir>' recipe
+# is obsolete; when the wrapper DID auto-isolate, the banner says so and names it.
+bust k24
+run_wrapper 0 test   # instant real test => fake-green banner fires (auto_isolated=1)
+if grep -q "$WARN" <<<"$OUT" && grep -q "CLAUDIUS_FORCE=1" <<<"$OUT" \
+   && ! grep -q "CARGO_TARGET_DIR=<your-own-dir>" <<<"$OUT" \
+   && grep -q "own auto-isolated target dir" <<<"$OUT"; then
+  ok "K24 auto-isolated banner names its own dir, drops the manual CARGO_TARGET_DIR recipe"
+else
+  bad "K24 (out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K25: two DIFFERENT explicit CARGO_TARGET_DIRs must NOT cross-replay ==="
+# The escape hatch (explicit override) is a verdict input: a caller pointing at a
+# known-clean dir to force a real re-verify must actually build there, not replay
+# a verdict recorded against a DIFFERENT explicit dir. So the two runs on an
+# identical tree but different explicit dirs must BOTH execute. RED against the
+# unconditional-exclude code (which folds both to one key => 2nd replays).
+E25CACHE="$WORK/cache-k25"
+BEFORE=$(counter)
+OUTA=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$E25CACHE" CLAUDIUS_FORCE=0 CARGO_TARGET_DIR="$WORK/expl-a" \
+        env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 )
+MID=$(counter)
+OUTB=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$E25CACHE" CLAUDIUS_FORCE=0 CARGO_TARGET_DIR="$WORK/expl-b" \
+        env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 )
+AFTER=$(counter)
+if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER" = "$((MID + 1))" ] \
+   && ! grep -q "CACHED verification" <<<"$OUTB" \
+   && grep -q "STUB_TGT=$WORK/expl-a" <<<"$OUTA" && grep -q "STUB_TGT=$WORK/expl-b" <<<"$OUTB"; then
+  ok "K25 different explicit target dirs each built (no cross-replay; override is in the key)"
+else
+  bad "K25 (before=$BEFORE mid=$MID after=$AFTER outB='${OUTB//$'\n'/ }')"
+fi
+
+echo "=== K26: sccache present with HOME unset does not crash the wrapper ==="
+# Old code exported SCCACHE_BASEDIRS=\"\$HOME\" under set -u; an unset HOME aborted
+# the whole wrapper instead of falling through. $toplevel (always non-empty) fixes
+# it. Stub sccache reports 0.14.0 so the export path actually executes.
+bust k26
+BEFORE=$(counter)
+OUT=$( cd "$REPO" && env -u HOME PATH="$SCCDIR:$STUBDIR:$PATH" SCC_VER=0.14.0 \
+       CLAUDIUS_CACHE_DIR="$CLAUDIUS_CACHE_DIR" COUNTER="$COUNTER" \
+       STUB_TARGET_DIR="$STUB_TARGET_DIR" CLAUDIUS_FORCE=0 \
+       "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
+AFTER=$(counter)
+tl_expected=$(cd "$REPO" && git rev-parse --show-toplevel)
+if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = "0" ] \
+   && grep -q "STUB CARGO INVOCATION" <<<"$OUT" \
+   && grep -q "STUB_SCC_BASEDIRS=$tl_expected" <<<"$OUT"; then
+  ok "K26 HOME unset + sccache present: wrapper ran (SCCACHE_BASEDIRS=toplevel, no crash)"
+else
+  bad "K26 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K27: SCCACHE_BASEDIRS is version-gated (skipped below sccache 0.14.0) ==="
+# The installed host sccache (0.7.7) predates SCCACHE_BASEDIRS (mozilla/sccache#35,
+# 0.14.0). Setting it there is a silent no-op, so the wrapper must NOT set it.
+bust k27
+OUT=$( cd "$REPO" && env PATH="$SCCDIR:$STUBDIR:$PATH" SCC_VER=0.7.7 CLAUDIUS_FORCE=1 \
+       "$BASHBIN" "$WRAPPER" test 2>&1 )
+if grep -q "STUB_SCC_BASEDIRS=$" <<<"$OUT"; then
+  ok "K27 sccache 0.7.7: SCCACHE_BASEDIRS left unset (version gate holds)"
+else
+  bad "K27 (out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K28: an underivable target dir abandons isolation instead of exporting a broken path ==="
+# If mkdir on the derived dir fails, the wrapper must NOT leave CARGO_TARGET_DIR
+# pointing at an uncreatable path (real cargo would exit 101 and that false RED
+# would be ledgered + replayed). It must unset it so cargo falls back. Make the
+# canonical parent a regular FILE so mkdir -p fails with ENOTDIR. RED against the
+# 'export then mkdir||true' code (which leaves STUB_TGT set to the broken path).
+bust k28
+BLOCK="$WORK/blocker-file"; : > "$BLOCK"   # a regular file, not a dir
+BEFORE=$(counter)
+OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" STUB_TARGET_DIR="$BLOCK/sub" CLAUDIUS_FORCE=1 \
+       "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
+AFTER=$(counter)
+if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = "0" ] \
+   && grep -q "STUB_TGT=$" <<<"$OUT" \
+   && grep -q "isolation skipped (could not create" <<<"$OUT"; then
+  ok "K28 mkdir-fail abandons isolation (CARGO_TARGET_DIR unset), wrapper still runs cargo"
+else
+  bad "K28 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K29: a failed cargo metadata resolution warns loudly and still runs cargo ==="
+# Losing isolation drops a CORRECTNESS protection (not just an optimization), so
+# unlike the silent fail-open guards this one must be observable on stderr.
+bust k29
+BEFORE=$(counter)
+OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" STUB_NO_METADATA=1 CLAUDIUS_FORCE=1 \
+       "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
+AFTER=$(counter)
+if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = "0" ] \
+   && grep -q "isolation skipped (cargo metadata resolution failed)" <<<"$OUT" \
+   && grep -q "STUB_TGT=$" <<<"$OUT"; then
+  ok "K29 metadata-fail: loud warning emitted, isolation skipped, cargo still ran"
+else
+  bad "K29 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K30: a cross-checkout fake-green REPLAY banner names the RECORD's dir, not the replayer's ==="
+# The whole point of cross-checkout sharing: checkout B replays A's flagged record.
+# The replay banner must name A's ORIGINAL dir (from the record), not B's own live
+# derived dir. RED against the code that interpolated the live process env.
+hash_krepo=$(printf '%s' "$KREPO" | sha256sum | cut -c1-16)
+hash_kwt=$(printf '%s' "$KWT" | sha256sum | cut -c1-16)
+K30CACHE="$WORK/cache-k30"
+( cd "$KREPO" && CLAUDIUS_CACHE_DIR="$K30CACHE" CLAUDIUS_FORCE=0 \
+    env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test >/dev/null 2>&1 )  # miss, fast => flagged
+OUT=$( cd "$KWT" && CLAUDIUS_CACHE_DIR="$K30CACHE" CLAUDIUS_FORCE=0 \
+       env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 )          # replay B
+banner=$(grep -A12 "CACHED FAKE-GREEN SUSPECT" <<<"$OUT")
+if grep -q "CACHED FAKE-GREEN SUSPECT" <<<"$OUT" \
+   && grep -q "$hash_krepo" <<<"$banner" && ! grep -q "$hash_kwt" <<<"$banner"; then
+  ok "K30 replay banner names the record's dir ($hash_krepo), not the replaying checkout's ($hash_kwt)"
+else
+  bad "K30 (banner='${banner//$'\n'/ }')"
+fi
+
+echo "=== K31: an explicit (possibly shared) override banner does NOT falsely claim isolation ==="
+# With an explicit override the wrapper did NOT auto-isolate, so the collision
+# hazard can be live. The banner must say so, not reassure with 'auto-isolated'.
+# RED against the code that hard-coded the 'own isolated dir' wording.
+bust k31
+OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" CARGO_TARGET_DIR="$WORK/shared-override" CLAUDIUS_FORCE=0 \
+       "$BASHBIN" "$WRAPPER" test 2>&1 )
+if grep -q "$WARN" <<<"$OUT" \
+   && grep -q "WITHOUT claudius auto-isolation" <<<"$OUT" \
+   && ! grep -q "own auto-isolated target dir" <<<"$OUT"; then
+  ok "K31 explicit-override banner flags the live hazard, does not falsely claim isolation"
+else
+  bad "K31 (out='${OUT//$'\n'/ }')"
 fi
 
 echo ""

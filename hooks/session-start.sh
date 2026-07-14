@@ -21,13 +21,15 @@ if command -v cargo >/dev/null 2>&1; then
   # process builds — exactly the parallel-agent scenario this probe runs in.
   # Bound it well under this hook's 5s budget so a blocked call degrades to
   # "(unresolved)" instead of killing this script before it emits ANY context
-  # (SoT + Memory Actions included, not just this Rust section).
+  # (SoT + Memory Actions included, not just this Rust section). The 2s here is
+  # deliberately tighter than cargo-cached.sh/cargo-discipline.sh's 3s — those
+  # have no such hard hook ceiling; the shorter bound is intentional, not drift.
   MC="cargo"; command -v timeout >/dev/null 2>&1 && MC="timeout 2 cargo"; true
   TGT=$($MC metadata --format-version 1 --no-deps 2>/dev/null | jq -r '.target_directory // empty' 2>/dev/null) || TGT=""
   [[ -n "$TGT" ]] || TGT="(unresolved — not inside a cargo project, or metadata timed out)"
   LEDGER="${CLAUDIUS_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claudius}/ledger"
   WRAPPER="${CLAUDE_PLUGIN_ROOT}/scripts/cargo-cached.sh"
-  printf -v RUST_ENV '\n\n## Rust build environment\n- Shared target dir: %s — never override CARGO_TARGET_DIR/--target-dir except the documented concurrent-worktree isolation case (grand-admiral § Worktree Isolation, requires CLAUDIUS_ISOLATE_TARGET=1 to pass the hook) — undocumented ad-hoc overrides are denied\n- sccache: %s; cargo-nextest: %s\n- Verification ledger: %s\n- Wrapper (absolute path — skill docs only name it relatively): %s — route cargo test/clippy/nextest through it (hook-enforced); build may go through it too for dedup but is not enforced. Identical command + identical tree replays the recorded log instantly (any agent); CLAUDIUS_FORCE=1 forces a real re-run' "$TGT" "$SC" "$NX" "$LEDGER" "$WRAPPER"
+  printf -v RUST_ENV '\n\n## Rust build environment\n- Machine shared target dir: %s — ANY cargo invocation routed through the wrapper AUTO-ISOLATES per checkout (own derived target dir, no manual assignment; the hook forces test/clippy/nextest through it, a routed build isolates too). A raw cargo build NOT via the wrapper uses this shared dir; a bare cargo metadata outside the wrapper also reports this shared dir, not the isolated one. CLAUDIUS_ISOLATE_TARGET=1 is only a manual escape hatch; undocumented ad-hoc overrides are denied\n- sccache: %s; cargo-nextest: %s\n- Verification ledger: %s\n- Wrapper (absolute path — skill docs only name it relatively): %s — route cargo test/clippy/nextest through it (hook-enforced); build may go through it too for dedup but is not enforced. Identical command + identical tree replays the recorded log instantly (any agent); CLAUDIUS_FORCE=1 forces a real re-run' "$TGT" "$SC" "$NX" "$LEDGER" "$WRAPPER"
 fi
 
 jq -n --arg sot "$SOT_CONTENT" --arg rust "$RUST_ENV" '{
