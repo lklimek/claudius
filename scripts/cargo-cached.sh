@@ -53,10 +53,50 @@ key=$(printf '%s' "$head_oid:$diff_hash:$untracked_hash:$toolchain:$env_hash:$re
 # must never be looked up or recorded — it would alias every other empty key.
 [[ -n "$key" ]] || exec cargo "$@"
 
+# --- Shared helpers --------------------------------------------------------
+# Safely-quoted reconstruction of THIS invocation, for copy-paste re-run hints
+# in banners: `printf %q` per arg preserves boundaries so an arg with spaces or
+# shell metacharacters (e.g. --exact 'my test; echo x') can't corrupt the hint.
+rerun_cmd() {
+  local out a q
+  printf -v out '%q' "$0"
+  for a in "$@"; do printf -v q ' %q' "$a"; out+="$q"; done
+  printf '%s' "$out"
+}
+SELF_CMD=$(rerun_cmd "$@")
+
+# Cargo subcommand = first non-flag token. A value-taking GLOBAL flag consumes
+# the NEXT word as its value, so that word must be skipped too — else `-C . test`
+# reads "." and `--config X test` reads "X" as the subcommand (false negative),
+# while `-C test build` reads "test" (false positive). Joined forms
+# (`--color=always`, `-Zfoo`) are single flag tokens needing no skip. List of
+# value-taking globals verified against `cargo -h` in this toolchain.
+cargo_subcommand() {
+  local skip_next=0 arg
+  for arg in "$@"; do
+    if (( skip_next )); then skip_next=0; continue; fi
+    case "$arg" in
+      --config|-C|--color|--explain|--target-dir|-Z) skip_next=1 ;;
+      -*|+*) ;;
+      *) printf '%s' "$arg"; return 0 ;;
+    esac
+  done
+}
+
+# Plausibility threshold in seconds (0 disables). Base-10 forced so a leading
+# zero (CLAUDIUS_MIN_PLAUSIBLE_DUR=08/09 -> arithmetic error that silently
+# no-ops the guard; =010 -> misread as octal 8) is parsed as the decimal the
+# user meant. The regex rejects non-digits; `10#` reinterprets the digits base-10.
+fake_green_min() {
+  local min="${CLAUDIUS_MIN_PLAUSIBLE_DUR:-2}"
+  [[ "$min" =~ ^[0-9]+$ ]] || min=2
+  printf '%s' "$(( 10#$min ))"
+}
+
 # Replay the newest live record for $key, if fresh and unforced. Returns 1 on miss.
 replay_if_hit() {
   [[ "${CLAUDIUS_FORCE:-0}" == 1 || ! -f "$RECORDS" ]] && return 1
-  local hit ts rc logf rec_epoch now
+  local hit ts rc logf rec_epoch now fg dur_rec
   hit=$(grep -F "\"key\":\"$key\"" "$RECORDS" 2>/dev/null | tail -1) || return 1
   [[ -n "$hit" ]] || return 1
   ts=$(jq -r '.ts // empty' <<<"$hit" 2>/dev/null)
@@ -71,8 +111,26 @@ replay_if_hit() {
   now=$(date +%s)
   (( now - rec_epoch < TTL_HOURS * 3600 )) || return 1
   echo "=== CACHED verification: identical command on identical tree, recorded $ts, exit $rc ==="
-  echo "=== Full log: $logf | force a real re-run: CLAUDIUS_FORCE=1 $0 $* ==="
+  echo "=== Full log: $logf | force a real re-run: CLAUDIUS_FORCE=1 $SELF_CMD ==="
   tail -100 "$logf"
+  # Re-surface a fake-green suspicion recorded on the ORIGINAL run — otherwise the
+  # cache launders it into a clean CACHED line for every later agent/TTL window.
+  # rc is never touched (warn-only); a missing field on older records reads false.
+  fg=$(jq -r '.fake_green_suspected // false' <<<"$hit" 2>/dev/null)
+  dur_rec=$(jq -r '.duration_s // empty' <<<"$hit" 2>/dev/null)
+  if [[ "$fg" == true ]]; then
+    cat <<BANNER
+!!! --------------------------------------------------------------------------
+!!! WARNING: CACHED FAKE-GREEN SUSPECT — this cached result was flagged as
+!!! suspiciously fast (${dur_rec}s) when it originally ran, so cargo may have
+!!! compiled little (or nothing) and executed a PRE-EXISTING binary. The cache is replaying
+!!! that same run: a clean CACHED line is NOT evidence on its own.
+!!! Confirm YOUR new/renamed test names appear in the log above ($logf).
+!!! If not, re-run genuinely isolated:
+!!!   CARGO_TARGET_DIR=<your-own-dir> CLAUDIUS_FORCE=1 $SELF_CMD
+!!! --------------------------------------------------------------------------
+BANNER
+  fi
   exit "$rc"
 }
 
@@ -81,8 +139,10 @@ replay_if_hit "$@"
 # Serialize concurrent identical runs: a second agent blocks on the first, then
 # replays its freshly written record instead of duplicating the build. flock is
 # Linux/util-linux; if absent, skip locking (correctness holds, dedup weakens).
-if command -v flock >/dev/null 2>&1; then
-  exec 9>"$LEDGER_DIR/locks/$key.lock" 2>/dev/null || true
+# A bare `exec 9>f 2>/dev/null` makes the stderr mute PERMANENT for the rest of
+# the run; the brace group scopes it to the open alone while fd 9 stays open. A
+# failed open short-circuits the `&&`, skipping locking (fail-open).
+if command -v flock >/dev/null 2>&1 && { exec 9>"$LEDGER_DIR/locks/$key.lock"; } 2>/dev/null; then
   if ! flock -n 9 2>/dev/null; then
     echo "=== identical command already running under another agent; waiting for its result ==="
     # -w assumes the CALLER's Bash-tool timeout, not this script's. The Bash
@@ -115,6 +175,20 @@ start=$(date +%s)
 cargo "$@" 2>&1 | tee "$logf" | tail -100
 rc=${PIPESTATUS[0]}
 dur=$(( $(date +%s) - start ))
+
+# Fake-green suspicion, decided ONCE here (see the guard's rationale below) and
+# persisted, so a later cache replay can re-surface it instead of laundering it.
+# A test/clippy/nextest MISS that finished implausibly fast compiled nothing and
+# ran a PRE-EXISTING binary — possibly a concurrent agent's build sharing the
+# target dir. rc is never touched (warn-only); any parse failure degrades to false.
+fg_min=$(fake_green_min)
+fake_green_suspected=false
+if (( fg_min > 0 )) && [[ "${dur:-}" =~ ^[0-9]+$ ]] && (( dur < fg_min )); then
+  case "$(cargo_subcommand "$@")" in
+    test|clippy|nextest) fake_green_suspected=true ;;
+  esac
+fi
+
 # duration_s is recorded on purpose: a corrupted cargo fingerprint can make a
 # suite falsely report "Finished" in ~0.3s (a false green). Recorded duration
 # turns that invisible trap into an auditable anomaly.
@@ -125,7 +199,8 @@ dur=$(( $(date +%s) - start ))
 record=$(jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg key "$key" --arg cmd "$cmd_norm" \
   --arg head "$head_oid" --arg log "$logf" \
   --argjson exit "$rc" --argjson dur "$dur" --arg sid "${CLAUDE_SESSION_ID:-}" \
-  '{ts:$ts,key:$key,cmd:$cmd,head:$head,exit:$exit,duration_s:$dur,log:$log,session:$sid}')
+  --argjson fg "$fake_green_suspected" \
+  '{ts:$ts,key:$key,cmd:$cmd,head:$head,exit:$exit,duration_s:$dur,fake_green_suspected:$fg,log:$log,session:$sid}')
 if command -v flock >/dev/null 2>&1; then
   printf '%s\n' "$record" | flock "$RECORDS" tee -a "$RECORDS" >/dev/null
 else
@@ -134,41 +209,31 @@ fi
 echo "=== exit $rc | full log: $logf | recorded in verification ledger (key $key) ==="
 
 # --- Fake-green guard: implausibly fast verification ------------------------
-# A test/clippy/nextest MISS must compile and run for real, so a ~0s finish means
-# cargo built nothing and ran a PRE-EXISTING binary. Cargo records dep-info paths
-# relative to the crate root, so two worktrees at the same HEAD collide on one
-# artifact path in a shared target dir: the binary that ran can be a CONCURRENT
-# agent's build — green without ever containing this agent's tests. A legitimate
-# no-op re-run looks identical from here, so this only WARNS: rc is never touched
-# and any internal failure degrades to silence (fail-open, per the header).
-warn_if_implausibly_fast() {
-  local min sub arg
-  # 2s: a genuine compile+link+run of a test/clippy target costs seconds even on a
-  # warm cache; below that, cargo has done no build work at all. 0 disables.
-  min="${CLAUDIUS_MIN_PLAUSIBLE_DUR:-2}"
-  [[ "$min" =~ ^[0-9]+$ ]] || min=2
-  (( min > 0 )) || return 0
-  [[ "${dur:-}" =~ ^[0-9]+$ ]] || return 0
-  (( dur < min )) || return 0
-  # The subcommand is the first non-flag arg (`+toolchain` and flags precede it).
-  for arg in "$@"; do
-    case "$arg" in -*|+*) ;; *) sub="$arg"; break ;; esac
-  done
-  case "${sub:-}" in test|clippy|nextest) ;; *) return 0 ;; esac
+# The suspicion was decided above; this only renders the banner. Cargo records
+# dep-info paths relative to the crate root, so two worktrees at the same HEAD
+# collide on one artifact path in a shared target dir: an implausibly fast run
+# may have executed a CONCURRENT agent's build — green without ever containing
+# this agent's tests. A legitimate no-op re-run looks identical from here, so
+# this only WARNS; rc is never touched (fail-open, per the header).
+fake_green_banner() {
   cat <<BANNER
 !!! --------------------------------------------------------------------------
-!!! WARNING: POSSIBLE FAKE GREEN — this run finished in ${dur}s (below ${min}s),
+!!! WARNING: POSSIBLE FAKE GREEN — this run finished in ${dur}s (below ${fg_min}s),
 !!! so cargo may have compiled little (or nothing) and executed a PRE-EXISTING binary. Worktrees at
 !!! this same HEAD ($head_oid) can share one target dir and collide on the same
 !!! artifact path, so that binary may be ANOTHER agent's build.
 !!! 1. Before trusting this result, confirm YOUR new/renamed test names appear
 !!!    in the output above (full log: $logf).
 !!! 2. If they do not, this is NOT evidence. Re-run genuinely isolated:
-!!!      CARGO_TARGET_DIR=<your-own-dir> CLAUDIUS_FORCE=1 $0 $*
+!!!      CARGO_TARGET_DIR=<your-own-dir> CLAUDIUS_FORCE=1 $SELF_CMD
 !!! Tune or silence this guard with CLAUDIUS_MIN_PLAUSIBLE_DUR (0 = off).
 !!! --------------------------------------------------------------------------
 BANNER
 }
-warn_if_implausibly_fast "$@" || true
+# tee into the log too: a human/coordinator greps $logf directly, and the cache
+# replay re-surfaces the banner from the log tail on every later hit.
+if [[ "$fake_green_suspected" == true ]]; then
+  fake_green_banner | tee -a "$logf"
+fi
 
 exit "$rc"
