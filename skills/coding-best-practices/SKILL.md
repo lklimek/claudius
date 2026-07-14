@@ -23,6 +23,11 @@ Steps 3-5 of every developer workflow (after build environment and prior art che
 
 Only run formatting, linting, and tests right before committing (or when the user explicitly asks). Don't run them after every edit — it wastes time and tokens.
 
+**Scope during iteration, full suite at the gate.** Mid-iteration, run the narrowest command that verifies what you touched — the specific test, module, or package — not the whole suite. Reserve one full run (whole-suite + lint + format) for the verification gate: before declaring a branch/PR done, and at any point where independently-developed branches merge. Widen scope mid-iteration only when you judge real regression risk spills outside it (funds, auth, crypto, shared signatures, cross-cutting refactors) — say so when you do.
+
+- **CI is a backstop, not a substitute.** Flaky, environment-, and scheduling-dependent failures surface only there; a local full run won't catch them.
+- **A green full suite isn't evidence unless the build was isolated.** Under concurrent agents sharing a build/target dir, a full-suite pass can report a sibling's artifacts as your own (see `grand-admiral` § Worktree Isolation). Either isolate the build for the gate run or treat the result as unverified.
+
 ## Build & Test Output Capture
 
 Never re-run a build, test, or lint command just to see more of its output. Capture full output on the first run using `tee`: `f=$(mktemp /tmp/build-XXXXXX.txt) && <command> 2>&1 | tee "$f" | tail -80 && echo "Full output: $f"`. If the visible tail is insufficient, read the temp file — do not re-execute the command. For cargo specifically, the `cargo-cached.sh` wrapper (absolute path announced in the SessionStart Rust build environment context) performs this capture automatically and replays it on identical re-runs; the mktemp+tee pattern above applies to non-cargo commands.
