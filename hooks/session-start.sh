@@ -27,7 +27,7 @@ if command -v cargo >/dev/null 2>&1; then
   [[ -n "$TGT" ]] || TGT="(unresolved — not inside a cargo project, or metadata timed out)"
   LEDGER="${CLAUDIUS_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claudius}/ledger"
   WRAPPER="${CLAUDE_PLUGIN_ROOT}/scripts/cargo-cached.sh"
-  printf -v RUST_ENV '\n\n## Rust build environment\n- Shared target dir: %s — never override CARGO_TARGET_DIR/--target-dir (the cargo-discipline hook denies ad-hoc overrides)\n- sccache: %s; cargo-nextest: %s\n- Verification ledger: %s\n- Wrapper (absolute path — skill docs only name it relatively): %s — route cargo test/clippy/nextest through it (hook-enforced); build may go through it too for dedup but is not enforced. Identical command + identical tree replays the recorded log instantly (any agent); CLAUDIUS_FORCE=1 forces a real re-run' "$TGT" "$SC" "$NX" "$LEDGER" "$WRAPPER"
+  printf -v RUST_ENV '\n\n## Rust build environment\n- Shared target dir: %s — never override CARGO_TARGET_DIR/--target-dir except the documented concurrent-worktree isolation case (grand-admiral § Worktree Isolation, requires CLAUDIUS_FORCE=1 to pass the hook) — undocumented ad-hoc overrides are denied\n- sccache: %s; cargo-nextest: %s\n- Verification ledger: %s\n- Wrapper (absolute path — skill docs only name it relatively): %s — route cargo test/clippy/nextest through it (hook-enforced); build may go through it too for dedup but is not enforced. Identical command + identical tree replays the recorded log instantly (any agent); CLAUDIUS_FORCE=1 forces a real re-run' "$TGT" "$SC" "$NX" "$LEDGER" "$WRAPPER"
 fi
 
 jq -n --arg sot "$SOT_CONTENT" --arg rust "$RUST_ENV" '{

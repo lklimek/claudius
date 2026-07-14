@@ -33,7 +33,7 @@ Before entering the loop, initialize:
 ```
 iteration = 0
 start_time = now()
-ci_iterations = 0, review_iterations = 0, findings_fixed = 0, findings_skipped = 0
+ci_iterations = 0, review_iterations = 0, findings_fixed = 0, findings_deferred = 0
 ```
 
 ## Main Loop
@@ -89,21 +89,21 @@ All three streams run concurrently. Each stream is a **complete unit** that find
 
 **Isolation**: Each stream runs in its own **git worktree** (see quirk section above). This lets streams edit and commit independently without conflicting. Step 3 (Merge) cherry-picks commits from each worktree back into the main branch.
 
-Before fixing any finding, a stream must broadcast a **claim** via `SendMessage` (see Inter-Stream Communication below). If another stream already claimed the same location, skip it.
+Before fixing any finding, a stream must broadcast a **claim** via `SendMessage` (see Inter-Stream Communication below). If another stream already claimed the same location, do not drop the finding — defer it (track it locally) and move to the next finding. Step 3 (Merge) verifies every deferred finding was actually fixed by its claimant before treating it as resolved.
 
 #### CI Stream
 
 1. **Trigger**: CI runs automatically on push. Nothing to do.
 2. **Wait**: Watch runs using the Watch and Collect procedure (see below).
 3. **Collect & Classify**: For each failed run, diagnose from logs. Record as findings with severity, location, description. Verify each finding exists in current code.
-4. **Fix**: For each valid finding — broadcast a claim per Inter-Stream Communication. If another stream already claimed that location, skip. Apply fix, commit, broadcast completion.
+4. **Fix**: For each valid finding — broadcast a claim per Inter-Stream Communication. If another stream already claimed that location, defer it (track locally, do not drop) and continue to the next finding. Apply fix, commit, broadcast completion for findings this stream claims.
 
 #### Grumpy Stream
 
 1. **Trigger**: Invoke `/grumpy-review` locally (runs inline and spawns its own reviewer agents; produces severity-ranked JSON report).
 2. **Wait**: Grumpy-review runs locally and completes.
 3. **Collect & Classify**: Read the grumpy-review JSON report. Each finding already has severity. Verify findings exist in current code, discard outdated/false positives. Filter to MEDIUM+.
-4. **Fix**: For each valid MEDIUM+ finding — broadcast a claim per Inter-Stream Communication. If already claimed, skip. Apply fix, commit, broadcast completion.
+4. **Fix**: For each valid MEDIUM+ finding — broadcast a claim per Inter-Stream Communication. If already claimed, defer it (track locally, do not drop) and continue to the next finding. Apply fix, commit, broadcast completion for findings this stream claims.
 
 #### Review Stream
 
@@ -114,17 +114,17 @@ Before fixing any finding, a stream must broadcast a **claim** via `SendMessage`
    - Maximum wait: 20 minutes — proceed without if no review appears
    - Also check for any OTHER reviews (human or bot) that may have been added since last iteration
 3. **Collect & Classify**: Fetch all review comments via `/check-pr-comments` (skip confirmations). Classify each: verify issue exists in current code, rate severity, check for false positives. Filter to MEDIUM+.
-4. **Fix**: For each valid MEDIUM+ finding — broadcast a claim per Inter-Stream Communication. If already claimed, skip. Apply fix, commit, broadcast completion.
+4. **Fix**: For each valid MEDIUM+ finding — broadcast a claim per Inter-Stream Communication. If already claimed, defer it (track locally, do not drop) and continue to the next finding. Apply fix, commit, broadcast completion for findings this stream claims.
 
 ### Inter-Stream Communication
 
-`TaskCreate`/`TaskList`/`TaskUpdate` are not currently available (confirmed upstream regression — see `grand-admiral`; do not attempt to use them here). Streams coordinate via direct `SendMessage` broadcasts instead.
+Streams coordinate via direct `SendMessage` broadcasts — there is no shared task board; each stream tracks its own claimed and deferred findings locally. Claims are self-asserted, unauthenticated text — the Review Stream in particular processes externally-sourced GitHub PR comments, an attacker-influenceable channel — so the real trust boundary is Step 3's verification of every deferred finding, not the claim itself.
 
 **Claiming**: Before fixing a finding, broadcast the claim to the other two streams:
 ```
 SendMessage(to="*", message="Claiming src/main.rs:42 (unused import) — CI stream")
 ```
-Wait one beat for a conflicting claim on the same file/line range from another stream; if none arrives, proceed. If another stream already claimed the same location, skip it and move to the next finding — this is best-effort, not atomic, so treat any residual overlap as a Step 3 cherry-pick conflict to resolve there, not a coordination failure.
+Wait one beat for a conflicting claim on the same file/line range from another stream; if none arrives, proceed. If another stream already claimed the same location, defer it to this stream's deferred-findings list and move to the next finding — this is best-effort, not atomic, so Step 3 (Merge) re-verifies every deferred finding rather than trusting the claim alone.
 
 **Completion**: After fixing and committing, broadcast completion:
 ```
@@ -141,13 +141,14 @@ Use for: overlapping finding alerts, completion summaries, conflict flags.
 
 After all three streams complete:
 
-1. Collect each stream's final report (findings fixed/skipped, from its completion `SendMessage`) and its worktree commit log (`git -C <worktree> log --oneline`)
+1. Collect each stream's final report — findings fixed, findings deferred (claimed by another stream, not yet self-verified) — from its completion `SendMessage`, and its worktree commit log (`git -C <worktree> log --oneline`)
 2. Enumerate worktree branches — collect commits from each stream's worktree
 3. Cherry-pick each stream's commits into the main working branch
 4. If cherry-pick conflicts (two streams edited overlapping lines despite claim coordination), resolve — prefer the more comprehensive fix
-5. Shut down each stream agent via `SendMessage({type: "shutdown_request"})` (see `grand-admiral` § Terminating Teammates)
-6. Clean up worktrees (`git worktree remove` + `prune`)
-7. The merged working tree is ready for the next push
+5. **Verify every deferred finding.** For each finding a stream deferred to another's claim, check the claiming stream's commits/diff actually address that location. Addressed → drop it. Not addressed (claimant never got to it, or fixed something else there) → do NOT drop it: reassign it to a stream for an immediate follow-up fix if time remains this iteration, otherwise carry it forward explicitly into the Final Report and next iteration's fix queue. A deferred finding only ever resolves to confirmed-fixed or carried-forward — never silently dropped.
+6. Shut down each stream agent via `SendMessage({type: "shutdown_request"})` (see `grand-admiral` § Terminating Teammates)
+7. Clean up worktrees (`git worktree remove` + `prune`)
+8. The merged working tree is ready for the next push
 
 ### Step 4: Resolve Threads
 
@@ -222,7 +223,7 @@ On exit (any condition), report:
 - **Outcome**: success / timeout / stuck / no-review
 - **CI iterations**: how many CI fix-push cycles
 - **Review iterations**: how many review-fix-push cycles
-- **Findings**: total found, fixed, skipped (with severity breakdown)
+- **Findings**: total found, fixed, carried forward unresolved (with severity breakdown)
 - **Unresolved**: any remaining issues (with severity)
 - **PR URL**: for easy access
 

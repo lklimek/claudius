@@ -23,10 +23,9 @@ Steps 3-5 of every developer workflow (after build environment and prior art che
 
 Only run formatting, linting, and tests right before committing (or when the user explicitly asks). Don't run them after every edit — it wastes time and tokens.
 
-**Scope during iteration, full suite at the gate.** Mid-iteration, run the narrowest command that verifies what you touched — the specific test, module, or package — not the whole suite. Reserve one full run (whole-suite + lint + format) for the verification gate: before declaring a branch/PR done, and at any point where independently-developed branches merge. Widen scope mid-iteration only when you judge real regression risk spills outside it (funds, auth, crypto, shared signatures, cross-cutting refactors) — say so when you do.
+**Targeted scope, always — including at merge.** Run the narrowest command that verifies what you touched — the specific test, module, or package — not the whole suite. This applies mid-iteration AND at the merge gate (declaring a branch/PR done, or landing independently-developed branches together): CI runs the full suite anyway, so a local full run is redundant work, not extra safety. Widen scope only when you judge real regression risk spills outside it (funds, auth, crypto, shared signatures, cross-cutting refactors) — say so when you do.
 
-- **CI is a backstop, not a substitute.** Flaky, environment-, and scheduling-dependent failures surface only there; a local full run won't catch them.
-- **A green full suite isn't evidence unless the build was isolated.** Under concurrent agents sharing a build/target dir, a full-suite pass can report a sibling's artifacts as your own (see `grand-admiral` § Worktree Isolation). Either isolate the build for the gate run or treat the result as unverified.
+- **CI is the full-suite backstop, not an afterthought.** It's where flaky, environment-, and scheduling-dependent failures surface, and where the full suite actually runs — local verification stays targeted precisely because CI covers the rest.
 
 ## Build & Test Output Capture
 

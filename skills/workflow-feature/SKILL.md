@@ -160,7 +160,7 @@ Include a deduplication pass — scan for duplicated logic, extract shared helpe
 
 ## Multi-Agent Coordination
 
-For phases with multiple agents on shared files, use teams (`TeamCreate` + `SendMessage` + Task tools) to prevent duplicate work and conflicts. See the Claudius agent's Spawning section for team patterns.
+For phases with multiple agents on shared files, coordinate via named spawns + `SendMessage` claim/completion broadcasts to prevent duplicate work and conflicts. See `grand-admiral` § Spawning and `ci-dance` § Inter-Stream Communication for the pattern.
 
 ## Commit Discipline
 

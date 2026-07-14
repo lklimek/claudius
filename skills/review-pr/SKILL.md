@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: Use to review a PR for code quality, security, and correctness.
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, TaskCreate, TaskUpdate, TaskList, TaskGet, SendMessage, mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_review_write, mcp__plugin_claudius_github__add_comment_to_pending_review
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage, mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_review_write, mcp__plugin_claudius_github__add_comment_to_pending_review
 ---
 
 # PR Audit Workflow
@@ -173,5 +173,4 @@ See [gh-cli-fallback.md](../git-and-github/references/pr-review.md) for: verifyi
 
 ## 5. Cleanup
 
-Shutdown all agents (`SendMessage type: "shutdown_request"`), then `TeamDelete` (if a team was
-used).
+Shutdown all agents (`SendMessage type: "shutdown_request"`) — no team object to tear down (see `grand-admiral` § Spawning).
