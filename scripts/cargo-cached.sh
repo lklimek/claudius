@@ -158,8 +158,8 @@ warn_if_implausibly_fast() {
   cat <<BANNER
 !!! --------------------------------------------------------------------------
 !!! WARNING: POSSIBLE FAKE GREEN — this run finished in ${dur}s (below ${min}s),
-!!! so cargo compiled nothing and executed a PRE-EXISTING binary. Worktrees at
-!!! this same HEAD ($head_oid) share one target dir and collide on the same
+!!! so cargo may have compiled little (or nothing) and executed a PRE-EXISTING binary. Worktrees at
+!!! this same HEAD ($head_oid) can share one target dir and collide on the same
 !!! artifact path, so that binary may be ANOTHER agent's build.
 !!! 1. Before trusting this result, confirm YOUR new/renamed test names appear
 !!!    in the output above (full log: $logf).
