@@ -6,6 +6,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-07-14
+
+### Changed
+
+- **`skills/ci-dance/SKILL.md`**: replaced the `TeamCreate`/`TeamDelete` + `TaskCreate`/`TaskList`/`TaskUpdate` stream-coordination choreography with the implicit-team spawn model and `SendMessage`-based claim/completion broadcasts. The task-board tools are confirmed broken upstream (anthropics/claude-code#23816, #68721) and `TeamCreate`/`TeamDelete` were intentionally removed (v2.1.178) — every session now has one implicit team, so named `Agent()` spawns join it automatically with no create/destroy step.
+- **`skills/workflow-simplified/SKILL.md`**, **`skills/workflow-feature/SKILL.md`**: Phase 3 QA now states explicitly that only `qa-engineer-marvin` executes the build/test/lint suite; other reviewers work diff/read/grep-only, preventing silent 3x redundant compiles on a shared target dir.
+- **`skills/check-pr-comments/SKILL.md`**: step 8 now gates replies/resolves on the actual fix/no-fix decision instead of firing during triage — a bot thread that's about to be fixed goes straight to auto-resolve instead of getting a premature reply first.
+
+### Added
+
+- **`skills/grand-admiral/SKILL.md`**: documents the same-HEAD shared-target-dir hazard (cargo's relative dep-info paths let one worktree's binary satisfy another's freshness check, corrupting test verdicts silently — not mere lock contention) and the per-agent `CARGO_TARGET_DIR`+`CLAUDIUS_FORCE=1` verification pattern for same-HEAD multi-agent waves; the `shutdown_approved`-doesn't-free-the-tmux-pane recovery procedure (`tmux capture-pane` + grep + `kill-pane`); that `shutdown_request` cannot preempt a teammate mid tool-call (send a plain redirect first); and a `[COORDINATOR CORRECTION from <name>]` tagging convention so mid-task `SendMessage` steers aren't mistaken for prompt injection by background agents.
+- **`scripts/cargo-cached.sh`**: warns when a real (non-replay) `test`/`clippy`/`nextest` run completes implausibly fast (`CLAUDIUS_MIN_PLAUSIBLE_DUR`, default 2s) — the observable symptom of a stale/foreign binary silently satisfying cargo's own freshness check on a shared target dir. Warn-only, fail-open — never changes the exit code. `tests/test_cargo_cached.sh` gains cases K7-K10 covering the warning, its absence past-threshold, and that a replay never triggers it.
+- **`CLAUDE.md`**: new scripts default to Python over Bash (error handling, testability, no GNU/BSD portability split to work around).
+
+Addresses 10 backlog TODOs from the `claudius` memcan project tracker (shared-target-dir hazard, ledger stale-binary detection x2, tmux pane recovery, mid-task SendMessage framing, shutdown preemption, ci-dance upstream-tool breakage, check-pr-comments sequencing, QA fan-out ownership, and the parenthesized-prompt/`eval` crash — investigated and closed as an upstream Claude Code issue, not fixable from this plugin).
+
 ## [5.4.1] - 2026-07-09
 
 ### Fixed
