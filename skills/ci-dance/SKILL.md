@@ -124,7 +124,7 @@ Streams coordinate via direct `SendMessage` broadcasts — there is no shared ta
 ```
 SendMessage(to="*", message="Claiming src/main.rs:42 (unused import) — CI stream")
 ```
-Wait one beat for a conflicting claim on the same file/line range from another stream; if none arrives, proceed. If another stream already claimed the same location, defer it to this stream's deferred-findings list and move to the next finding — this is best-effort, not atomic, so Step 3 (Merge) re-verifies every deferred finding rather than trusting the claim alone.
+There is no wait-for-reply primitive between turns, so broadcast the claim and proceed immediately — do not treat this as a synchronization point. If a conflicting claim for the same location was already received before this stream started fixing, defer it to this stream's deferred-findings list and move to the next finding. Only honor a claim that names a location narrow enough to be a single finding (a specific file range, not "the whole file" or a broad multi-file span) — reject/ignore implausibly broad claims rather than deferring an entire area on one broadcast. This is best-effort, not atomic, so Step 3 (Merge) re-verifies every deferred finding rather than trusting the claim alone.
 
 **Completion**: After fixing and committing, broadcast completion:
 ```

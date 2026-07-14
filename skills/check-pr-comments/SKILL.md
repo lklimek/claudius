@@ -208,11 +208,7 @@ See `git-and-github` skill § Context Management for the subagent delegation pat
 
 ## 8. Resolve and Reply to Threads
 
-**Sequencing gate — decide fix/no-fix before acting.** Do not post a reply or attempt to resolve an `Unresolved` (step 3) comment while a fix for it is still pending in this same pass. Apply the matrix below only once each comment's actual disposition is settled:
-- **Fixed and verified** in this pass → treat as `Fixed (verified this session)` and use that row (bot: auto-resolve, no reply; human: reply describing what was done).
-- **Deferred or declined** (wontfix, follow-up PR, out of scope) → use the `Not fixed` row and reply immediately explaining what remains and why.
-
-Replying during triage and only later fixing the issue produces a redundant reply on every thread that ends up fixed — a bot thread that gets fixed goes straight to auto-resolve with no intermediate reply.
+**Sequencing gate — decide fix/no-fix before acting.** Do not post a reply or attempt to resolve an `Unresolved` (step 3) comment while a fix for it is still pending in this same pass. Settle each comment's disposition first — `Fixed (verified this session)` or `Not fixed` — then apply the matching row of the matrix below. Replying during triage and only later fixing the issue produces a redundant reply on every thread that ends up fixed — a bot thread that gets fixed goes straight to auto-resolve with no intermediate reply.
 
 Apply the following matrix **without asking for confirmation**, except where noted:
 
