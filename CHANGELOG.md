@@ -6,7 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [5.8.0] - 2026-07-15
+## [5.9.0] - 2026-07-15
+
+### Added
+
+- **`scripts/task-ledger.py`** (new): durable, deterministic per-checkout task ledger for the coordinator. A YAML file the coordinator owns on disk, outside any git tree, at a path derived by hashing the checkout root (`git rev-parse --show-toplevel`, or `$PWD` when not a repo) — so `task-ledger.py path` resolves to the same file for the same checkout with nothing to remember, surviving compaction and fresh sessions. Lives under `$XDG_STATE_HOME/claudius/tasks/` (default `~/.local/state/claudius/tasks/`; override with `$CLAUDIUS_STATE_DIR`). Subcommands: `path`, `add`, `update`, `done`, `start`, `list` (`--status`/`--all`/`--format plain|md|yaml`), `remove`; atomic writes (temp-file + `os.replace` + `fsync`), status validation, and malformed-YAML-without-clobber safety. Tests in `tests/test_task_ledger.py`.
+
+### Changed
+
+- **`skills/grand-admiral/SKILL.md`** § Session Protocol + § Spawning → Track Progress: task tracking moves from an in-context checklist (which dies on compaction — the failure mode where multi-task work silently drops tasks) to the durable on-disk task ledger, with an explicit recover-after-compaction step (`task-ledger.py path` → read the file).
 
 ### Added
 

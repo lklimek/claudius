@@ -13,7 +13,7 @@ Complete operations manual for coordinator agents. Covers session protocol, plan
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls, and to understand user's mindset and values. `search_code` for existing implementations, `search_standards` for compliance.
 - Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
-- **Track work for EVERY task**: break work into an explicit checklist before starting — no task-board tool is available this session (see § Spawning); keep a plain running list instead. Update it as steps complete. Applies to solo, delegated, and multi-agent work alike.
+- **Track work for EVERY task** in the durable on-disk task ledger (§ Spawning → Track Progress), not just an in-context list — an in-context list dies on compaction, which is exactly how tasks silently get dropped. Record every task up front, update status as steps complete, and re-read the ledger after any context loss. Applies to solo, delegated, and multi-agent work alike.
 - Past work is sunk cost — do what is correct, even if it means redoing work
 - After completing a task, end with two lines in character voice:
   **Task**: what the user wanted (<=8 words).
@@ -56,12 +56,17 @@ Workflow skills define phases and agent sequencing. Claudius is the coordinator 
 
 ### Track Progress (Always)
 
-No task-board tool (`TaskCreate`/`TaskList`/`TaskUpdate`/`TaskGet`) is available this session — confirmed absent; upstream availability has varied by build, so check `ToolSearch` before assuming otherwise rather than trusting this note indefinitely. Track progress with a plain checklist instead:
+Track work in the **durable task ledger** — a YAML file the coordinator owns on disk, outside any git tree, at a deterministic per-checkout path so it survives compaction and is recoverable from scratch (no memory) in a fresh session. An in-context checklist is not enough: it dies on compaction, and that is exactly how tasks silently get dropped.
 
-1. **Before starting**: write out the work as a short list — one item per logical unit (agent dispatch, phase, file group) — in your own running notes.
-2. **While working**: mark items done as they complete; note which agent/step owns each.
-3. **Between steps**: re-read your list to decide next action and catch forgotten work.
-4. **Delegated work**: track status via the delegate's completion report (`SendMessage` or final agent output), not a shared task object.
+Helper (path-agnostic): `python3 ${CLAUDE_SKILL_DIR}/../../scripts/task-ledger.py <cmd>`. The ledger lives under `$XDG_STATE_HOME/claudius/tasks/` (default `~/.local/state/claudius/tasks/`; override with `$CLAUDIUS_STATE_DIR`); its filename is derived by hashing the checkout root, so `task-ledger.py path` always resolves to the same file for the same checkout — no need to remember it.
+
+1. **Session start / after any compaction or context loss**: run `task-ledger.py path`, then read that file to recover in-flight tasks — never assume the in-context list is complete.
+2. **Before starting**: `task-ledger.py add "<title>"` for each logical unit (agent dispatch, phase, file group) — capture the whole plan up front so nothing is lost.
+3. **While working**: `task-ledger.py start <id>` / `done <id>` / `update <id> --status blocked --note "…"` as state changes; set `--owner` to the delegate for dispatched work.
+4. **Between steps**: `task-ledger.py list` to decide the next action and catch forgotten work.
+5. **Delegated work**: reflect the delegate's completion report back into the ledger, so a post-compaction you still sees what's outstanding.
+
+The ledger is the source of truth for outstanding work.
 
 ### Monitoring (Mandatory)
 
