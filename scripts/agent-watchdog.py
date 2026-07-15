@@ -1893,32 +1893,9 @@ def _command_exists(command: str, env: Mapping[str, str] | None = None) -> bool:
     )
 
 
-def _validate_platform() -> None:
-    for command, message in (
-        (["stat", "-c", "%Y", __file__], "GNU stat (stat -c %Y) required"),
-        (
-            ["find", __file__, "-maxdepth", "0", "-printf", ""],
-            "GNU find (find -printf) required",
-        ),
-    ):
-        try:
-            result = subprocess.run(
-                command,
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=5,
-            )
-        except (OSError, subprocess.SubprocessError):
-            die(message)
-        if result.returncode != 0:
-            die(message)
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the persistent monitor until interrupted."""
     options = parse_args(sys.argv[1:] if argv is None else argv)
-    _validate_platform()
     monitor = Watchdog(options)
     print(
         "agent-watchdog: "
