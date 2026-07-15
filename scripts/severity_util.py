@@ -55,6 +55,12 @@ MERGE_CLASS_COLORS: dict[str, str] = {
     "out_of_scope_follow_up": "#607D8B",
     "disputed": "#7F8C8D",
 }
+MERGE_CLASS_TEXT_COLORS: dict[str, str] = {
+    "blocking": "#FFFFFF",
+    "non_blocking": "#0A0A0A",
+    "out_of_scope_follow_up": "#0A0A0A",
+    "disputed": "#0A0A0A",
+}
 
 # Categories tracked in the severity x category matrix. Mirrors the
 # coordinator's CATEGORY_PREFIX ordering.

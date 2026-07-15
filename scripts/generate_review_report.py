@@ -49,6 +49,7 @@ from severity_util import (
     MERGE_CLASS_COLORS,
     MERGE_CLASS_LABELS,
     MERGE_CLASS_ORDER,
+    MERGE_CLASS_TEXT_COLORS,
     build_severity_stats,
     derive_overall,
     derive_severity_int,
@@ -859,7 +860,7 @@ tr:nth-child(even) td{background:{{ BG_LIGHT }}}
 .badge-LOW{background:{{ SEV_LOW }}}
 .badge-INFO{background:{{ SEV_INFO }}}
 .merge-class-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;
-  font-weight:700;color:#fff;white-space:nowrap}
+  font-weight:700;white-space:nowrap}
 /* Tag chips */
 .tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:.7rem;
   background:{{ BG_LIGHT }};border:1px solid {{ BORDER }};color:{{ TEXT_SECONDARY }};margin-left:4px}
@@ -1098,7 +1099,7 @@ details summary:hover{color:{{ ACCENT }}}
 <div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ f._category if f._category else sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}"{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}>
   <h3>
     <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
-    {% if f.merge_class %}<span class="merge-class-chip" style="background-color: {{ merge_class_colors[f.merge_class] }}">{{ merge_class_labels[f.merge_class] }}</span>{% endif %}
+    {% if f.merge_class %}<span class="merge-class-chip" style="background-color: {{ merge_class_colors[f.merge_class] }}; color: {{ merge_class_text_colors[f.merge_class] }}">{{ merge_class_labels[f.merge_class] }}</span>{% endif %}
     {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of risk/impact/scope)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
     {% if f.risk is number %}<span class="metric-chip metric-risk" title="OWASP Likelihood normalized">R {{ '%.2f' % f.risk }}</span>{% endif %}
     {% if f.impact is number %}<span class="metric-chip metric-impact" title="OWASP Impact normalized">I {{ '%.2f' % f.impact }}</span>{% endif %}
@@ -1881,6 +1882,7 @@ def _build_html_context(
         "category_labels": CATEGORY_LABELS,
         "merge_class_labels": MERGE_CLASS_LABELS,
         "merge_class_colors": MERGE_CLASS_COLORS,
+        "merge_class_text_colors": MERGE_CLASS_TEXT_COLORS,
         "category_slugs_json": json.dumps(list(CATEGORY_LABELS.keys())).replace(
             "</", r"<\/"
         ),
@@ -2303,6 +2305,16 @@ def _configure_matplotlib_font(matplotlib: Any) -> None:
             type(exc).__name__,
             exc,
         )
+
+
+def _pdf_merge_class_chip(merge_class: str | None) -> str:
+    if merge_class not in MERGE_CLASS_LABELS:
+        return ""
+    return (
+        f' <font backColor="{MERGE_CLASS_COLORS[merge_class]}" '
+        f'color="{MERGE_CLASS_TEXT_COLORS[merge_class]}">'
+        f"<b> {MERGE_CLASS_LABELS[merge_class]} </b></font>"
+    )
 
 
 def render_pdf(data: dict[str, Any], output_path: Path) -> None:
@@ -2973,13 +2985,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         impact_desc = f.get("impact_description", "")
         rec = f["recommendation"]
         clr = SEV_COLORS.get(sev, TEXT_MUTED)
-        merge_class = f.get("merge_class")
-        merge_chip = ""
-        if merge_class in MERGE_CLASS_LABELS:
-            merge_chip = (
-                f' <font backColor="{MERGE_CLASS_COLORS[merge_class]}" color="#FFFFFF">'
-                f"<b> {MERGE_CLASS_LABELS[merge_class]} </b></font>"
-            )
+        merge_chip = _pdf_merge_class_chip(f.get("merge_class"))
         tag_display = (
             f' <font color="{TEXT_MUTED}">- {", ".join(tags)}</font>' if tags else ""
         )

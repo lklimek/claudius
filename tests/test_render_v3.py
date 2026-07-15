@@ -29,6 +29,23 @@ def _load(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
+def _relative_luminance(color: str) -> float:
+    channels = [int(color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+    linear = [
+        channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+        for channel in channels
+    ]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast_ratio(foreground: str, background: str) -> float:
+    lighter, darker = sorted(
+        (_relative_luminance(foreground), _relative_luminance(background)),
+        reverse=True,
+    )
+    return (lighter + 0.05) / (darker + 0.05)
+
+
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -1072,6 +1089,37 @@ def test_html_merge_class_chip_attribute_and_filter_in_base_and_triage():
         assert "dataset.mergeClass" in output
     assert html.count('id="filterAiVerdict"') == 1
     assert triage.count('id="filterAiVerdict"') == 1
+
+
+def test_all_merge_class_colors_meet_wcag_normal_text_contrast():
+    assert grr.MERGE_CLASS_COLORS.keys() == grr.MERGE_CLASS_TEXT_COLORS.keys()
+    for merge_class, background in grr.MERGE_CLASS_COLORS.items():
+        foreground = grr.MERGE_CLASS_TEXT_COLORS[merge_class]
+        ratio = _contrast_ratio(foreground, background)
+        assert ratio >= 4.5, f"{merge_class} contrast is only {ratio:.2f}:1"
+
+
+@pytest.mark.parametrize(
+    "merge_class",
+    ["blocking", "non_blocking", "out_of_scope_follow_up", "disputed"],
+)
+def test_html_merge_class_chips_use_shared_foreground_and_background(merge_class):
+    finding = {
+        "id": "CODE-001",
+        "severity": 2,
+        "merge_class": merge_class,
+        "title": "Merge class colors",
+        "location": "src/example.py:1",
+        "description": "D",
+        "recommendation": "R",
+    }
+    expected_style = (
+        f'style="background-color: {grr.MERGE_CLASS_COLORS[merge_class]}; '
+        f'color: {grr.MERGE_CLASS_TEXT_COLORS[merge_class]}"'
+    )
+
+    for renderer in (grr.render_html, grr.render_triage):
+        assert expected_style in renderer(_wrap_section(finding))
 
 
 def test_absent_merge_class_has_no_chip_marker_or_data_attribute():

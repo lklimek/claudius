@@ -22,6 +22,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ### Fixed
 
+- **Review report renderers**: merge-class chips use per-class foreground colors that meet WCAG normal-text contrast, including the gold `non_blocking` chip.
 - **`scripts/generate_review_report.py`**: duplicated `filterAiVerdict` select in the base toolbar.
 
 ## [5.5.0] - 2026-07-14

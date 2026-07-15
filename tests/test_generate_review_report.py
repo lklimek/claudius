@@ -195,6 +195,16 @@ def test_v32_merge_class_round_trips_through_pdf(tmp_path):
     assert "BLOCKING" in text
 
 
+@pytest.mark.parametrize(
+    "merge_class",
+    ["blocking", "non_blocking", "out_of_scope_follow_up", "disputed"],
+)
+def test_pdf_merge_class_chips_use_shared_foreground_and_background(merge_class):
+    chip = grr._pdf_merge_class_chip(merge_class)
+    assert f'backColor="{grr.MERGE_CLASS_COLORS[merge_class]}"' in chip
+    assert f'color="{grr.MERGE_CLASS_TEXT_COLORS[merge_class]}"' in chip
+
+
 # ---------------------------------------------------------------------------
 # Scoreboard / category coverage — every renderer must surface ALL registered
 # categories, not a hardcoded subset. Regression for the post-Pass-C gap where
