@@ -6,10 +6,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [5.7.0] - 2026-07-15
+## [5.8.0] - 2026-07-15
 
 ### Added
 
+- **`skills/codex-crew/SKILL.md`** (+ `references/sandbox-and-recovery.md`): new skill — the pre-flight a coordinator reads before its first Codex dispatch. Covers routing (Codex Sol = `gpt-5.6-sol --effort high`, always high effort), the `workspace-write` sandbox limits (worktree writes under `/data/git-worktrees`, the coordinator-commits pattern for the linked-worktree git-commit block, network for localhost test sockets), progress monitoring (codex-rescue has no reliable completion heartbeat — rely on the watchdog / job state), and stale-broker recovery. Consolidates codex-tooling lessons previously rediscovered session after session.
+- **`scripts/agent-watchdog.py`** Codex "Source D" monitoring: the stall watchdog now discovers Codex Companion jobs (session- and workspace-scoped, slug/hash-mapped from the monitored workspaces) and emits namespaced, edge-triggered `CODEX_STALL`/`CODEX_RESUMED`/`CODEX_GONE`/`CODEX_DONE`/`CODEX_FAILED`/`CODEX_CANCELLED` transitions — surfacing a failed/stalled/finished Codex job that codex-rescue itself never signals. Polling never decodes the growing `state.json` (a bounded ≤4 KB header carries version/shape) and mtime-gates per-job reads so unchanged job files are not re-parsed; per-poll enumeration cost scales with the number of retained `jobs/*.json` files in a workspace, and enumeration slower than `JOBS_GLOB_WARN_SECS` (0.5s) emits a one-time `codex-jobs-glob-slow` diagnostic flagging the directory for pruning or a bounded-scan optimization.
+- **`skills/grand-admiral/SKILL.md`** § Spawning → Monitoring: launching the stall watchdog Monitor is now **mandatory** whenever any agent — Claude or Codex — is dispatched; § Recovery documents the Codex discovery source and `CODEX_*` event grammar.
+
+### Changed
+
+- **`scripts/agent-watchdog.sh` → `scripts/agent-watchdog.py`**: the stall watchdog is rewritten Bash → Python (drop-in: `python3 scripts/agent-watchdog.py <same args>`), preserving all Claude-agent behavior (Sources A/B/C, activity-clock fallback chain, per-agent `/proc` build detection, per-session tmux swarm-socket binding, STALL/RESUMED/GONE + `--gone-polls`, edge-trigger/zero-token contract) and gaining importable helpers + a real test net (`tests/test_agent_watchdog.py` — Claude parity + Codex CX-001..035; `tests/test_agent_watchdog_gone.sh` now drives the `.py`). The Monitor launch command becomes `python3 …/agent-watchdog.py`; update the settings allow-rule to `Bash(python3 */scripts/agent-watchdog.py *)` to match.
+- **`scripts/agent-watchdog.py` isolation and polling**: tmux discovery now honors the watchdog's injected `PATH`, while Codex polling reads version metadata once from a bounded `state.json` header and uses per-job records for phase/activity fields without decoding the growing jobs array.
+- **`scripts/agent-watchdog.py` startup**: drop the GNU `stat`/`find` precondition check carried over from the Bash version — the Python port does all mtime work through `pathlib`/`os.stat` and never invokes those binaries, so the check only cost two subprocess spawns per startup and a needless hard-fail on non-GNU hosts (BusyBox/distroless), the very portability trap the port exists to escape.
+- **`CodexStateMachine` pruning**: Codex jobs whose records disappear from disk are forgotten after their grace period (`gone_polls`), reclaiming state for removed jobs; terminal jobs are reported once (edge-triggered) and their per-job state is retained while their `jobs/*.json` record remains on disk.
+
+### Removed
+
+- **`scripts/agent-watchdog.sh`**: replaced by the Python port (git history retains it).
+
+## [5.7.0] - 2026-07-15
+
+### Added
 - **Merge-classification axis** (schema v3.2.0): per-finding `merge_class` (`blocking|non_blocking|out_of_scope_follow_up|disputed`) + `intent_basis`, orthogonal to OWASP severity — 🔴 blocking is a merge class, never a severity; a LOW can block when it violates explicit PR intent, a HIGH can be follow-up when pre-existing. Decision tree, intent-priority order, materiality and pre-existing rules, and an external-reviewer field-compatibility map live in `skills/severity/SKILL.md` § Merge Classification. Plumbed through `consolidate_reports.py` (whitelist, blocking-first `top_findings`, merge-class-aware `remediation`, `merge_class_counts`, new `regenerate` subcommand), all four `generate_review_report.py` formats (md marker, html chip + filter in both base and triage toolbars, pdf chip), and advisory `validate_report.py` coherence warnings.
 - **`skills/review-pr/SKILL.md`**: §1 intent digest (linked issues via `issue_read`, title/body claims, session requirements); Pass C upgraded to **functional promise verification** (verify the diff delivers each promise, not just textual alignment; new Unfulfilled-promise trigger emitting `merge_class: blocking`) and reordered BEFORE consolidation so its findings flow through prepare/§5b.
 

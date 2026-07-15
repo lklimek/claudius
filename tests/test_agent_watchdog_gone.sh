@@ -15,7 +15,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WATCHDOG="${WATCHDOG:-$SCRIPT_DIR/../scripts/agent-watchdog.sh}"
+WATCHDOG="${WATCHDOG:-$SCRIPT_DIR/../scripts/agent-watchdog.py}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YEL='\033[0;33m'; NC='\033[0m'
 pass=0; fail=0
@@ -90,7 +90,7 @@ JSON
 
 run_watchdog() {   # $1=team-dir  $2=seconds-to-observe  -> sets OUT/ERR/SURVIVED globals
   OUT="$BASE/out.$RANDOM"; ERR="$BASE/err.$RANDOM"
-  bash "$WATCHDOG" --team-dir "$1" --worktrees "$BASE/wt" \
+  python3 "$WATCHDOG" --team-dir "$1" --worktrees "$BASE/wt" \
        --tasks-dir "$HOME/.claude/tasks" --projects-dir "$HOME/.claude/projects" \
        --poll-secs 1 --gone-polls 2 --resume-secs 30 --stall-secs 300 \
        >"$OUT" 2>"$ERR" &

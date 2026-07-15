@@ -63,6 +63,10 @@ No task-board tool (`TaskCreate`/`TaskList`/`TaskUpdate`/`TaskGet`) is available
 3. **Between steps**: re-read your list to decide next action and catch forgotten work.
 4. **Delegated work**: track status via the delegate's completion report (`SendMessage` or final agent output), not a shared task object.
 
+### Monitoring (Mandatory)
+
+Whenever you dispatch ANY agent — a Claude subagent OR a Codex job — the stall watchdog Monitor MUST be running for the session. Launch it once: a single persistent, session-scoped Monitor covers every agent and every wave (Claude agents via Sources A/B/C, Codex jobs via the `CODEX_*` machine), so there is never a reason to run a second. It is strictly edge-triggered and silent when healthy — zero coordinator tokens until something actually stalls, fails, or vanishes — so there is no cost argument for skipping it. An un-monitored dispatch is a doctrine violation: Codex jobs in particular emit no reliable completion signal (see `codex-crew`), so without the watchdog a finished or failed Codex job can sit unnoticed. Launch command, discovery sources, and the full event grammar (Claude `STALL`/`RESUMED`/`GONE` + `CODEX_*`) live in § Recovery → Stall Watchdog; `TaskStop` the Monitor when the whole wave completes.
+
 ### Standalone vs Coordinated
 
 Every session has one implicit team — a named `Agent()` spawn joins it automatically, no create/destroy step (`TeamCreate`/`TeamDelete` don't exist). The only real choice is whether spawned agents need to talk to each other.
@@ -280,17 +284,20 @@ A stall is **owning an in_progress task AND idle past threshold AND no build run
 - **Team** (the session-scoped team's members — see Multi-Session Hygiene — `isActive==true`, non-lead) — NAMED, **task-gated**; per-agent clock = newest mtime under its worktree, else its `cwd` (`.git` pruned), else — when the cwd is shared by ≥2 members (e.g. read-only design/QA agents living in the lead's cwd) — the member's own **transcript-jsonl mtime**, so shared-cwd members are tracked rather than skipped.
 - **Worktree-isolated** (`<worktrees>/agent-*`) — NAMED, **task-gated**; clock = newest mtime under the dir. Shares ONE canonical label with the team source (leading `agent-` stripped).
 - **Individual/background subagents** (`…/subagents/agent-*.jsonl`) — ANONYMOUS, **off by default**; enable with `--watch-subagents`. Best-effort & opt-in: a finished subagent has a stale transcript by design with no reliable on-disk completion signal, and the harness already notifies on background-agent completion/death — so treat any subagent STALL as an investigate prompt.
+- **Codex Companion jobs** (`jobs/*.json` below the state directory mapped from the selected team's workspaces) — session- and workspace-scoped, with an independent `CODEX_*` state machine. Detailed job records provide terminal truth; job/log mtimes provide progress; compatible launcher/broker PIDs provide corroborating liveness.
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
-        command="bash \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.sh\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300")
+        command="python3 \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.py\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300")
 ```
 
-`${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(*/scripts/agent-watchdog.sh *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
+`${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(python3 */scripts/agent-watchdog.py *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
 
 **Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops yielding a signal (worktree removed, member deactivated) is auto-cleared — but only after several consecutive signalless polls (`--gone-polls`, default 2), so a one-poll config/`find` glitch never spuriously clears a stall. `TaskStop` the Monitor when the wave completes.
 
 **Events:** `STALL agent=<name> idle=<N>s reason=owns-in_progress-idle` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fresh activity OR no longer owns an in_progress task) or `RESUMED agent=<key> reason=gone` (agent vanished). Plus **`GONE agent=<name> reason=pane-dead|pid-gone|stale-active`** — the process is *verified absent* (its tmux pane dropped to a bare shell, the pane/PID vanished, or `isActive` is stale with no live process and no transcript advance), confirmed over `--gone-polls` consecutive polls; `RESUMED agent=<name> reason=recovered` when a GONE agent's pane goes live again. GONE never auto-kills — it flags a stale active flag to clear or a respawn to consider.
+
+Codex events are separately namespaced: `CODEX_STALL job=<id> workspace=<slug-hash> idle=<N>s phase=<phase> reason=no-progress`; `CODEX_RESUMED ... idle=<N>s phase=<phase> reason=progress`; `CODEX_GONE ... reason=runtime-gone|record-missing`; `CODEX_RESUMED ... phase=<phase> reason=recovered`; `CODEX_DONE ... phase=<phase>`; `CODEX_FAILED ... phase=<phase> error=<JSON-string>`; and `CODEX_CANCELLED ... reason=user-cancelled`. Terminal records report once per watchdog process. Healthy or unchanged Codex jobs remain silent.
 
 **Multi-Session Hygiene:** On a shared host, several Claude Code sessions each own a `~/.claude/teams/session-<id>/` team, `.claude/worktrees/`, and tmux panes. **NEVER trust "newest team/config/worktree by mtime"** — it silently binds to *another* session's agents (a recurring failure: monitoring strangers, missing your own). The watchdog selects its team by precedence `--team-dir` > `--session-id` > `$CLAUDE_SESSION_ID` env > newest-mtime (last resort, with a one-time stderr warning naming the picked session); the Monitor one-liner above passes `--session-id ${CLAUDE_SESSION_ID}` so it tracks THIS session only. Apply the same discipline when investigating by hand: scope `ps`/`/proc`/team-config/worktree lookups to your own session id — do not assume the newest artifact on the box is yours (confirm via the team's `leadSessionId`).
 
