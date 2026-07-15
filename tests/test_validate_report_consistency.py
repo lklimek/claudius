@@ -134,8 +134,7 @@ class TestMergeClassAdvisories:
         )
         warnings = vr.check_consistency(report)
         assert not any(
-            "duplicate" in warning and "merge_class" in warning
-            for warning in warnings
+            "duplicate" in warning and "merge_class" in warning for warning in warnings
         )
 
     def test_blocking_without_nonempty_intent_basis_warns(self):

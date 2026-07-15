@@ -1987,11 +1987,11 @@ def render_triage(data: dict[str, Any]) -> str:
     # comment-check `verdict` (RESOLVED/UNRESOLVED) lives only on triage pages.
     old_finding_div = (
         " data-ai-verdict=\"{{ f.ai_verdict | default('', true) }}\""
-        "{% if f.merge_class %} data-merge-class=\"{{ f.merge_class }}\"{% endif %}>"
+        '{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}>'
     )
     new_finding_div = (
         " data-ai-verdict=\"{{ f.ai_verdict | default('', true) }}\""
-        "{% if f.merge_class %} data-merge-class=\"{{ f.merge_class }}\"{% endif %}"
+        '{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}'
         " data-verdict=\"{{ f.verdict | default('', true) }}\">"
     )
     triage_template = triage_template.replace(old_finding_div, new_finding_div)

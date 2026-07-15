@@ -854,16 +854,11 @@ class TestRegenerateDerived:
         cr.regenerate_derived(report)
 
         assert [item["id"] for item in report["top_findings"]] == ["SEC-001"]
-        by_priority = {
-            bucket["priority"]: bucket for bucket in report["remediation"]
-        }
+        by_priority = {bucket["priority"]: bucket for bucket in report["remediation"]}
         assert "CODE-001" not in by_priority["before_merge"]["finding_ids"]
         assert "CODE-001" in by_priority["post_deployment"]["finding_ids"]
         assert report["summary_statistics"]["merge_class_counts"]["blocking"] == 0
-        assert (
-            report["summary_statistics"]["merge_class_counts"]["non_blocking"]
-            == 2
-        )
+        assert report["summary_statistics"]["merge_class_counts"]["non_blocking"] == 2
 
     def test_regenerate_command_revalidates_and_writes_in_place(self, tmp_path):
         path = tmp_path / "report.json"

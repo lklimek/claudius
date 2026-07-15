@@ -183,10 +183,7 @@ def test_v32_merge_class_round_trips_through_pdf(tmp_path):
 
     pypdf = pytest.importorskip("pypdf")
     fixture = (
-        Path(__file__).resolve().parent
-        / "fixtures"
-        / "reports"
-        / "v3-merge-class.json"
+        Path(__file__).resolve().parent / "fixtures" / "reports" / "v3-merge-class.json"
     )
     data = _json.loads(fixture.read_text(encoding="utf-8"))
     out = tmp_path / "merge-class.pdf"
