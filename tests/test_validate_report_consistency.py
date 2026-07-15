@@ -1,9 +1,7 @@
 """Tests for the non-blocking consistency gate in validate_report.py.
 
-The gate emits ``[consistency]`` WARNINGS to stderr but must never fail an
-otherwise-valid report (exit code stays 0). It covers two smells:
-(i) an explicit ``severity`` that disagrees with the band derived from floats,
-(ii) an axis (risk/impact/scope) defaulted to one value across most findings.
+The gate emits ``[consistency]`` warnings to stderr without failing an
+otherwise-valid report. It covers rating, merge-class, and schema coherence.
 """
 
 from __future__ import annotations
@@ -107,6 +105,19 @@ class TestLabelBandMismatch:
 
 
 class TestMergeClassAdvisories:
+    def test_merge_class_requires_schema_3_2_0(self):
+        report = _report([_section([_finding(1, merge_class="non_blocking")])])
+        report["schema_version"] = "3.1.0"
+
+        warnings = vr.check_consistency(report)
+        assert any("require schema_version=3.2.0" in warning for warning in warnings)
+
+        report["schema_version"] = "3.2.0"
+        warnings = vr.check_consistency(report)
+        assert not any(
+            "require schema_version=3.2.0" in warning for warning in warnings
+        )
+
     def test_false_positive_with_non_disputed_merge_class_warns(self):
         report = _report(
             [

@@ -24,6 +24,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 - **Review report renderers**: merge-class chips use per-class foreground colors that meet WCAG normal-text contrast, including the gold `non_blocking` chip.
 - **`scripts/generate_review_report.py`**: duplicated `filterAiVerdict` select in the base toolbar.
+- **`scripts/consolidate_reports.py`**: disputed findings are excluded from `top_findings`, matching remediation behavior.
+- **`scripts/validate_report.py`**: merge-classification fields on pre-3.2.0 reports emit an advisory consistency warning.
 
 ## [5.6.0] - 2026-07-14
 

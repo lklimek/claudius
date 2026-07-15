@@ -64,13 +64,25 @@ def check_consistency(report: dict) -> list[str]:
     than rated per finding.
     (iii) Dismissed finding with a non-disputed merge classification.
     (iv) Blocking finding without the requirement or claim that makes it blocking.
+    (v) Merge-classification fields used with a pre-3.2.0 schema version.
 
     Warnings are advisory: callers print them but never fail validation.
     """
     findings = _iter_findings(report)
     warnings: list[str] = []
+    schema_version = report.get("schema_version")
 
     for f in findings:
+        schema_fields = [
+            field for field in ("merge_class", "intent_basis") if field in f
+        ]
+        if schema_fields and schema_version != "3.2.0":
+            warnings.append(
+                f"[consistency] finding {f.get('id', '?')}: 3.2.0-only fields "
+                f"({', '.join(schema_fields)}) require schema_version=3.2.0, "
+                f"not {schema_version}"
+            )
+
         merge_class = f.get("merge_class")
         ai_verdict = f.get("ai_verdict")
         if (

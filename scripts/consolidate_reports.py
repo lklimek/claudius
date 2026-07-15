@@ -735,7 +735,10 @@ def generate_top_findings(
     top: list[dict[str, Any]] = []
     for _section, f in _iter_findings(sections):
         sev = f.get("severity", 1)
-        if f.get("merge_class") == "blocking" or sev >= 4:
+        merge_class = f.get("merge_class")
+        if merge_class == "disputed":
+            continue
+        if merge_class == "blocking" or sev >= 4:
             entry: dict[str, Any] = {
                 "id": f.get("id", ""),
                 "severity": sev,

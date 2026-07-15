@@ -835,6 +835,18 @@ class TestGenerateTopFindings:
         assert [finding["id"] for finding in top] == ["CODE-001", "CODE-002"]
         assert top[0]["merge_class"] == "blocking"
 
+    def test_disputed_high_is_excluded(self, make_finding, make_section):
+        disputed = make_finding(severity=5, fid="CODE-001")
+        disputed["merge_class"] = "disputed"
+        non_disputed = make_finding(severity=5, fid="CODE-002")
+        non_disputed["merge_class"] = "non_blocking"
+
+        top = cr.generate_top_findings(
+            [make_section(findings=[disputed, non_disputed])]
+        )
+
+        assert [finding["id"] for finding in top] == ["CODE-002"]
+
 
 class TestRegenerateDerived:
     def _report(self) -> dict[str, Any]:
