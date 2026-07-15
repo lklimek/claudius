@@ -67,13 +67,13 @@ This is the default end of the workflow. Steps 5-7 (structured report) are only 
 
 ## 5. Build Structured Report JSON
 
-Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v3.1.0; 3.0.0 still accepted).
+Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v3.2.0; 3.0.0/3.1.0 still accepted).
 
 ### Report structure
 
 ```json
 {
-  "schema_version": "3.1.0",
+  "schema_version": "3.2.0",
   "metadata": {
     "project": "<owner>/<repo>",
     "date": "YYYY-MM-DD",
@@ -175,6 +175,7 @@ Omit `location_permalink` (do NOT emit an empty string) when commit or project i
 - **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (the comment is satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted as already-resolved via `isResolved: true` (see step 3), state that it was already resolved on GitHub rather than inventing a fix description you didn't verify. The coordinator will derive `severity = 1` (INFO) from those floats.
 - **Unresolved** comments: assess `risk`, `impact`, AND `scope` per the OWASP recipes in `claudius:severity`. Rate `scope` as the comment's real blast radius (a single call-site / narrow path ≈ `0.2`; a subsystem ≈ `0.5`; repo-wide ≈ `1.0`) — do NOT default to `1.0`. The coordinator derives the integer `severity` band; never hand-type a label. Set `verdict: "UNRESOLVED"` and let `recommendation` describe what still needs doing.
 - `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 8.
+- **Merge class** (coordinator-inline producer exception — see `claudius:report-format`): RESOLVED comments omit `merge_class` (informational carve-out). UNRESOLVED comments get classified per `claudius:severity` § Merge Classification — a reviewer-demanded unresolved thread is a `blocking` candidate (`intent_basis` = the reviewer's request); tangential suggestions are `non_blocking` or `out_of_scope_follow_up`.
 
 **Do NOT emit** (coordinator/validator-owned): `overall_severity`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `risk`/`impact`/`scope` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 

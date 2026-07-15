@@ -46,6 +46,10 @@ from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
 from severity_util import (
+    MERGE_CLASS_COLORS,
+    MERGE_CLASS_LABELS,
+    MERGE_CLASS_ORDER,
+    MERGE_CLASS_TEXT_COLORS,
     build_severity_stats,
     derive_overall,
     derive_severity_int,
@@ -636,20 +640,33 @@ def render_markdown(data: dict[str, Any]) -> str:
             lines.append(f"| {verdict} | {count} |")
         lines.append("")
 
+    merge_counts = stats.get("merge_class_counts")
+    if merge_counts:
+        summary = " · ".join(
+            f"{MERGE_CLASS_LABELS[key]}: {merge_counts.get(key, 0)}"
+            for key in MERGE_CLASS_ORDER
+        )
+        lines.append(f"**Merge classes:** {summary}")
+        lines.append("")
+
     # Top findings
     top = data.get("top_findings", [])
     if top:
-        lines.append("### Top 5 Findings")
+        blocking_top = [tf for tf in top if tf.get("merge_class") == "blocking"]
+        lines.append("### Top Findings" if blocking_top else "### Top 5 Findings")
         lines.append("")
-        for tf in top[:5]:
+        other_top = [tf for tf in top if tf.get("merge_class") != "blocking"][:5]
+        for tf in [*blocking_top, *other_top]:
             loc = tf.get("location", "")
             permalink = tf.get("location_permalink")
             if permalink and permalink.startswith(("https://", "http://")):
                 loc_md = f"[`{loc}`]({permalink})"
             else:
                 loc_md = f"`{loc}`"
+            marker = "🔴 BLOCKING " if tf.get("merge_class") == "blocking" else ""
             lines.append(
-                f"- **{tf['id']}** ({sev_label(tf.get('severity'))}): {tf['title']} \u2014 {loc_md}"
+                f"- {marker}**{tf['id']}** ({sev_label(tf.get('severity'))}): "
+                f"{tf['title']} \u2014 {loc_md}"
             )
         lines.append("")
 
@@ -674,6 +691,11 @@ def render_markdown(data: dict[str, Any]) -> str:
 
         for f in section.get("findings", []):
             tag_str = _finding_tag_suffix(f)
+            merge_marker = {
+                "blocking": "🔴 BLOCKING ",
+                "out_of_scope_follow_up": "[follow-up] ",
+                "disputed": "[disputed] ",
+            }.get(f.get("merge_class"), "")
             sev_extra = ""
             if _severity_tooltip(f):
                 sev_extra = (
@@ -683,7 +705,8 @@ def render_markdown(data: dict[str, Any]) -> str:
                     f"scope={f['scope']:.2f})*"
                 )
             lines.append(
-                f"### {f['id']} ({sev_label(f.get('severity'))}){sev_extra}: {f['title']}{tag_str}"
+                f"### {merge_marker}{f['id']} ({sev_label(f.get('severity'))})"
+                f"{sev_extra}: {f['title']}{tag_str}"
             )
             lines.append("")
             loc = f.get("location", "")
@@ -836,6 +859,8 @@ tr:nth-child(even) td{background:{{ BG_LIGHT }}}
 .badge-MEDIUM{background:{{ SEV_MEDIUM }}}
 .badge-LOW{background:{{ SEV_LOW }}}
 .badge-INFO{background:{{ SEV_INFO }}}
+.merge-class-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;
+  font-weight:700;white-space:nowrap}
 /* Tag chips */
 .tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:.7rem;
   background:{{ BG_LIGHT }};border:1px solid {{ BORDER }};color:{{ TEXT_SECONDARY }};margin-left:4px}
@@ -979,7 +1004,7 @@ details summary:hover{color:{{ ACCENT }}}
 <tr><th>ID</th><th>Severity</th><th>Title</th><th>Location</th>{% if triage %}<th class="no-print">Decision</th>{% endif %}</tr>
 {% for tf in top_findings %}
 <tr>
-  <td><a href="#finding-{{ tf.id }}">{{ tf.id }}</a></td>
+  <td>{% if tf.merge_class == "blocking" %}🔴 BLOCKING {% endif %}<a href="#finding-{{ tf.id }}">{{ tf.id }}</a></td>
   <td><span class="badge badge-{{ tf.severity|sev_label }}">{{ tf.severity|sev_label }}</span></td>
   <td>{{ tf.title }}</td>
   <td>{% if tf.location_permalink and tf.location_permalink.startswith(('https://', 'http://')) %}<a href="{{ tf.location_permalink }}" target="_blank" rel="noopener"><code>{{ tf.location }}</code></a>{% else %}<code>{{ tf.location }}</code>{% endif %}</td>
@@ -1034,13 +1059,12 @@ details summary:hover{color:{{ ACCENT }}}
     <option value="pr_comments">PR Comments</option>
     <option value="pr_promises">PR Promises</option>
   </select>
-  <select id="filterAiVerdict">
-    <option value="">All AI Verdicts</option>
-    <option value="valid">Valid</option>
-    <option value="false_positive">False Positive</option>
-    <option value="needs_investigation">Needs Investigation</option>
-    <option value="out_of_scope">Out of Scope</option>
-    <option value="duplicate">Duplicate</option>
+  <select id="filterMergeClass">
+    <option value="">All Merge Classes</option>
+    <option value="blocking">Blocking</option>
+    <option value="non_blocking">Non-Blocking</option>
+    <option value="out_of_scope_follow_up">Follow-Up</option>
+    <option value="disputed">Disputed</option>
   </select>
   <select id="filterAiVerdict">
     <option value="">All AI Verdicts</option>
@@ -1072,9 +1096,10 @@ details summary:hover{color:{{ ACCENT }}}
 <summary>{{ sec.findings | length }} finding{{ "s" if sec.findings | length != 1 else "" }}</summary>
 
 {% for f in sec.findings %}
-<div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ f._category if f._category else sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}">
+<div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ f._category if f._category else sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}"{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}>
   <h3>
     <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
+    {% if f.merge_class %}<span class="merge-class-chip" style="background-color: {{ merge_class_colors[f.merge_class] }}; color: {{ merge_class_text_colors[f.merge_class] }}">{{ merge_class_labels[f.merge_class] }}</span>{% endif %}
     {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of risk/impact/scope)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
     {% if f.risk is number %}<span class="metric-chip metric-risk" title="OWASP Likelihood normalized">R {{ '%.2f' % f.risk }}</span>{% endif %}
     {% if f.impact is number %}<span class="metric-chip metric-impact" title="OWASP Impact normalized">I {{ '%.2f' % f.impact }}</span>{% endif %}
@@ -1319,6 +1344,7 @@ details summary:hover{color:{{ ACCENT }}}
   const originalHTML = container.innerHTML;
   const sevFilter = document.getElementById("filterSeverity");
   const catFilter = document.getElementById("filterCategory");
+  const mergeClassFilter = document.getElementById("filterMergeClass");
   const aiVerdictFilter = document.getElementById("filterAiVerdict");
   const searchInput = document.getElementById("filterSearch");
   const sortSelect = document.getElementById("sortBy");
@@ -1356,12 +1382,14 @@ details summary:hover{color:{{ ACCENT }}}
     const findings = getFindings();
     const sv = sevFilter ? sevFilter.value : "";
     const ct = catFilter ? catFilter.value : "";
+    const mc = mergeClassFilter ? mergeClassFilter.value : "";
     const av = aiVerdictFilter ? aiVerdictFilter.value : "";
     const q = searchInput ? searchInput.value.toLowerCase() : "";
     findings.forEach(f => {
       let show = true;
       if (sv && f.dataset.severity !== sv) show = false;
       if (ct && f.dataset.category !== ct) show = false;
+      if (mc && f.dataset.mergeClass !== mc) show = false;
       if (av && f.dataset.aiVerdict !== av) show = false;
       if (q && !f.textContent.toLowerCase().includes(q)) show = false;
       f.style.display = show ? "" : "none";
@@ -1467,6 +1495,7 @@ details summary:hover{color:{{ ACCENT }}}
 
   if (sevFilter) sevFilter.addEventListener("change", applyFilters);
   if (catFilter) catFilter.addEventListener("change", applyFilters);
+  if (mergeClassFilter) mergeClassFilter.addEventListener("change", applyFilters);
   if (aiVerdictFilter) aiVerdictFilter.addEventListener("change", applyFilters);
   if (searchInput) searchInput.addEventListener("input", applyFilters);
   if (sortSelect) sortSelect.addEventListener("change", () => {
@@ -1586,6 +1615,7 @@ _TRIAGE_EXTRA_JS = r"""
   const sevFilter = document.getElementById("filterSeverity");
   const catFilter = document.getElementById("filterCategory");
   const verdictFilter = document.getElementById("verdictFilter");
+  const mergeClassFilter = document.getElementById("filterMergeClass");
   const aiVerdictFilter = document.getElementById("filterAiVerdict");
   const searchInput = document.getElementById("filterSearch");
   const sortSelect = document.getElementById("sortBy");
@@ -1593,12 +1623,14 @@ _TRIAGE_EXTRA_JS = r"""
   function applyFilters() {
     const sv = sevFilter.value, ct = catFilter.value, q = searchInput.value.toLowerCase();
     const vd = verdictFilter ? verdictFilter.value : "";
+    const mc = mergeClassFilter ? mergeClassFilter.value : "";
     const av = aiVerdictFilter ? aiVerdictFilter.value : "";
     findings.forEach(f => {
       let show = true;
       if (sv && f.dataset.severity !== sv) show = false;
       if (ct && f.dataset.category !== ct) show = false;
       if (vd && f.dataset.verdict !== vd) show = false;
+      if (mc && f.dataset.mergeClass !== mc) show = false;
       if (av && f.dataset.aiVerdict !== av) show = false;
       if (q && !f.textContent.toLowerCase().includes(q)) show = false;
       f.style.display = show ? "" : "none";
@@ -1625,6 +1657,7 @@ _TRIAGE_EXTRA_JS = r"""
   if (sevFilter) sevFilter.addEventListener("change", applyFilters);
   if (catFilter) catFilter.addEventListener("change", applyFilters);
   if (verdictFilter) verdictFilter.addEventListener("change", applyFilters);
+  if (mergeClassFilter) mergeClassFilter.addEventListener("change", applyFilters);
   if (aiVerdictFilter) aiVerdictFilter.addEventListener("change", applyFilters);
   if (searchInput) searchInput.addEventListener("input", applyFilters);
   if (sortSelect) sortSelect.addEventListener("change", () => { applySort(); applyFilters(); });
@@ -1847,6 +1880,9 @@ def _build_html_context(
         ),
         "priority_colors_json": json.dumps(PRIORITY_COLORS).replace("</", r"<\/"),
         "category_labels": CATEGORY_LABELS,
+        "merge_class_labels": MERGE_CLASS_LABELS,
+        "merge_class_colors": MERGE_CLASS_COLORS,
+        "merge_class_text_colors": MERGE_CLASS_TEXT_COLORS,
         "category_slugs_json": json.dumps(list(CATEGORY_LABELS.keys())).replace(
             "</", r"<\/"
         ),
@@ -1951,9 +1987,13 @@ def render_triage(data: dict[str, Any]) -> str:
     # Add comment-check `data-verdict` attribute. The base template already
     # carries data-overall and data-ai-verdict; the triage filter for the
     # comment-check `verdict` (RESOLVED/UNRESOLVED) lives only on triage pages.
-    old_finding_div = " data-ai-verdict=\"{{ f.ai_verdict | default('', true) }}\">"
+    old_finding_div = (
+        " data-ai-verdict=\"{{ f.ai_verdict | default('', true) }}\""
+        '{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}>'
+    )
     new_finding_div = (
         " data-ai-verdict=\"{{ f.ai_verdict | default('', true) }}\""
+        '{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}'
         " data-verdict=\"{{ f.verdict | default('', true) }}\">"
     )
     triage_template = triage_template.replace(old_finding_div, new_finding_div)
@@ -2001,6 +2041,13 @@ def render_triage(data: dict[str, Any]) -> str:
     <option value="UNRESOLVED">Unresolved</option>
   </select>
   {% endif %}
+  <select id="filterMergeClass">
+    <option value="">All Merge Classes</option>
+    <option value="blocking">Blocking</option>
+    <option value="non_blocking">Non-Blocking</option>
+    <option value="out_of_scope_follow_up">Follow-Up</option>
+    <option value="disputed">Disputed</option>
+  </select>
   <select id="filterAiVerdict">
     <option value="">All AI Verdicts</option>
     <option value="valid">Valid</option>
@@ -2258,6 +2305,16 @@ def _configure_matplotlib_font(matplotlib: Any) -> None:
             type(exc).__name__,
             exc,
         )
+
+
+def _pdf_merge_class_chip(merge_class: str | None) -> str:
+    if merge_class not in MERGE_CLASS_LABELS:
+        return ""
+    return (
+        f' <font backColor="{MERGE_CLASS_COLORS[merge_class]}" '
+        f'color="{MERGE_CLASS_TEXT_COLORS[merge_class]}">'
+        f"<b> {MERGE_CLASS_LABELS[merge_class]} </b></font>"
+    )
 
 
 def render_pdf(data: dict[str, Any], output_path: Path) -> None:
@@ -2730,9 +2787,14 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
                 )
             else:
                 loc_xml = f'<font color="{ACCENT}">{xml_escape(loc)}</font>'
+            blocking_marker = (
+                '<font color="#C0392B"><b>[BLOCKING]</b></font> '
+                if tf.get("merge_class") == "blocking"
+                else ""
+            )
             tbl_data.append(
                 [
-                    Paragraph(tf["id"], s["tcc"]),
+                    Paragraph(f"{blocking_marker}{tf['id']}", s["tcc"]),
                     _badge(tf["severity"]),
                     Paragraph(tf["title"], s["tc"]),
                     Paragraph(loc_xml, s["tc"]),
@@ -2923,6 +2985,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         impact_desc = f.get("impact_description", "")
         rec = f["recommendation"]
         clr = SEV_COLORS.get(sev, TEXT_MUTED)
+        merge_chip = _pdf_merge_class_chip(f.get("merge_class"))
         tag_display = (
             f' <font color="{TEXT_MUTED}">- {", ".join(tags)}</font>' if tags else ""
         )
@@ -2933,7 +2996,8 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             loc_xml = f'<font color="{ACCENT}">{xml_escape(loc)}</font>'
         elements: list[Any] = [
             Paragraph(
-                f'<font color="{clr}"><b>{fid} ({sev})</b></font>: {title}{tag_display}',
+                f'<font color="{clr}"><b>{fid} ({sev})</b></font>'
+                f"{merge_chip}: {title}{tag_display}",
                 s["finding_title"],
             ),
         ]

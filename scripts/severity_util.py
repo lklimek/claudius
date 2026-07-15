@@ -37,6 +37,31 @@ SEV_LABELS: dict[int, str] = {
 }
 SEV_ORDER: list[str] = list(SEV_LABELS.values())  # CRITICAL, HIGH, ... INFO
 
+MERGE_CLASS_LABELS: dict[str, str] = {
+    "blocking": "BLOCKING",
+    "non_blocking": "NON-BLOCKING",
+    "out_of_scope_follow_up": "FOLLOW-UP",
+    "disputed": "DISPUTED",
+}
+MERGE_CLASS_ORDER: list[str] = [
+    "blocking",
+    "non_blocking",
+    "out_of_scope_follow_up",
+    "disputed",
+]
+MERGE_CLASS_COLORS: dict[str, str] = {
+    "blocking": "#C0392B",
+    "non_blocking": "#D4AC0D",
+    "out_of_scope_follow_up": "#607D8B",
+    "disputed": "#7F8C8D",
+}
+MERGE_CLASS_TEXT_COLORS: dict[str, str] = {
+    "blocking": "#FFFFFF",
+    "non_blocking": "#0A0A0A",
+    "out_of_scope_follow_up": "#0A0A0A",
+    "disputed": "#0A0A0A",
+}
+
 # Categories tracked in the severity x category matrix. Mirrors the
 # coordinator's CATEGORY_PREFIX ordering.
 MATRIX_CATEGORIES: list[str] = [
@@ -169,3 +194,15 @@ def build_severity_stats(sections: list[dict[str, Any]]) -> dict[str, Any]:
         "severity_counts": severity_counts,
         "severity_category_matrix": matrix,
     }
+
+
+def build_merge_class_stats(findings: list[dict[str, Any]]) -> dict[str, int]:
+    """Count classified findings, returning an empty dict when none are classified."""
+    counts = {merge_class: 0 for merge_class in MERGE_CLASS_ORDER}
+    classified = False
+    for finding in findings:
+        merge_class = finding.get("merge_class")
+        if merge_class in counts:
+            counts[merge_class] += 1
+            classified = True
+    return counts if classified else {}
