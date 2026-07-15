@@ -36,6 +36,11 @@
 #   K29 cargo metadata resolution fails -> loud stderr warning, cargo still runs
 #   K30 fake-green REPLAY from other checkout -> banner names RECORD's dir
 #   K31 explicit (shared) override -> banner says hazard LIVE, not "auto-isolated"
+#   K32 BSD sort rejects -V        -> sccache >= 0.14.0 gate still evaluates true
+#   K33 timeout absent             -> metadata probe is skipped without blocking
+#   K34 target prefix set          -> unique per checkout and stable on repeat
+#   K35 explicit target + prefix   -> explicit CARGO_TARGET_DIR wins unchanged
+#   K36 target prefix unset        -> existing canonical-derived path is unchanged
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -50,6 +55,7 @@ bad() { echo -e "  ${RED}\xe2\x9c\x97${NC} $1"; fail=$((fail + 1)); }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 export CLAUDIUS_CACHE_DIR="$WORK/cache"   # ledger lives here, outside the repo
+unset CLAUDIUS_TARGET_PREFIX
 COUNTER="$WORK/counter"; echo 0 > "$COUNTER"; export COUNTER
 # Fixed "canonical" target dir the stub reports for `cargo metadata` — the wrapper
 # derives each checkout's isolated dir UNDER this (see K19-K24).
@@ -66,6 +72,11 @@ STUBDIR="$WORK/bin"; mkdir -p "$STUBDIR"
 cat > "$STUBDIR/cargo" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = metadata ]; then
+  if [ -n "${METADATA_COUNTER:-}" ]; then
+    n=$(cat "$METADATA_COUNTER" 2>/dev/null || echo 0)
+    echo "$((n + 1))" > "$METADATA_COUNTER"
+  fi
+  [ "${STUB_METADATA_SLEEP:-0}" != 0 ] && sleep "${STUB_METADATA_SLEEP}"
   [ "${STUB_NO_METADATA:-0}" = 1 ] && exit 0   # emit nothing => canonical empty
   echo "{\"target_directory\":\"${STUB_TARGET_DIR:-$HOME/target}\"}"
   exit 0
@@ -89,6 +100,20 @@ cat > "$SCCDIR/sccache" <<'EOF'
 exit 0
 EOF
 chmod +x "$SCCDIR/sccache"
+
+# BSD/macOS sort has no -V. This shim preserves ordinary sort behavior but
+# rejects -V exactly as a BSD implementation would.
+REAL_SORT=$(command -v sort); export REAL_SORT
+BSDSORTDIR="$WORK/bsd-sort-bin"; mkdir -p "$BSDSORTDIR"
+cat > "$BSDSORTDIR/sort" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = -V ]; then
+  echo "sort: illegal option -- V" >&2
+  exit 2
+fi
+exec "$REAL_SORT" "$@"
+EOF
+chmod +x "$BSDSORTDIR/sort"
 
 # Throwaway git repo (the tree the wrapper keys on).
 REPO="$WORK/repo"; mkdir -p "$REPO"
@@ -350,6 +375,13 @@ derived_tgt() {  # $1=dir to run in; echoes the effective CARGO_TARGET_DIR
       "$BASHBIN" "$WRAPPER" test "$@" 2>&1 ) | sed -n 's/^STUB_TGT=//p' | tail -1
 }
 
+prefixed_tgt() {  # $1=dir to run in; $2=auto-derived target root
+  local d="$1" prefix="$2"
+  ( cd "$d" && CLAUDIUS_FORCE=1 CLAUDIUS_TARGET_PREFIX="$prefix" \
+      env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 \
+  ) | sed -n 's/^STUB_TGT=//p' | tail -1
+}
+
 echo "=== K19: a git worktree of the same repo gets its own derived target dir ==="
 # A worktree shares the object store (identical HEAD) but lives at a different
 # path — the exact production same-HEAD collision scenario. Path-keyed isolation
@@ -570,6 +602,80 @@ if grep -q "$WARN" <<<"$OUT" \
   ok "K31 explicit-override banner flags the live hazard, does not falsely claim isolation"
 else
   bad "K31 (out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K32: the sccache version gate works when sort rejects GNU-only -V ==="
+bust k32
+OUT=$( cd "$REPO" && env -u SCCACHE_BASEDIRS PATH="$BSDSORTDIR:$SCCDIR:$STUBDIR:$PATH" \
+       SCC_VER=0.14.0 CLAUDIUS_FORCE=1 "$BASHBIN" "$WRAPPER" test 2>&1 )
+if grep -q "STUB_SCC_BASEDIRS=$REPO" <<<"$OUT" \
+   && ! grep -q "illegal option -- V" <<<"$OUT"; then
+  ok "K32 BSD-style sort: sccache 0.14.0 gate passed without invoking sort -V"
+else
+  bad "K32 (out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K33: without timeout, the metadata probe skips immediately and fails open ==="
+NO_TIMEOUT_BIN="$WORK/no-timeout-bin"; mkdir -p "$NO_TIMEOUT_BIN"
+for t in bash cat cut date env git grep jq mkdir sha256sum sleep sort tail tee tr xargs; do
+  src=$(command -v "$t" 2>/dev/null) && ln -sf "$src" "$NO_TIMEOUT_BIN/$t"
+done
+ln -sf "$STUBDIR/cargo" "$NO_TIMEOUT_BIN/cargo"
+METADATA_COUNTER="$WORK/metadata-counter"; echo 0 > "$METADATA_COUNTER"
+BEFORE=$(counter)
+start=$(date +%s)
+OUT=$( cd "$REPO" && env -i PATH="$NO_TIMEOUT_BIN" HOME="$WORK" \
+       CLAUDIUS_CACHE_DIR="$WORK/cache-k33" COUNTER="$COUNTER" \
+       METADATA_COUNTER="$METADATA_COUNTER" STUB_METADATA_SLEEP=4 \
+       STUB_TARGET_DIR="$STUB_TARGET_DIR" CLAUDIUS_FORCE=1 \
+       "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
+elapsed=$(( $(date +%s) - start ))
+AFTER=$(counter)
+if [ "$(cat "$METADATA_COUNTER")" = 0 ] && [ "$elapsed" -lt 3 ] \
+   && [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = 0 ] \
+   && grep -q "isolation skipped (timeout unavailable)" <<<"$OUT"; then
+  ok "K33 timeout absent: metadata was not invoked and cargo ran fail-open in ${elapsed}s"
+else
+  bad "K33 (metadata=$(cat "$METADATA_COUNTER") elapsed=${elapsed}s before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K34: CLAUDIUS_TARGET_PREFIX keeps targets unique and stable under its root ==="
+PREFIX="$WORK/prefixed-targets"
+prefix_repo_1=$(prefixed_tgt "$REPO" "$PREFIX")
+prefix_repo_2=$(prefixed_tgt "$REPO" "$PREFIX")
+prefix_wt=$(prefixed_tgt "$WT19" "$PREFIX")
+if [[ "$prefix_repo_1" == "$PREFIX/"* ]] \
+   && [[ "$prefix_wt" == "$PREFIX/"* ]] \
+   && [ "$prefix_repo_1" = "$prefix_repo_2" ] \
+   && [ "$prefix_repo_1" != "$prefix_wt" ] \
+   && [ -d "$prefix_repo_1" ] && [ -d "$prefix_wt" ]; then
+  ok "K34 prefix roots distinct per-checkout dirs and repeat builds stay warm"
+else
+  bad "K34 (repo1='$prefix_repo_1' repo2='$prefix_repo_2' wt='$prefix_wt')"
+fi
+
+echo "=== K35: explicit CARGO_TARGET_DIR takes precedence over CLAUDIUS_TARGET_PREFIX ==="
+PREFIX_EXPLICIT="$WORK/prefix-must-not-win"
+EXPLICIT35="$WORK/explicit-must-win"
+OUT=$( cd "$REPO" && CLAUDIUS_FORCE=1 CLAUDIUS_TARGET_PREFIX="$PREFIX_EXPLICIT" \
+       CARGO_TARGET_DIR="$EXPLICIT35" env PATH="$STUBDIR:$PATH" \
+       "$BASHBIN" "$WRAPPER" test 2>&1 )
+tgt_explicit35=$(sed -n 's/^STUB_TGT=//p' <<<"$OUT" | tail -1)
+if [ "$tgt_explicit35" = "$EXPLICIT35" ] && [ ! -e "$PREFIX_EXPLICIT" ]; then
+  ok "K35 explicit target dir won; the unused prefix was not created"
+else
+  bad "K35 (expected='$EXPLICIT35' got='$tgt_explicit35' prefix_exists=$([ -e "$PREFIX_EXPLICIT" ] && echo yes || echo no))"
+fi
+
+echo "=== K36: an unset prefix preserves the existing default path exactly ==="
+hash_repo=$(printf '%s' "$REPO" | sha256sum | cut -c1-16)
+expected_default="$STUB_TARGET_DIR/claudius-checkouts/$hash_repo"
+unset CLAUDIUS_TARGET_PREFIX
+default_tgt=$(derived_tgt "$REPO")
+if [ "$default_tgt" = "$expected_default" ]; then
+  ok "K36 unset prefix kept the existing canonical-derived path byte-for-byte"
+else
+  bad "K36 (expected='$expected_default' got='$default_tgt')"
 fi
 
 echo ""

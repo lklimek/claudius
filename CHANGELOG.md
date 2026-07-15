@@ -11,10 +11,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Added
 
 - **`scripts/cargo-cached.sh`**: per-checkout `CARGO_TARGET_DIR` isolation is now structural and automatic — every invocation routed through the wrapper derives its own target dir from the checkout's absolute path (`<canonical>/claudius-checkouts/<hash>`), replacing the coordinator-doctrine-dependent manual assignment that kept failing in practice. An explicit caller-set `CARGO_TARGET_DIR` (the `CLAUDIUS_ISOLATE_TARGET=1` escape hatch) is respected as-is and now correctly participates in the ledger's cache key, so it can't cross-replay against a different explicit override. `SCCACHE_BASEDIRS` (version-gated to sccache >= 0.14.0) keeps rlib caching shared across isolated dirs where supported. Fake-green banners now record and report the actual isolation state of the run being displayed, including on cross-checkout replay. New tests K19-K31 in `tests/test_cargo_cached.sh`.
+- **`CLAUDIUS_TARGET_PREFIX`**: optionally roots auto-derived, path-hashed target dirs under a chosen directory; explicit `CARGO_TARGET_DIR` still takes precedence, and an unset or empty prefix preserves the existing default.
 
 ### Fixed
 
 - **`scripts/cargo-cached.sh`**: a failed target-dir creation no longer presses ahead into an unusable path — it now abandons isolation and falls through to cargo's default resolution, preventing a false test failure from being ledgered and replayed to other checkouts. Silent fail-open paths that drop the isolation protection (metadata resolution failure, directory-creation failure) now emit a stderr warning instead of failing silently.
+- **`scripts/cargo-cached.sh`**: metadata probing now skips promptly when `timeout` is unavailable, and the sccache 0.14.0 gate no longer depends on GNU-only `sort -V`.
 
 ### Changed
 

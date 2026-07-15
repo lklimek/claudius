@@ -57,20 +57,31 @@ auto_isolated=0
 # worktrees, clones and submodules uniformly. Deterministic — a checkout's own
 # repeat builds reuse the same dir and stay warm. An explicit caller-set
 # CARGO_TARGET_DIR is the manual escape hatch and is left untouched.
-# NOTE: these <canonical>/claudius-checkouts/<hash> dirs accumulate PERMANENTLY —
-# there is deliberately NO automatic GC (deleting build dirs is a destructive data
-# op). Pruning stale ones is the user's/coordinator's manual responsibility.
+# NOTE: these default <canonical>/claudius-checkouts/<hash> dirs (or
+# CLAUDIUS_TARGET_PREFIX/<hash>) accumulate PERMANENTLY — there is deliberately
+# NO automatic GC. Pruning stale ones is the user's/coordinator's responsibility.
 if [[ -z "$caller_target_dir" ]]; then
-  # Resolve the machine's TRUE canonical target dir the same way
-  # hooks/cargo-discipline.sh does — BEFORE setting our own override, so cargo
-  # reports the real default rather than something we already changed. Time-
-  # bounded so a metadata call blocked on the package-cache lock can't hang us.
-  mc="cargo"; command -v timeout >/dev/null 2>&1 && mc="timeout 3 cargo"
-  canonical=$($mc metadata --format-version 1 --no-deps 2>/dev/null \
-    | jq -r '.target_directory // empty' 2>/dev/null)
-  if [[ -n "$canonical" ]]; then
+  derivation_ready=0
+  derivation_failure="cargo metadata resolution failed"
+  if [[ -n "${CLAUDIUS_TARGET_PREFIX:-}" ]]; then
+    target_root="${CLAUDIUS_TARGET_PREFIX%/}"
+    derivation_ready=1
+  elif command -v timeout >/dev/null 2>&1; then
+    # Resolve cargo's true default before setting our override. The probe is
+    # bounded when timeout exists; without it, skip the potentially locked call.
+    canonical=$(timeout 3 cargo metadata --format-version 1 --no-deps 2>/dev/null \
+      | jq -r '.target_directory // empty' 2>/dev/null)
+    if [[ -n "$canonical" ]]; then
+      target_root="${canonical%/}/claudius-checkouts"
+      derivation_ready=1
+    fi
+  else
+    derivation_failure="timeout unavailable"
+  fi
+
+  if [[ "$derivation_ready" == 1 ]]; then
     tl_hash=$(printf '%s' "$toplevel" | sha256sum | cut -c1-16)
-    derived="${canonical%/}/claudius-checkouts/$tl_hash"
+    derived="${target_root%/}/$tl_hash"
     # Export ONLY after the dir exists. A failed mkdir must NOT leave
     # CARGO_TARGET_DIR pointing at an uncreatable path — cargo would then hard-
     # fail (exit 101), that false RED would be ledgered as a real verdict, and
@@ -83,11 +94,9 @@ if [[ -z "$caller_target_dir" ]]; then
       echo "claudius: per-checkout isolation skipped (could not create $derived) — using shared/default target dir, same-HEAD collision hazard applies" >&2
     fi
   else
-    # metadata timeout / not a cargo project / jq hiccup. Fail-open like every
-    # other guard, but LOUDLY: this drops a correctness protection (not just an
-    # optimization), and metadata is likeliest to time out under exactly the
-    # concurrent load where the collision risk is highest.
-    echo "claudius: per-checkout isolation skipped (cargo metadata resolution failed) — using shared/default target dir, same-HEAD collision hazard applies" >&2
+    # Fail open loudly because this drops a correctness protection, not merely
+    # an optimization, under the same concurrency that makes collisions likely.
+    echo "claudius: per-checkout isolation skipped ($derivation_failure) — using shared/default target dir, same-HEAD collision hazard applies" >&2
   fi
 fi
 
@@ -101,10 +110,20 @@ fi
 # distinguishing subpath (git/a/... vs git/b/...) still differs after stripping.
 # SCCACHE_BASEDIRS landed in sccache 0.14.0 (mozilla/sccache#35); on older builds
 # it's silently ignored, so version-gate to avoid claiming an effect we don't get.
+version_at_least() {
+  local got_major got_minor got_patch min_major min_minor min_patch
+  IFS=. read -r got_major got_minor got_patch <<<"$1"
+  IFS=. read -r min_major min_minor min_patch <<<"$2"
+  got_major=$(( 10#$got_major )); got_minor=$(( 10#$got_minor )); got_patch=$(( 10#$got_patch ))
+  min_major=$(( 10#$min_major )); min_minor=$(( 10#$min_minor )); min_patch=$(( 10#$min_patch ))
+  (( got_major > min_major \
+     || (got_major == min_major && got_minor > min_minor) \
+     || (got_major == min_major && got_minor == min_minor && got_patch >= min_patch) ))
+}
+
 if command -v sccache >/dev/null 2>&1 && [[ -z "${SCCACHE_BASEDIRS:-}" ]]; then
   scv=$(sccache --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  if [[ -n "$scv" ]] \
-     && [[ "$(printf '%s\n0.14.0\n' "$scv" | sort -V | head -1)" == "0.14.0" ]]; then
+  if [[ -n "$scv" ]] && version_at_least "$scv" 0.14.0; then
     export SCCACHE_BASEDIRS="$toplevel"
   fi
 fi
