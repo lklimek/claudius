@@ -47,6 +47,11 @@ TERMINAL_STATUSES = {
 }
 SUPPORTED_STATE_VERSIONS = {1}
 STATE_HEADER_LIMIT = 4096
+# Per-poll cost scales with the number of retained jobs/*.json files in a
+# workspace (the Codex Companion keeps terminal job records on disk). Warn once
+# per workspace when enumerating them exceeds this, signalling the directory has
+# grown enough to justify pruning old records or a bounded-scan optimization.
+JOBS_GLOB_WARN_SECS = 0.5
 STATE_VERSION_PREFIX = re.compile(r'^\s*\{\s*"version"\s*:\s*')
 # Sentinel: the state file is a JSON object but its version could not be read
 # from the bounded header (file too large and "version" is not near the start).
@@ -933,10 +938,20 @@ class CodexScanner:
                 )
                 continue
             jobs: list[tuple[Path, dict[str, Any]]] = []
+            glob_start = time.monotonic()
             try:
                 job_paths = sorted((info.state_dir / "jobs").glob("*.json"))
             except OSError:
                 job_paths = []
+            glob_elapsed = time.monotonic() - glob_start
+            if glob_elapsed > JOBS_GLOB_WARN_SECS:
+                self._warning(
+                    f"codex-jobs-glob-slow:{info.key}",
+                    f"Codex job enumeration for {info.key} took {glob_elapsed:.2f}s "
+                    f"({len(job_paths)} files); per-poll cost scales with retained "
+                    "jobs/*.json — prune old job records or add a bounded scan",
+                    warnings,
+                )
             for job_path in job_paths:
                 raw = self.cache.read(job_path, self._minimal_job)
                 if not isinstance(raw, dict):

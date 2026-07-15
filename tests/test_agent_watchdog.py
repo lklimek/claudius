@@ -425,6 +425,33 @@ def test_codex_state_header_cache_reacts_to_version_change(tmp_path: Path) -> No
     assert second.warnings[0][0].startswith("codex-state-version")
 
 
+def test_slow_jobs_glob_emits_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Enumerating jobs/*.json slower than the threshold warns once, not per poll."""
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "job-1", "epoch": 100, "phase": "streaming", "updatedAt": 150}],
+        state_epoch=140,
+    )
+    # Each monotonic() call advances 0.6s, so every glob start/end pair reports
+    # 0.6s elapsed — over the 0.5s JOBS_GLOB_WARN_SECS threshold.
+    clock = {"t": 0.0}
+
+    def fake_monotonic() -> float:
+        clock["t"] += 0.6
+        return clock["t"]
+
+    monkeypatch.setattr(watchdog.time, "monotonic", fake_monotonic)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    result = scanner.scan([ws], "session-full")
+    assert [item.phase for item in result.records] == ["streaming"]
+    slow = [k for k, _ in result.warnings if k.startswith("codex-jobs-glob-slow")]
+    assert len(slow) == 1
+
+
 def test_codex_scanner_checks_shared_broker_once_per_workspace(tmp_path: Path) -> None:
     """Shared broker liveness is read once for all matching workspace jobs."""
 
