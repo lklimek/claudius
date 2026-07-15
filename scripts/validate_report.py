@@ -64,7 +64,8 @@ def check_consistency(report: dict) -> list[str]:
     than rated per finding.
     (iii) Dismissed finding with a non-disputed merge classification.
     (iv) Blocking finding without the requirement or claim that makes it blocking.
-    (v) Merge-classification fields used with a pre-3.2.0 schema version.
+    (v) Merge-classification fields — on findings, top_findings, or
+    summary_statistics — used with a pre-3.2.0 schema version.
 
     Warnings are advisory: callers print them but never fail validation.
     """
@@ -123,6 +124,23 @@ def check_consistency(report: dict) -> list[str]:
                     f"[consistency] finding {f.get('id', '?')}: explicit severity={sev} "
                     f"disagrees with overall_severity={float(overall):.3f} (band {overall_band})"
                 )
+
+    # 3.2.0-only additions can also appear outside per-section findings.
+    report_level_fields: list[str] = []
+    top_findings = report.get("top_findings")
+    if isinstance(top_findings, list) and any(
+        isinstance(tf, dict) and "merge_class" in tf for tf in top_findings
+    ):
+        report_level_fields.append("top_findings[].merge_class")
+    summary_stats = report.get("summary_statistics")
+    if isinstance(summary_stats, dict) and "merge_class_counts" in summary_stats:
+        report_level_fields.append("summary_statistics.merge_class_counts")
+    if report_level_fields and schema_version != "3.2.0":
+        warnings.append(
+            "[consistency] report: 3.2.0-only fields "
+            f"({', '.join(report_level_fields)}) require schema_version=3.2.0, "
+            f"not {schema_version}"
+        )
 
     if len(findings) >= _AXIS_MIN_FINDINGS:
         for axis in ("risk", "impact", "scope"):

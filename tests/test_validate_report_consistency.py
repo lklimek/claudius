@@ -118,6 +118,32 @@ class TestMergeClassAdvisories:
             "require schema_version=3.2.0" in warning for warning in warnings
         )
 
+    def test_report_level_merge_fields_require_schema_3_2_0(self):
+        # merge_class in top_findings and merge_class_counts in
+        # summary_statistics are 3.2.0-only additions that live outside the
+        # per-section findings the finding loop scans.
+        report = _report([_section([_finding(1)])])
+        report["schema_version"] = "3.1.0"
+        report["top_findings"] = [
+            {
+                "id": "CODE-001",
+                "severity": 4,
+                "title": "Finding 1",
+                "location": "src/example.rs:1",
+                "merge_class": "blocking",
+            }
+        ]
+        report["summary_statistics"]["merge_class_counts"] = {"blocking": 1}
+
+        warnings = vr.check_consistency(report)
+        assert any("top_findings[].merge_class" in w for w in warnings)
+        assert any("summary_statistics.merge_class_counts" in w for w in warnings)
+
+        report["schema_version"] = "3.2.0"
+        assert not any(
+            "report: 3.2.0-only fields" in w for w in vr.check_consistency(report)
+        )
+
     def test_false_positive_with_non_disputed_merge_class_warns(self):
         report = _report(
             [
