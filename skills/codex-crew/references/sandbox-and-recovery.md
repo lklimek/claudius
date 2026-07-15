@@ -22,12 +22,14 @@ model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 
 [sandbox_workspace_write]
-writable_roots = ["/data/git-worktrees", "/data/tmp", "/data/artifacts"]
+# Self-commit scope (repo .git) intentionally NOT added yet
+writable_roots = ["/data/git-worktrees", "/data/tmp", "/data/artifacts", "/data/target"]
 network_access = true
 ```
 
-- `writable_roots` **adds** to the always-writable workspace root (cwd). It makes `/data` worktrees + scratch writable and lets tests reach the network.
+- `writable_roots` **adds** to the always-writable workspace root (cwd). It makes `/data` worktrees, scratch, and the shared cargo target dir (`/data/target`) writable and lets tests reach the network.
 - `network_access = true` unblocks localhost test sockets (e.g. a test server) — it also enables general outbound network, the tradeoff `workspace-write` disables by default.
+- The live config's `# Self-commit scope (repo .git) intentionally NOT added yet` comment corroborates the coordinator-commits rule: widening the sandbox to the repo `.git` is a deliberate non-goal, not an oversight.
 - Validate any change with `codex --strict-config doctor` (hard-errors on unknown fields). Keep a timestamped backup of `config.toml` before editing.
 
 ## Why Codex Cannot `git commit` in a Linked Worktree
