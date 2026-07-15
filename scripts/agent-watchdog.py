@@ -1188,8 +1188,15 @@ class CodexStateMachine:
                 events.extend(self._terminal(record))
             else:
                 events.extend(self._active(record, now, build_active))
+        events.extend(self.prune(seen))
+        return events
+
+    def prune(self, alive: set[str]) -> list[str]:
+        """Forget signalless Codex states only after consecutive misses."""
+        events: list[str] = []
         for key in list(self.state):
-            if key in seen:
+            if key in alive:
+                self.misses[key] = 0
                 continue
             self.misses[key] = self.misses.get(key, 0) + 1
             if self.misses[key] < self.gone_polls:
@@ -1198,17 +1205,20 @@ class CodexStateMachine:
             if state in {"ACTIVE", "STALLED"} and self.gone_enabled:
                 _, workspace_key, job_id = key.split(":", 2)
                 self.state[key] = "GONE"
+                self.misses[key] = 0
                 events.append(
                     f"CODEX_GONE job={job_id} workspace={workspace_key} "
                     "reason=record-missing"
                 )
-            elif state in {"ACTIVE", "STALLED"}:
+            else:
                 self.state.pop(key, None)
                 self.misses.pop(key, None)
+                self.reported.discard(key)
                 self.gone_hits.pop(key, None)
-            elif state in {"DONE", "FAILED", "CANCELLED"}:
-                self.state.pop(key, None)
+        for key in set(self.misses) | self.reported | set(self.gone_hits):
+            if key not in alive and key not in self.state:
                 self.misses.pop(key, None)
+                self.reported.discard(key)
                 self.gone_hits.pop(key, None)
         return events
 
@@ -1682,17 +1692,19 @@ class Watchdog:
                 codex_candidates.append(team.lead_cwd)
             codex_candidates.extend(member.cwd for member in team.members if member.cwd)
         codex_candidates.extend(source_c)
+        codex_records: Iterable[CodexRecord] = ()
         if effective_session:
             scan = self.scanner.scan(codex_candidates, effective_session)
             for warning_key, message in scan.warnings:
                 self.warn_once(warning_key, message)
-            events.extend(
-                self.codex.evaluate(
-                    scan.records,
-                    epoch,
-                    lambda path: build_status_under(path, self.scanner.proc.proc_root),
-                )
+            codex_records = scan.records
+        events.extend(
+            self.codex.evaluate(
+                codex_records,
+                epoch,
+                lambda path: build_status_under(path, self.scanner.proc.proc_root),
             )
+        )
         return events
 
 

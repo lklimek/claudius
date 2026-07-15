@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Changed
 
 - **`scripts/agent-watchdog.sh` → `scripts/agent-watchdog.py`**: the stall watchdog is rewritten Bash → Python (drop-in: `python3 scripts/agent-watchdog.py <same args>`), preserving all Claude-agent behavior (Sources A/B/C, activity-clock fallback chain, per-agent `/proc` build detection, per-session tmux swarm-socket binding, STALL/RESUMED/GONE + `--gone-polls`, edge-trigger/zero-token contract) and gaining importable helpers + a real test net (`tests/test_agent_watchdog.py` — Claude parity + Codex CX-001..035; `tests/test_agent_watchdog_gone.sh` now drives the `.py`). The Monitor launch command becomes `python3 …/agent-watchdog.py`; update the settings allow-rule to `Bash(python3 */scripts/agent-watchdog.py *)` to match.
+- **`CodexStateMachine` pruning**: completed and missing Codex jobs are forgotten after their grace period so per-job watchdog state stays bounded.
 
 ### Removed
 

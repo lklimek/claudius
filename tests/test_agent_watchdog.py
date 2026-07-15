@@ -485,6 +485,69 @@ def test_cx_035_no_gone_still_allows_stall() -> None:
     ].startswith("CODEX_STALL ")
 
 
+def test_cx_036_gone_job_is_fully_forgotten_after_grace() -> None:
+    """CX-036: GONE jobs leave every per-job structure after grace."""
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    active = record(activity=100)
+    key = active.key
+
+    assert machine.evaluate([active], now=100, build_active=no_build) == []
+    assert machine.evaluate([], now=101, build_active=no_build) == []
+    assert machine.evaluate([], now=102, build_active=no_build) == [
+        "CODEX_GONE job=job-1 workspace=repo-abc123 reason=record-missing"
+    ]
+    machine.reported.add(key)
+    assert machine.evaluate([], now=103, build_active=no_build) == []
+    assert machine.evaluate([], now=104, build_active=no_build) == []
+
+    assert key not in machine.state
+    assert key not in machine.misses
+    assert key not in machine.reported
+    assert key not in machine.gone_hits
+
+
+def test_cx_037_completed_job_cycles_keep_per_job_state_bounded() -> None:
+    """CX-037: completed and forgotten jobs do not accumulate state."""
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+
+    for index in range(100):
+        done = record(job_id=f"job-{index}", status="done", phase="done")
+        assert machine.evaluate([done], now=index * 3, build_active=no_build) == [
+            f"CODEX_DONE job=job-{index} workspace=repo-abc123 phase=done"
+        ]
+        assert machine.evaluate([], now=index * 3 + 1, build_active=no_build) == []
+        assert machine.evaluate([], now=index * 3 + 2, build_active=no_build) == []
+
+    assert machine.state == {}
+    assert machine.misses == {}
+    assert machine.reported == set()
+    assert machine.gone_hits == {}
+
+
+def test_cx_038_pruned_job_reappears_with_fresh_transition_edges() -> None:
+    """CX-038: a pruned job reappears fresh without changing event edges."""
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    active = record(activity=100)
+
+    assert machine.evaluate([active], now=100, build_active=no_build) == []
+    assert machine.evaluate([], now=101, build_active=no_build) == []
+    assert machine.evaluate([], now=102, build_active=no_build) == [
+        "CODEX_GONE job=job-1 workspace=repo-abc123 reason=record-missing"
+    ]
+    assert machine.evaluate([], now=103, build_active=no_build) == []
+    assert machine.evaluate([], now=104, build_active=no_build) == []
+
+    assert machine.evaluate([active], now=200, build_active=no_build) == []
+    assert machine.evaluate([active], now=200, build_active=no_build) == [
+        "CODEX_STALL job=job-1 workspace=repo-abc123 idle=100s "
+        "phase=running reason=no-progress"
+    ]
+    done = record(status="done", phase="done")
+    assert machine.evaluate([done], now=201, build_active=no_build) == [
+        "CODEX_DONE job=job-1 workspace=repo-abc123 phase=done"
+    ]
+
+
 def test_activity_clock_fallback_chain(tmp_path: Path) -> None:
     """Claude activity uses worktree, isolated cwd, then transcript in that order."""
     wt_root = tmp_path / "worktrees"
