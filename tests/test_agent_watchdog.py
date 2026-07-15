@@ -44,6 +44,11 @@ def workspace(tmp_path: Path, name: str = "repo") -> Path:
     return result
 
 
+def no_build(_: Path) -> bool:
+    """Return an isolated negative build-process result."""
+    return False
+
+
 def codex_store(
     tmp_path: Path,
     ws: Path,
@@ -222,21 +227,25 @@ def test_cx_011_to_015_active_stall_resume_and_build() -> None:
     assert (
         machine.evaluate([stale], now=100, build_active=lambda _: builds) == []
     )  # 011
-    assert machine.evaluate([record(activity=150)], now=200) == []  # 012
-    assert machine.evaluate([stale], now=200) == [
+    assert (
+        machine.evaluate([record(activity=150)], now=200, build_active=no_build) == []
+    )  # 012
+    assert machine.evaluate([stale], now=200, build_active=no_build) == [
         "CODEX_STALL job=job-1 workspace=repo-abc123 idle=100s "
         "phase=running reason=no-progress"
     ]  # 013
-    assert machine.evaluate([stale], now=201) == []
-    assert machine.evaluate([record(activity=185)], now=200) == [
+    assert machine.evaluate([stale], now=201, build_active=no_build) == []
+    assert machine.evaluate([record(activity=185)], now=200, build_active=no_build) == [
         "CODEX_RESUMED job=job-1 workspace=repo-abc123 idle=15s "
         "phase=running reason=progress"
     ]  # 014
-    assert machine.evaluate([stale], now=200) != []
-    assert machine.evaluate([record(activity=150)], now=200) == []  # hysteresis
+    assert machine.evaluate([stale], now=200, build_active=no_build) != []
+    assert (
+        machine.evaluate([record(activity=150)], now=200, build_active=no_build) == []
+    )  # hysteresis
     builds = True
     machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
-    assert machine.evaluate([stale], now=100) == []
+    assert machine.evaluate([stale], now=100, build_active=no_build) == []
     assert machine.evaluate([stale], now=200, build_active=lambda _: builds) == []
     builds = False
     assert machine.evaluate([stale], now=201, build_active=lambda _: builds)[
@@ -261,35 +270,89 @@ def test_cx_016_shared_state_mtime_not_attributed(tmp_path: Path) -> None:
     assert {item.activity_epoch for item in records} == {100, 110}
 
 
+def test_codex_scanner_checks_shared_broker_once_per_workspace(tmp_path: Path) -> None:
+    """Shared broker liveness is read once for all matching workspace jobs."""
+
+    class CountingProcInspector(watchdog.NullProcInspector):
+        def __init__(self) -> None:
+            super().__init__()
+            self.broker_calls = 0
+
+        def broker(self, record: dict[str, Any] | None, workspace: Path) -> str | None:
+            self.broker_calls += 1
+            return super().broker(record, workspace)
+
+    ws = workspace(tmp_path)
+    _, env = codex_store(tmp_path, ws, [{"id": "one"}, {"id": "two"}])
+    proc = CountingProcInspector()
+    records = (
+        watchdog.CodexScanner(env=env, proc=proc).scan([ws], "session-full").records
+    )
+    assert [item.job_id for item in records] == ["one", "two"]
+    assert proc.broker_calls == 1
+
+
 def test_cx_017_to_021_runtime_gone_unknown_and_recovery() -> None:
     """CX-017..CX-021: verified death is confirmed; unknown is conservative."""
     machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
-    assert machine.evaluate([record(runtime="dead")], now=100) == []
-    assert machine.evaluate([record(runtime="dead")], now=200) == [
-        "CODEX_GONE job=job-1 workspace=repo-abc123 reason=runtime-gone"
-    ]  # CX-018
-    assert machine.evaluate([record(activity=200, runtime="alive")], now=201) == [
+    assert (
+        machine.evaluate([record(runtime="dead")], now=100, build_active=no_build) == []
+    )
+    assert machine.evaluate(
+        [record(runtime="dead")], now=200, build_active=no_build
+    ) == ["CODEX_GONE job=job-1 workspace=repo-abc123 reason=runtime-gone"]  # CX-018
+    assert machine.evaluate(
+        [record(activity=200, runtime="alive")], now=201, build_active=no_build
+    ) == [
         "CODEX_RESUMED job=job-1 workspace=repo-abc123 phase=running reason=recovered"
     ]  # CX-021
 
     unknown = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
-    assert unknown.evaluate([record(runtime="unknown")], now=100) == []
-    assert unknown.evaluate([record(runtime="unknown")], now=200)[0].startswith(
-        "CODEX_STALL "
-    )  # CX-019
-    null_pid = watchdog.classify_runtime([], [])
-    assert null_pid == "unknown"  # CX-020
+    assert (
+        unknown.evaluate([record(runtime="unknown")], now=100, build_active=no_build)
+        == []
+    )
+    assert unknown.evaluate(
+        [record(runtime="unknown")], now=200, build_active=no_build
+    )[0].startswith("CODEX_STALL ")  # CX-019
+
+
+def test_cx_020_null_pid_uses_scanner_clock_and_runtime_rules(tmp_path: Path) -> None:
+    """CX-020: running null-PID jobs stall by clock without immediate GONE."""
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "null-pid", "pid": None, "status": "running", "epoch": 100}],
+        state_epoch=100,
+    )
+    proc_root = tmp_path / "proc"
+    proc_root.mkdir()
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.ProcInspector(proc_root))
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+
+    records = scanner.scan([ws], "session-full").records
+    assert len(records) == 1
+    assert records[0].runtime == "unknown"
+    assert machine.evaluate(records, now=100, build_active=no_build) == []
+    assert machine.evaluate(records, now=200, build_active=no_build) == [
+        f"CODEX_STALL job=null-pid workspace={records[0].workspace_key} "
+        "idle=100s phase=running reason=no-progress"
+    ]
 
 
 def test_cx_022_to_026_terminal_events_are_exact_and_deterministic() -> None:
     """CX-022..CX-026: terminal status wins and reports exactly once."""
     machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
-    assert machine.evaluate([record(status="active")], now=100) == []
+    assert (
+        machine.evaluate([record(status="active")], now=100, build_active=no_build)
+        == []
+    )
     done = record(status="done", phase="done")
-    assert machine.evaluate([done], now=200) == [
+    assert machine.evaluate([done], now=200, build_active=no_build) == [
         "CODEX_DONE job=job-1 workspace=repo-abc123 phase=done"
     ]  # CX-022
-    assert machine.evaluate([done], now=201) == []
+    assert machine.evaluate([done], now=201, build_active=no_build) == []
 
     failed = record(
         job_id="bad",
@@ -297,25 +360,25 @@ def test_cx_022_to_026_terminal_events_are_exact_and_deterministic() -> None:
         phase="failed",
         error="fatal:\n  index.lock\t denied",
     )
-    assert machine.evaluate([failed], now=202) == [
+    assert machine.evaluate([failed], now=202, build_active=no_build) == [
         "CODEX_FAILED job=bad workspace=repo-abc123 phase=failed "
         'error="fatal: index.lock denied"'
     ]  # CX-023
-    assert machine.evaluate([failed], now=203) == []
+    assert machine.evaluate([failed], now=203, build_active=no_build) == []
 
     missing_error = record(job_id="bad2", status="failed", error=None)
-    assert machine.evaluate([missing_error], now=204)[0].endswith(
-        'error="error message unavailable"'
-    )  # CX-024
+    assert machine.evaluate([missing_error], now=204, build_active=no_build)[
+        0
+    ].endswith('error="error message unavailable"')  # CX-024
     cancelled = record(job_id="cancel", status="cancelled")
-    assert machine.evaluate([cancelled], now=205) == [
+    assert machine.evaluate([cancelled], now=205, build_active=no_build) == [
         "CODEX_CANCELLED job=cancel workspace=repo-abc123 reason=user-cancelled"
     ]  # CX-025
     simultaneous = [
         record(job_id="z", status="done", phase="done", created_at=2),
         record(job_id="a", status="done", phase="done", created_at=1),
     ]
-    lines = machine.evaluate(simultaneous, now=206)
+    lines = machine.evaluate(simultaneous, now=206, build_active=no_build)
     assert [line.split()[1] for line in lines] == ["job=a", "job=z"]  # CX-026
 
 
@@ -326,12 +389,17 @@ def test_cx_027_to_032_missing_partial_unknown_and_bootstrap(tmp_path: Path) -> 
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
     machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
     first = scanner.scan([ws], "session-full").records
-    assert machine.evaluate(first, now=100) == []
+    assert machine.evaluate(first, now=100, build_active=no_build) == []
     job_file = state_dir / "jobs" / "job-1.json"
     job_file.write_text("{", encoding="utf-8")
     os.utime(job_file, (101, 101))
     assert (
-        machine.evaluate(scanner.scan([ws], "session-full").records, now=101) == []
+        machine.evaluate(
+            scanner.scan([ws], "session-full").records,
+            now=101,
+            build_active=no_build,
+        )
+        == []
     )  # 027
     write_json(
         job_file,
@@ -344,12 +412,28 @@ def test_cx_027_to_032_missing_partial_unknown_and_bootstrap(tmp_path: Path) -> 
         },
         102,
     )
-    assert machine.evaluate(scanner.scan([ws], "session-full").records, now=102) == []
+    assert (
+        machine.evaluate(
+            scanner.scan([ws], "session-full").records,
+            now=102,
+            build_active=no_build,
+        )
+        == []
+    )
     job_file.unlink()
     assert (
-        machine.evaluate(scanner.scan([ws], "session-full").records, now=103) == []
+        machine.evaluate(
+            scanner.scan([ws], "session-full").records,
+            now=103,
+            build_active=no_build,
+        )
+        == []
     )  # 028
-    assert machine.evaluate(scanner.scan([ws], "session-full").records, now=104) == [
+    assert machine.evaluate(
+        scanner.scan([ws], "session-full").records,
+        now=104,
+        build_active=no_build,
+    ) == [
         "CODEX_GONE job=job-1 workspace="
         f"{watchdog.resolve_workspace(ws, env=env).key} reason=record-missing"
     ]  # 029
@@ -371,16 +455,18 @@ def test_cx_027_to_032_missing_partial_unknown_and_bootstrap(tmp_path: Path) -> 
 
     boot = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
     terminal = record(status="done", phase="done")
-    assert len(boot.evaluate([terminal], now=100)) == 1
-    assert boot.evaluate([terminal], now=101) == []  # CX-032
+    assert len(boot.evaluate([terminal], now=100, build_active=no_build)) == 1
+    assert boot.evaluate([terminal], now=101, build_active=no_build) == []  # CX-032
 
 
 def test_cx_033_and_034_namespaces_and_healthy_silence() -> None:
     """CX-033/CX-034: Claude grammar is isolated and combined health is silent."""
-    claude = watchdog.ClaudeStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    claude = watchdog.ClaudeStateMachine(
+        stall_secs=100, resume_secs=20, gone_polls=2, build_active=no_build
+    )
     codex = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
     assert claude.evaluate_named("bilby", 100, Path("/work"), {"bilby"}, 100) == []
-    assert codex.evaluate([record(activity=100)], now=100) == []
+    assert codex.evaluate([record(activity=100)], now=100, build_active=no_build) == []
     lines = claude.evaluate_named("bilby", 100, Path("/work"), {"bilby"}, 200)
     assert lines == ["STALL agent=bilby idle=100s reason=owns-in_progress-idle"]
     assert all(not line.startswith("CODEX_") for line in lines)
@@ -391,10 +477,12 @@ def test_cx_035_no_gone_still_allows_stall() -> None:
     machine = watchdog.CodexStateMachine(
         stall_secs=100, resume_secs=20, gone_polls=2, gone_enabled=False
     )
-    assert machine.evaluate([record(runtime="dead")], now=100) == []
-    assert machine.evaluate([record(runtime="dead")], now=200)[0].startswith(
-        "CODEX_STALL "
+    assert (
+        machine.evaluate([record(runtime="dead")], now=100, build_active=no_build) == []
     )
+    assert machine.evaluate([record(runtime="dead")], now=200, build_active=no_build)[
+        0
+    ].startswith("CODEX_STALL ")
 
 
 def test_activity_clock_fallback_chain(tmp_path: Path) -> None:
@@ -426,6 +514,18 @@ def test_activity_clock_fallback_chain(tmp_path: Path) -> None:
         == 30
     )
     assert watchdog.member_activity(member, wt_root, {cwd: 2}, {}) is None
+
+
+def test_cwd_activity_clock_prunes_git_metadata(tmp_path: Path) -> None:
+    """Repository metadata churn does not refresh the cwd activity clock."""
+    cwd = workspace(tmp_path)
+    touch(cwd / "work.py", 100)
+    touch(cwd / ".git" / "index.lock", 200)
+    os.utime(cwd / ".git", (200, 200))
+    os.utime(cwd, (50, 50))
+
+    assert watchdog.newest_mtime_under(cwd, exclude_git=True) == 100
+    assert watchdog.newest_mtime_cwd(cwd) == 100
 
 
 def test_member_transcript_resolution_is_session_scoped(tmp_path: Path) -> None:
@@ -491,6 +591,27 @@ def test_tmux_snapshot_and_socket_enumeration(
     assert watchdog.snapshot_panes(first) == [
         ("%1", "sleep", "claudius:developer-bilby")
     ]
+
+
+def test_watchdog_warns_when_no_team_has_matching_swarm_socket(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """GONE diagnostics run even when the selected team has no members."""
+    monkeypatch.setattr(watchdog, "_command_exists", lambda _: True)
+    home = tmp_path / "home"
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            projects_dir=tmp_path / "projects",
+            worktrees=tmp_path / "worktrees",
+        ),
+        env={"HOME": str(home), "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin")},
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=100) == []
+    assert "no matching tmux swarm socket for this team" in capsys.readouterr().err
 
 
 def test_watchdog_poll_combines_claude_and_codex_edges(tmp_path: Path) -> None:
@@ -646,21 +767,62 @@ def test_proc_build_detection_is_scoped_to_agent(tmp_path: Path) -> None:
     assert watchdog.build_active_under(ours, proc_root=proc)
 
 
-def test_unevaluable_proc_suppresses_transition() -> None:
-    """A wholesale proc failure cannot be interpreted as no build."""
+def test_unreadable_unrelated_proc_does_not_suppress_stall(tmp_path: Path) -> None:
+    """An exited unrelated process cannot silence either stall transition."""
+    proc = tmp_path / "proc"
+    watched = workspace(tmp_path, "watched")
+    process = proc / "999"
+    process.mkdir(parents=True)
+    (process / "cwd").symlink_to(watched, target_is_directory=True)
+
+    def build_active(directory: Path) -> bool:
+        return watchdog.build_status_under(directory, proc)
+
+    assert build_active(watched) is False
+    assert watchdog.build_status_under(watched, tmp_path / "missing-proc") is False
     claude = watchdog.ClaudeStateMachine(
         stall_secs=100,
         resume_secs=20,
         gone_polls=2,
-        build_active=lambda _: None,
+        build_active=build_active,
     )
-    assert claude.evaluate_named("bilby", 100, Path("/work"), {"bilby"}, 200) == []
+    assert claude.evaluate_named("bilby", 100, watched, {"bilby"}, 200) == [
+        "STALL agent=bilby idle=100s reason=owns-in_progress-idle"
+    ]
     codex = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
-    assert codex.evaluate([record(activity=100)], now=100) == []
     assert (
-        codex.evaluate([record(activity=100)], now=200, build_active=lambda _: None)
-        == []
+        codex.evaluate([record(activity=100)], now=100, build_active=build_active) == []
     )
+    assert codex.evaluate(
+        [record(activity=100)], now=200, build_active=build_active
+    ) == [
+        "CODEX_STALL job=job-1 workspace=repo-abc123 idle=100s "
+        "phase=running reason=no-progress"
+    ]
+
+
+def test_build_oracle_error_does_not_suppress_stall() -> None:
+    """A build-oracle read error is a negative confirmation, not silence."""
+
+    def failed_build(_: Path) -> bool:
+        raise OSError("proc scan raced")
+
+    claude = watchdog.ClaudeStateMachine(
+        stall_secs=100,
+        resume_secs=20,
+        gone_polls=2,
+        build_active=failed_build,
+    )
+    assert claude.evaluate_named("bilby", 100, Path("/work"), {"bilby"}, 200) == [
+        "STALL agent=bilby idle=100s reason=owns-in_progress-idle"
+    ]
+    codex = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    stale = record(activity=100)
+    assert codex.evaluate([stale], now=100, build_active=failed_build) == []
+    assert codex.evaluate([stale], now=200, build_active=failed_build) == [
+        "CODEX_STALL job=job-1 workspace=repo-abc123 idle=100s "
+        "phase=running reason=no-progress"
+    ]
 
 
 def test_unreadable_proc_evidence_is_unknown(tmp_path: Path) -> None:
@@ -722,9 +884,36 @@ def test_team_selection_precedence(tmp_path: Path) -> None:
     assert watchdog.select_team(teams, None, "").directory == two
 
 
+def test_team_autodetect_ignores_unreadable_candidate_mtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Autodetect keeps the newest readable candidate after one stat failure."""
+    teams = tmp_path / "teams"
+    newest = teams / "session-a"
+    unreadable = teams / "session-b"
+    oldest = teams / "session-z"
+    write_json(newest / "config.json", {"leadSessionId": "newest"}, 300)
+    write_json(unreadable / "config.json", {"leadSessionId": "unreadable"}, 200)
+    write_json(oldest / "config.json", {"leadSessionId": "oldest"}, 100)
+    os.utime(newest, (300, 300))
+    os.utime(unreadable, (200, 200))
+    os.utime(oldest, (100, 100))
+    original_stat = Path.stat
+
+    def selective_stat(path: Path, *args: Any, **kwargs: Any) -> os.stat_result:
+        if path == unreadable:
+            raise OSError("candidate disappeared")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", selective_stat)
+    assert watchdog.select_team(teams, None, "").directory == newest
+
+
 def test_claude_stall_resume_gone_confirmation() -> None:
     """Claude transitions are edge-triggered and require consecutive misses."""
-    machine = watchdog.ClaudeStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    machine = watchdog.ClaudeStateMachine(
+        stall_secs=100, resume_secs=20, gone_polls=2, build_active=no_build
+    )
     assert machine.evaluate_named("bilby", 100, Path("/work"), {"bilby"}, 100) == []
     assert machine.evaluate_named("bilby", 100, Path("/work"), {"bilby"}, 200) == [
         "STALL agent=bilby idle=100s reason=owns-in_progress-idle"
@@ -738,7 +927,9 @@ def test_claude_stall_resume_gone_confirmation() -> None:
         "GONE agent=bilby reason=pane-dead"
     ]
     assert machine.recover_gone("bilby") == ["RESUMED agent=bilby reason=recovered"]
-    machine = watchdog.ClaudeStateMachine(stall_secs=100, resume_secs=20, gone_polls=1)
+    machine = watchdog.ClaudeStateMachine(
+        stall_secs=100, resume_secs=20, gone_polls=1, build_active=no_build
+    )
     assert machine.gone_candidate("old", "missing", 0, 200) == [
         "GONE agent=old reason=stale-active"
     ]

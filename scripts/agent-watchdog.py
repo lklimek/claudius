@@ -336,10 +336,14 @@ def select_team(
                     break
         mode = "matched" if selected else "none"
     elif candidates:
-        try:
-            selected = max(candidates, key=lambda path: path.stat().st_mtime)
-        except OSError:
-            selected = candidates[-1]
+
+        def mtime(path: Path) -> float:
+            try:
+                return path.stat().st_mtime
+            except OSError:
+                return 0.0
+
+        selected = max(candidates, key=mtime)
         mode = "autodetect"
     selected_real = os.path.realpath(selected) if selected else ""
     others = tuple(
@@ -468,9 +472,8 @@ def _is_under(path: Path, root: Path) -> bool:
         return False
 
 
-def build_status_under(directory: Path, proc_root: Path = Path("/proc")) -> bool | None:
-    """Return per-workspace build activity, or None when proc is unevaluable."""
-    unknown_candidate = False
+def build_status_under(directory: Path, proc_root: Path = Path("/proc")) -> bool:
+    """Return whether a build is positively confirmed under the workspace."""
     try:
         processes = proc_root.iterdir()
         for process in processes:
@@ -484,18 +487,17 @@ def build_status_under(directory: Path, proc_root: Path = Path("/proc")) -> bool
                 continue
             argv = _try_read_cmdline(process / "cmdline")
             if argv is None:
-                unknown_candidate = True
                 continue
             if is_build_command(argv):
                 return True
     except OSError:
-        return None
-    return None if unknown_candidate else False
+        return False
+    return False
 
 
 def build_active_under(directory: Path, proc_root: Path = Path("/proc")) -> bool:
     """Return whether a build is positively active under the workspace."""
-    return build_status_under(directory, proc_root) is True
+    return build_status_under(directory, proc_root)
 
 
 def write_fake_process(
@@ -904,6 +906,9 @@ class CodexScanner:
                 info.state_dir / "broker.json", self._minimal_broker
             )
             broker_record = broker if isinstance(broker, dict) else None
+            broker_evidence = (
+                self.proc.broker(broker_record, info.canonical) if matching else None
+            )
             for job_path, raw, status in matching:
                 job_id = str(raw["id"])
                 clocks = [safe_mtime(job_path)]
@@ -925,7 +930,6 @@ class CodexScanner:
                         warnings,
                     )
                 launcher = self.proc.launcher(raw.get("pid"), info.canonical)
-                broker_evidence = self.proc.broker(broker_record, info.canonical)
                 runtime = classify_runtime([launcher], [broker_evidence])
                 try:
                     created = float(raw.get("createdAt") or 0)
@@ -961,7 +965,7 @@ class ClaudeStateMachine:
         stall_secs: int,
         resume_secs: int,
         gone_polls: int,
-        build_active: Callable[[Path], bool | None] = build_status_under,
+        build_active: Callable[[Path], bool] = build_status_under,
     ) -> None:
         self.stall_secs = stall_secs
         self.resume_secs = resume_secs
@@ -987,9 +991,7 @@ class ClaudeStateMachine:
             try:
                 building = self.build_active(directory)
             except OSError:
-                building = None
-            if building is None:
-                return []
+                building = False
             if not building:
                 self.state[key] = "STALLED"
                 return [f"STALL agent={key} idle={idle}s reason=owns-in_progress-idle"]
@@ -1110,7 +1112,7 @@ class CodexStateMachine:
         self,
         record: CodexRecord,
         now: int,
-        build_active: Callable[[Path], bool | None],
+        build_active: Callable[[Path], bool],
     ) -> list[str]:
         state = self.state.get(record.key)
         first_observation = state is None
@@ -1161,9 +1163,7 @@ class CodexStateMachine:
         try:
             building = build_active(record.workspace_root)
         except OSError:
-            building = None
-        if building is None:
-            return []
+            building = False
         if building:
             return []
         self.state[record.key] = "STALLED"
@@ -1176,7 +1176,7 @@ class CodexStateMachine:
         self,
         records: Iterable[CodexRecord],
         now: int,
-        build_active: Callable[[Path], bool | None] = build_status_under,
+        build_active: Callable[[Path], bool] = build_status_under,
     ) -> list[str]:
         """Evaluate every record deterministically, then apply missing-record grace."""
         ordered = sorted(records, key=lambda item: (item.created_at, item.job_id))
@@ -1552,8 +1552,9 @@ class Watchdog:
             cwd_counts.update(member.cwd for member in team.members if member.cwd)
 
         pane_commands: dict[str, str] = {}
-        if self.have_tmux and team:
-            pane_commands, socket, score = bind_swarm_socket(team.members, self.env)
+        if self.have_tmux:
+            members = team.members if team else ()
+            pane_commands, socket, score = bind_swarm_socket(members, self.env)
             if socket:
                 self.warn_once(
                     f"swarmsock:{socket.name}",
