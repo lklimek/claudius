@@ -46,6 +46,13 @@ TERMINAL_STATUSES = {
     "canceled": "cancelled",
 }
 SUPPORTED_STATE_VERSIONS = {1}
+STATE_HEADER_LIMIT = 4096
+STATE_VERSION_PREFIX = re.compile(r'^\s*\{\s*"version"\s*:\s*')
+# Sentinel: the state file is a JSON object but its version could not be read
+# from the bounded header (file too large and "version" is not near the start).
+# Treated as unsupported so the scanner skips the file loudly instead of
+# silently assuming it is the current supported version.
+_INDETERMINATE_VERSION = object()
 SAFE_FIELD = re.compile(r"^[A-Za-z0-9._-]+$")
 SHELL_COMMANDS = {
     "sh",
@@ -147,6 +154,14 @@ class WorkspaceInfo:
 
 
 @dataclass(frozen=True)
+class _StateHeader:
+    """Bounded metadata read from a Codex Companion state file."""
+
+    shape_supported: bool
+    version: Any = None
+
+
+@dataclass(frozen=True)
 class CodexRecord:
     """Minimal normalized Codex job record consumed by the state machine."""
 
@@ -201,6 +216,51 @@ def safe_json(path: Path) -> Any | None:
             return json.load(handle)
     except (OSError, UnicodeError, json.JSONDecodeError):
         return None
+
+
+def _safe_state_header(path: Path) -> _StateHeader | None:
+    """Read the fixed state header without decoding its growing jobs array."""
+    try:
+        with path.open(encoding="utf-8") as handle:
+            prefix = handle.read(STATE_HEADER_LIMIT + 1)
+    except (OSError, UnicodeError):
+        return None
+    sample = prefix[:STATE_HEADER_LIMIT]
+    stripped = sample.lstrip()
+    if not stripped:
+        return None
+    if not stripped.startswith("{"):
+        # A JSON object must open with "{"; anything else is an unsupported
+        # top-level shape regardless of whether the file was truncated.
+        return _StateHeader(False)
+    truncated = len(prefix) > STATE_HEADER_LIMIT
+    match = STATE_VERSION_PREFIX.match(sample)
+    if match is not None:
+        # Fast path: "version" is the first key, so decode just that scalar
+        # without touching the (possibly huge) jobs array — works even when
+        # the file is truncated.
+        try:
+            version, end = json.JSONDecoder().raw_decode(sample, match.end())
+        except json.JSONDecodeError:
+            return _StateHeader(True, _INDETERMINATE_VERSION)
+        remainder = sample[end:].lstrip()
+        if not remainder or remainder[0] not in ",}":
+            return _StateHeader(True, _INDETERMINATE_VERSION)
+        return _StateHeader(True, version)
+    if not truncated:
+        # The whole object fit in the bounded window, so a full parse is safe
+        # and finds "version" wherever it sits among the keys.
+        try:
+            value = json.loads(prefix)
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(value, dict):
+            return _StateHeader(False)
+        return _StateHeader(True, value.get("version"))
+    # Truncated object and "version" is not near the start: the version is
+    # indeterminate. Fail loud — skip the file with a warning rather than
+    # silently assuming it is supported.
+    return _StateHeader(True, _INDETERMINATE_VERSION)
 
 
 def safe_mtime(path: Path) -> int | None:
@@ -715,6 +775,37 @@ class _JsonCache:
         return value
 
 
+class _StateHeaderCache:
+    """Bound state headers to stable state-directory identities."""
+
+    def __init__(self, limit: int = 512) -> None:
+        self.limit = limit
+        self.items: OrderedDict[Path, tuple[tuple[int, int], _StateHeader]] = (
+            OrderedDict()
+        )
+
+    def read(self, state_dir: Path, state_path: Path) -> _StateHeader | None:
+        try:
+            directory_stat = state_dir.stat()
+            state_path.stat()
+        except OSError:
+            self.items.pop(state_dir, None)
+            return None
+        identity = (directory_stat.st_dev, directory_stat.st_ino)
+        cached = self.items.get(state_dir)
+        if cached and cached[0] == identity:
+            self.items.move_to_end(state_dir)
+            return cached[1]
+        header = _safe_state_header(state_path)
+        if header is None:
+            return None
+        self.items[state_dir] = (identity, header)
+        self.items.move_to_end(state_dir)
+        while len(self.items) > self.limit:
+            self.items.popitem(last=False)
+        return header
+
+
 class CodexScanner:
     """Discover minimal session-scoped Source D job records."""
 
@@ -727,6 +818,7 @@ class CodexScanner:
         self.env = dict(os.environ if env is None else env)
         self.proc = proc or ProcInspector()
         self.cache = _JsonCache(cache_limit)
+        self.state_headers = _StateHeaderCache(cache_limit)
         self.warned: set[str] = set()
 
     def _warning(self, key: str, message: str, warnings: list[tuple[str, str]]) -> None:
@@ -757,24 +849,6 @@ class CodexScanner:
         return ""
 
     @staticmethod
-    def _minimal_state(value: Any) -> Any:
-        if not isinstance(value, dict):
-            return value
-        jobs = value.get("jobs")
-        minimal_jobs = []
-        if isinstance(jobs, list):
-            minimal_jobs = [
-                {
-                    "id": item.get("id"),
-                    "phase": item.get("phase"),
-                    "updatedAt": item.get("updatedAt"),
-                }
-                for item in jobs
-                if isinstance(item, dict)
-            ]
-        return {"version": value.get("version"), "jobs": minimal_jobs}
-
-    @staticmethod
     def _minimal_job(value: Any) -> Any:
         if not isinstance(value, dict):
             return value
@@ -784,6 +858,7 @@ class CodexScanner:
             "workspaceRoot",
             "status",
             "phase",
+            "updatedAt",
             "createdAt",
             "pid",
             "logFile",
@@ -816,7 +891,6 @@ class CodexScanner:
             tuple[
                 WorkspaceInfo,
                 list[tuple[Path, dict[str, Any]]],
-                dict[str, Any],
                 int | None,
             ]
         ] = []
@@ -825,17 +899,30 @@ class CodexScanner:
             if not info.state_dir.is_dir():
                 continue
             state_path = info.state_dir / "state.json"
-            raw_state = self.cache.read(state_path, self._minimal_state)
-            if raw_state is not None and not isinstance(raw_state, dict):
+            state_header = self.state_headers.read(info.state_dir, state_path)
+            if state_header is not None and not state_header.shape_supported:
                 self._warning(
                     f"codex-state-shape:{info.key}",
                     f"Codex state {info.key} has an unsupported top-level shape; skipped",
                     warnings,
                 )
                 continue
-            state = raw_state or {}
-            version = state.get("version")
-            if version is not None and version not in SUPPORTED_STATE_VERSIONS:
+            version = state_header.version if state_header is not None else None
+            if version is _INDETERMINATE_VERSION:
+                self._warning(
+                    f"codex-state-version-indeterminate:{info.key}",
+                    f"Codex state {info.key} version could not be read from the "
+                    "bounded header (file too large); skipped",
+                    warnings,
+                )
+                continue
+            try:
+                version_supported = (
+                    version is None or version in SUPPORTED_STATE_VERSIONS
+                )
+            except TypeError:
+                version_supported = False
+            if not version_supported:
                 self._warning(
                     f"codex-state-version:{info.key}:{version}",
                     f"Codex state {info.key} has unsupported version {version!r}; skipped",
@@ -864,18 +951,13 @@ class CodexScanner:
                 if isinstance(session, str) and session:
                     sessions.add(session)
                 jobs.append((job_path, raw))
-            raw_by_workspace.append((info, jobs, state, safe_mtime(state_path)))
+            raw_by_workspace.append((info, jobs, safe_mtime(state_path)))
 
         session = self._session(effective_session, sessions, warnings)
         if not session:
             return ScanResult([], warnings)
         records: list[CodexRecord] = []
-        for info, jobs, state, state_mtime in raw_by_workspace:
-            summaries = {
-                str(item.get("id")): item
-                for item in state.get("jobs", [])
-                if isinstance(item, dict) and item.get("id")
-            }
+        for info, jobs, state_mtime in raw_by_workspace:
             matching: list[tuple[Path, dict[str, Any], str]] = []
             for job_path, raw in jobs:
                 if raw.get("sessionId") != session:
@@ -917,8 +999,7 @@ class CodexScanner:
                 sibling = info.state_dir / "jobs" / f"{job_id}.log"
                 log_path = declared if declared and declared.exists() else sibling
                 clocks.append(safe_mtime(log_path))
-                summary = summaries.get(job_id, {})
-                clocks.append(_parse_timestamp(summary.get("updatedAt")))
+                clocks.append(_parse_timestamp(raw.get("updatedAt")))
                 if status == "active" and active_count == 1:
                     clocks.append(state_mtime)
                 valid_clocks = [value for value in clocks if value is not None]
@@ -942,7 +1023,7 @@ class CodexScanner:
                         workspace_key=info.key,
                         workspace_root=info.canonical,
                         status=status,
-                        phase=_safe_phase(raw.get("phase") or summary.get("phase")),
+                        phase=_safe_phase(raw.get("phase")),
                         activity_epoch=activity,
                         runtime=runtime,
                         created_at=created,
@@ -1454,7 +1535,7 @@ class Watchdog:
             options.gone_enabled,
         )
         self.scanner = CodexScanner(self.env, ProcInspector(proc_root))
-        self.have_tmux = options.gone_enabled and _command_exists("tmux")
+        self.have_tmux = options.gone_enabled and _command_exists("tmux", self.env)
 
     def warn_once(self, key: str, message: str) -> None:
         """Emit one diagnostic to stderr without touching protocol stdout."""
@@ -1802,8 +1883,9 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
     return options
 
 
-def _command_exists(command: str) -> bool:
-    path = os.environ.get("PATH", os.defpath)
+def _command_exists(command: str, env: Mapping[str, str] | None = None) -> bool:
+    environment = os.environ if env is None else env
+    path = environment.get("PATH", os.defpath)
     return any(
         (Path(directory) / command).is_file()
         and os.access(Path(directory) / command, os.X_OK)

@@ -270,6 +270,133 @@ def test_cx_016_shared_state_mtime_not_attributed(tmp_path: Path) -> None:
     assert {item.activity_epoch for item in records} == {100, 110}
 
 
+def test_codex_scanner_never_parses_growing_state_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """State polling uses per-job fields and the shared file only as a clock."""
+    ws = workspace(tmp_path)
+    state_dir, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "job-1",
+                "epoch": 100,
+                "phase": "streaming",
+                "updatedAt": 150,
+            }
+        ],
+        state_epoch=140,
+    )
+    state_path = state_dir / "state.json"
+    parsed_paths: list[Path] = []
+    header_paths: list[Path] = []
+    real_safe_json = watchdog.safe_json
+    real_safe_state_header = watchdog._safe_state_header
+
+    def tracking_safe_json(path: Path) -> Any | None:
+        parsed_paths.append(path)
+        return real_safe_json(path)
+
+    def tracking_safe_state_header(path: Path) -> Any | None:
+        header_paths.append(path)
+        return real_safe_state_header(path)
+
+    monkeypatch.setattr(watchdog, "safe_json", tracking_safe_json)
+    monkeypatch.setattr(watchdog, "_safe_state_header", tracking_safe_state_header)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    first = scanner.scan([ws], "session-full").records
+    assert [(item.phase, item.activity_epoch) for item in first] == [("streaming", 150)]
+
+    write_json(
+        state_path,
+        {
+            "version": 1,
+            "jobs": [
+                {"id": f"old-{index}", "phase": "done", "updatedAt": 999}
+                for index in range(2_000)
+            ],
+        },
+        160,
+    )
+    second = scanner.scan([ws], "session-full").records
+    assert [(item.phase, item.activity_epoch) for item in second] == [
+        ("streaming", 160)
+    ]
+    assert state_path not in parsed_paths
+    assert header_paths == [state_path]
+
+
+def _reorder_state(state_path: Path, version: Any, epoch: int = 140) -> None:
+    """Rewrite state.json with "version" placed after "jobs"."""
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    write_json(state_path, {"jobs": payload["jobs"], "version": version}, epoch)
+
+
+def test_codex_state_version_after_jobs_supported_is_read(tmp_path: Path) -> None:
+    """A supported version is honored even when it is not the first key."""
+    ws = workspace(tmp_path)
+    state_dir, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "job-1", "epoch": 100, "phase": "streaming", "updatedAt": 150}],
+        state_epoch=140,
+    )
+    _reorder_state(state_dir / "state.json", 1)
+    result = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector()).scan(
+        [ws], "session-full"
+    )
+    assert result.warnings == []
+    assert [(item.phase, item.activity_epoch) for item in result.records] == [
+        ("streaming", 150)
+    ]
+
+
+def test_codex_state_version_after_jobs_unsupported_is_skipped(tmp_path: Path) -> None:
+    """An unsupported version after "jobs" is detected, not silently accepted."""
+    ws = workspace(tmp_path)
+    state_dir, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "job-1", "epoch": 100, "phase": "streaming", "updatedAt": 150}],
+        state_epoch=140,
+    )
+    _reorder_state(state_dir / "state.json", 2)
+    result = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector()).scan(
+        [ws], "session-full"
+    )
+    assert result.records == []
+    assert len(result.warnings) == 1
+    assert result.warnings[0][0].startswith("codex-state-version")
+
+
+def test_codex_state_large_truncated_version_is_indeterminate(tmp_path: Path) -> None:
+    """A huge file whose version is past the header window fails loud (skipped)."""
+    ws = workspace(tmp_path)
+    state_dir, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "job-1", "epoch": 100, "phase": "streaming", "updatedAt": 150}],
+        state_epoch=140,
+    )
+    state_path = state_dir / "state.json"
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    filler = [
+        {"id": f"old-{index}", "phase": "done", "updatedAt": 999}
+        for index in range(200)
+    ]
+    write_json(state_path, {"jobs": filler + payload["jobs"], "version": 1}, 140)
+    text = state_path.read_text(encoding="utf-8")
+    assert len(text) > watchdog.STATE_HEADER_LIMIT
+    assert '"version"' not in text[: watchdog.STATE_HEADER_LIMIT]
+    result = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector()).scan(
+        [ws], "session-full"
+    )
+    assert result.records == []
+    assert len(result.warnings) == 1
+    assert result.warnings[0][0].startswith("codex-state-version-indeterminate")
+
+
 def test_codex_scanner_checks_shared_broker_once_per_workspace(tmp_path: Path) -> None:
     """Shared broker liveness is read once for all matching workspace jobs."""
 
@@ -656,13 +783,39 @@ def test_tmux_snapshot_and_socket_enumeration(
     ]
 
 
+def test_tmux_detection_honors_watchdog_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An isolated PATH controls both command lookup and Watchdog detection."""
+    empty_bin = tmp_path / "empty-bin"
+    fake_bin = tmp_path / "fake-bin"
+    empty_bin.mkdir()
+    fake_bin.mkdir()
+    fake_tmux = fake_bin / "tmux"
+    fake_tmux.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_tmux.chmod(0o755)
+    monkeypatch.setenv("PATH", str(empty_bin))
+    env = {
+        "HOME": str(tmp_path / "home"),
+        "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin"),
+        "PATH": str(fake_bin),
+    }
+
+    assert watchdog._command_exists("tmux", env)
+    assert not watchdog._command_exists("tmux")
+    monitor = watchdog.Watchdog(
+        watchdog.Options(), env=env, proc_root=tmp_path / "proc"
+    )
+    assert monitor.have_tmux
+
+
 def test_watchdog_warns_when_no_team_has_matching_swarm_socket(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """GONE diagnostics run even when the selected team has no members."""
-    monkeypatch.setattr(watchdog, "_command_exists", lambda _: True)
+    monkeypatch.setattr(watchdog, "_command_exists", lambda *_: True)
     home = tmp_path / "home"
     monitor = watchdog.Watchdog(
         watchdog.Options(
