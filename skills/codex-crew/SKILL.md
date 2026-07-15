@@ -39,7 +39,7 @@ Deep mechanics (exact sandbox modes, the on-disk job-state layout, why `git comm
 
 Instead, monitor Codex progress the same way the stall watchdog monitors Claude agents — from on-disk job state, not from harness signals:
 
-- The stall watchdog (`grand-admiral` § Recovery → `scripts/agent-watchdog.sh`) discovers Codex jobs and emits `CODEX_*` transition events. Launching it is **mandatory** whenever any agent — Claude or Codex — is dispatched (see `grand-admiral` § Spawning → Monitoring).
+- The stall watchdog (`grand-admiral` § Recovery → `scripts/agent-watchdog.py`) discovers Codex jobs and emits `CODEX_*` transition events. Launching it is **mandatory** whenever any agent — Claude or Codex — is dispatched (see `grand-admiral` § Spawning → Monitoring).
 - As a manual stopgap when the watchdog is not running, poll the job's on-disk state directly (mtime-gated, minimal-field reads — never load the full state blob): see `references/sandbox-and-recovery.md` § On-Disk Job State.
 
 ## Recovering a Stale Broker

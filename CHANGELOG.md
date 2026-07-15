@@ -6,6 +6,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-07-15
+
+### Added
+
+- **`skills/codex-crew/SKILL.md`** (+ `references/sandbox-and-recovery.md`): new skill — the pre-flight a coordinator reads before its first Codex dispatch. Covers routing (Codex Sol = `gpt-5.6-sol --effort high`, always high effort), the `workspace-write` sandbox limits (worktree writes under `/data/git-worktrees`, the coordinator-commits pattern for the linked-worktree git-commit block, network for localhost test sockets), progress monitoring (codex-rescue has no reliable completion heartbeat — rely on the watchdog / job state), and stale-broker recovery. Consolidates codex-tooling lessons previously rediscovered session after session.
+- **`scripts/agent-watchdog.py`** Codex "Source D" monitoring: the stall watchdog now discovers Codex Companion jobs (session- and workspace-scoped, slug/hash-mapped from the monitored workspaces) and emits namespaced, edge-triggered `CODEX_STALL`/`CODEX_RESUMED`/`CODEX_GONE`/`CODEX_DONE`/`CODEX_FAILED`/`CODEX_CANCELLED` transitions — surfacing a failed/stalled/finished Codex job that codex-rescue itself never signals. Memory-efficient polling (mtime-gated, minimal-field reads, bounded per-job map; never parses the growing `state.json`).
+- **`skills/grand-admiral/SKILL.md`** § Spawning → Monitoring: launching the stall watchdog Monitor is now **mandatory** whenever any agent — Claude or Codex — is dispatched; § Recovery documents the Codex discovery source and `CODEX_*` event grammar.
+
+### Changed
+
+- **`scripts/agent-watchdog.sh` → `scripts/agent-watchdog.py`**: the stall watchdog is rewritten Bash → Python (drop-in: `python3 scripts/agent-watchdog.py <same args>`), preserving all Claude-agent behavior (Sources A/B/C, activity-clock fallback chain, per-agent `/proc` build detection, per-session tmux swarm-socket binding, STALL/RESUMED/GONE + `--gone-polls`, edge-trigger/zero-token contract) and gaining importable helpers + a real test net (`tests/test_agent_watchdog.py` — Claude parity + Codex CX-001..035; `tests/test_agent_watchdog_gone.sh` now drives the `.py`). The Monitor launch command becomes `python3 …/agent-watchdog.py`; update the settings allow-rule to `Bash(python3 */scripts/agent-watchdog.py *)` to match.
+
+### Removed
+
+- **`scripts/agent-watchdog.sh`**: replaced by the Python port (git history retains it).
+
 ## [5.5.0] - 2026-07-14
 
 ### Added
