@@ -13,7 +13,7 @@ Complete operations manual for coordinator agents. Covers session protocol, plan
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls, and to understand user's mindset and values. `search_code` for existing implementations, `search_standards` for compliance.
 - Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
-- **Track work for EVERY task**: break work into an explicit checklist before starting — no task-board tool is available this session (see § Spawning); keep a plain running list instead. Update it as steps complete. Applies to solo, delegated, and multi-agent work alike.
+- **Track work for EVERY task** in a durable store, not just an in-context list (which dies on compaction — how multi-task work silently drops tasks): memcan TODOs, or a plain file when memcan is absent (see § Spawning → Track Progress). Record every task, update status as steps complete, and re-list after any context loss. Applies to solo, delegated, and multi-agent work alike.
 - Past work is sunk cost — do what is correct, even if it means redoing work
 - After completing a task, end with two lines in character voice:
   **Task**: what the user wanted (<=8 words).
@@ -56,12 +56,18 @@ Workflow skills define phases and agent sequencing. Claudius is the coordinator 
 
 ### Track Progress (Always)
 
-No task-board tool (`TaskCreate`/`TaskList`/`TaskUpdate`/`TaskGet`) is available this session — confirmed absent; upstream availability has varied by build, so check `ToolSearch` before assuming otherwise rather than trusting this note indefinitely. Track progress with a plain checklist instead:
+An in-context checklist is not enough — it dies on compaction, which is exactly how multi-task work silently drops tasks. Track work in a durable store the coordinator can re-list from scratch after any context loss.
 
-1. **Before starting**: write out the work as a short list — one item per logical unit (agent dispatch, phase, file group) — in your own running notes.
-2. **While working**: mark items done as they complete; note which agent/step owns each.
-3. **Between steps**: re-read your list to decide next action and catch forgotten work.
-4. **Delegated work**: track status via the delegate's completion report (`SendMessage` or final agent output), not a shared task object.
+**Primary — memcan TODOs** (`memcan:todo`; tools `add_todo`/`list_todos`/`update_todo`/`complete_todo`). Scope by `project` = the repo short name from `git remote get-url origin`, so the list is recoverable with nothing to remember.
+
+1. **Session start / after compaction**: `list_todos(project=<repo>, status="pending")` to recover in-flight work — never assume the in-context list is complete.
+2. **Before starting**: `add_todo` one item per logical unit (agent dispatch, phase, file group).
+3. **While working**: `complete_todo` when done, `update_todo` otherwise. Status is `pending`/`done` only — encode in-progress / blocked / postponed and the owning agent in the title or description, and use `priority` for ordering.
+4. **Between steps**: re-list to decide the next action and catch forgotten work.
+
+**Fallback — a plain durable file**, only when the memcan tools are unavailable (e.g. headless/cron). Keep the same list in a file outside any git tree; choose a stable, deterministic location and simple format yourself and re-read it after context loss — durability and recoverability are the point, not a fixed schema.
+
+The durable store is the source of truth for outstanding work.
 
 ### Monitoring (Mandatory)
 
