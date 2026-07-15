@@ -152,7 +152,7 @@ otherwise                                          → out_of_scope_follow_up
 
 | External field | Claudius equivalent |
 |---|---|
-| `validity: valid\|disputed` | `ai_verdict` (`false_positive`/`duplicate` ≈ disputed) |
+| `validity: valid / disputed` | `ai_verdict` (`false_positive`/`duplicate` ≈ disputed) |
 | `merge_class` | `merge_class` (same 4 values) |
 | `impact_severity` | derived `severity` label (INFORMATIONAL ≈ INFO) |
 | `confidence` | `ai_verdict_confidence` |
