@@ -776,7 +776,7 @@ class _JsonCache:
 
 
 class _StateHeaderCache:
-    """Bound state headers to stable state-directory identities."""
+    """Bounded mtime-gated cache of state.json headers for the long-lived poller."""
 
     def __init__(self, limit: int = 512) -> None:
         self.limit = limit
@@ -786,20 +786,23 @@ class _StateHeaderCache:
 
     def read(self, state_dir: Path, state_path: Path) -> _StateHeader | None:
         try:
-            directory_stat = state_dir.stat()
-            state_path.stat()
+            stat = state_path.stat()
+            signature = (stat.st_mtime_ns, stat.st_size)
         except OSError:
             self.items.pop(state_dir, None)
             return None
-        identity = (directory_stat.st_dev, directory_stat.st_ino)
+        # Gate on the state.json file's own mtime/size, like _JsonCache — the
+        # directory inode is stable across in-place rewrites, so keying on it
+        # would pin the first version read for the process's lifetime and
+        # defeat the version guard on every later poll.
         cached = self.items.get(state_dir)
-        if cached and cached[0] == identity:
+        if cached and cached[0] == signature:
             self.items.move_to_end(state_dir)
             return cached[1]
         header = _safe_state_header(state_path)
         if header is None:
             return None
-        self.items[state_dir] = (identity, header)
+        self.items[state_dir] = (signature, header)
         self.items.move_to_end(state_dir)
         while len(self.items) > self.limit:
             self.items.popitem(last=False)

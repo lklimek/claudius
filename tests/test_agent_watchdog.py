@@ -324,7 +324,9 @@ def test_codex_scanner_never_parses_growing_state_json(
         ("streaming", 160)
     ]
     assert state_path not in parsed_paths
-    assert header_paths == [state_path]
+    # The growing jobs array is never full-parsed, but the bounded header is
+    # re-read once the file's mtime changes (mtime-gated, not pinned forever).
+    assert header_paths == [state_path, state_path]
 
 
 def _reorder_state(state_path: Path, version: Any, epoch: int = 140) -> None:
@@ -395,6 +397,32 @@ def test_codex_state_large_truncated_version_is_indeterminate(tmp_path: Path) ->
     assert result.records == []
     assert len(result.warnings) == 1
     assert result.warnings[0][0].startswith("codex-state-version-indeterminate")
+
+
+def test_codex_state_header_cache_reacts_to_version_change(tmp_path: Path) -> None:
+    """A long-lived scanner re-checks the version when state.json is rewritten."""
+    ws = workspace(tmp_path)
+    state_dir, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "job-1", "epoch": 100, "phase": "streaming", "updatedAt": 150}],
+        state_epoch=140,
+        version=1,
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    first = scanner.scan([ws], "session-full")
+    assert [item.phase for item in first.records] == ["streaming"]
+    assert first.warnings == []
+    # Rewrite the SAME state.json in place to an unsupported version, new mtime.
+    state_path = state_dir / "state.json"
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    write_json(state_path, {"version": 999, "jobs": payload["jobs"]}, 160)
+    # The same long-lived scanner must notice the change, not serve a pinned
+    # header from the first read.
+    second = scanner.scan([ws], "session-full")
+    assert second.records == []
+    assert len(second.warnings) == 1
+    assert second.warnings[0][0].startswith("codex-state-version")
 
 
 def test_codex_scanner_checks_shared_broker_once_per_workspace(tmp_path: Path) -> None:
