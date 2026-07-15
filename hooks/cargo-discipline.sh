@@ -19,11 +19,11 @@
 #      may still chain — it does not compile).
 #   3. no ad-hoc CARGO_TARGET_DIR=/--target-dir override that differs from the
 #      dynamically-resolved canonical target dir (via `cargo metadata`). Scoped
-#      override: CLAUDIUS_ISOLATE_TARGET=1 clears ONLY this rule (for the
-#      documented concurrent-worktree isolation case in grand-admiral § Worktree
-#      Isolation) — unlike CLAUDIUS_FORCE=1, it leaves Rules 1/2/4 enforced and
-#      does NOT set the wrapper's own CLAUDIUS_FORCE env var, so ledger replay
-#      stays intact for the isolated target dir.
+#      override: CLAUDIUS_ISOLATE_TARGET=1 clears ONLY this rule (a manual escape
+#      hatch — per-checkout isolation is now automatic inside cargo-cached.sh; see
+#      grand-admiral § Worktree Isolation) — unlike CLAUDIUS_FORCE=1, it leaves
+#      Rules 1/2/4 enforced and does NOT set the wrapper's own CLAUDIUS_FORCE env
+#      var, so ledger replay stays intact for the isolated target dir.
 #   4. verification invocations (test|clippy|nextest) must route through
 #      scripts/cargo-cached.sh (the verification ledger). Plain `cargo build` is
 #      intentionally NOT forced: the ledger replays a recorded VERDICT (a test /
@@ -35,9 +35,10 @@
 #
 # CLAUDIUS_FORCE=1 is a GLOBAL allow (clears all four rules, and separately
 # tells scripts/cargo-cached.sh to skip its own ledger lookup) — reserve it for
-# genuine one-off exceptions. CLAUDIUS_ISOLATE_TARGET=1 is the narrow, routine
-# token for concurrent-wave target-dir isolation; it does not touch Rules 1/2/4
-# or ledger replay.
+# genuine one-off exceptions. CLAUDIUS_ISOLATE_TARGET=1 is the narrow manual
+# escape hatch for a deliberate target-dir override the wrapper's automatic
+# per-checkout isolation doesn't cover; it does not touch Rules 1/2/4 or ledger
+# replay.
 set -uo pipefail
 
 allow() { exit 0; }
@@ -118,7 +119,7 @@ if grep -qE 'CARGO_TARGET_DIR=|--target-dir' <<<"$scan"; then
       [[ -z "$ov" ]] && continue
       ov="${ov//\"/}"; ov="${ov//\'/}"; ov="${ov%/}"
       if [[ -n "$ov" && "$ov" != "$canonical" && "$claudius_isolate_target" != 1 ]]; then
-        deny "Ad-hoc target-dir override ('$ov') opts out of the shared cargo target dir ('$canonical', resolved from cargo metadata) and its sccache. Drop the override so builds stay shared. For the documented concurrent-worktree isolation case, prefix CLAUDIUS_ISOLATE_TARGET=1 instead — it clears only this rule and keeps ledger routing enforced. Blanket override (rarely justified): prefix CLAUDIUS_FORCE=1."
+        deny "Ad-hoc target-dir override ('$ov') opts out of the shared cargo target dir ('$canonical', resolved from cargo metadata) and its sccache. Drop the override so builds stay shared — per-checkout isolation for test/clippy/nextest is already automatic in cargo-cached.sh. To deliberately force a specific target dir anyway, prefix CLAUDIUS_ISOLATE_TARGET=1 — it clears only this rule and keeps ledger routing enforced. Blanket override (rarely justified): prefix CLAUDIUS_FORCE=1."
       fi
     done <<<"$(extract_target_dirs "$scan")"
   fi
