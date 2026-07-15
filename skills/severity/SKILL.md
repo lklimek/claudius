@@ -13,17 +13,17 @@ adapted for general code review findings beyond pure security.
 
 ## Levels
 
-**CRITICAL** — Must fix before merge. Exploitable vulnerability, data loss, correctness bug
-causing wrong results, or system breakage. Production incident if deployed.
+**CRITICAL** — Exploitable vulnerability, data loss, correctness bug causing wrong results,
+or system breakage. Production incident if deployed.
 *CVSS equivalent: 9.0-10.0. Examples: RCE, SQL injection, data breach, silent data corruption.*
 
-**HIGH** — Should fix before merge. Significant risk or correctness issue that will likely
-cause problems. Workaround may exist but is not acceptable long-term.
+**HIGH** — Significant risk or correctness issue that will likely cause problems.
+Workaround may exist but is not acceptable long-term.
 *CVSS equivalent: 7.0-8.9. Examples: privilege escalation, race condition causing data loss,
 broken authentication, missing input validation on untrusted data.*
 
-**MEDIUM** — Fix before production. Real issue that requires additional factors to manifest,
-or a design flaw that increases future risk. Acceptable to merge with a tracked follow-up.
+**MEDIUM** — Real issue that requires additional factors to manifest, or a design flaw that
+increases future risk. Typically fixed before production.
 *CVSS equivalent: 4.0-6.9. Examples: information disclosure, missing rate limiting, code
 duplication creating maintenance risk, error handling that swallows context.*
 
@@ -55,6 +55,7 @@ Emit severity as an integer in finding JSON:
 - **INFO** is exclusively for praise and context — never for suggestions or improvements
 - When in doubt between two levels, choose the higher one
 - Severity reflects **impact and likelihood**, not effort to fix
+- Severity states shipped impact only — whether a finding blocks THIS PR is the orthogonal `merge_class` axis (see Merge Classification below); never encode merge-worthiness in the severity floats or label
 - A trivial one-line fix can still be CRITICAL if the impact is severe
 - UX/DX impact is a severity factor — a broken user journey or confusing developer experience can be HIGH even if the code compiles and passes tests
 
@@ -114,3 +115,46 @@ CVSS v4.0-aligned bands, applied by the coordinator:
 Producers emit `risk`/`impact`/`scope` floats; the coordinator (or `validate-findings` when a producer omits them) writes `overall_severity` and the integer `severity`.
 
 The float trio is the **single source of truth** for severity. Producers MUST NOT hand-type a severity label (CRITICAL/HIGH/…) in a companion document or alongside the floats — every human-readable label is *derived* from `risk`/`impact`/`scope` by the pipeline. A label authored in parallel drifts from the floats and is wrong by construction.
+
+## Merge Classification (orthogonal axis)
+
+`merge_class` answers one question — **does this finding prevent THIS PR from merging?** — while severity answers another: **what is the shipped impact?** The axes are independent. 🔴 **Blocking is a merge class, never a severity**: a LOW can block (it violates an explicit acceptance criterion); a HIGH can be follow-up (pre-existing, unchanged, not required by this PR). Severity and `ai_verdict_confidence` never upgrade a finding to blocking.
+
+Coordinator-owned: assigned during consolidation (grumpy-review §5b, using the intent digest when available, else the coordinator's own knowledge of the work's goal) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments). Fields: `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` + `intent_basis` (the exact requirement/claim; always cite it for `blocking`). See `report-format` for schema shape.
+
+### Establish PR intent (priority order)
+
+1. Explicit human requirements and acceptance criteria (incl. session knowledge the coordinator holds)
+2. Linked issue / spec requirements
+3. PR title and behavioral claims in its description
+4. Invariants necessarily implied by the requested behavior
+
+Incidental implementation details are NOT requirements unless presented as a behavior, guarantee, or security invariant.
+
+### Decision tree (apply in order)
+
+```
+informational/praise (INFO-intended: praise, INTENTIONAL downgrade,
+  RESOLVED comment, scope=0.0 convention)          → omit merge_class
+invalid (ai_verdict false_positive | duplicate)    → disputed
+required to satisfy explicit PR intent             → blocking
+introduced, worsened, or newly exposed by the diff
+  AND material                                     → blocking
+valid and related to the change                    → non_blocking
+otherwise                                          → out_of_scope_follow_up
+```
+
+**Material** = observable incorrect behavior, security/safety invariant failure, data loss/corruption, crash, invalid persistence/API behavior, or duplicate external operations. Style, speculative hardening, and minor maintainability improvements are NOT material.
+
+**Pre-existing issues** block only when the PR relies on them, worsens or newly exposes them, or fixing them is necessary for an explicit stated goal. A residual gap after a partial improvement blocks only when the PR claims full closure of that gap.
+
+### External-reviewer compatibility map
+
+| External field | Claudius equivalent |
+|---|---|
+| `validity: valid / disputed` | `ai_verdict` (`false_positive`/`duplicate` ≈ disputed) |
+| `merge_class` | `merge_class` (same 4 values) |
+| `impact_severity` | derived `severity` label (INFORMATIONAL ≈ INFO) |
+| `confidence` | `ai_verdict_confidence` |
+| `intent_basis` | `intent_basis` |
+| `material_impact` | `impact_description` |

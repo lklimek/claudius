@@ -178,6 +178,33 @@ def test_v3_minimal_round_trips_through_all_renderers(tmp_path):
     assert pdf_out.is_file() and pdf_out.stat().st_size > 1000
 
 
+def test_v32_merge_class_round_trips_through_pdf(tmp_path):
+    import json as _json
+
+    pypdf = pytest.importorskip("pypdf")
+    fixture = (
+        Path(__file__).resolve().parent / "fixtures" / "reports" / "v3-merge-class.json"
+    )
+    data = _json.loads(fixture.read_text(encoding="utf-8"))
+    out = tmp_path / "merge-class.pdf"
+    grr.render_pdf(data, out)
+    assert out.is_file() and out.stat().st_size > 1000
+    text = "".join(
+        page.extract_text() or "" for page in pypdf.PdfReader(str(out)).pages
+    )
+    assert "BLOCKING" in text
+
+
+@pytest.mark.parametrize(
+    "merge_class",
+    ["blocking", "non_blocking", "out_of_scope_follow_up", "disputed"],
+)
+def test_pdf_merge_class_chips_use_shared_foreground_and_background(merge_class):
+    chip = grr._pdf_merge_class_chip(merge_class)
+    assert f'backColor="{grr.MERGE_CLASS_COLORS[merge_class]}"' in chip
+    assert f'color="{grr.MERGE_CLASS_TEXT_COLORS[merge_class]}"' in chip
+
+
 # ---------------------------------------------------------------------------
 # Scoreboard / category coverage — every renderer must surface ALL registered
 # categories, not a hardcoded subset. Regression for the post-Pass-C gap where

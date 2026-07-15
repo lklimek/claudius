@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [5.7.0] - 2026-07-15
+## [5.8.0] - 2026-07-15
 
 ### Added
 
@@ -24,6 +24,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Removed
 
 - **`scripts/agent-watchdog.sh`**: replaced by the Python port (git history retains it).
+
+## [5.7.0] - 2026-07-15
+
+### Added
+- **Merge-classification axis** (schema v3.2.0): per-finding `merge_class` (`blocking|non_blocking|out_of_scope_follow_up|disputed`) + `intent_basis`, orthogonal to OWASP severity — 🔴 blocking is a merge class, never a severity; a LOW can block when it violates explicit PR intent, a HIGH can be follow-up when pre-existing. Decision tree, intent-priority order, materiality and pre-existing rules, and an external-reviewer field-compatibility map live in `skills/severity/SKILL.md` § Merge Classification. Plumbed through `consolidate_reports.py` (whitelist, blocking-first `top_findings`, merge-class-aware `remediation`, `merge_class_counts`, new `regenerate` subcommand), all four `generate_review_report.py` formats (md marker, html chip + filter in both base and triage toolbars, pdf chip), and advisory `validate_report.py` coherence warnings.
+- **`skills/review-pr/SKILL.md`**: §1 intent digest (linked issues via `issue_read`, title/body claims, session requirements); Pass C upgraded to **functional promise verification** (verify the diff delivers each promise, not just textual alignment; new Unfulfilled-promise trigger emitting `merge_class: blocking`) and reordered BEFORE consolidation so its findings flow through prepare/§5b.
+
+### Changed
+
+- **`skills/severity/SKILL.md`**: severity level definitions are impact-only — merge-gating phrases ("Must fix before merge" etc.) removed; merge-worthiness lives exclusively in `merge_class`.
+- **`skills/grumpy-review/SKILL.md`**: §5b assigns `merge_class`/`intent_basis` to every non-informational finding (coordinator-owned; producers must not emit); trivial path classifies inline after the producer returns.
+- **`skills/validate-findings/SKILL.md`**: merge-class coherence backstop (false_positive/duplicate ⇒ disputed; blocking requires `intent_basis`) + post-loop `consolidate_reports.py regenerate` to refresh derived blocks.
+- **`skills/report-format/SKILL.md`**, **`skills/check-pr-comments/SKILL.md`**, **`skills/review-dependency/SKILL.md`**: new fields documented (coordinator-owned with coordinator-inline producer exceptions); stale 3.0.0/3.1.0 schema-version strings bumped to 3.2.0.
+
+### Fixed
+
+- **Review report renderers**: merge-class chips use per-class foreground colors that meet WCAG normal-text contrast, including the gold `non_blocking` chip.
+- **`scripts/generate_review_report.py`**: duplicated `filterAiVerdict` select in the base toolbar.
+- **`scripts/consolidate_reports.py`**: disputed findings are excluded from `top_findings`, matching remediation behavior.
+- **`scripts/validate_report.py`**: merge-classification fields on pre-3.2.0 reports emit an advisory consistency warning.
+
+## [5.6.0] - 2026-07-14
+
+### Added
+
+- **`scripts/cargo-cached.sh`**: per-checkout `CARGO_TARGET_DIR` isolation is now structural and automatic — every invocation routed through the wrapper derives its own target dir from the checkout's absolute path (`<canonical>/claudius-checkouts/<hash>`), replacing the coordinator-doctrine-dependent manual assignment that kept failing in practice. An explicit caller-set `CARGO_TARGET_DIR` (the `CLAUDIUS_ISOLATE_TARGET=1` escape hatch) is respected as-is and now correctly participates in the ledger's cache key, so it can't cross-replay against a different explicit override. `SCCACHE_BASEDIRS` (version-gated to sccache >= 0.14.0) keeps rlib caching shared across isolated dirs where supported. Fake-green banners now record and report the actual isolation state of the run being displayed, including on cross-checkout replay. New tests K19-K31 in `tests/test_cargo_cached.sh`.
+- **`CLAUDIUS_TARGET_PREFIX`**: optionally roots auto-derived, path-hashed target dirs under a chosen directory; explicit `CARGO_TARGET_DIR` still takes precedence, and an unset or empty prefix preserves the existing default.
+
+### Fixed
+
+- **`scripts/cargo-cached.sh`**: a failed target-dir creation no longer presses ahead into an unusable path — it now abandons isolation and falls through to cargo's default resolution, preventing a false test failure from being ledgered and replayed to other checkouts. Silent fail-open paths that drop the isolation protection (metadata resolution failure, directory-creation failure) now emit a stderr warning instead of failing silently.
+- **`scripts/cargo-cached.sh`**: metadata probing now skips promptly when `timeout` is unavailable, and the sccache 0.14.0 gate no longer depends on GNU-only `sort -V`.
+
+### Changed
+
+- **`skills/grand-admiral/SKILL.md`**, **`skills/rust-best-practices/SKILL.md`**, **`hooks/session-start.sh`**, **`hooks/cargo-discipline.sh`**: doctrine updated to reflect automatic isolation — the manual per-agent `CARGO_TARGET_DIR` assignment mandate is gone; `CLAUDIUS_ISOLATE_TARGET=1` is now documented purely as a manual escape hatch. Also clarifies that isolation applies to any wrapper-routed invocation (not just test/clippy/nextest), notes the sccache mitigation's version requirement (confirmed no-op on this machine's installed sccache 0.7.7), and flags that isolated target dirs accumulate with no automatic cleanup.
+
+Caught by a two-round, 3-agent adversarial review (`security-engineer-smythe`, `project-reviewer-adams`, `qa-engineer-marvin`) of this refactor: an explicit-override cache-key regression that silently defeated the manual re-verification escape hatch, a wrong-and-crash-prone sccache mitigation value, a false-failure propagation path, and banner/doctrine accuracy gaps — all confirmed by direct reproduction (including against the actual installed sccache binary) before and after each fix.
 
 ## [5.5.0] - 2026-07-14
 

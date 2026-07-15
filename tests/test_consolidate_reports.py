@@ -644,6 +644,22 @@ class TestComputeStatistics:
 
         assert matrix_by_sev["INFO"]["total"] == 0
 
+    def test_merge_class_counts_emitted_only_when_present(
+        self, make_finding, make_section
+    ):
+        absent = [make_section(findings=[make_finding()])]
+        assert "merge_class_counts" not in cr.compute_statistics(absent, [])
+
+        blocking = make_finding()
+        blocking["merge_class"] = "blocking"
+        classified = [make_section(findings=[blocking])]
+        assert cr.compute_statistics(classified, [])["merge_class_counts"] == {
+            "blocking": 1,
+            "non_blocking": 0,
+            "out_of_scope_follow_up": 0,
+            "disputed": 0,
+        }
+
 
 # ---------------------------------------------------------------------------
 # generate_remediation
@@ -690,6 +706,55 @@ class TestGenerateRemediation:
         assert len(result) == 3
         for bucket in result:
             assert bucket["count"] == 0
+
+    def test_merge_class_matrix(self, make_finding, make_section):
+        blocking_info = make_finding(severity=1, fid="CODE-001")
+        blocking_info["merge_class"] = "blocking"
+        non_blocking_high = make_finding(severity=4, fid="CODE-002")
+        non_blocking_high["merge_class"] = "non_blocking"
+        disputed = make_finding(severity=5, fid="CODE-003")
+        disputed["merge_class"] = "disputed"
+        follow_up = make_finding(severity=5, fid="CODE-004")
+        follow_up["merge_class"] = "out_of_scope_follow_up"
+
+        result = cr.generate_remediation(
+            [
+                make_section(
+                    findings=[blocking_info, non_blocking_high, disputed, follow_up]
+                )
+            ]
+        )
+        by_priority = {bucket["priority"]: bucket for bucket in result}
+        assert by_priority["before_merge"]["finding_ids"] == ["CODE-001"]
+        assert by_priority["before_production"]["finding_ids"] == ["CODE-002"]
+        assert by_priority["post_deployment"]["finding_ids"] == ["CODE-004"]
+
+    def test_absent_merge_class_keeps_severity_bucketing(
+        self, make_finding, make_section
+    ):
+        sections = self._sections_with_severities(
+            make_finding, make_section, [5, 4, 3, 2, 1]
+        )
+        assert cr.generate_remediation(sections) == [
+            {
+                "label": "Before Merge",
+                "count": 2,
+                "priority": "before_merge",
+                "finding_ids": ["X-000", "X-001"],
+            },
+            {
+                "label": "Before Production",
+                "count": 1,
+                "priority": "before_production",
+                "finding_ids": ["X-002"],
+            },
+            {
+                "label": "Post Deployment",
+                "count": 1,
+                "priority": "post_deployment",
+                "finding_ids": ["X-003"],
+            },
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -758,6 +823,65 @@ class TestGenerateTopFindings:
         assert top[0]["id"] == "SEC-001"
         assert top[0]["title"] == ""
         assert top[0]["location"] == ""
+
+    def test_blocking_low_is_included_before_non_blocking_high(
+        self, make_finding, make_section
+    ):
+        blocking = make_finding(severity=2, fid="CODE-001")
+        blocking.update({"merge_class": "blocking", "overall_severity": 0.2})
+        high = make_finding(severity=4, fid="CODE-002")
+        high.update({"merge_class": "non_blocking", "overall_severity": 0.8})
+        top = cr.generate_top_findings([make_section(findings=[high, blocking])])
+        assert [finding["id"] for finding in top] == ["CODE-001", "CODE-002"]
+        assert top[0]["merge_class"] == "blocking"
+
+    def test_disputed_high_is_excluded(self, make_finding, make_section):
+        disputed = make_finding(severity=5, fid="CODE-001")
+        disputed["merge_class"] = "disputed"
+        non_disputed = make_finding(severity=5, fid="CODE-002")
+        non_disputed["merge_class"] = "non_blocking"
+
+        top = cr.generate_top_findings(
+            [make_section(findings=[disputed, non_disputed])]
+        )
+
+        assert [finding["id"] for finding in top] == ["CODE-002"]
+
+
+class TestRegenerateDerived:
+    def _report(self) -> dict[str, Any]:
+        path = (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "reports"
+            / "v3-merge-class.json"
+        )
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_recomputes_after_merge_class_flip(self):
+        report = self._report()
+        finding = report["findings"][0]["findings"][0]
+        finding["merge_class"] = "non_blocking"
+
+        cr.regenerate_derived(report)
+
+        assert [item["id"] for item in report["top_findings"]] == ["SEC-001"]
+        by_priority = {bucket["priority"]: bucket for bucket in report["remediation"]}
+        assert "CODE-001" not in by_priority["before_merge"]["finding_ids"]
+        assert "CODE-001" in by_priority["post_deployment"]["finding_ids"]
+        assert report["summary_statistics"]["merge_class_counts"]["blocking"] == 0
+        assert report["summary_statistics"]["merge_class_counts"]["non_blocking"] == 2
+
+    def test_regenerate_command_revalidates_and_writes_in_place(self, tmp_path):
+        path = tmp_path / "report.json"
+        report = self._report()
+        report["findings"][0]["findings"][0]["merge_class"] = "non_blocking"
+        path.write_text(json.dumps(report), encoding="utf-8")
+
+        args = cr.parse_args(["regenerate", str(path)])
+        assert cr.cmd_regenerate(args) == 0
+        regenerated = json.loads(path.read_text(encoding="utf-8"))
+        assert [item["id"] for item in regenerated["top_findings"]] == ["SEC-001"]
 
 
 # ---------------------------------------------------------------------------
@@ -934,6 +1058,28 @@ class TestFlattenAgentReport:
         # original_id is empty string, stripped by _strip_none_values
         assert "original_id" not in f or f["original_id"] == ""
         assert positives == []
+
+    def test_merge_class_and_intent_basis_pass_through(self):
+        sections = [
+            {
+                "category": "code_quality",
+                "title": "CQ",
+                "findings": [
+                    {
+                        "severity": 2,
+                        "merge_class": "blocking",
+                        "intent_basis": "The requested behavior is absent.",
+                        "title": "Missing behavior",
+                        "location": "f.py:1",
+                        "description": "Desc",
+                        "recommendation": "Fix",
+                    }
+                ],
+            }
+        ]
+        raw, _ = cr._flatten_agent_report("agent-a", sections)
+        assert raw[0]["merge_class"] == "blocking"
+        assert raw[0]["intent_basis"] == "The requested behavior is absent."
 
     def test_empty_sections_list(self):
         raw, positives = cr._flatten_agent_report("agent-x", [])

@@ -1,9 +1,7 @@
 """Tests for the non-blocking consistency gate in validate_report.py.
 
-The gate emits ``[consistency]`` WARNINGS to stderr but must never fail an
-otherwise-valid report (exit code stays 0). It covers two smells:
-(i) an explicit ``severity`` that disagrees with the band derived from floats,
-(ii) an axis (risk/impact/scope) defaulted to one value across most findings.
+The gate emits ``[consistency]`` warnings to stderr without failing an
+otherwise-valid report. It covers rating, merge-class, and schema coherence.
 """
 
 from __future__ import annotations
@@ -104,6 +102,95 @@ class TestLabelBandMismatch:
         # No risk/impact/scope -> nothing to compare against.
         report = _report([_section([{"id": "CODE-001", "severity": 4}])])
         assert vr.check_consistency(report) == []
+
+
+class TestMergeClassAdvisories:
+    def test_merge_class_requires_schema_3_2_0(self):
+        report = _report([_section([_finding(1, merge_class="non_blocking")])])
+        report["schema_version"] = "3.1.0"
+
+        warnings = vr.check_consistency(report)
+        assert any("require schema_version=3.2.0" in warning for warning in warnings)
+
+        report["schema_version"] = "3.2.0"
+        warnings = vr.check_consistency(report)
+        assert not any(
+            "require schema_version=3.2.0" in warning for warning in warnings
+        )
+
+    def test_report_level_merge_fields_require_schema_3_2_0(self):
+        # merge_class in top_findings and merge_class_counts in
+        # summary_statistics are 3.2.0-only additions that live outside the
+        # per-section findings the finding loop scans.
+        report = _report([_section([_finding(1)])])
+        report["schema_version"] = "3.1.0"
+        report["top_findings"] = [
+            {
+                "id": "CODE-001",
+                "severity": 4,
+                "title": "Finding 1",
+                "location": "src/example.rs:1",
+                "merge_class": "blocking",
+            }
+        ]
+        report["summary_statistics"]["merge_class_counts"] = {"blocking": 1}
+
+        warnings = vr.check_consistency(report)
+        assert any("top_findings[].merge_class" in w for w in warnings)
+        assert any("summary_statistics.merge_class_counts" in w for w in warnings)
+
+        report["schema_version"] = "3.2.0"
+        assert not any(
+            "report: 3.2.0-only fields" in w for w in vr.check_consistency(report)
+        )
+
+    def test_false_positive_with_non_disputed_merge_class_warns(self):
+        report = _report(
+            [
+                _section(
+                    [
+                        _finding(
+                            1,
+                            ai_verdict="false_positive",
+                            merge_class="blocking",
+                            intent_basis="A claimed requirement.",
+                        )
+                    ]
+                )
+            ]
+        )
+        warnings = vr.check_consistency(report)
+        assert any(
+            "false_positive" in warning and "disputed" in warning
+            for warning in warnings
+        )
+
+    def test_duplicate_with_disputed_merge_class_is_silent(self):
+        report = _report(
+            [_section([_finding(1, ai_verdict="duplicate", merge_class="disputed")])]
+        )
+        warnings = vr.check_consistency(report)
+        assert not any(
+            "duplicate" in warning and "merge_class" in warning for warning in warnings
+        )
+
+    def test_blocking_without_nonempty_intent_basis_warns(self):
+        for intent_basis in (None, "", "   "):
+            report = _report(
+                [
+                    _section(
+                        [
+                            _finding(
+                                1,
+                                merge_class="blocking",
+                                intent_basis=intent_basis,
+                            )
+                        ]
+                    )
+                ]
+            )
+            warnings = vr.check_consistency(report)
+            assert any("intent_basis" in warning for warning in warnings)
 
 
 # ---------------------------------------------------------------------------
