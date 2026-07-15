@@ -6,6 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-07-15
+
+### Added
+
+- **Merge-classification axis** (schema v3.2.0): per-finding `merge_class` (`blocking|non_blocking|out_of_scope_follow_up|disputed`) + `intent_basis`, orthogonal to OWASP severity — 🔴 blocking is a merge class, never a severity; a LOW can block when it violates explicit PR intent, a HIGH can be follow-up when pre-existing. Decision tree, intent-priority order, materiality and pre-existing rules, and an external-reviewer field-compatibility map live in `skills/severity/SKILL.md` § Merge Classification. Plumbed through `consolidate_reports.py` (whitelist, blocking-first `top_findings`, merge-class-aware `remediation`, `merge_class_counts`, new `regenerate` subcommand), all four `generate_review_report.py` formats (md marker, html chip + filter in both base and triage toolbars, pdf chip), and advisory `validate_report.py` coherence warnings.
+- **`skills/review-pr/SKILL.md`**: §1 intent digest (linked issues via `issue_read`, title/body claims, session requirements); Pass C upgraded to **functional promise verification** (verify the diff delivers each promise, not just textual alignment; new Unfulfilled-promise trigger emitting `merge_class: blocking`) and reordered BEFORE consolidation so its findings flow through prepare/§5b.
+
+### Changed
+
+- **`skills/severity/SKILL.md`**: severity level definitions are impact-only — merge-gating phrases ("Must fix before merge" etc.) removed; merge-worthiness lives exclusively in `merge_class`.
+- **`skills/grumpy-review/SKILL.md`**: §5b assigns `merge_class`/`intent_basis` to every non-informational finding (coordinator-owned; producers must not emit); trivial path classifies inline after the producer returns.
+- **`skills/validate-findings/SKILL.md`**: merge-class coherence backstop (false_positive/duplicate ⇒ disputed; blocking requires `intent_basis`) + post-loop `consolidate_reports.py regenerate` to refresh derived blocks.
+- **`skills/report-format/SKILL.md`**, **`skills/check-pr-comments/SKILL.md`**, **`skills/review-dependency/SKILL.md`**: new fields documented (coordinator-owned with coordinator-inline producer exceptions); stale 3.0.0/3.1.0 schema-version strings bumped to 3.2.0.
+
+### Fixed
+
+- **`scripts/generate_review_report.py`**: duplicated `filterAiVerdict` select in the base toolbar.
+
 ## [5.5.0] - 2026-07-14
 
 ### Added

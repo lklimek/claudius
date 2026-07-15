@@ -63,7 +63,9 @@ human-authored default above.
 Instruct the single fallback agent to also apply `security-best-practices` and
 `coding-best-practices` checklists — it is standing in for the entire trio, so its prompt must
 cover security, structural, and adversarial-correctness concerns in one pass. The agent writes the
-report JSON directly — no consolidation needed.
+report JSON directly — no consolidation needed. Since §5b never runs on this path, the coordinator
+assigns `merge_class`/`intent_basis` inline after the producer returns (per `severity` skill
+§ Merge Classification), before rendering.
 
 ### Core agents (always include — fixed trio, every non-trivial review)
 
@@ -148,7 +150,7 @@ Each agent writes its output to the specified file path as valid JSON:
 
 **Optional**: `tags`, `impact_description` (Markdown impact narrative; the numeric `impact` float is separate), `code_snippets` (emit only when you captured the exact source during analysis — never invent one).
 
-**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats. `risk`/`impact`/`scope` are required — without all three, the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
+**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, `merge_class`, `intent_basis`, and the derived integer `severity` when emitting floats. `risk`/`impact`/`scope` are required — without all three, the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 
 **Metadata**: emit `metadata.commit` as the full 40-character SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` when the branch has no upstream — use the pushed commit so permalinks resolve on GitHub; not `--short`); omit when not in a git repo. The coordinator derives `metadata.repository` from `git remote get-url origin` — producers do not emit it.
 
@@ -246,9 +248,15 @@ Read `intermediate.json` and make these decisions:
    severity to `INFO`. These represent deliberate engineering decisions from previous triage.
 3. **Severity re-evaluation**: Load the `severity` skill (`/severity`), then re-assess every
    finding's severity using its criteria. Agents often over-inflate — apply the definitions strictly.
-4. **Merge sections**: Combine agent sections with the same category into unified sections.
-5. **Executive summary**: Write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action`.
-6. **Agent stats**: Record per-agent unique vs redundant counts.
+4. **Merge classification**: Assign `merge_class` (+ `intent_basis` for `blocking`) to every
+   non-informational finding per `severity` skill § Merge Classification. Use the intent digest when
+   the invoker supplied one (review-pr); with no PR context, derive intent from your own knowledge of
+   the work's goal — the coordinator often knows the bigger picture the producers don't. Severity
+   never determines `merge_class`.
+5. **Merge sections**: Combine agent sections with the same category into unified sections.
+6. **Executive summary**: Write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action`.
+   LLM-authored, but it must not contradict the merge classification — reflect every valid `blocking` finding.
+7. **Agent stats**: Record per-agent unique vs redundant counts.
 
 Write the result as `merged-findings.json` with this structure:
 

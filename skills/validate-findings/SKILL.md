@@ -1,7 +1,7 @@
 ---
 name: validate-findings
 description: Coordinator-only LLM validation pass. Adds ai_assessment / ai_verdict / ai_verdict_confidence and, in the rare partial-producer case, re-estimates absent risk/impact/scope on a consolidated v3 report.
-allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
+allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(*consolidate_reports.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
 model: inherit
 ---
 
@@ -28,6 +28,7 @@ For each finding that does not already carry `ai_verdict`:
    - `ai_verdict` — one of `valid`, `false_positive`, `needs_investigation`, `out_of_scope`, `duplicate`.
    - `ai_verdict_confidence` — float 0.0–1.0 reflecting how sure the LLM is. Renderers visually fade the chip background as confidence drops; honest low values are useful.
 3. **Estimate missing floats** — when any of `risk` / `impact` / `scope` is absent, score them per the OWASP recipes in `severity` skill § "OWASP Risk Rating normalization". Only fill what the producer omitted; never overwrite an existing producer value.
+   3a. **Merge-class coherence** — this skill is NOT the primary classifier (it has no PR/issue access to build an intent digest); it only enforces coherence on what the coordinator assigned: when the new `ai_verdict` is `false_positive` or `duplicate` and `merge_class` is present and not `disputed`, flip it to `disputed`; when `merge_class` is `blocking` with an absent/empty `intent_basis`, flag it in `ai_assessment` and set `ai_verdict: needs_investigation` unless the basis is evident. Never assign a fresh `blocking`.
 4. **Re-derive integer severity** — after writing or accepting floats, recompute `overall_severity` and the integer `severity` band. Arithmetic stays in Python, never in the LLM. Reuse the coordinator's helpers:
 
    ```python
@@ -52,7 +53,12 @@ Write changes back with the `Edit` tool — single JSON file, in place. No `Writ
    ```
 
    Fail loudly if validation fails — the AI updates must not break the report.
-2. **Re-sort** `findings[].findings` by `overall_severity` desc (then by integer `severity` desc, then by `id` asc) so the highest-impact items surface first after re-estimation.
+2. **Regenerate derived blocks** — any `merge_class` flip changes `remediation` membership and `top_findings`/stats. Re-derive them:
+
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py regenerate "$ARGUMENTS"
+   ```
+3. **Re-sort** `findings[].findings` by `overall_severity` desc (then by integer `severity` desc, then by `id` asc) so the highest-impact items surface first after re-estimation.
 
 ## Scope and boundaries
 
