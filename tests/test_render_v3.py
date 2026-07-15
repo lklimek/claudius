@@ -107,6 +107,49 @@ def test_markdown_minimal_fixture_renders_cleanly():
     assert "](http" not in md  # no permalink link
 
 
+def test_markdown_merge_class_markers_and_summary_render():
+    md = grr.render_markdown(_load("v3-merge-class.json"))
+    assert "🔴 BLOCKING" in md
+    assert "[disputed]" in md
+    assert "Merge classes:" in md
+
+
+def test_markdown_top_findings_cap_applies_only_to_non_blocking_remainder():
+    data = _wrap_section(
+        {
+            "id": "CODE-999",
+            "severity": 1,
+            "title": "Detail",
+            "location": "x.py:1",
+            "description": "D",
+            "recommendation": "R",
+        }
+    )
+    data["top_findings"] = [
+        {
+            "id": "CODE-001",
+            "severity": 2,
+            "merge_class": "blocking",
+            "title": "Blocking low",
+            "location": "x.py:1",
+        },
+        *[
+            {
+                "id": f"CODE-{index:03d}",
+                "severity": 4,
+                "merge_class": "non_blocking",
+                "title": f"High {index}",
+                "location": f"x.py:{index}",
+            }
+            for index in range(2, 8)
+        ],
+    ]
+    md = grr.render_markdown(data)
+    assert "Blocking low" in md
+    assert "High 6" in md
+    assert "High 7" not in md
+
+
 def _wrap_section(finding: dict) -> dict:
     """Wrap a finding into a minimal renderable report shape."""
     return {
@@ -1014,6 +1057,33 @@ def test_render_markdown_empty_returns_empty_markup():
 
     assert grr.render_markdown_to_html("") == Markup("")
     assert grr.render_markdown_to_html("   ") == Markup("")
+
+
+def test_html_merge_class_chip_attribute_and_filter_in_base_and_triage():
+    data = _load("v3-merge-class.json")
+    html = grr.render_html(data)
+    triage = grr.render_triage(_load("v3-merge-class.json"))
+
+    for output in (html, triage):
+        assert 'id="filterMergeClass"' in output
+        assert 'data-merge-class="blocking"' in output
+        assert 'class="merge-class-chip"' in output
+        assert "BLOCKING" in output
+        assert "dataset.mergeClass" in output
+    assert html.count('id="filterAiVerdict"') == 1
+    assert triage.count('id="filterAiVerdict"') == 1
+
+
+def test_absent_merge_class_has_no_chip_marker_or_data_attribute():
+    data = _load("v3-minimal.json")
+    md = grr.render_markdown(data)
+    html = grr.render_html(_load("v3-minimal.json"))
+    triage = grr.render_triage(_load("v3-minimal.json"))
+    assert "🔴 BLOCKING" not in md
+    assert 'class="merge-class-chip"' not in html
+    assert "data-merge-class" not in html
+    assert 'class="merge-class-chip"' not in triage
+    assert "data-merge-class" not in triage
 
 
 def test_html_end_to_end_strips_script_in_description():

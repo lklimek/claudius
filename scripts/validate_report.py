@@ -62,6 +62,8 @@ def check_consistency(report: dict) -> list[str]:
     (ii) Un-rated-axis smell — when one dimension (risk, impact, or scope) holds
     an identical value across most findings, signalling it was defaulted rather
     than rated per finding.
+    (iii) Dismissed finding with a non-disputed merge classification.
+    (iv) Blocking finding without the requirement or claim that makes it blocking.
 
     Warnings are advisory: callers print them but never fail validation.
     """
@@ -69,6 +71,26 @@ def check_consistency(report: dict) -> list[str]:
     warnings: list[str] = []
 
     for f in findings:
+        merge_class = f.get("merge_class")
+        ai_verdict = f.get("ai_verdict")
+        if (
+            ai_verdict in {"false_positive", "duplicate"}
+            and merge_class is not None
+            and merge_class != "disputed"
+        ):
+            warnings.append(
+                f"[consistency] finding {f.get('id', '?')}: ai_verdict={ai_verdict} "
+                f"should use merge_class=disputed, not {merge_class}"
+            )
+        intent_basis = f.get("intent_basis")
+        if merge_class == "blocking" and (
+            not isinstance(intent_basis, str) or not intent_basis.strip()
+        ):
+            warnings.append(
+                f"[consistency] finding {f.get('id', '?')}: merge_class=blocking "
+                "requires a non-empty intent_basis"
+            )
+
         sev = f.get("severity")
         has_sev = isinstance(sev, int) and not isinstance(sev, bool)
         if not has_sev:

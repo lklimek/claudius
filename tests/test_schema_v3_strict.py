@@ -274,6 +274,55 @@ class TestV31AdditiveFields:
         assert errors == [], [e.message for e in errors]
 
 
+class TestV32AdditiveFields:
+    """Schema 3.2.0 adds an optional merge classification axis."""
+
+    def _base(self) -> dict:
+        return json.loads((FIXTURES / "v3-merge-class.json").read_text())
+
+    def test_fixture_validates(self):
+        errors = list(VALIDATOR.iter_errors(self._base()))
+        assert errors == [], [e.message for e in errors]
+
+    def test_merge_class_values_validate(self):
+        finding = self._base()["findings"][0]["findings"][0]
+        for value in (
+            "blocking",
+            "non_blocking",
+            "out_of_scope_follow_up",
+            "disputed",
+        ):
+            data = self._base()
+            data["findings"][0]["findings"][0]["merge_class"] = value
+            errors = list(VALIDATOR.iter_errors(data))
+            assert errors == [], (value, [e.message for e in errors])
+
+    def test_unknown_merge_class_rejected(self):
+        data = self._base()
+        data["findings"][0]["findings"][0]["merge_class"] = "later"
+        assert list(VALIDATOR.iter_errors(data))
+
+    def test_intent_basis_accepts_string_and_null(self):
+        for value in ("The acceptance criteria require this behavior.", None):
+            data = self._base()
+            data["findings"][0]["findings"][0]["intent_basis"] = value
+            errors = list(VALIDATOR.iter_errors(data))
+            assert errors == [], (value, [e.message for e in errors])
+
+    def test_old_schema_versions_still_validate(self):
+        data = self._base()
+        for version in ("3.0.0", "3.1.0"):
+            data["schema_version"] = version
+            errors = list(VALIDATOR.iter_errors(data))
+            assert errors == [], (version, [e.message for e in errors])
+
+    def test_merge_class_counts_accept_string_integer_counts(self):
+        data = self._base()
+        data["summary_statistics"]["merge_class_counts"]["future_class"] = 0
+        errors = list(VALIDATOR.iter_errors(data))
+        assert errors == [], [e.message for e in errors]
+
+
 class TestV2Legacy:
     def test_rejected(self):
         data = json.loads((LEGACY_FIXTURES / "v2-legacy.json").read_text())

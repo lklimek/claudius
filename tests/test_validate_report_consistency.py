@@ -106,6 +106,57 @@ class TestLabelBandMismatch:
         assert vr.check_consistency(report) == []
 
 
+class TestMergeClassAdvisories:
+    def test_false_positive_with_non_disputed_merge_class_warns(self):
+        report = _report(
+            [
+                _section(
+                    [
+                        _finding(
+                            1,
+                            ai_verdict="false_positive",
+                            merge_class="blocking",
+                            intent_basis="A claimed requirement.",
+                        )
+                    ]
+                )
+            ]
+        )
+        warnings = vr.check_consistency(report)
+        assert any(
+            "false_positive" in warning and "disputed" in warning
+            for warning in warnings
+        )
+
+    def test_duplicate_with_disputed_merge_class_is_silent(self):
+        report = _report(
+            [_section([_finding(1, ai_verdict="duplicate", merge_class="disputed")])]
+        )
+        warnings = vr.check_consistency(report)
+        assert not any(
+            "duplicate" in warning and "merge_class" in warning
+            for warning in warnings
+        )
+
+    def test_blocking_without_nonempty_intent_basis_warns(self):
+        for intent_basis in (None, "", "   "):
+            report = _report(
+                [
+                    _section(
+                        [
+                            _finding(
+                                1,
+                                merge_class="blocking",
+                                intent_basis=intent_basis,
+                            )
+                        ]
+                    )
+                ]
+            )
+            warnings = vr.check_consistency(report)
+            assert any("intent_basis" in warning for warning in warnings)
+
+
 # ---------------------------------------------------------------------------
 # check_consistency — un-rated-axis smell (check ii)
 # ---------------------------------------------------------------------------

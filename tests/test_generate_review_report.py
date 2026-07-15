@@ -178,6 +178,26 @@ def test_v3_minimal_round_trips_through_all_renderers(tmp_path):
     assert pdf_out.is_file() and pdf_out.stat().st_size > 1000
 
 
+def test_v32_merge_class_round_trips_through_pdf(tmp_path):
+    import json as _json
+
+    pypdf = pytest.importorskip("pypdf")
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "reports"
+        / "v3-merge-class.json"
+    )
+    data = _json.loads(fixture.read_text(encoding="utf-8"))
+    out = tmp_path / "merge-class.pdf"
+    grr.render_pdf(data, out)
+    assert out.is_file() and out.stat().st_size > 1000
+    text = "".join(
+        page.extract_text() or "" for page in pypdf.PdfReader(str(out)).pages
+    )
+    assert "BLOCKING" in text
+
+
 # ---------------------------------------------------------------------------
 # Scoreboard / category coverage — every renderer must surface ALL registered
 # categories, not a hardcoded subset. Regression for the post-Pass-C gap where

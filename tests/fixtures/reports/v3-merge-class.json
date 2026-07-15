@@ -1,0 +1,97 @@
+{
+  "schema_version": "3.2.0",
+  "metadata": {
+    "project": "claudius",
+    "date": "2026-07-15"
+  },
+  "executive_summary": {
+    "overall_assessment": "Merge classification is independent of severity."
+  },
+  "summary_statistics": {
+    "total_findings": 3,
+    "severity_counts": {
+      "CRITICAL": 0,
+      "HIGH": 1,
+      "MEDIUM": 0,
+      "LOW": 1,
+      "INFO": 1
+    },
+    "merge_class_counts": {
+      "blocking": 1,
+      "non_blocking": 1,
+      "out_of_scope_follow_up": 0,
+      "disputed": 1
+    }
+  },
+  "top_findings": [
+    {
+      "id": "CODE-001",
+      "severity": 2,
+      "title": "Required behavior is missing",
+      "location": "src/example.py:10",
+      "merge_class": "blocking"
+    },
+    {
+      "id": "SEC-001",
+      "severity": 4,
+      "title": "Hardening opportunity",
+      "location": "src/security.py:20",
+      "merge_class": "non_blocking"
+    }
+  ],
+  "findings": [
+    {
+      "title": "Code Quality",
+      "category": "code_quality",
+      "findings": [
+        {
+          "id": "CODE-001",
+          "severity": 2,
+          "risk": 0.2,
+          "impact": 0.2,
+          "scope": 0.2,
+          "overall_severity": 0.2,
+          "merge_class": "blocking",
+          "intent_basis": "The PR acceptance criteria require this behavior.",
+          "title": "Required behavior is missing",
+          "location": "src/example.py:10",
+          "description": "The requested behavior is not implemented.",
+          "recommendation": "Implement the stated acceptance criterion."
+        },
+        {
+          "id": "CODE-002",
+          "severity": 1,
+          "risk": 0.0,
+          "impact": 0.0,
+          "scope": 0.0,
+          "overall_severity": 0.0,
+          "merge_class": "disputed",
+          "intent_basis": null,
+          "title": "Contested style concern",
+          "location": "src/example.py:30",
+          "description": "The producer and validator disagree.",
+          "recommendation": "Resolve the disagreement before remediation."
+        }
+      ]
+    },
+    {
+      "title": "Security",
+      "category": "security",
+      "findings": [
+        {
+          "id": "SEC-001",
+          "severity": 4,
+          "risk": 0.8,
+          "impact": 0.8,
+          "scope": 0.8,
+          "overall_severity": 0.8,
+          "merge_class": "non_blocking",
+          "title": "Hardening opportunity",
+          "location": "src/security.py:20",
+          "description": "Defense in depth can be improved.",
+          "recommendation": "Track the hardening work before production."
+        }
+      ]
+    }
+  ]
+}

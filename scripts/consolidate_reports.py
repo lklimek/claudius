@@ -40,6 +40,7 @@ from urllib.parse import quote as _url_quote
 from severity_util import (
     SEV_LABELS,
     SEV_ORDER,
+    build_merge_class_stats,
     derive_overall,
     derive_severity_int,
     reject_non_finite_constant,
@@ -643,6 +644,11 @@ def compute_statistics(
         "severity_counts": severity_counts,
         "severity_category_matrix": matrix,
     }
+    merge_class_counts = build_merge_class_stats(
+        [finding for _section, finding in _iter_findings(sections)]
+    )
+    if merge_class_counts:
+        stats["merge_class_counts"] = merge_class_counts
 
     if agent_stats:
         total_all = sum(a.get("unique", 0) + a.get("redundant", 0) for a in agent_stats)
@@ -684,10 +690,19 @@ def generate_remediation(
 
     for _section, f in _iter_findings(sections):
         sev = f.get("severity", 1)
-        if sev == 1:
-            continue
         fid = f.get("id", "UNKNOWN")
-        if sev >= 4:
+        merge_class = f.get("merge_class")
+        if merge_class == "disputed":
+            continue
+        if merge_class == "blocking":
+            bucket = "before_merge"
+        elif merge_class == "non_blocking":
+            bucket = "before_production" if sev >= 3 else "post_deployment"
+        elif merge_class == "out_of_scope_follow_up":
+            bucket = "post_deployment"
+        elif sev == 1:
+            continue
+        elif sev >= 4:
             bucket = "before_merge"
         elif sev == 3:
             bucket = "before_production"
@@ -716,22 +731,44 @@ def generate_remediation(
 def generate_top_findings(
     sections: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Extract CRITICAL and HIGH findings as top findings."""
+    """Extract blocking, CRITICAL, and HIGH findings as top findings."""
     top: list[dict[str, Any]] = []
     for _section, f in _iter_findings(sections):
         sev = f.get("severity", 1)
-        if sev >= 4:
+        if f.get("merge_class") == "blocking" or sev >= 4:
             entry: dict[str, Any] = {
                 "id": f.get("id", ""),
                 "severity": sev,
                 "title": f.get("title", ""),
                 "location": f.get("location", ""),
+                "_overall_sort": f.get("overall_severity", 0.0),
             }
             if "location_permalink" in f:
                 entry["location_permalink"] = f["location_permalink"]
+            if "merge_class" in f:
+                entry["merge_class"] = f["merge_class"]
             top.append(entry)
-    top.sort(key=lambda f: f["severity"], reverse=True)
+    top.sort(
+        key=lambda f: (
+            f.get("merge_class") == "blocking",
+            f.get("severity", 1),
+            f.get("_overall_sort", 0.0),
+        ),
+        reverse=True,
+    )
+    for finding in top:
+        finding.pop("_overall_sort", None)
     return top
+
+
+def regenerate_derived(report: dict[str, Any]) -> None:
+    """Recompute all finding-derived report fields in place."""
+    sections = report.get("findings", [])
+    report["top_findings"] = generate_top_findings(sections)
+    report["remediation"] = generate_remediation(sections)
+    report["summary_statistics"] = compute_statistics(
+        sections, report.get("agent_stats", [])
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -867,6 +904,8 @@ def _flatten_agent_report(
                     "impact_description": f.get("impact_description", ""),
                     "recommendation": recommendation,
                     "code_snippets": f.get("code_snippets"),
+                    "merge_class": f.get("merge_class"),
+                    "intent_basis": f.get("intent_basis"),
                     "positives": section_positives if section_positives else None,
                 }
             )
@@ -1092,6 +1131,29 @@ def _validate_report(report: dict[str, Any]) -> bool:
     return True
 
 
+def cmd_regenerate(args: argparse.Namespace) -> int:
+    """Regenerate derived fields in an existing report and write it in place."""
+    report_path = Path(args.report)
+    try:
+        report = _load_json_file(report_path)
+    except (FileNotFoundError, ValueError) as error:
+        log.error("%s", error)
+        return 2
+    if not isinstance(report, dict):
+        log.error("Expected a report object in %s", report_path)
+        return 2
+
+    regenerate_derived(report)
+    if not _validate_report(report):
+        log.error("Regenerated report failed schema validation, not writing output")
+        return 1
+
+    findings = [finding for _section, finding in _iter_findings(report["findings"])]
+    _write_json_output(report_path, report, findings)
+    log.info("Regenerated derived fields in %s", report_path)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -1126,6 +1188,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p_assemble.add_argument("--output", required=True, help="Output report JSON path")
 
+    p_regenerate = sub.add_parser(
+        "regenerate", help="Recompute derived fields in an existing report"
+    )
+    p_regenerate.add_argument("report", help="Report JSON path to update in place")
+
     return parser.parse_args(argv)
 
 
@@ -1135,6 +1202,8 @@ def main() -> int:
         return cmd_prepare(args)
     elif args.command == "assemble":
         return cmd_assemble(args)
+    elif args.command == "regenerate":
+        return cmd_regenerate(args)
     return 2
 
 
