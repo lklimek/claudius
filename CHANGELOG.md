@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.9.0] - 2026-07-16
+
+### Fixed
+
+- **`scripts/agent-watchdog.py`** `CodexScanner.scan()`: add a 6-hour terminal-job retention window so per-poll `jobs/*.json` enumeration and state tracking stay bounded over long sessions; active jobs are retained regardless of age. Existing mtime cache and one-time slow-glob warning preserved.
+
+### Added
+
+- **`tests/test_agent_watchdog.py`**: cover previously-untested default-path branches — a real `git init` Source-D fixture (`git_toplevel()`/`resolve_workspace()`), `Watchdog._task_dir`, the default relative `_worktrees` resolution path, `_subagent_dirs` autodetect, and `member_transcripts()` fallback/ambiguity branches.
+
+### Changed
+
+- **`skills/grand-admiral/SKILL.md`** § Terminating Teammates: note that a `TaskStop` success response for a Monitor-wrapped background process doesn't prove the underlying OS process actually died.
+- **`skills/codex-crew/SKILL.md`** + `references/sandbox-and-recovery.md`: Codex can now `git commit` directly inside a linked worktree (verified empirically 2026-07-16, commit `f2639aa`) — reverses the earlier hard-block guidance. `writable_roots` was unchanged at test time; the likely enabling lever is `approval_policy = "on-request"` + the project's `trust_level = "trusted"`, not a sandbox-path change. Coordinator-commits remains the documented fallback if the old read-only/`index.lock` error resurfaces.
+
 ## [5.8.0] - 2026-07-15
 
 ### Added
