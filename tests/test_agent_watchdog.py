@@ -138,6 +138,53 @@ def record(
     )
 
 
+def test_safe_json_bounds_reads_and_handles_recursion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Defensive JSON reads reject oversized and excessively nested input."""
+    oversized = tmp_path / "oversized.json"
+    oversized.write_bytes(b" " * (watchdog.JSON_FILE_LIMIT + 1))
+    assert watchdog.safe_json(oversized) is None
+    assert "exceeds the 10485760-byte read limit" in capsys.readouterr().err
+    assert watchdog.safe_json(oversized) is None
+    assert capsys.readouterr().err == ""
+
+    recursive = tmp_path / "recursive.json"
+    recursive.write_text("{}", encoding="utf-8")
+
+    def raise_recursion(_: str) -> Any:
+        raise RecursionError
+
+    monkeypatch.setattr(watchdog.json, "loads", raise_recursion)
+    assert watchdog.safe_json(recursive) is None
+
+
+def test_uncaught_exception_traceback_has_named_crash_log(tmp_path: Path) -> None:
+    """Crash diagnostics append the full traceback under plugin state."""
+    env = {"CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin-data")}
+    traceback_text = "Traceback (most recent call last):\nRuntimeError: boom\n"
+
+    path = watchdog._write_crash_log(traceback_text, env)
+
+    assert path == Path(env["CLAUDE_PLUGIN_DATA"]) / "logs" / watchdog.CRASH_LOG_NAME
+    assert traceback_text in path.read_text(encoding="utf-8")
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert path.parent.stat().st_mode & 0o777 == 0o700
+
+
+def test_crash_log_bounds_one_pathological_traceback(tmp_path: Path) -> None:
+    """One huge traceback is marked and kept within the crash-log size cap."""
+    env = {"CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin-data")}
+
+    path = watchdog._write_crash_log("x" * (watchdog.CRASH_LOG_LIMIT + 1), env)
+
+    payload = path.read_bytes()
+    assert len(payload) <= watchdog.CRASH_LOG_LIMIT
+    assert payload.endswith(b"[traceback truncated to crash-log limit]\n")
+
+
 def test_cx_001_and_002_known_slug_hash_examples() -> None:
     """CX-001/CX-002: known paths match state.mjs exactly."""
     first = watchdog.workspace_key(
@@ -229,6 +276,27 @@ def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
         .records
         == []
     )
+
+
+def test_codex_scanner_isolates_nul_workspace_root(tmp_path: Path) -> None:
+    """One invalid workspaceRoot cannot suppress valid jobs in the same store."""
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "invalid-root", "workspaceRoot": "invalid\0root"},
+            {"id": "healthy"},
+        ],
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan([ws], "session-full")
+
+    assert [item.job_id for item in result.records] == ["healthy"]
+    assert len(result.warnings) == 1
+    assert result.warnings[0][0].startswith("codex-job-scan-error:")
+    assert "ValueError" in result.warnings[0][1]
 
 
 def test_codex_scanner_warns_once_for_workspace_root_mismatch(
@@ -332,6 +400,33 @@ def test_short_codex_session_prefix_must_be_unique(tmp_path: Path) -> None:
     assert scanner.scan([ws], "session-").warnings == []
 
 
+def test_malformed_job_does_not_poison_session_disambiguation(
+    tmp_path: Path,
+) -> None:
+    """An invalid job cannot make a healthy short session prefix ambiguous."""
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "healthy", "sessionId": "session-one"},
+            {
+                "id": "invalid-status",
+                "sessionId": "session-two",
+                "status": "not-a-status",
+            },
+        ],
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan([ws], "session-")
+
+    assert [item.job_id for item in result.records] == ["healthy"]
+    assert not any(
+        key.startswith("codex-session-ambiguous") for key, _ in result.warnings
+    )
+
+
 def test_cx_011_to_015_active_stall_resume_and_build() -> None:
     """CX-011..CX-015: active silence, hysteresis, edges, and build suppression."""
     builds = False
@@ -381,6 +476,65 @@ def test_cx_016_shared_state_mtime_not_attributed(tmp_path: Path) -> None:
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
     records = scanner.scan([ws], "session-full").records
     assert {item.activity_epoch for item in records} == {100, 110}
+
+
+def test_cross_session_job_prevents_shared_state_mtime_attribution(
+    tmp_path: Path,
+) -> None:
+    """A concurrent foreign-session job cannot refresh the selected job's clock."""
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "selected-orphan",
+                "sessionId": "session-one",
+                "epoch": 100,
+                "updatedAt": None,
+            },
+            {
+                "id": "foreign-active",
+                "sessionId": "session-two",
+                "epoch": 199,
+                "updatedAt": None,
+            },
+        ],
+        state_epoch=199,
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    records = scanner.scan([ws], "session-one", now=200).records
+
+    assert [(item.job_id, item.activity_epoch) for item in records] == [
+        ("selected-orphan", 100)
+    ]
+
+
+def test_direct_discovery_prefilters_foreign_workspace_state(
+    tmp_path: Path,
+) -> None:
+    """Teamless discovery does not parse state for another workspace."""
+    ws = workspace(tmp_path)
+    foreign = workspace(tmp_path, "foreign")
+    _, env = codex_store(tmp_path, ws, [{"id": "ours", "epoch": 100}])
+    foreign_state, _ = codex_store(
+        tmp_path,
+        foreign,
+        [{"id": "foreign", "epoch": 100}],
+    )
+    foreign_job = foreign_state / "jobs" / "foreign.json"
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan(
+        [],
+        "session-full",
+        now=100,
+        discovery_candidates=[ws],
+    )
+
+    assert [item.job_id for item in result.records] == ["ours"]
+    assert foreign_job not in scanner.cache.items
 
 
 def test_codex_scanner_never_parses_growing_state_json(
@@ -563,6 +717,33 @@ def test_slow_jobs_glob_emits_warning(
     assert [item.phase for item in result.records] == ["streaming"]
     slow = [k for k, _ in result.warnings if k.startswith("codex-jobs-glob-slow")]
     assert len(slow) == 1
+
+
+def test_codex_scanner_skips_jobs_outside_configured_recency(
+    tmp_path: Path,
+) -> None:
+    """The per-workspace scan does not parse job records older than its bound."""
+    now = 1_000
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "old-active", "epoch": now - 61},
+            {"id": "recent-active", "epoch": now - 59},
+        ],
+        state_epoch=now,
+    )
+    scanner = watchdog.CodexScanner(
+        env=env,
+        proc=watchdog.NullProcInspector(),
+        job_recency_secs=60,
+    )
+
+    result = scanner.scan([ws], "session-full", now=now)
+
+    assert [item.job_id for item in result.records] == ["recent-active"]
+    assert any(key.startswith("codex-jobs-recency:") for key, _ in result.warnings)
 
 
 def test_codex_scanner_ages_out_only_terminal_job_records(
@@ -1228,13 +1409,12 @@ def test_watchdog_warns_once_when_codex_has_zero_candidates(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert monitor.warned == {"codex-zero-candidates"}
+    assert set(monitor.warned) == {"zero-monitored"}
     assert captured.err == (
-        "agent-watchdog: Codex Source D: no team config and no discovered agent "
-        "worktrees — 0 candidate workspaces to scan this poll; Codex job monitoring "
-        "is effectively disabled (dispatch at least one NAMED teammate to create a "
-        "team, or verify --worktrees points at where Codex worktrees actually live, "
-        "if Codex jobs are expected).\n"
+        "agent-watchdog: monitoring 0 Claude agents and 0 Codex jobs/workspaces: "
+        "no team config, no discovered worktrees, and no session-workspace Codex "
+        "state; dispatch a named teammate or verify --worktrees, --session-id, and "
+        "the watchdog working directory.\n"
     )
 
 
@@ -1363,6 +1543,126 @@ def test_watchdog_poll_combines_claude_and_codex_edges(tmp_path: Path) -> None:
         f"CODEX_DONE job=coexisting workspace={watchdog.resolve_workspace(ws, env=env).key} "
         "phase=done",
     ]
+
+
+def test_watchdog_poll_preserves_claude_event_when_codex_job_is_invalid(
+    tmp_path: Path,
+) -> None:
+    """A malformed Codex job cannot blank an unrelated Claude transition."""
+    home = tmp_path / "home"
+    ws = workspace(tmp_path)
+    worktrees = tmp_path / "worktrees"
+    agent_worktree = worktrees / "agent-bilby"
+    touch(agent_worktree / "work", 100)
+    os.utime(agent_worktree, (100, 100))
+    team_dir = home / ".claude" / "teams" / "session-short"
+    write_json(
+        team_dir / "config.json",
+        {
+            "name": "session-short",
+            "leadSessionId": "session-full",
+            "members": [
+                {
+                    "agentType": "team-lead",
+                    "name": "lead",
+                    "cwd": str(ws),
+                    "isActive": True,
+                }
+            ],
+        },
+    )
+    tasks = tmp_path / "tasks"
+    write_json(tasks / "1.json", {"status": "in_progress", "owner": "bilby"})
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "invalid-root", "workspaceRoot": "invalid\0root"}],
+    )
+    env["HOME"] = str(home)
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            team_dir=team_dir,
+            tasks_dir=tasks,
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            gone_enabled=False,
+            stall_secs=100,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=200) == [
+        "STALL agent=bilby idle=100s reason=owns-in_progress-idle"
+    ]
+
+
+def test_source_c_discovers_slug_named_git_worktree(tmp_path: Path) -> None:
+    """Source C includes real worktrees whose directory lacks an agent- prefix."""
+    worktrees = tmp_path / "worktrees"
+    slug = "home-ubuntu-git-claudius-fix-x"
+    worktree = worktrees / slug
+    touch(worktree / ".git", 50)
+    touch(worktree / "work", 100)
+    os.utime(worktree, (100, 100))
+    tasks = tmp_path / "tasks"
+    write_json(tasks / "1.json", {"status": "in_progress", "owner": slug})
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            tasks_dir=tasks,
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            gone_enabled=False,
+            stall_secs=100,
+            resume_secs=20,
+        ),
+        env={
+            "HOME": str(tmp_path / "home"),
+            "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin"),
+        },
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=200) == [
+        f"STALL agent={slug} idle=100s reason=owns-in_progress-idle"
+    ]
+
+
+def test_teamless_watchdog_discovers_codex_state_from_session_cwd(
+    tmp_path: Path,
+) -> None:
+    """Codex state discovery does not depend on team or worktree mappings."""
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "teamless", "epoch": 100, "updatedAt": None}],
+        state_epoch=100,
+    )
+    env["PWD"] = str(ws)
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="session-full",
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=200) == []
+    assert monitor.poll_once(now=201) == [
+        "CODEX_STALL job=teamless "
+        f"workspace={watchdog.resolve_workspace(ws, env).key} "
+        "idle=101s phase=running reason=no-progress"
+    ]
+    assert "zero-monitored" not in monitor.warned
 
 
 def test_watchdog_poll_opt_in_source_b_stall_resume(tmp_path: Path) -> None:
@@ -1656,6 +1956,8 @@ def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
             "3",
             "--poll-secs",
             "1",
+            "--codex-job-recency-secs",
+            "3600",
             "--watch-subagents",
             "--no-gone",
         ],
@@ -1668,6 +1970,7 @@ def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
     assert options.worktrees == Path("/worktrees")
     assert (options.stall_secs, options.resume_secs, options.gone_polls) == (10, 2, 3)
     assert options.poll_secs == 1
+    assert options.codex_job_recency_secs == 3600
     assert options.watch_subagents and not options.gone_enabled
 
 
@@ -1678,6 +1981,7 @@ def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
         (["--team-dir"], "needs a value"),
         (["--gone-polls", "x"], "expects a non-negative integer"),
         (["--gone-polls", "0"], "must be >= 1"),
+        (["--codex-job-recency-secs", "0"], "must be >= 1"),
         (["--stall-secs", "2", "--resume-secs", "2"], "must be <"),
     ],
 )

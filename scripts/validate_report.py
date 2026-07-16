@@ -3,6 +3,7 @@
 
 Usage:
     python3 scripts/validate_report.py <report.json> [--schema <schema.json>]
+        [--producer]
 
 Exit codes:
     0  Valid
@@ -175,6 +176,12 @@ def main() -> int:
         default=str(DEFAULT_SCHEMA),
         help="Path to JSON schema (default: schemas/review-report.schema.json)",
     )
+    parser.add_argument(
+        "--producer",
+        "--section-array",
+        action="store_true",
+        help="Validate a producer-stage array of finding sections",
+    )
     args = parser.parse_args()
 
     try:
@@ -182,6 +189,25 @@ def main() -> int:
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Schema error: {e}", file=sys.stderr)
         return 2
+
+    if args.producer:
+        definitions = schema.get("$defs")
+        if (
+            not isinstance(definitions, dict)
+            or "finding_section_array" not in definitions
+        ):
+            print(
+                "Schema error: missing $defs.finding_section_array",
+                file=sys.stderr,
+            )
+            return 2
+        schema = {
+            "$schema": schema.get(
+                "$schema", "https://json-schema.org/draft/2020-12/schema"
+            ),
+            "$defs": definitions,
+            "$ref": "#/$defs/finding_section_array",
+        }
 
     try:
         report = json.loads(
@@ -206,8 +232,9 @@ def main() -> int:
 
     if not errors:
         # Consistency gate: advisory only — never changes the exit code.
-        for warning in check_consistency(report):
-            print(warning, file=sys.stderr)
+        if not args.producer:
+            for warning in check_consistency(report):
+                print(warning, file=sys.stderr)
         print(f"Valid: {args.report}")
         return 0
 

@@ -141,12 +141,24 @@ required to satisfy explicit PR intent             → blocking
 introduced, worsened, or newly exposed by the diff
   AND material                                     → blocking
 valid and related to the change                    → non_blocking
-otherwise                                          → out_of_scope_follow_up
+must not survive this review — leaving it in the
+  codebase indefinitely is unacceptable            → non_blocking
+otherwise (acceptable to leave permanently)        → out_of_scope_follow_up
 ```
 
 **Material** = observable incorrect behavior, security/safety invariant failure, data loss/corruption, crash, invalid persistence/API behavior, or duplicate external operations. Style, speculative hardening, and minor maintainability improvements are NOT material.
 
 **Pre-existing issues** block only when the PR relies on them, worsens or newly exposes them, or fixing them is necessary for an explicit stated goal. A residual gap after a partial improvement blocks only when the PR claims full closure of that gap.
+
+### `out_of_scope_follow_up` means "probably never fixed"
+
+🔴 Deferral is not a plan. There is no follow-up strategy behind this class: deferred findings have a **low probability of ever being actioned**. The realistic outcome is a `TODO` comment that outlives everyone who read the review. Mechanics reinforce this — `out_of_scope_follow_up` findings are summary-only, never posted as inline comments (review-pr § Part B), so nobody is asked to act on them.
+
+Read the class as **"acceptable to never fix"**, not "fix later". Consequences when classifying:
+
+- Deferring a finding *because* someone will presumably pick it up later is a mis-classification — that assumption is false. If a finding genuinely must be fixed, classify it for fixing now: `blocking` when PR intent requires it, `non_blocking` otherwise.
+- `out_of_scope_follow_up` stays correct only where permanent non-fix is an acceptable outcome: unrelated pre-existing nits, speculative hardening, taste.
+- The tradeoff is deliberate and stated: this bias grows PRs and puts more work in front of authors at review time. That cost is accepted in exchange for not laundering real defects into a backlog that does not exist.
 
 ### External-reviewer compatibility map
 

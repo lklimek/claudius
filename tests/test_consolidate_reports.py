@@ -1227,6 +1227,39 @@ class TestCmdPrepare:
         assert len(data["raw_findings"]) == 1
         assert data["agents"] == ["sec-agent"]
 
+    def test_flat_finding_array_is_auto_wrapped_with_warning(self, tmp_path, caplog):
+        findings = [
+            {
+                "id": "PY-001",
+                "severity": 3,
+                "risk": 0.4,
+                "impact": 0.5,
+                "scope": 0.2,
+                "title": "Bare finding",
+                "location": "scripts/example.py:1",
+                "description": "A finding without a section wrapper.",
+                "recommendation": "Preserve it.",
+            }
+        ]
+        spec = self._make_agent_report(tmp_path, "python-agent", findings)
+        output = tmp_path / "intermediate.json"
+        args = argparse.Namespace(
+            agent_reports=[spec],
+            repo_root=str(tmp_path),
+            output=str(output),
+            metadata=None,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            rc = cr.cmd_prepare(args)
+
+        assert rc == 0
+        data = json.loads(output.read_text())
+        assert len(data["raw_findings"]) == 1
+        assert data["raw_findings"][0]["original_id"] == "PY-001"
+        assert data["raw_findings"][0]["category"] == "code_quality"
+        assert "auto-wrapping" in caplog.text
+
     def test_missing_file_returns_2(self, tmp_path):
         output = tmp_path / "out.json"
         args = argparse.Namespace(

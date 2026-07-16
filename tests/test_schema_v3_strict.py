@@ -285,7 +285,6 @@ class TestV32AdditiveFields:
         assert errors == [], [e.message for e in errors]
 
     def test_merge_class_values_validate(self):
-        finding = self._base()["findings"][0]["findings"][0]
         for value in (
             "blocking",
             "non_blocking",
