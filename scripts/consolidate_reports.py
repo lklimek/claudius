@@ -842,6 +842,34 @@ def _flatten_agent_report(
     agent_name: str, sections: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Flatten agent sections into raw findings and section positives."""
+    finding_markers = {
+        "id",
+        "risk",
+        "impact",
+        "scope",
+        "location",
+        "description",
+        "recommendation",
+    }
+    if sections and all(
+        isinstance(item, dict)
+        and "findings" not in item
+        and any(marker in item for marker in finding_markers)
+        for item in sections
+    ):
+        log.warning(
+            "Agent '%s' report is a flat array of bare findings; auto-wrapping "
+            "it in a code_quality finding section",
+            agent_name,
+        )
+        sections = [
+            {
+                "title": f"{agent_name} findings",
+                "category": "code_quality",
+                "findings": sections,
+            }
+        ]
+
     raw: list[dict[str, Any]] = []
     positives: list[dict[str, Any]] = []
 
