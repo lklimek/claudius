@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.9.0] - 2026-07-15
+
+### Changed
+
+- **`skills/grand-admiral/SKILL.md`** § Session Protocol + § Spawning → Track Progress: task tracking moves from an in-context checklist (which dies on compaction — the failure mode where multi-task work silently drops tasks) to a durable store. Primary is memcan TODOs (scoped by `<owner>/<repo>` derived from `git remote get-url origin`, so `list_todos(project=<owner>/<repo>)` recovers in-flight work with nothing to remember; status is `pending`/`done`, with in-progress/blocked/postponed/owner encoded in title/description and `priority` for ordering); fallback is a plain durable file at an agent-chosen deterministic location/format when memcan is unavailable (headless/cron). Doctrine-only change.
+
 ## [5.8.0] - 2026-07-15
 
 ### Added
