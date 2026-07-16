@@ -1818,6 +1818,16 @@ class Watchdog:
         codex_candidates.extend(source_c)
         codex_records: Iterable[CodexRecord] = ()
         if effective_session:
+            if not codex_candidates:
+                self.warn_once(
+                    "codex-zero-candidates",
+                    "Codex Source D: no team config and no discovered agent "
+                    "worktrees — 0 candidate workspaces to scan this poll; Codex "
+                    "job monitoring is effectively disabled (dispatch at least one "
+                    "NAMED teammate to create a team, or verify --worktrees points "
+                    "at where Codex worktrees actually live, if Codex jobs are "
+                    "expected).",
+                )
             scan = self.scanner.scan(codex_candidates, effective_session, epoch)
             for warning_key, message in scan.warnings:
                 self.warn_once(warning_key, message)

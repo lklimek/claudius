@@ -1105,6 +1105,40 @@ def test_watchdog_warns_when_no_team_has_matching_swarm_socket(
     assert "no matching tmux swarm socket for this team" in capsys.readouterr().err
 
 
+def test_watchdog_warns_once_when_codex_has_zero_candidates(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Teamless Codex monitoring reports its empty candidate blind spot once."""
+    home = tmp_path / "home"
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="session-full",
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            gone_enabled=False,
+        ),
+        env={"HOME": str(home), "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin")},
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=100) == []
+    assert monitor.poll_once(now=101) == []
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert monitor.warned == {"codex-zero-candidates"}
+    assert captured.err == (
+        "agent-watchdog: Codex Source D: no team config and no discovered agent "
+        "worktrees — 0 candidate workspaces to scan this poll; Codex job monitoring "
+        "is effectively disabled (dispatch at least one NAMED teammate to create a "
+        "team, or verify --worktrees points at where Codex worktrees actually live, "
+        "if Codex jobs are expected).\n"
+    )
+
+
 def test_watchdog_poll_combines_claude_and_codex_edges(tmp_path: Path) -> None:
     """One poll coordinator preserves Claude grammar beside Source D events."""
     home = tmp_path / "home"
