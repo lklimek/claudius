@@ -2,10 +2,9 @@
 # Verification ledger for cargo. Usage: cargo-cached.sh <cargo args...>
 #   e.g. cargo-cached.sh clippy -p my-crate --all-targets -- -D warnings
 #
-# Identical command + identical tree (ANY agent, ANY worktree on this machine)
-# => REPLAY the recorded log + exit code (the agent gets its output at zero
-# compile cost). Otherwise run the real cargo, tee the full log, and append a
-# JSONL record to the ledger.
+# Identical command + identical tree in the same checkout => REPLAY the recorded
+# log + exit code (the agent gets its output at zero compile cost). Otherwise run
+# the real cargo, tee the full log, and append a JSONL record to the ledger.
 #
 # FAIL-OPEN throughout: any internal error (missing jq, not a git repo, no flock)
 # falls through to a plain `cargo "$@"`. Correctness of a real build always wins
@@ -16,8 +15,6 @@
 set -uo pipefail
 
 CACHE_ROOT="${CLAUDIUS_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claudius}"
-LEDGER_DIR="$CACHE_ROOT/ledger"
-RECORDS="$LEDGER_DIR/records.jsonl"
 TTL_HOURS=24
 
 command -v jq >/dev/null 2>&1 || exec cargo "$@"
@@ -27,11 +24,29 @@ command -v jq >/dev/null 2>&1 || exec cargo "$@"
 # record in the ledger (cross-command replay poisoning). Fail open instead.
 command -v sha256sum >/dev/null 2>&1 || exec cargo "$@"
 command -v xargs >/dev/null 2>&1 || exec cargo "$@"
-mkdir -p "$LEDGER_DIR/logs" "$LEDGER_DIR/locks" 2>/dev/null || exec cargo "$@"
-# Capture the checkout root once — serves as the fail-open git guard AND the key
-# for per-checkout target-dir isolation below.
+# Capture and canonicalize the checkout root once. It guards git-dependent cache
+# operations and identifies both the ledger key and isolated target directory.
 toplevel=$(git rev-parse --show-toplevel 2>/dev/null)
 [[ -n "$toplevel" ]] || exec cargo "$@"
+toplevel=$(cd "$toplevel" 2>/dev/null && pwd -P)
+[[ -n "$toplevel" ]] || exec cargo "$@"
+
+prepare_ledger() {
+  local probe="$LEDGER_DIR/locks/.write-test.$$"
+  mkdir -p "$LEDGER_DIR/logs" "$LEDGER_DIR/locks" 2>/dev/null || return 1
+  ( umask 077; : > "$probe" ) 2>/dev/null || return 1
+  rm -f "$probe" 2>/dev/null || return 1
+}
+
+LEDGER_DIR="$CACHE_ROOT/ledger"
+RECORDS="$LEDGER_DIR/records.jsonl"
+if ! prepare_ledger; then
+  primary_ledger_dir="$LEDGER_DIR"
+  LEDGER_DIR="$toplevel/.claudius-ledger"
+  RECORDS="$LEDGER_DIR/records.jsonl"
+  prepare_ledger || exec cargo "$@"
+  echo "claudius: ledger unavailable at $primary_ledger_dir (not writable); using workspace-local ledger $LEDGER_DIR" >&2
+fi
 
 # Whether the CALLER explicitly set CARGO_TARGET_DIR (vs the wrapper auto-deriving
 # it). Captured BEFORE auto-derivation consumes/overwrites it — the env_hash
@@ -135,12 +150,13 @@ diff_hash=$(git diff HEAD 2>/dev/null | sha256sum | cut -d' ' -f1)
 # `-r`/--no-run-if-empty is a GNU xargs extension BSD/macOS xargs rejects.
 # Without it, zero untracked files still runs sha256sum once with an already-
 # drained stdin, hashing empty input — deterministic and portable either way.
-untracked_hash=$(git ls-files --others --exclude-standard -z 2>/dev/null \
+# The workspace-local ledger is generated output and must not invalidate its own
+# replay key when the invoking repository does not ignore it.
+untracked_hash=$(git ls-files --others --exclude-standard --exclude='/.claudius-ledger/' -z 2>/dev/null \
   | sort -z | xargs -0 sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1)
 # CARGO_TARGET_DIR's role in the key depends on WHO set it:
-#  - Auto-derived (caller left it unset): pure path noise. Two byte-identical
-#    trees in different checkouts get different derived dirs but must still share
-#    a replay hit, so EXCLUDE it from the key.
+#  - Auto-derived (caller left it unset): pure path noise. The checkout root is
+#    keyed independently, so EXCLUDE the wrapper-derived target dir.
 #  - Caller-set explicitly (the CLAUDIUS_ISOLATE_TARGET=1 escape hatch): a verdict
 #    input. The caller chose a specific dir precisely to force a real build there
 #    (e.g. a known-clean dir for re-verification); two different explicit dirs
@@ -156,8 +172,28 @@ toolchain=$(rustc -V 2>/dev/null || echo unknown)
 # a member dir vs the workspace root — that must be part of what makes a tree+
 # command combination unique.
 rel_dir=$(git rev-parse --show-prefix 2>/dev/null)
-cmd_norm=$(printf '%s' "cargo $*" | tr -s '[:space:]' ' ')
-key=$(printf '%s' "$head_oid:$diff_hash:$untracked_hash:$toolchain:$env_hash:$rel_dir:$cmd_norm" \
+normalize_cargo_command() {
+  local out="cargo"
+  while (( $# )); do
+    case "$1" in
+      --)
+        while (( $# )); do out+=" $1"; shift; done
+        break
+        ;;
+      --target-dir)
+        if (( $# > 1 )); then shift 2; continue; fi
+        ;;
+      --target-dir=*) shift; continue ;;
+    esac
+    out+=" $1"
+    shift
+  done
+  printf '%s' "$out" | tr -s '[:space:]' ' '
+}
+cmd_norm=$(normalize_cargo_command "$@")
+checkout_id=$(printf '%s' "$toplevel" | sha256sum | cut -d' ' -f1)
+[[ -n "$checkout_id" ]] || exec cargo "$@"
+key=$(printf '%s' "$head_oid:$diff_hash:$untracked_hash:$toolchain:$env_hash:$checkout_id:$rel_dir:$cmd_norm" \
       | sha256sum | cut -c1-32)
 # Belt-and-braces: an empty key (e.g. a hashing tool failed silently above)
 # must never be looked up or recorded — it would alias every other empty key.
@@ -179,7 +215,7 @@ SELF_CMD=$(rerun_cmd "$@")
 # (1/true if the WRAPPER derived & exported the dir), $2=effective target dir.
 # Describes the state of the run being reported — for a REPLAY that is the
 # ORIGINAL run's RECORDED state (read from the matched ledger record), never the
-# replaying process's own live env, which may be a different checkout entirely.
+# replaying process's own live environment.
 isolation_status_line() {
   local iso="$1" tgt="$2"
   if [[ "$iso" == 1 || "$iso" == true ]]; then
@@ -243,9 +279,8 @@ replay_if_hit() {
   fg=$(jq -r '.fake_green_suspected // false' <<<"$hit" 2>/dev/null)
   dur_rec=$(jq -r '.duration_s // empty' <<<"$hit" 2>/dev/null)
   # The isolation status must reflect the ORIGINAL run (this record), not the
-  # replaying process — a cross-checkout replay runs in a DIFFERENT dir, and a
-  # replay of a non-isolated run must not be dressed up as isolated. Old records
-  # predating these fields read as not-isolated / unknown dir (jq defaults).
+  # replaying process. Old records predating these fields read as not-isolated /
+  # unknown dir (jq defaults).
   rec_tgt=$(jq -r '.target_dir // empty' <<<"$hit" 2>/dev/null)
   rec_autoiso=$(jq -r '.auto_isolated // false' <<<"$hit" 2>/dev/null)
   if [[ "$fg" == true ]]; then

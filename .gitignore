@@ -12,6 +12,7 @@ Thumbs.db
 # Claude Code
 .claude/
 .playwright-cli/
+.claudius-ledger/
 
 # Temporary files (eval workspaces, etc.)
 tmp/
