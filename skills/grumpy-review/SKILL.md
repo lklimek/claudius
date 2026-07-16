@@ -195,7 +195,7 @@ non-trivial review REQUIRES fan-out.
 
 Spawn all agents in parallel following the general spawning guidelines, using the fixed per-role
 model tiering: `claudius:security-engineer-smythe` on `opus`, `claudius:project-reviewer-adams` on
-`opus`, `claudius:qa-engineer-marvin` on `sonnet` (matches `grand-admiral` Token Economy). This
+`opus`, `claudius:qa-engineer-marvin` on `sonnet` (matches `claudius:spawn-checklist` § Token Economy). This
 replaces the old "opus for all by default" rule with fixed per-role tiers.
 
 **Model override (user-requested; confirm before downgrading Smythe):** the user may still force a

@@ -145,7 +145,7 @@ Presented ONLY when all phases complete (or max retries exhausted):
 
 ## Model Selection
 
-Agents default to `model: inherit`; set model per spawn (see `grand-admiral` Token Economy). Feature work leans `opus` for complex design and decisions; use `sonnet` for routine sub-tasks (straightforward implementation, config, docs, `technical-writer-trillian`).
+Agents default to `model: inherit`; set model per spawn (see `claudius:spawn-checklist` § Token Economy). Feature work leans `opus` for complex design and decisions; use `sonnet` for routine sub-tasks (straightforward implementation, config, docs, `technical-writer-trillian`).
 
 ## Severity & Iteration
 

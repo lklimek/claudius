@@ -12,7 +12,7 @@ The recurring failure this skill prevents: coordinators re-derive the same Codex
 ## When to Enlist Codex
 
 - **Opt-in, not the default.** Reach for Codex when the user asks for it, or per the standing coding preference below.
-- **Coding-first (project default).** Actual code-writing work prefers **Codex Sol** over Opus-tier claudius agents (`developer-bilby`). This intentionally overrides `grand-admiral`'s Token Economy model tiering for implementation tasks.
+- **Coding-first (project default).** Actual code-writing work prefers **Codex Sol** over Opus-tier claudius agents (`developer-bilby`). This intentionally overrides `spawn-checklist`'s Token Economy model tiering for implementation tasks.
 - **Non-coding roles keep normal tiering.** Review, QA, security, architecture, and docs stay with their claudius agents unless the user explicitly opts them into Codex.
 
 ## Routing — One Model, High Effort

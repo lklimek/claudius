@@ -113,7 +113,7 @@ Presented ONLY when all phases complete (or max retries exhausted):
 
 ## Model Selection
 
-Agents default to `model: inherit`; set model per spawn (see `grand-admiral` Token Economy). Use `sonnet` for mechanical sub-tasks and `technical-writer-trillian`; escalate stuck or complex agents to `opus`.
+Agents default to `model: inherit`; set model per spawn (see `claudius:spawn-checklist` § Token Economy). Use `sonnet` for mechanical sub-tasks and `technical-writer-trillian`; escalate stuck or complex agents to `opus`.
 
 ## Severity & Iteration
 
