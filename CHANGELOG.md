@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [5.9.0] - 2026-07-16
+## [5.10.0] - 2026-07-16
 
 ### Fixed
 
@@ -23,6 +23,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - **`skills/grand-admiral/SKILL.md`** § Terminating Teammates: note that a `TaskStop` success response for a Monitor-wrapped background process doesn't prove the underlying OS process actually died.
 - **`skills/codex-crew/SKILL.md`** + `references/sandbox-and-recovery.md`: Codex `git commit` inside a linked worktree is confirmed inconsistent (observed both ways 2026-07-16). One dispatch committed as `f2639aa`; a later dispatch in a different worktree hit the exact old `index.lock`/read-only error and was committed by the coordinator as `7c2d3e8`. `writable_roots` was unchanged; the likely enabling lever is `approval_policy = "on-request"` + the project's `trust_level = "trusted"`, not a sandbox-path change. Coordinator-commit is the reliable default, not just a fallback for a regression.
 - **`skills/ci-dance/SKILL.md`** § Step 2: document the fallback when `/ci-dance` itself runs as a delegated (non-lead) teammate — named stream spawns fail outright on a flat team roster ("teammates cannot spawn other teammates"); use unnamed background subagents and rely on Step 3's merge-time reconciliation instead of the claim/completion protocol.
+
+## [5.9.0] - 2026-07-15
+
+### Changed
+
+- **`skills/grand-admiral/SKILL.md`** § Session Protocol + § Spawning → Track Progress: task tracking moves from an in-context checklist (which dies on compaction — the failure mode where multi-task work silently drops tasks) to a durable store. Primary is memcan TODOs (scoped by `<owner>/<repo>` derived from `git remote get-url origin`, so `list_todos(project=<owner>/<repo>)` recovers in-flight work with nothing to remember; status is `pending`/`done`, with in-progress/blocked/postponed/owner encoded in title/description and `priority` for ordering); fallback is a plain durable file at an agent-chosen deterministic location/format when memcan is unavailable (headless/cron). Doctrine-only change.
 
 ## [5.8.0] - 2026-07-15
 
