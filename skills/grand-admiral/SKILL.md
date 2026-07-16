@@ -19,6 +19,15 @@ Complete operations manual for coordinator agents. Covers session protocol, plan
   **Task**: what the user wanted (<=8 words).
   **Status**: `<quality, git>` — two assessments, each <=3 words. Quality: `tested` | `linted` | `reviewed` | `untested` | etc. Git: `committed not pushed` | `pushed, no PR` | `pushed to PR` | `pushed, PR updated` | etc.
 
+### Mid-Turn Interjections
+
+A user message arriving mid-turn is not automatically an interrupt. Triage before switching:
+
+- **Non-urgent** (question, aside, FYI, a request to do something afterwards) — finish the current atomic unit of work, then respond. Breaking off mid-sequence strands half-applied state: a pushed branch whose PR never got updated, a wave with half its agents briefed, a merge with no cleanup.
+- **Urgent or direction-changing** (stop, wrong approach, scope is wrong) — switch immediately; in-flight work built on a wrong premise is waste, and finishing it first compounds the error.
+
+The unit is the smallest sequence that leaves consistent state (commit+push+PR-update; one agent wave's dispatch), not the whole task. When urgency is unclear, acknowledge in one line, finish the unit, then engage.
+
 ## Planning
 
 For each prompt: identify need -> select matching skills/agents -> plan and delegate.
@@ -104,6 +113,7 @@ A named `Agent(name=...)` teammate is NOT in the background-task registry — it
 - **Spawn-time trade-off**: naming an agent enables mid-task `SendMessage` steering (flip a directive while it runs) but creates a lingering teammate you must explicitly shut down; an unnamed `run_in_background` Agent gets a clean `TaskStop`-able registry id but cannot be messaged mid-flight. Choose by whether mid-run steering is needed.
 - **`shutdown_approved` doesn't reliably free the tmux pane.** Confirmed recurring: after a teammate's `shutdown_response`/`approve: true` and the `shutdown_approved` confirmation, its tmux pane frequently stays open for minutes, eventually blocking new spawns with "no space for new pane." Recovery: `tmux capture-pane -t <id> -p -S -N` on each candidate pane's scrollback, grep for identifying content (a worktree path or agent name unique to a currently-active spawn) to positively identify which pane(s) must be preserved, then `tmux kill-pane -t <id>` on every other confirmed-stale, non-coordinator pane.
 - **`TaskStop` success doesn't prove a Monitor-wrapped process died.** Verify its PID or run `pgrep -f agent-watchdog.py` before assuming the watchdog stopped; this complements tmux cleanup above, but checks process death rather than pane death.
+- **Sweep for orphans proactively — not only when the user reports them.** Both checks above are cheap, but running them only on complaint means the first symptom is a blocked spawn ("no space for new pane") or a stale watchdog that has already been misreporting for a while. Sweep at two trigger points instead: (1) once a wave of shutdowns completes — the moment orphans are created and the pane/PID mapping is still known; (2) on resuming after compaction — the panes and PIDs survive the context loss, so re-derive them from `tmux list-panes` / `pgrep` rather than assuming an empty board. These are trigger conditions, not a periodic background job — nothing schedules one.
 - **`shutdown_request` does not preempt a teammate mid tool-call.** `SendMessage` delivers to an inbox the agent checks between turns, not an interrupt — a teammate deep in a multi-minute build/test chain won't see the shutdown until it naturally yields, by which point it may have redone work already reassigned elsewhere. When reassigning a running agent's scope, send a plain redirect message FIRST (not `shutdown_request`) so it can choose to abandon in-flight work on its own; escalate to `shutdown_request` only if it doesn't respond. Before deleting/recreating a worktree assumed abandoned, verify the owning agent's tmux pane/process is actually idle or gone — a "stood down" chat acknowledgement does not guarantee the process stopped promptly if it was mid-turn.
 
 ### SendMessage Patterns
@@ -289,16 +299,18 @@ The harness auto-notifies on agent completion AND death (crash, rate-limit, term
 A stall is **owning an in_progress task AND idle past threshold AND no build running *under that agent*** — not bare idle. A healthy agent idles while waiting for its next instruction; an idle agent with **no assigned in_progress task is healthy and never flagged**. "Owns work" is read from the on-disk task store (`~/.claude/tasks/<teamName>/<id>.json`, the `owner`+`status` fields — the source of truth), rebuilt every poll. Build suppression is **per-agent** (a process whose `/proc/<pid>/cwd` is under the agent's worktree/cwd running a real build/test argv), never a machine-global `pgrep` (which a shared box pins to "always building"). Launch ONE persistent Monitor per wave; it discovers:
 
 - **Team** (the session-scoped team's members — see Multi-Session Hygiene — `isActive==true`, non-lead) — NAMED, **task-gated**; per-agent clock = newest mtime under its worktree, else its `cwd` (`.git` pruned), else — when the cwd is shared by ≥2 members (e.g. read-only design/QA agents living in the lead's cwd) — the member's own **transcript-jsonl mtime**, so shared-cwd members are tracked rather than skipped.
-- **Worktree-isolated** (`<worktrees>/agent-*`) — NAMED, **task-gated**; clock = newest mtime under the dir. Shares ONE canonical label with the team source (leading `agent-` stripped).
+- **Worktree-isolated** (worktree dirs under `--worktrees`) — NAMED, **task-gated**; clock = newest mtime under the dir. Shares ONE canonical label with the team source (any leading `agent-` stripped). Also feeds the Codex Source D candidate list — see the launch block below.
 - **Individual/background subagents** (`…/subagents/agent-*.jsonl`) — ANONYMOUS, **off by default**; enable with `--watch-subagents`. Best-effort & opt-in: a finished subagent has a stale transcript by design with no reliable on-disk completion signal, and the harness already notifies on background-agent completion/death — so treat any subagent STALL as an investigate prompt.
 - **Codex Companion jobs** (`jobs/*.json` below the state directory mapped from the selected team's workspaces) — session- and workspace-scoped, with an independent `CODEX_*` state machine. Detailed job records provide terminal truth; job/log mtimes provide progress; compatible launcher/broker PIDs provide corroborating liveness.
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
-        command="python3 \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.py\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300")
+        command="python3 \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.py\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300 --worktrees /data/git-worktrees")
 ```
 
 `${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(python3 */scripts/agent-watchdog.py *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
+
+**Point `--worktrees` at the canonical worktree root** (`/data/git-worktrees` here; the flag defaults to `.claude/worktrees`, which pre-created worktrees never land in). It carries double duty: Source C stall-tracks the worktrees it finds there, AND those same dirs are appended to the Codex workspace candidate list. Without it, Codex Source D sees only the team's lead/member cwds — so an **unnamed** Codex dispatch, which contributes no member cwd, is invisible and its jobs go unmonitored. Source C matches worktree dirs under that root by this repo's `<repo-path-slug>` naming (per Worktree Isolation), not an `agent-` prefix.
 
 **Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops yielding a signal (worktree removed, member deactivated) is auto-cleared — but only after several consecutive signalless polls (`--gone-polls`, default 2), so a one-poll config/`find` glitch never spuriously clears a stall. `TaskStop` the Monitor when the wave completes.
 
