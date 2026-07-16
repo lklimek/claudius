@@ -7,7 +7,7 @@ description: Use before dispatching work to Codex (codex:codex-rescue) — decid
 
 Codex agents (OpenAI Codex CLI, dispatched through `codex:codex-rescue`) are external crew a coordinator can enlist alongside the named claudius roster. Use of Codex is **opt-in**. Read this once before the first Codex dispatch of a session — it covers routing, the sandbox's hard limits, how to monitor a Codex job, and how to recover a stuck broker.
 
-The recurring failure this skill prevents: coordinators re-derive the same Codex sandbox and orchestration quirks session after session, each losing time to the same write-rejection and broker-staleness traps (and, historically, a commit-block — now lifted on this host, see Sandbox & Workdir rule 2).
+The recurring failure this skill prevents: coordinators re-derive the same Codex sandbox and orchestration quirks session after session, each losing time to the same write-rejection and broker-staleness traps (and an inconsistent commit path — see Sandbox & Workdir rule 2).
 
 ## When to Enlist Codex
 
@@ -18,7 +18,7 @@ The recurring failure this skill prevents: coordinators re-derive the same Codex
 ## Routing — One Model, High Effort
 
 - **Codex Sol = `--model gpt-5.6-sol --effort high`. Always high effort.** State both flags explicitly on every dispatch: `codex:codex-cli-runtime` only forwards `--effort`/`--model` when present in the request text, so an omitted flag silently drops to the runtime default.
-- **Dispatch through `codex:codex-rescue`.** It is a thin forwarder: exactly one `task` invocation, returning that stdout unchanged. It does **not** monitor, poll, or fetch results on its own initiative — that's **coordinator** work (see Monitoring below). It CAN commit when the dispatch prompt explicitly instructs it to (see Sandbox & Workdir rule 2) — it just won't do so unasked.
+- **Dispatch through `codex:codex-rescue`.** It is a thin forwarder: exactly one `task` invocation, returning that stdout unchanged. It does **not** monitor, poll, or fetch results on its own initiative — that's **coordinator** work (see Monitoring below). It CAN attempt a commit when the dispatch prompt explicitly instructs it to, but success is inconsistent; the coordinator must verify independently (see Sandbox & Workdir rule 2).
 - The lighter `spark` alias (`gpt-5.3-codex-spark`) exists, but claudius routing standardizes on Sol at high effort.
 
 ## Sandbox & Workdir — The Load-Bearing Rules
@@ -50,4 +50,4 @@ Recovery: find the orphaned broker PID (its `--cwd` points at the old worktree p
 
 ## Additional Resources
 
-- **`references/sandbox-and-recovery.md`** — sandbox modes, the `workspace-write` config, on-disk job-state layout for monitoring, git-commit-in-a-worktree status (now working) and its fallback, and copy-paste broker-recovery commands.
+- **`references/sandbox-and-recovery.md`** — sandbox modes, the `workspace-write` config, on-disk job-state layout for monitoring, git-commit-in-a-worktree status (inconsistent) and its fallback, and copy-paste broker-recovery commands.
