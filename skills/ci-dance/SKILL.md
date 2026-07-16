@@ -77,6 +77,8 @@ Spawn each stream as a named `Agent()` — every session has one implicit team, 
 - `grumpy-stream`
 - `review-stream`
 
+**Named spawning requires this skill to be running in the session lead.** If a lead delegates the whole `/ci-dance` invocation to a teammate rather than running it itself, every named spawn above fails outright — "Teammates cannot spawn other teammates" (flat team roster). If you find yourself running this skill as a non-lead teammate: spawn the three streams as **unnamed** background subagents instead (omit `name`), skip the entire Inter-Stream Communication claim/completion protocol below (unnamed agents can't be addressed by `SendMessage`), and rely solely on Step 3's merge-time cherry-pick/conflict resolution as the overlap trust boundary — it already degrades gracefully to this. Step 3/6's `shutdown_request` likewise doesn't apply to unnamed subagents; they simply run to completion.
+
 ### Team-spawn worktree quirk
 
 See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary for ci-dance:

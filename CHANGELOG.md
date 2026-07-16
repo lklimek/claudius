@@ -20,6 +20,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 - **`skills/grand-admiral/SKILL.md`** § Terminating Teammates: note that a `TaskStop` success response for a Monitor-wrapped background process doesn't prove the underlying OS process actually died.
 - **`skills/codex-crew/SKILL.md`** + `references/sandbox-and-recovery.md`: Codex can now `git commit` directly inside a linked worktree (verified empirically 2026-07-16, commit `f2639aa`) — reverses the earlier hard-block guidance. `writable_roots` was unchanged at test time; the likely enabling lever is `approval_policy = "on-request"` + the project's `trust_level = "trusted"`, not a sandbox-path change. Coordinator-commits remains the documented fallback if the old read-only/`index.lock` error resurfaces.
+- **`skills/ci-dance/SKILL.md`** § Step 2: document the fallback when `/ci-dance` itself runs as a delegated (non-lead) teammate — named stream spawns fail outright on a flat team roster ("teammates cannot spawn other teammates"); use unnamed background subagents and rely on Step 3's merge-time reconciliation instead of the claim/completion protocol.
 
 ## [5.8.0] - 2026-07-15
 
