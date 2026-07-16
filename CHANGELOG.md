@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ### Fixed
 
-- **`scripts/agent-watchdog.py`** `CodexScanner.scan()`: add a 6-hour terminal-job retention window so per-poll `jobs/*.json` enumeration and state tracking stay bounded over long sessions; active jobs are retained regardless of age. Existing mtime cache and one-time slow-glob warning preserved.
+- **`scripts/agent-watchdog.py`** `CodexScanner.scan()`: add a 6-hour terminal-job retention window so the tracked/returned Codex record set and downstream state tracking stay bounded over long sessions; active jobs are retained regardless of age. Per-poll `jobs/*.json` **enumeration** itself is unchanged and still scales with total accumulated job files on disk (nothing prunes them) — the existing mtime cache and one-time slow-glob warning are preserved for that reason.
 
 ### Added
 
