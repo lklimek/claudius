@@ -75,6 +75,14 @@ Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (o
 
 `codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal when not going through the companion's job state.
 
+## Harness Kills of a Backgrounded Task
+
+A `codex-companion.mjs task --write --background` run launched via a `run_in_background` Bash call can be killed by the harness mid-run — confirmed via a tmux pane reading `Background command ... was stopped`. Nothing reports it: `codex:codex-rescue` is a forwarder whose own turn ended at dispatch time and which never polls its background task, so it cannot notice or surface the kill. **Silence is not evidence of health.**
+
+- **Detect it coordinator-side.** Periodically read the job's actual log content (`jobs/<job-id>.log`) and inspect the tmux pane directly. Do not infer health from `status` alone — it can sit at `running` after the process is gone.
+- **On-disk edits survive.** Files Codex already wrote stay written; the work is partial, not lost.
+- **Resume, don't restart.** Redispatch with `--resume-last` to continue from the surviving state instead of redoing completed edits from scratch.
+
 ## Broker Recovery
 
 Each worktree dispatch runs its own broker: `app-server-broker.mjs serve --endpoint unix:/tmp/cxc-<id>/broker.sock --cwd <worktree>`. Removing and recreating a worktree at the same path while its broker still runs strands the broker; the next dispatch fails in ~0 s with a misleading `failed to resolve feature override precedence` / `auth.loggedIn: false` error.
