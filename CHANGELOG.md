@@ -12,7 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 - **`scripts/agent-watchdog.py`** `CodexScanner.scan()`: add a 6-hour terminal-job retention window so the tracked/returned Codex record set and downstream state tracking stay bounded over long sessions; active jobs are retained regardless of age. Per-poll `jobs/*.json` **enumeration** itself is unchanged and still scales with total accumulated job files on disk (nothing prunes them) — the existing mtime cache and one-time slow-glob warning are preserved for that reason.
 - **`scripts/agent-watchdog.py`** `CodexScanner.scan()`: warn once when a discovered job's self-reported `workspaceRoot` doesn't canonical-match the candidate being scanned, closing the silent-skip gap implicated in a real incident. Matching behavior itself is unchanged.
-- **`scripts/agent-watchdog.py`** `Watchdog.poll_once()`: warn once when there's a session to monitor but zero discoverable Codex candidate workspaces (no team, no discovered agent worktrees) — this teamless-session shape previously discovered nothing and warned nothing, indistinguishable from a healthy fleet with no Codex activity. Discovery behavior itself is unchanged.
+- **`scripts/agent-watchdog.py`** `Watchdog.poll_once()`: warn once when there's a session to monitor but zero discoverable Codex candidate workspaces — either no team config, or a team whose lead and active members report no cwd, with no discovered agent worktrees either. Both shapes previously discovered nothing and warned nothing, indistinguishable from a healthy fleet with no Codex activity; the warning names which shape it hit so its suggested remedy fits. Discovery behavior itself is unchanged.
 
 ### Added
 

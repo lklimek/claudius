@@ -1194,6 +1194,53 @@ def test_watchdog_warns_once_when_codex_has_zero_candidates(
     )
 
 
+def test_watchdog_zero_candidates_warning_names_the_real_cause(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A team lacking any usable cwd is not blamed on a missing team config."""
+    home = tmp_path / "home"
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
+    team_dir = home / ".claude" / "teams" / "session-short"
+    write_json(
+        team_dir / "config.json",
+        {
+            "name": "session-short",
+            "leadSessionId": "session-full",
+            "members": [
+                {"agentType": "team-lead", "name": "lead", "isActive": True},
+                {
+                    "agentType": "developer-bilby",
+                    "name": "bilby",
+                    "agentId": "aid",
+                    "cwd": str(tmp_path / "finished"),
+                    "isActive": False,
+                },
+            ],
+        },
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            team_dir=team_dir,
+            session_id="session-full",
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            gone_enabled=False,
+        ),
+        env={"HOME": str(home), "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin")},
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=100) == []
+
+    err = capsys.readouterr().err
+    assert "codex-zero-candidates" in monitor.warned
+    assert "no team config" not in err
+    assert "a team config with no active member or lead cwd" in err
+    assert "dispatch a NAMED teammate that reports a cwd" in err
+
+
 def test_watchdog_poll_combines_claude_and_codex_edges(tmp_path: Path) -> None:
     """One poll coordinator preserves Claude grammar beside Source D events."""
     home = tmp_path / "home"

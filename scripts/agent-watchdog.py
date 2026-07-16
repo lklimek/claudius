@@ -1826,14 +1826,21 @@ class Watchdog:
         codex_records: Iterable[CodexRecord] = ()
         if effective_session:
             if not codex_candidates:
+                if team is None:
+                    cause = "no team config and no discovered agent worktrees"
+                    remedy = "dispatch at least one NAMED teammate to create a team"
+                else:
+                    cause = (
+                        "a team config with no active member or lead cwd, and no "
+                        "discovered agent worktrees"
+                    )
+                    remedy = "dispatch a NAMED teammate that reports a cwd"
                 self.warn_once(
                     "codex-zero-candidates",
-                    "Codex Source D: no team config and no discovered agent "
-                    "worktrees — 0 candidate workspaces to scan this poll; Codex "
-                    "job monitoring is effectively disabled (dispatch at least one "
-                    "NAMED teammate to create a team, or verify --worktrees points "
-                    "at where Codex worktrees actually live, if Codex jobs are "
-                    "expected).",
+                    f"Codex Source D: {cause} — 0 candidate workspaces to scan "
+                    "this poll; Codex job monitoring is effectively disabled "
+                    f"({remedy}, or verify --worktrees points at where Codex "
+                    "worktrees actually live, if Codex jobs are expected).",
                 )
             scan = self.scanner.scan(codex_candidates, effective_session, epoch)
             for warning_key, message in scan.warnings:
