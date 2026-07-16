@@ -71,7 +71,7 @@ Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `c
 - Parse an individual `jobs/<id>.json` only when its mtime advanced since the last poll, and extract only the few fields above.
 - Keep a bounded per-job last-seen map (`job-id → {status, mtime}`), never accumulated JSON.
 
-Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the commit block above) that otherwise goes unnoticed.
+Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
 
 `codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal when not going through the companion's job state.
 

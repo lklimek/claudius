@@ -31,7 +31,7 @@ Codex runs under `sandbox_mode = "workspace-write"` (see `~/.codex/config.toml`)
 
 3. **All worktrees live under `/data/git-worktrees/<slug>`** (global environment rule; slug = the startup `$PWD` path). The coordinator pre-creates the worktree following the isolation pattern in `grand-admiral` § Worktree Isolation — which owns the pre-create-and-inject-absolute-path procedure, not this concrete path — and injects that absolute path into the dispatch.
 
-Deep mechanics (exact sandbox modes, the on-disk job-state layout, why `git commit` is blocked) are in `references/sandbox-and-recovery.md`.
+Deep mechanics (exact sandbox modes, the on-disk job-state layout, `git commit` in a linked worktree status and fallback) are in `references/sandbox-and-recovery.md`.
 
 ## Monitoring a Codex Job
 
@@ -50,4 +50,4 @@ Recovery: find the orphaned broker PID (its `--cwd` points at the old worktree p
 
 ## Additional Resources
 
-- **`references/sandbox-and-recovery.md`** — sandbox modes, the `workspace-write` config, on-disk job-state layout for monitoring, the git-commit block explained, and copy-paste broker-recovery commands.
+- **`references/sandbox-and-recovery.md`** — sandbox modes, the `workspace-write` config, on-disk job-state layout for monitoring, git-commit-in-a-worktree status (now working) and its fallback, and copy-paste broker-recovery commands.
