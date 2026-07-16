@@ -52,6 +52,8 @@ STATE_HEADER_LIMIT = 4096
 # per workspace when enumerating them exceeds this, signalling the directory has
 # grown enough to justify pruning old records or a bounded-scan optimization.
 JOBS_GLOB_WARN_SECS = 0.5
+# Keep active jobs indefinitely, but age terminal records out after six hours.
+TERMINAL_JOB_RETENTION_SECS = 6 * 60 * 60
 STATE_VERSION_PREFIX = re.compile(r'^\s*\{\s*"version"\s*:\s*')
 # Sentinel: the state file is a JSON object but its version could not be read
 # from the bounded header (file too large and "version" is not near the start).
@@ -880,11 +882,19 @@ class CodexScanner:
             return value
         return {"pid": value.get("pid"), "endpoint": value.get("endpoint")}
 
-    def scan(self, candidates: Iterable[Path], effective_session: str) -> ScanResult:
-        """Scan every retained matching job without enumerating global state."""
+    def scan(
+        self,
+        candidates: Iterable[Path],
+        effective_session: str,
+        now: float | None = None,
+    ) -> ScanResult:
+        """Scan active and recent matching jobs without enumerating global state."""
         warnings: list[tuple[str, str]] = []
         if not effective_session:
             return ScanResult([], warnings)
+        terminal_cutoff = (
+            time.time() if now is None else now
+        ) - TERMINAL_JOB_RETENTION_SECS
         workspaces: dict[Path, WorkspaceInfo] = {}
         for candidate in candidates:
             try:
@@ -949,7 +959,7 @@ class CodexScanner:
                     f"codex-jobs-glob-slow:{info.key}",
                     f"Codex job enumeration for {info.key} took {glob_elapsed:.2f}s "
                     f"({len(job_paths)} files); per-poll cost scales with retained "
-                    "jobs/*.json — prune old job records or add a bounded scan",
+                    "jobs/*.json — prune old job records",
                     warnings,
                 )
             for job_path in job_paths:
@@ -999,6 +1009,13 @@ class CodexScanner:
                         f"Codex job {job_id} has unknown status {persisted_status!r}; skipped",
                         warnings,
                     )
+                    continue
+                job_mtime = safe_mtime(job_path)
+                if (
+                    status != "active"
+                    and job_mtime is not None
+                    and job_mtime < terminal_cutoff
+                ):
                     continue
                 matching.append((job_path, raw, status))
             active_count = sum(status == "active" for _, _, status in matching)
@@ -1793,7 +1810,7 @@ class Watchdog:
         codex_candidates.extend(source_c)
         codex_records: Iterable[CodexRecord] = ()
         if effective_session:
-            scan = self.scanner.scan(codex_candidates, effective_session)
+            scan = self.scanner.scan(codex_candidates, effective_session, epoch)
             for warning_key, message in scan.warnings:
                 self.warn_once(warning_key, message)
             codex_records = scan.records

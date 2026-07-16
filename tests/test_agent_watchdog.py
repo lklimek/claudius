@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -41,6 +42,19 @@ def workspace(tmp_path: Path, name: str = "repo") -> Path:
     """Create a monitored non-Git workspace."""
     result = tmp_path / name
     result.mkdir(parents=True)
+    return result
+
+
+@pytest.fixture
+def git_repo(tmp_path: Path) -> Path:
+    """Create a real Git workspace for repository-root resolution tests."""
+    result = tmp_path / "git-repo"
+    subprocess.run(
+        ["git", "init", str(result)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     return result
 
 
@@ -159,6 +173,21 @@ def test_cx_005_node_temp_environment_semantics(tmp_path: Path) -> None:
     """CX-005: plugin-data absence uses Node-compatible temp selection."""
     env = {"TMPDIR": str(tmp_path / "node-tmp"), "HOME": str(tmp_path / "home")}
     assert watchdog.codex_state_root(env) == Path(env["TMPDIR"]) / "codex-companion"
+
+
+def test_real_git_workspace_resolves_repository_root(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    """Source D maps a nested Git path to its real repository toplevel."""
+    nested = git_repo / "nested" / "directory"
+    nested.mkdir(parents=True)
+    env = {"CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin-data")}
+
+    assert watchdog.git_toplevel(nested) == git_repo
+    resolved = watchdog.resolve_workspace(nested, env)
+    assert resolved.root == git_repo
+    assert resolved.canonical == git_repo.resolve()
+    assert resolved.state_dir == watchdog.codex_state_root(env) / resolved.key
 
 
 def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
@@ -450,6 +479,50 @@ def test_slow_jobs_glob_emits_warning(
     assert [item.phase for item in result.records] == ["streaming"]
     slow = [k for k, _ in result.warnings if k.startswith("codex-jobs-glob-slow")]
     assert len(slow) == 1
+
+
+def test_codex_scanner_ages_out_only_terminal_job_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Old retained terminals age out while old active and recent terminal jobs stay."""
+    now = 1_000_000
+    retention_secs = 6 * 60 * 60
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "old-terminal",
+                "status": "completed",
+                "phase": "done",
+                "epoch": now - retention_secs - 1,
+            },
+            {
+                "id": "old-active",
+                "status": "running",
+                "epoch": now - retention_secs - 1,
+            },
+            {
+                "id": "recent-terminal",
+                "status": "failed",
+                "phase": "failed",
+                "epoch": now - retention_secs + 1,
+            },
+        ],
+    )
+    monkeypatch.setattr(watchdog.time, "time", lambda: now)
+
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan([ws], "session-full")
+        .records
+    )
+
+    assert [item.job_id for item in records] == [
+        "old-active",
+        "recent-terminal",
+    ]
 
 
 def test_codex_scanner_checks_shared_broker_once_per_workspace(tmp_path: Path) -> None:
@@ -790,6 +863,124 @@ def test_member_transcript_resolution_is_session_scoped(tmp_path: Path) -> None:
     assert watchdog.member_transcripts(team, projects, {"other-lead"}) == {
         "bilby": transcript
     }
+
+
+def test_member_transcript_type_and_cwd_fallbacks_reject_ambiguity(
+    tmp_path: Path,
+) -> None:
+    """Type metadata and cwd slugs resolve uniquely; multiple sessions do not."""
+    projects = tmp_path / "projects"
+    cwd = workspace(tmp_path)
+    subagent = projects / "slug" / "lead-full" / "subagents" / "agent-sub.jsonl"
+    subagent.parent.mkdir(parents=True)
+    subagent.write_text('{"type":"message"}\n', encoding="utf-8")
+    write_json(
+        subagent.with_suffix(".meta.json"),
+        {"agentType": "developer-bilby"},
+    )
+    slug_name = re.sub(r"[^A-Za-z0-9-]", "-", str(cwd).rstrip("/"))
+    slug_dir = projects / slug_name
+    slug_dir.mkdir(parents=True)
+    fallback = slug_dir / "worker-adams.jsonl"
+    fallback.write_text(
+        '{"type":"agent-setting","agentSetting":"reviewer-adams",'
+        '"sessionId":"worker-adams"}\n',
+        encoding="utf-8",
+    )
+    for session_id in ("worker-smythe-a", "worker-smythe-b"):
+        (slug_dir / f"{session_id}.jsonl").write_text(
+            '{"type":"agent-setting","agentSetting":"security-smythe",'
+            f'"sessionId":"{session_id}"}}\n',
+            encoding="utf-8",
+        )
+    members = (
+        watchdog.Member("bilby", cwd, "unmatched-id", "developer-bilby", "", ""),
+        watchdog.Member("adams", cwd, "", "reviewer-adams", "", ""),
+        watchdog.Member("smythe", cwd, "", "security-smythe", "", ""),
+    )
+    team = watchdog.Team(
+        lead_session_id="lead-full",
+        members=members,
+        created_at=0,
+    )
+
+    assert watchdog.member_transcripts(team, projects, {"other-lead"}) == {
+        "bilby": subagent,
+        "adams": fallback,
+    }
+
+
+def test_watchdog_task_dir_named_and_unbound_autodetect(tmp_path: Path) -> None:
+    """Task discovery uses a team name or the newest unbound session directory."""
+    home = tmp_path / "home"
+    tasks = home / ".claude" / "tasks"
+    named = tasks / "named-team"
+    oldest = tasks / "session-old"
+    newest = tasks / "session-new"
+    for directory, epoch in ((named, 100), (oldest, 200), (newest, 300)):
+        directory.mkdir(parents=True)
+        os.utime(directory, (epoch, epoch))
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            projects_dir=tmp_path / "projects",
+            gone_enabled=False,
+        ),
+        env={"HOME": str(home), "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin")},
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor._task_dir(watchdog.Team(name="named-team")) == named
+    assert monitor._task_dir(None) == newest
+
+
+def test_watchdog_relative_worktrees_use_team_cwd(tmp_path: Path) -> None:
+    """Relative worktrees resolve from the lead, then the first member cwd."""
+    lead_cwd = workspace(tmp_path, "lead")
+    member_cwd = workspace(tmp_path, "member")
+    member = watchdog.Member("bilby", member_cwd, "aid", "developer", "", "")
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            projects_dir=tmp_path / "projects",
+            worktrees=Path(".claude/worktrees"),
+            gone_enabled=False,
+        ),
+        env={
+            "HOME": str(tmp_path / "home"),
+            "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin"),
+        },
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor._worktrees(watchdog.Team(lead_cwd=lead_cwd)) == (
+        lead_cwd / ".claude" / "worktrees"
+    )
+    assert monitor._worktrees(watchdog.Team(members=(member,))) == (
+        member_cwd / ".claude" / "worktrees"
+    )
+
+
+def test_watchdog_subagent_dirs_autodetect_newest_project_slug(
+    tmp_path: Path,
+) -> None:
+    """Unbound subagent discovery selects sessions below the newest project slug."""
+    projects = tmp_path / "projects"
+    oldest = projects / "oldest"
+    newest = projects / "newest"
+    expected = newest / "session-new" / "subagents"
+    (oldest / "session-old" / "subagents").mkdir(parents=True)
+    expected.mkdir(parents=True)
+    os.utime(oldest, (100, 100))
+    os.utime(newest, (200, 200))
+    monitor = watchdog.Watchdog(
+        watchdog.Options(projects_dir=projects, gone_enabled=False),
+        env={
+            "HOME": str(tmp_path / "home"),
+            "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin"),
+        },
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor._subagent_dirs(None) == [expected]
 
 
 def test_tmux_binding_requires_unique_positive_evidence(
