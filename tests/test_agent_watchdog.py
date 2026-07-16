@@ -237,11 +237,15 @@ def test_codex_scanner_warns_once_for_workspace_root_mismatch(
     """A job found under the wrong resolved workspace is skipped with context."""
     ws = workspace(tmp_path)
     reported = workspace(tmp_path, "reported")
-    _, env = codex_store(
+    state_dir, env = codex_store(
         tmp_path,
         ws,
         [{"id": "mismatch", "workspaceRoot": str(reported)}],
     )
+    job_path = state_dir / "jobs" / "mismatch.json"
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    job.pop("sessionId")
+    write_json(job_path, job, 100)
     info = watchdog.resolve_workspace(ws, env)
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
 
@@ -251,13 +255,64 @@ def test_codex_scanner_warns_once_for_workspace_root_mismatch(
     assert first.warnings == [
         (
             f"codex-job-workspace-mismatch:{info.key}:mismatch.json",
-            f"Codex job mismatch.json in {info.key} reports "
+            f"Codex job 'mismatch.json' in {info.key} reports "
             f"workspaceRoot={str(reported)!r} which doesn't match this candidate's "
             f"resolved path {info.canonical} — job skipped, may be silently "
             "invisible to CODEX_* events",
         )
     ]
     assert scanner.scan([ws], "session-full").warnings == []
+
+
+def test_codex_scanner_warns_for_prefix_matching_session_workspace_mismatch(
+    tmp_path: Path,
+) -> None:
+    """A mismatched job from a plausibly tracked session still warns."""
+    ws = workspace(tmp_path)
+    reported = workspace(tmp_path, "reported")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "matching-session-mismatch",
+                "sessionId": "session-full",
+                "workspaceRoot": str(reported),
+            }
+        ],
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan([ws], "session")
+
+    assert result.records == []
+    assert len(result.warnings) == 1
+    assert result.warnings[0][0].startswith("codex-job-workspace-mismatch:")
+
+
+def test_codex_scanner_suppresses_workspace_mismatch_for_unrelated_session(
+    tmp_path: Path,
+) -> None:
+    """A mismatched job from an unrelated session is discarded silently."""
+    ws = workspace(tmp_path)
+    reported = workspace(tmp_path, "reported")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "unrelated-session-mismatch",
+                "sessionId": "some-other-session-from-last-week",
+                "workspaceRoot": str(reported),
+            }
+        ],
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan([ws], "session-full")
+
+    assert result.records == []
+    assert result.warnings == []
 
 
 def test_short_codex_session_prefix_must_be_unique(tmp_path: Path) -> None:
