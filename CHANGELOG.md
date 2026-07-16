@@ -6,6 +6,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.10.0] - 2026-07-16
+
+### Fixed
+
+- **`scripts/agent-watchdog.py`** `CodexScanner.scan()`: add a 6-hour terminal-job retention window so the tracked/returned Codex record set and downstream state tracking stay bounded over long sessions; active jobs are retained regardless of age. Per-poll `jobs/*.json` **enumeration** itself is unchanged and still scales with total accumulated job files on disk (nothing prunes them) — the existing mtime cache and one-time slow-glob warning are preserved for that reason.
+- **`scripts/agent-watchdog.py`** `CodexScanner.scan()`: apply the terminal-job retention cutoff before a job's `sessionId` is folded into the session-disambiguation set, not just before it lands in `records` — an aged-out terminal job's session no longer counts as an ambiguity candidate for `_session()`, closing a gap where a long-dead session could still spuriously disable Source D (or steer selection) months after retention was meant to age it out.
+- **`scripts/agent-watchdog.py`** `CodexScanner.scan()`: warn once when a discovered job's self-reported `workspaceRoot` doesn't canonical-match the candidate being scanned, closing the silent-skip gap implicated in a real incident. Matching behavior itself is unchanged.
+- **`scripts/agent-watchdog.py`** `Watchdog.poll_once()`: warn once when there's a session to monitor but zero discoverable Codex candidate workspaces — either no team config, or a team whose lead and active members report no cwd, with no discovered agent worktrees either. Both shapes previously discovered nothing and warned nothing, indistinguishable from a healthy fleet with no Codex activity; the warning names which shape it hit so its suggested remedy fits. Discovery behavior itself is unchanged.
+
+### Added
+
+- **`tests/test_agent_watchdog.py`**: cover previously-untested default-path branches — a real `git init` Source-D fixture (`git_toplevel()`/`resolve_workspace()`), `Watchdog._task_dir`, the default relative `_worktrees` resolution path, `_subagent_dirs` autodetect, and `member_transcripts()` fallback/ambiguity branches.
+
+### Changed
+
+- **`skills/grand-admiral/SKILL.md`** § Terminating Teammates: note that a `TaskStop` success response for a Monitor-wrapped background process doesn't prove the underlying OS process actually died.
+- **`skills/codex-crew/SKILL.md`** + `references/sandbox-and-recovery.md`: Codex `git commit` inside a linked worktree is confirmed inconsistent (observed both ways 2026-07-16). One dispatch committed as `f2639aa`; a later dispatch in a different worktree hit the exact old `index.lock`/read-only error and was committed by the coordinator as `7c2d3e8`. `writable_roots` was unchanged; the likely enabling lever is `approval_policy = "on-request"` + the project's `trust_level = "trusted"`, not a sandbox-path change. Coordinator-commit is the reliable default, not just a fallback for a regression.
+- **`skills/ci-dance/SKILL.md`** § Step 2: document the fallback when `/ci-dance` itself runs as a delegated (non-lead) teammate — named stream spawns fail outright on a flat team roster ("teammates cannot spawn other teammates"); use unnamed background subagents and rely on Step 3's merge-time reconciliation instead of the claim/completion protocol.
+
 ## [5.9.0] - 2026-07-15
 
 ### Changed

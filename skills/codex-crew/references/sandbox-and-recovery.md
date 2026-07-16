@@ -29,19 +29,27 @@ network_access = true
 
 - `writable_roots` **adds** to the always-writable workspace root (cwd). It makes `/data` worktrees, scratch, and the shared cargo target dir (`/data/target`) writable and lets tests reach the network.
 - `network_access = true` unblocks localhost test sockets (e.g. a test server) — it also enables general outbound network, the tradeoff `workspace-write` disables by default.
-- The live config's `# Self-commit scope (repo .git) intentionally NOT added yet` comment corroborates the coordinator-commits rule: widening the sandbox to the repo `.git` is a deliberate non-goal, not an oversight.
+- The `# Self-commit scope (repo .git) intentionally NOT added yet` comment is now known to be misleading as an explanation for commit behavior (see below) — kept here verbatim since it's still the live config text, but don't treat it as proof commit is blocked.
 - Validate any change with `codex --strict-config doctor` (hard-errors on unknown fields). Keep a timestamped backup of `config.toml` before editing.
 
-## Why Codex Cannot `git commit` in a Linked Worktree
+## Git Commit in a Linked Worktree — Status (updated 2026-07-16)
 
-Two stacked restrictions, both confirmed across sessions:
+**Confirmed inconsistent — both outcomes observed the same day (2026-07-16), same repo.** Dispatch 1: Codex successfully ran `git add` + `git commit` inside a linked worktree (`/data/git-worktrees/home-ubuntu-git-claudius-watchdog-fixes`) — commit `f2639aa`, independently verified via `git log`/`git show` afterward, no approval prompt. Dispatch 2, a different worktree (`/data/git-worktrees/home-ubuntu-git-claudius-codex-diag`) later the same day: `git add` failed outright with `fatal: Unable to create '.../index.lock': Read-only file system` — the exact historical error below. The coordinator committed on Codex's behalf instead (`7c2d3e8`).
 
-1. **Path allowlist.** A linked worktree created by `git worktree add /data/git-worktrees/foo` from main repo `/home/ubuntu/git/<repo>` stores its per-worktree git metadata (HEAD, index, refs) under the **main repo's** `.git/worktrees/foo/`, and objects under the main repo's `.git/objects/`. Those paths are outside the sandbox's writable set, so `git commit` (which writes `index.lock`, refs, objects there) is rejected.
-2. **Git-metadata block.** A separate read-only block on git metadata applies **even when the path is writable**, so widening `writable_roots` to include the repo `.git` is not a reliable fix.
+`writable_roots` was unchanged across both dispatches and still excludes the repo `.git` — so `writable_roots` is not the lever, and whatever gates this isn't a static per-repo setting (both dispatches targeted the same repo, same day). Working theory: `approval_policy = "on-request"` combined with the project's `trust_level = "trusted"` entry (`[projects."<repo>"] trust_level = "trusted"`) sometimes auto-approves the escalated git-metadata write and sometimes doesn't — not independently confirmed against the actual mechanism. **Don't treat a successful Codex commit as evidence the fallback is no longer needed** — the very next dispatch can still hit the old block.
 
-**Consequence — coordinator commits.** Do not try to make Codex commit. Codex writes source changes into the worktree; the coordinator (unsandboxed) then runs `git -C <worktree> add -A && git -C <worktree> commit -m ...`. Verify Codex's diff before committing on its behalf.
+**Pattern:** it's fine to instruct Codex to run its own `git add`/`git commit` as the final dispatch step (with an explicit, well-formed commit message — it doesn't know your commit conventions unless given them), but always verify independently afterward (`git -C <worktree> log`/`git status`) rather than trusting Codex's self-report, and be ready to commit yourself when it didn't land. Pushing remains the coordinator's job regardless of who committed, and still requires explicit user authorization.
 
-Symptom when Codex tries anyway: a job `errorMessage` such as *"the sandbox prevented creating the requested commit because the worktree's Git metadata is read-only"*, or a git error about being unable to create `index.lock` under the main repo's external `.git`.
+**When commit fails:** symptom is a job `errorMessage` like *"the sandbox prevented creating the requested commit because the worktree's Git metadata is read-only"*, or a git error about being unable to create `index.lock` under the main repo's external `.git`. This is a routine, expected outcome, not a sign of a special regression — coordinator-commits: Codex writes files only, the coordinator (unsandboxed) runs `git -C <worktree> add -A && git -C <worktree> commit -m ...`.
+
+### Historical mechanics (why it was blocked before — kept for troubleshooting the fallback case)
+
+Two stacked restrictions were previously confirmed across sessions:
+
+1. **Path allowlist.** A linked worktree created by `git worktree add /data/git-worktrees/foo` from main repo `/home/ubuntu/git/<repo>` stores its per-worktree git metadata (HEAD, index, refs) under the **main repo's** `.git/worktrees/foo/`, and objects under the main repo's `.git/objects/`. Those paths are outside the sandbox's writable set, so `git commit` (which writes `index.lock`, refs, objects there) would be rejected under a strict path allowlist alone.
+2. **Git-metadata block.** A separate read-only block on git metadata was observed to apply even when the path was writable — at the time, widening `writable_roots` to include the repo `.git` was not considered a reliable fix.
+
+If the fallback triggers, these are the mechanics to investigate first.
 
 ## On-Disk Job State (for Monitoring)
 
@@ -63,7 +71,7 @@ Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `c
 - Parse an individual `jobs/<id>.json` only when its mtime advanced since the last poll, and extract only the few fields above.
 - Keep a bounded per-job last-seen map (`job-id → {status, mtime}`), never accumulated JSON.
 
-Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the commit block above) that otherwise goes unnoticed.
+Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
 
 `codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal when not going through the companion's job state.
 

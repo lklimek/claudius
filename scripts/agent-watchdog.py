@@ -52,6 +52,8 @@ STATE_HEADER_LIMIT = 4096
 # per workspace when enumerating them exceeds this, signalling the directory has
 # grown enough to justify pruning old records or a bounded-scan optimization.
 JOBS_GLOB_WARN_SECS = 0.5
+# Keep active jobs indefinitely, but age terminal records out after six hours.
+TERMINAL_JOB_RETENTION_SECS = 6 * 60 * 60
 STATE_VERSION_PREFIX = re.compile(r'^\s*\{\s*"version"\s*:\s*')
 # Sentinel: the state file is a JSON object but its version could not be read
 # from the bounded header (file too large and "version" is not near the start).
@@ -880,11 +882,19 @@ class CodexScanner:
             return value
         return {"pid": value.get("pid"), "endpoint": value.get("endpoint")}
 
-    def scan(self, candidates: Iterable[Path], effective_session: str) -> ScanResult:
-        """Scan every retained matching job without enumerating global state."""
+    def scan(
+        self,
+        candidates: Iterable[Path],
+        effective_session: str,
+        now: float | None = None,
+    ) -> ScanResult:
+        """Scan active and recent matching jobs without enumerating global state."""
         warnings: list[tuple[str, str]] = []
         if not effective_session:
             return ScanResult([], warnings)
+        terminal_cutoff = (
+            time.time() if now is None else now
+        ) - TERMINAL_JOB_RETENTION_SECS
         workspaces: dict[Path, WorkspaceInfo] = {}
         for candidate in candidates:
             try:
@@ -949,7 +959,7 @@ class CodexScanner:
                     f"codex-jobs-glob-slow:{info.key}",
                     f"Codex job enumeration for {info.key} took {glob_elapsed:.2f}s "
                     f"({len(job_paths)} files); per-poll cost scales with retained "
-                    "jobs/*.json — prune old job records or add a bounded scan",
+                    "jobs/*.json — prune old job records",
                     warnings,
                 )
             for job_path in job_paths:
@@ -964,7 +974,33 @@ class CodexScanner:
                 except OSError:
                     raw_canonical = Path(os.path.realpath(workspace_root))
                 if raw_canonical != info.canonical:
+                    job_session = raw.get("sessionId")
+                    plausibly_tracked = not (
+                        isinstance(job_session, str)
+                        and job_session
+                        and not _prefix_matches(job_session, effective_session)
+                    )
+                    if plausibly_tracked:
+                        self._warning(
+                            f"codex-job-workspace-mismatch:{info.key}:{job_path.name}",
+                            f"Codex job {job_path.name!r} in {info.key} reports "
+                            f"workspaceRoot={workspace_root!r} which doesn't match this "
+                            f"candidate's resolved path {info.canonical} — job skipped, "
+                            "may be silently invisible to CODEX_* events",
+                            warnings,
+                        )
                     continue
+                persisted_status = raw.get("status")
+                if persisted_status not in ACTIVE_STATUSES:
+                    terminal_status = TERMINAL_STATUSES.get(str(persisted_status), "")
+                    if terminal_status:
+                        job_mtime = safe_mtime(job_path)
+                        if job_mtime is not None and job_mtime < terminal_cutoff:
+                            # Aged-out terminal job: exclude from session
+                            # disambiguation too, not just from records —
+                            # otherwise a long-dead session can still make
+                            # _session() see it as a live ambiguity candidate.
+                            continue
                 session = raw.get("sessionId")
                 if isinstance(session, str) and session:
                     sessions.add(session)
@@ -999,6 +1035,13 @@ class CodexScanner:
                         f"Codex job {job_id} has unknown status {persisted_status!r}; skipped",
                         warnings,
                     )
+                    continue
+                job_mtime = safe_mtime(job_path)
+                if (
+                    status != "active"
+                    and job_mtime is not None
+                    and job_mtime < terminal_cutoff
+                ):
                     continue
                 matching.append((job_path, raw, status))
             active_count = sum(status == "active" for _, _, status in matching)
@@ -1793,7 +1836,24 @@ class Watchdog:
         codex_candidates.extend(source_c)
         codex_records: Iterable[CodexRecord] = ()
         if effective_session:
-            scan = self.scanner.scan(codex_candidates, effective_session)
+            if not codex_candidates:
+                if team is None:
+                    cause = "no team config and no discovered agent worktrees"
+                    remedy = "dispatch at least one NAMED teammate to create a team"
+                else:
+                    cause = (
+                        "a team config with no active member or lead cwd, and no "
+                        "discovered agent worktrees"
+                    )
+                    remedy = "dispatch a NAMED teammate that reports a cwd"
+                self.warn_once(
+                    "codex-zero-candidates",
+                    f"Codex Source D: {cause} — 0 candidate workspaces to scan "
+                    "this poll; Codex job monitoring is effectively disabled "
+                    f"({remedy}, or verify --worktrees points at where Codex "
+                    "worktrees actually live, if Codex jobs are expected).",
+                )
+            scan = self.scanner.scan(codex_candidates, effective_session, epoch)
             for warning_key, message in scan.warnings:
                 self.warn_once(warning_key, message)
             codex_records = scan.records

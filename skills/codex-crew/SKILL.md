@@ -1,13 +1,13 @@
 ---
 name: codex-crew
-description: Use before dispatching work to Codex (codex:codex-rescue) — deciding whether to route coding to Codex Sol, handling a Codex job that cannot commit or write, monitoring a running Codex job, or recovering a stale Codex broker. Pre-flight the coordinator reads once before its first Codex dispatch of a session.
+description: Use before dispatching work to Codex (codex:codex-rescue) — deciding whether to route coding to Codex Sol, handling a Codex job that fails to write or commit, monitoring a running Codex job, or recovering a stale Codex broker. Pre-flight the coordinator reads once before its first Codex dispatch of a session.
 ---
 
 # Codex Crew — Enlisting Codex Agents
 
 Codex agents (OpenAI Codex CLI, dispatched through `codex:codex-rescue`) are external crew a coordinator can enlist alongside the named claudius roster. Use of Codex is **opt-in**. Read this once before the first Codex dispatch of a session — it covers routing, the sandbox's hard limits, how to monitor a Codex job, and how to recover a stuck broker.
 
-The recurring failure this skill prevents: coordinators re-derive the same Codex sandbox and orchestration quirks session after session, each losing time to the same commit-block, write-rejection, and broker-staleness traps.
+The recurring failure this skill prevents: coordinators re-derive the same Codex sandbox and orchestration quirks session after session, each losing time to the same write-rejection and broker-staleness traps (and an inconsistent commit path — see Sandbox & Workdir rule 2).
 
 ## When to Enlist Codex
 
@@ -18,7 +18,7 @@ The recurring failure this skill prevents: coordinators re-derive the same Codex
 ## Routing — One Model, High Effort
 
 - **Codex Sol = `--model gpt-5.6-sol --effort high`. Always high effort.** State both flags explicitly on every dispatch: `codex:codex-cli-runtime` only forwards `--effort`/`--model` when present in the request text, so an omitted flag silently drops to the runtime default.
-- **Dispatch through `codex:codex-rescue`.** It is a thin forwarder: exactly one `task` invocation, returning that stdout unchanged. It does **not** monitor, poll, fetch results, commit, or inspect the repo — every one of those is **coordinator** work (see Monitoring, and Coordinator Commits below).
+- **Dispatch through `codex:codex-rescue`.** It is a thin forwarder: exactly one `task` invocation, returning that stdout unchanged. It does **not** monitor, poll, or fetch results on its own initiative — that's **coordinator** work (see Monitoring below). It CAN attempt a commit when the dispatch prompt explicitly instructs it to, but success is inconsistent; the coordinator must verify independently (see Sandbox & Workdir rule 2).
 - The lighter `spark` alias (`gpt-5.3-codex-spark`) exists, but claudius routing standardizes on Sol at high effort.
 
 ## Sandbox & Workdir — The Load-Bearing Rules
@@ -27,11 +27,11 @@ Codex runs under `sandbox_mode = "workspace-write"` (see `~/.codex/config.toml`)
 
 1. **Write scope = cwd + configured `writable_roots`.** On this host `writable_roots` includes `/data/git-worktrees`, `/data/tmp`, `/data/artifacts`, `/data/target` (the shared cargo target dir), plus `network_access = true`. So worktrees under `/data/git-worktrees/<slug>` (the mandatory global worktree location) **are** writable by Codex, scratch under `/data/tmp` and `/data/artifacts` is writable, cargo build output under `/data/target` is writable, and sandboxed tests **can** bind localhost sockets. Paths outside cwd and `writable_roots` are read-only.
 
-2. **Codex CANNOT `git commit` in a linked worktree — the coordinator commits on its behalf.** A linked worktree's git metadata lives outside the sandbox's writable set, so the commit is rejected (mechanics: `references/sandbox-and-recovery.md` § Why Codex Cannot `git commit`). This is normal, not a failure to troubleshoot. **Pattern: Codex writes the files; the coordinator (unsandboxed) runs `git add`/`git commit`.** Plan every Codex dispatch with a coordinator commit step — never wait on Codex to commit.
+2. **Codex `git commit` in a linked worktree is inconsistent — confirmed both ways the same day (2026-07-16).** One dispatch committed cleanly (`f2639aa`, this repo, no approval prompt). A later dispatch, same repo, different worktree, hit the exact old "Git metadata is read-only"/`index.lock` error and had to be committed by the coordinator instead (`7c2d3e8`). `writable_roots` was unchanged across both, so whatever gates this isn't a static config value — likely `approval_policy = "on-request"` + `trust_level = "trusted"` interacting with something per-dispatch, not independently confirmed. **Treat coordinator-commit as the reliable default, not a fallback**: it is fine to instruct Codex to attempt `git add`/`git commit` itself as its final step (with an explicit commit message — it doesn't know your conventions unless told), but always plan for that attempt to fail and verify afterward — check `git log`/`git status` in the worktree rather than trusting Codex's self-report, and commit yourself (unsandboxed) when it didn't land. See `references/sandbox-and-recovery.md` § Git Commit in a Linked Worktree for both data points.
 
 3. **All worktrees live under `/data/git-worktrees/<slug>`** (global environment rule; slug = the startup `$PWD` path). The coordinator pre-creates the worktree following the isolation pattern in `grand-admiral` § Worktree Isolation — which owns the pre-create-and-inject-absolute-path procedure, not this concrete path — and injects that absolute path into the dispatch.
 
-Deep mechanics (exact sandbox modes, the on-disk job-state layout, why `git commit` is blocked) are in `references/sandbox-and-recovery.md`.
+Deep mechanics (exact sandbox modes, the on-disk job-state layout, `git commit` in a linked worktree status and fallback) are in `references/sandbox-and-recovery.md`.
 
 ## Monitoring a Codex Job
 
@@ -50,4 +50,4 @@ Recovery: find the orphaned broker PID (its `--cwd` points at the old worktree p
 
 ## Additional Resources
 
-- **`references/sandbox-and-recovery.md`** — sandbox modes, the `workspace-write` config, on-disk job-state layout for monitoring, the git-commit block explained, and copy-paste broker-recovery commands.
+- **`references/sandbox-and-recovery.md`** — sandbox modes, the `workspace-write` config, on-disk job-state layout for monitoring, git-commit-in-a-worktree status (inconsistent) and its fallback, and copy-paste broker-recovery commands.

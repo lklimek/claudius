@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -41,6 +42,19 @@ def workspace(tmp_path: Path, name: str = "repo") -> Path:
     """Create a monitored non-Git workspace."""
     result = tmp_path / name
     result.mkdir(parents=True)
+    return result
+
+
+@pytest.fixture
+def git_repo(tmp_path: Path) -> Path:
+    """Create a real Git workspace for repository-root resolution tests."""
+    result = tmp_path / "git-repo"
+    subprocess.run(
+        ["git", "init", str(result)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     return result
 
 
@@ -161,6 +175,21 @@ def test_cx_005_node_temp_environment_semantics(tmp_path: Path) -> None:
     assert watchdog.codex_state_root(env) == Path(env["TMPDIR"]) / "codex-companion"
 
 
+def test_real_git_workspace_resolves_repository_root(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    """Source D maps a nested Git path to its real repository toplevel."""
+    nested = git_repo / "nested" / "directory"
+    nested.mkdir(parents=True)
+    env = {"CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin-data")}
+
+    assert watchdog.git_toplevel(nested) == git_repo
+    resolved = watchdog.resolve_workspace(nested, env)
+    assert resolved.root == git_repo
+    assert resolved.canonical == git_repo.resolve()
+    assert resolved.state_dir == watchdog.codex_state_root(env) / resolved.key
+
+
 def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
     """CX-006..CX-010: direct discovery is workspace- and session-scoped."""
     ws = workspace(tmp_path)
@@ -200,6 +229,90 @@ def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
         .records
         == []
     )
+
+
+def test_codex_scanner_warns_once_for_workspace_root_mismatch(
+    tmp_path: Path,
+) -> None:
+    """A job found under the wrong resolved workspace is skipped with context."""
+    ws = workspace(tmp_path)
+    reported = workspace(tmp_path, "reported")
+    state_dir, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "mismatch", "workspaceRoot": str(reported)}],
+    )
+    job_path = state_dir / "jobs" / "mismatch.json"
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    job.pop("sessionId")
+    write_json(job_path, job, 100)
+    info = watchdog.resolve_workspace(ws, env)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    first = scanner.scan([ws], "session-full")
+
+    assert first.records == []
+    assert first.warnings == [
+        (
+            f"codex-job-workspace-mismatch:{info.key}:mismatch.json",
+            f"Codex job 'mismatch.json' in {info.key} reports "
+            f"workspaceRoot={str(reported)!r} which doesn't match this candidate's "
+            f"resolved path {info.canonical} — job skipped, may be silently "
+            "invisible to CODEX_* events",
+        )
+    ]
+    assert scanner.scan([ws], "session-full").warnings == []
+
+
+def test_codex_scanner_warns_for_prefix_matching_session_workspace_mismatch(
+    tmp_path: Path,
+) -> None:
+    """A mismatched job from a plausibly tracked session still warns."""
+    ws = workspace(tmp_path)
+    reported = workspace(tmp_path, "reported")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "matching-session-mismatch",
+                "sessionId": "session-full",
+                "workspaceRoot": str(reported),
+            }
+        ],
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan([ws], "session")
+
+    assert result.records == []
+    assert len(result.warnings) == 1
+    assert result.warnings[0][0].startswith("codex-job-workspace-mismatch:")
+
+
+def test_codex_scanner_suppresses_workspace_mismatch_for_unrelated_session(
+    tmp_path: Path,
+) -> None:
+    """A mismatched job from an unrelated session is discarded silently."""
+    ws = workspace(tmp_path)
+    reported = workspace(tmp_path, "reported")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "unrelated-session-mismatch",
+                "sessionId": "some-other-session-from-last-week",
+                "workspaceRoot": str(reported),
+            }
+        ],
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan([ws], "session-full")
+
+    assert result.records == []
+    assert result.warnings == []
 
 
 def test_short_codex_session_prefix_must_be_unique(tmp_path: Path) -> None:
@@ -450,6 +563,94 @@ def test_slow_jobs_glob_emits_warning(
     assert [item.phase for item in result.records] == ["streaming"]
     slow = [k for k, _ in result.warnings if k.startswith("codex-jobs-glob-slow")]
     assert len(slow) == 1
+
+
+def test_codex_scanner_ages_out_only_terminal_job_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Old retained terminals age out while old active and recent terminal jobs stay."""
+    now = 1_000_000
+    retention_secs = 6 * 60 * 60
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "old-terminal",
+                "status": "completed",
+                "phase": "done",
+                "epoch": now - retention_secs - 1,
+            },
+            {
+                "id": "old-active",
+                "status": "running",
+                "epoch": now - retention_secs - 1,
+            },
+            {
+                "id": "recent-terminal",
+                "status": "failed",
+                "phase": "failed",
+                "epoch": now - retention_secs + 1,
+            },
+        ],
+    )
+    monkeypatch.setattr(watchdog.time, "time", lambda: now)
+
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan([ws], "session-full")
+        .records
+    )
+
+    assert [item.job_id for item in records] == [
+        "old-active",
+        "recent-terminal",
+    ]
+
+
+def test_codex_scanner_excludes_aged_out_terminal_jobs_from_session_disambiguation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An aged-out terminal job's sessionId must not count toward ambiguity.
+
+    Retention is meant to bound *all* downstream state tracking, including
+    session disambiguation — not just the final `records` list. A terminal
+    job old enough to be aged out must not make `_session()` see it as a
+    live candidate for prefix-matching.
+    """
+    now = 1_000_000
+    retention_secs = 6 * 60 * 60
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "old-terminal",
+                "sessionId": "session-old",
+                "status": "completed",
+                "phase": "done",
+                "epoch": now - retention_secs - 1,
+            },
+            {
+                "id": "current",
+                "sessionId": "session-new",
+                "status": "running",
+                "epoch": now - 10,
+            },
+        ],
+    )
+    monkeypatch.setattr(watchdog.time, "time", lambda: now)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan([ws], "session-")
+
+    ambiguous = [
+        key for key, _ in result.warnings if key.startswith("codex-session-ambiguous")
+    ]
+    assert ambiguous == []
+    assert [item.job_id for item in result.records] == ["current"]
 
 
 def test_codex_scanner_checks_shared_broker_once_per_workspace(tmp_path: Path) -> None:
@@ -792,6 +993,124 @@ def test_member_transcript_resolution_is_session_scoped(tmp_path: Path) -> None:
     }
 
 
+def test_member_transcript_type_and_cwd_fallbacks_reject_ambiguity(
+    tmp_path: Path,
+) -> None:
+    """Type metadata and cwd slugs resolve uniquely; multiple sessions do not."""
+    projects = tmp_path / "projects"
+    cwd = workspace(tmp_path)
+    subagent = projects / "slug" / "lead-full" / "subagents" / "agent-sub.jsonl"
+    subagent.parent.mkdir(parents=True)
+    subagent.write_text('{"type":"message"}\n', encoding="utf-8")
+    write_json(
+        subagent.with_suffix(".meta.json"),
+        {"agentType": "developer-bilby"},
+    )
+    slug_name = re.sub(r"[^A-Za-z0-9-]", "-", str(cwd).rstrip("/"))
+    slug_dir = projects / slug_name
+    slug_dir.mkdir(parents=True)
+    fallback = slug_dir / "worker-adams.jsonl"
+    fallback.write_text(
+        '{"type":"agent-setting","agentSetting":"reviewer-adams",'
+        '"sessionId":"worker-adams"}\n',
+        encoding="utf-8",
+    )
+    for session_id in ("worker-smythe-a", "worker-smythe-b"):
+        (slug_dir / f"{session_id}.jsonl").write_text(
+            '{"type":"agent-setting","agentSetting":"security-smythe",'
+            f'"sessionId":"{session_id}"}}\n',
+            encoding="utf-8",
+        )
+    members = (
+        watchdog.Member("bilby", cwd, "unmatched-id", "developer-bilby", "", ""),
+        watchdog.Member("adams", cwd, "", "reviewer-adams", "", ""),
+        watchdog.Member("smythe", cwd, "", "security-smythe", "", ""),
+    )
+    team = watchdog.Team(
+        lead_session_id="lead-full",
+        members=members,
+        created_at=0,
+    )
+
+    assert watchdog.member_transcripts(team, projects, {"other-lead"}) == {
+        "bilby": subagent,
+        "adams": fallback,
+    }
+
+
+def test_watchdog_task_dir_named_and_unbound_autodetect(tmp_path: Path) -> None:
+    """Task discovery uses a team name or the newest unbound session directory."""
+    home = tmp_path / "home"
+    tasks = home / ".claude" / "tasks"
+    named = tasks / "named-team"
+    oldest = tasks / "session-old"
+    newest = tasks / "session-new"
+    for directory, epoch in ((named, 100), (oldest, 200), (newest, 300)):
+        directory.mkdir(parents=True)
+        os.utime(directory, (epoch, epoch))
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            projects_dir=tmp_path / "projects",
+            gone_enabled=False,
+        ),
+        env={"HOME": str(home), "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin")},
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor._task_dir(watchdog.Team(name="named-team")) == named
+    assert monitor._task_dir(None) == newest
+
+
+def test_watchdog_relative_worktrees_use_team_cwd(tmp_path: Path) -> None:
+    """Relative worktrees resolve from the lead, then the first member cwd."""
+    lead_cwd = workspace(tmp_path, "lead")
+    member_cwd = workspace(tmp_path, "member")
+    member = watchdog.Member("bilby", member_cwd, "aid", "developer", "", "")
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            projects_dir=tmp_path / "projects",
+            worktrees=Path(".claude/worktrees"),
+            gone_enabled=False,
+        ),
+        env={
+            "HOME": str(tmp_path / "home"),
+            "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin"),
+        },
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor._worktrees(watchdog.Team(lead_cwd=lead_cwd)) == (
+        lead_cwd / ".claude" / "worktrees"
+    )
+    assert monitor._worktrees(watchdog.Team(members=(member,))) == (
+        member_cwd / ".claude" / "worktrees"
+    )
+
+
+def test_watchdog_subagent_dirs_autodetect_newest_project_slug(
+    tmp_path: Path,
+) -> None:
+    """Unbound subagent discovery selects sessions below the newest project slug."""
+    projects = tmp_path / "projects"
+    oldest = projects / "oldest"
+    newest = projects / "newest"
+    expected = newest / "session-new" / "subagents"
+    (oldest / "session-old" / "subagents").mkdir(parents=True)
+    expected.mkdir(parents=True)
+    os.utime(oldest, (100, 100))
+    os.utime(newest, (200, 200))
+    monitor = watchdog.Watchdog(
+        watchdog.Options(projects_dir=projects, gone_enabled=False),
+        env={
+            "HOME": str(tmp_path / "home"),
+            "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin"),
+        },
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor._subagent_dirs(None) == [expected]
+
+
 def test_tmux_binding_requires_unique_positive_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -883,6 +1202,87 @@ def test_watchdog_warns_when_no_team_has_matching_swarm_socket(
 
     assert monitor.poll_once(now=100) == []
     assert "no matching tmux swarm socket for this team" in capsys.readouterr().err
+
+
+def test_watchdog_warns_once_when_codex_has_zero_candidates(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Teamless Codex monitoring reports its empty candidate blind spot once."""
+    home = tmp_path / "home"
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="session-full",
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            gone_enabled=False,
+        ),
+        env={"HOME": str(home), "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin")},
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=100) == []
+    assert monitor.poll_once(now=101) == []
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert monitor.warned == {"codex-zero-candidates"}
+    assert captured.err == (
+        "agent-watchdog: Codex Source D: no team config and no discovered agent "
+        "worktrees — 0 candidate workspaces to scan this poll; Codex job monitoring "
+        "is effectively disabled (dispatch at least one NAMED teammate to create a "
+        "team, or verify --worktrees points at where Codex worktrees actually live, "
+        "if Codex jobs are expected).\n"
+    )
+
+
+def test_watchdog_zero_candidates_warning_names_the_real_cause(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A team lacking any usable cwd is not blamed on a missing team config."""
+    home = tmp_path / "home"
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
+    team_dir = home / ".claude" / "teams" / "session-short"
+    write_json(
+        team_dir / "config.json",
+        {
+            "name": "session-short",
+            "leadSessionId": "session-full",
+            "members": [
+                {"agentType": "team-lead", "name": "lead", "isActive": True},
+                {
+                    "agentType": "developer-bilby",
+                    "name": "bilby",
+                    "agentId": "aid",
+                    "cwd": str(tmp_path / "finished"),
+                    "isActive": False,
+                },
+            ],
+        },
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            team_dir=team_dir,
+            session_id="session-full",
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            gone_enabled=False,
+        ),
+        env={"HOME": str(home), "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin")},
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=100) == []
+
+    err = capsys.readouterr().err
+    assert "codex-zero-candidates" in monitor.warned
+    assert "no team config" not in err
+    assert "a team config with no active member or lead cwd" in err
+    assert "dispatch a NAMED teammate that reports a cwd" in err
 
 
 def test_watchdog_poll_combines_claude_and_codex_edges(tmp_path: Path) -> None:
