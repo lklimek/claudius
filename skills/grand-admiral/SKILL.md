@@ -136,23 +136,14 @@ See `ci-dance` § Inter-Stream Communication for the production coordination pat
 ### Spawning Rules
 
 - Spawn independent agents **in parallel** in a single message
-- **Model override**: each agent carries an explicit tiered `model:` fallback (see Token Economy); that fallback applies only when a spawn omits an explicit model, so still set model per spawn to override when the task's risk/complexity differs from the agent's default tier.
+- **Model override**: each agent carries an explicit tiered `model:` fallback (see `spawn-checklist` § Token Economy); that fallback applies only when a spawn omits an explicit model, so still set model per spawn to override when the task's risk/complexity differs from the agent's default tier.
 - `run_in_background: true` for very large tasks
 
-### Token Economy
+### Token Economy, Scaling & the Pre-Spawn Checklist
 
-Spawning is the dominant token cost: every subagent rebuilds its context cache from scratch, and that cache-creation — not model output — is the bulk of the bill. The cheapest work is the spawn you don't make.
+**Before any `Agent()` call — one agent or a whole wave — load `claudius:spawn-checklist`.** It owns the spawn decision: the pre-spawn checklist, the four Token Economy rules (spawn discipline, mandatory model tiering with the Opus/Sonnet/Haiku table, read discipline, coordinator context), and Scaling (splitting and batching). Reload it before each spawn, not once per session — it is deliberately short so that is affordable.
 
-Four mandatory rules:
-
-1. **Spawn discipline**: default to inline for small/sequential work in the warm parent context. Spawn ONLY for genuinely parallel independent work, large scope (~20k+ output tokens, or many files), or required context isolation.
-2. **Model tiering (mandatory)**: set model on every spawn — the agent's frontmatter `model:` is only the fallback when you don't. **Sonnet 5** (the `sonnet` alias, which auto-resolves to it) is the capable default workhorse: ~91% of Opus on SWE-bench Pro, best-in-class terminal/computer-use, strong self-verification, native 1M context, ~1.67× cheaper than Opus (2.5× cheaper until 2026-08-31). Tier per agent by where quality is load-bearing:
-   - **Opus** — quality-critical reasoning / agentic depth: `developer-bilby` (agentic coding), `project-reviewer-adams` (project consistency + structural/idiom code-quality review — absorbed from `developer-bilby`'s former code-review remit), `architect-nagatha` (system design, dependency/tech trade-offs, plan validation), `ux-designer-diziet` (UX), `security-engineer-smythe` (security / high-risk). These carry `model: opus` as their frontmatter fallback.
-   - **Sonnet 5** — agentic-but-routine: the coordinator, `qa-engineer-marvin` (adversarial correctness/QA execution — tests, lints, edge cases, independent verification against ground truth), `technical-writer-trillian` (docs), `Explore` / `general-purpose` (search), and terminal / GUI / browser-automation verification (Sonnet 5 leads OSWorld / Terminal-bench).
-   - **Haiku** — trivial mechanical (bulk search, formatting).
-   Override per task, both ways: downgrade a quality-critical agent to Sonnet 5 for a trivial job; upgrade a routine agent to Opus for a genuinely hard one. **Risk-based tiebreaker — security always escalates to Opus**: every security-sensitive task goes to Opus regardless of its generic tier — crypto, auth/key handling, network/transport, deserialization, untrusted input, dependency/version bumps, or a large/opaque diff. A passing vulnerability scan (e.g. govulncheck) is NOT evidence of low risk and never justifies a downgrade; ALWAYS fully investigate a version bump, including verifying the updated dependency's changed code. Cost breaks ties only among non-security work — when unsure, tier up. **Tokenizer caveat**: Sonnet 5 emits 1.0–1.35× more tokens than Sonnet 4.6 — still net cheaper, but watch cache-heavy sessions.
-3. **Read discipline**: prefer Grep/Glob first and Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary — see `git-and-github` § Context Management.
-4. **Coordinator context**: inlining keeps work in the coordinator's own context, which grows with it — so the axis is bounded-vs-bulk, not small-vs-large. Inline only BOUNDED work; when work would pull in bulk or unbounded data (large files, logs, wide searches), delegate to a disposable subagent so those bytes never enter the coordinator's context (the spawn cost buys context hygiene). For long sessions, summarise completed work to a task/file and rely on context compaction rather than carrying full history.
+It is a standalone skill because every agent carrying a Task tool can spawn, not just coordinators loading this manual.
 
 ### Agent Reuse
 
@@ -264,12 +255,6 @@ Note for team spawns: omitting `team_name` does **not** help — `Agent()` calls
 
 **Anti-pattern:** committing locally without pushing, then launching worktree agents that need those changes — worktrees won't see them.
 
-## Scaling
-
-**Splitting:** For large tasks (50+ files), spawn multiple agents of same type with different file scopes split by package/module/layer.
-
-**Batching:** Merge small tasks so each agent gets >=100 lines of work. Avoid spawning agents for tiny isolated changes. Respect specialization boundaries — don't merge frontend with backend, security with docs, or unrelated domains. Group by: same layer, same language, same agent type.
-
 ## Output
 
 Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mktemp -d /tmp/claudius-XXXXXX`). Team agents use SendMessage. Each agent reports skills used; calculate redundancy ratio on overlap.
@@ -353,7 +338,7 @@ Codex events are separately namespaced: `CODEX_STALL job=<id> workspace=<slug-ha
 4. No output location — always specify where standalone agents write
 5. Parallelizing tightly coupled work — use single opus agent sequentially for cross-file dependencies
 6. Trusting stale diagnostics — check the ledger for the current tree key first; a fresh build is warranted only when no record exists for the current tree (`CLAUDIUS_FORCE=1` for the rare justified exception — suspected flake or corrupted fingerprint)
-7. Spawning agents for tiny tasks — inline small/sequential work by default (see Token Economy § Spawn discipline)
+7. Spawning agents for tiny tasks — inline small/sequential work by default (see `spawn-checklist` § Token Economy); independent files justify a separate worktree/commit, not automatically a separate spawn
 8. Auto-deleting data on errors — NEVER delete databases, wipe volumes, or destroy data without explicit user confirmation (see CLAUDE.md Safety section)
 9. Not verifying branch context after worktree cleanup — `git worktree remove` can change checked-out branch, causing cherry-picks into wrong branch
 10. Spawning fresh agents for follow-up work — reuse running agents via SendMessage to leverage accumulated context
