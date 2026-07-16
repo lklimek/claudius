@@ -990,6 +990,17 @@ class CodexScanner:
                             warnings,
                         )
                     continue
+                persisted_status = raw.get("status")
+                if persisted_status not in ACTIVE_STATUSES:
+                    terminal_status = TERMINAL_STATUSES.get(str(persisted_status), "")
+                    if terminal_status:
+                        job_mtime = safe_mtime(job_path)
+                        if job_mtime is not None and job_mtime < terminal_cutoff:
+                            # Aged-out terminal job: exclude from session
+                            # disambiguation too, not just from records —
+                            # otherwise a long-dead session can still make
+                            # _session() see it as a live ambiguity candidate.
+                            continue
                 session = raw.get("sessionId")
                 if isinstance(session, str) and session:
                     sessions.add(session)

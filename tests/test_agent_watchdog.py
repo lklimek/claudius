@@ -609,6 +609,50 @@ def test_codex_scanner_ages_out_only_terminal_job_records(
     ]
 
 
+def test_codex_scanner_excludes_aged_out_terminal_jobs_from_session_disambiguation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An aged-out terminal job's sessionId must not count toward ambiguity.
+
+    Retention is meant to bound *all* downstream state tracking, including
+    session disambiguation — not just the final `records` list. A terminal
+    job old enough to be aged out must not make `_session()` see it as a
+    live candidate for prefix-matching.
+    """
+    now = 1_000_000
+    retention_secs = 6 * 60 * 60
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "old-terminal",
+                "sessionId": "session-old",
+                "status": "completed",
+                "phase": "done",
+                "epoch": now - retention_secs - 1,
+            },
+            {
+                "id": "current",
+                "sessionId": "session-new",
+                "status": "running",
+                "epoch": now - 10,
+            },
+        ],
+    )
+    monkeypatch.setattr(watchdog.time, "time", lambda: now)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan([ws], "session-")
+
+    ambiguous = [
+        key for key, _ in result.warnings if key.startswith("codex-session-ambiguous")
+    ]
+    assert ambiguous == []
+    assert [item.job_id for item in result.records] == ["current"]
+
+
 def test_codex_scanner_checks_shared_broker_once_per_workspace(tmp_path: Path) -> None:
     """Shared broker liveness is read once for all matching workspace jobs."""
 
