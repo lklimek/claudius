@@ -231,6 +231,35 @@ def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
     )
 
 
+def test_codex_scanner_warns_once_for_workspace_root_mismatch(
+    tmp_path: Path,
+) -> None:
+    """A job found under the wrong resolved workspace is skipped with context."""
+    ws = workspace(tmp_path)
+    reported = workspace(tmp_path, "reported")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [{"id": "mismatch", "workspaceRoot": str(reported)}],
+    )
+    info = watchdog.resolve_workspace(ws, env)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    first = scanner.scan([ws], "session-full")
+
+    assert first.records == []
+    assert first.warnings == [
+        (
+            f"codex-job-workspace-mismatch:{info.key}:mismatch.json",
+            f"Codex job mismatch.json in {info.key} reports "
+            f"workspaceRoot={str(reported)!r} which doesn't match this candidate's "
+            f"resolved path {info.canonical} — job skipped, may be silently "
+            "invisible to CODEX_* events",
+        )
+    ]
+    assert scanner.scan([ws], "session-full").warnings == []
+
+
 def test_short_codex_session_prefix_must_be_unique(tmp_path: Path) -> None:
     """Ambiguous short sessions disable Source D with one diagnostic."""
     ws = workspace(tmp_path)

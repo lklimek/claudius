@@ -974,6 +974,14 @@ class CodexScanner:
                 except OSError:
                     raw_canonical = Path(os.path.realpath(workspace_root))
                 if raw_canonical != info.canonical:
+                    self._warning(
+                        f"codex-job-workspace-mismatch:{info.key}:{job_path.name}",
+                        f"Codex job {job_path.name} in {info.key} reports "
+                        f"workspaceRoot={workspace_root!r} which doesn't match this "
+                        f"candidate's resolved path {info.canonical} — job skipped, "
+                        "may be silently invisible to CODEX_* events",
+                        warnings,
+                    )
                     continue
                 session = raw.get("sessionId")
                 if isinstance(session, str) and session:
