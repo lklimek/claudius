@@ -65,7 +65,7 @@ state/<workspace-slug>-<hash>/
   jobs/<job-id>.log      # streamed progress + final result / error text
 ```
 
-Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `completed` | `failed`), `phase`, `errorMessage`, `startedAt`, `completedAt`, `workspaceRoot`, `logFile`. `pid` is often `null` (jobs run inside the shared app-server, not as a tracked child).
+Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `completed` | `failed`), `phase`, `errorMessage`, `startedAt`, `completedAt`, `workspaceRoot`, `logFile`, `pid`, `result`. `pid` is `null` for some job classes (running inside the shared app-server), but `task-worker`-class jobs (spawned as `codex-companion.mjs task-worker --cwd <dir> --job-id <id>`) carry a real, independently verifiable `pid` — cross-check with `ps -p <pid>` or `/proc/<pid>`; a populated `pid` with no matching process means the Codex engine crashed silently while `status` stays stuck at `"running"` forever (the record is never updated on crash). `result.rawOutput` is the full final report text — read it directly instead of waiting for the wrapper agent to relay it, and `result.touchedFiles` lists the worktree/files the job actually edited.
 
 **Memory discipline (long sessions).** The watchdog polls repeatedly. Do **not** parse `state.json` per poll — it embeds every job and grows over the session. Instead:
 
@@ -73,7 +73,7 @@ Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `c
 - Parse an individual `jobs/<id>.json` only when its mtime advanced since the last poll, and extract only the few fields above.
 - Keep a bounded per-job last-seen map (`job-id → {status, mtime}`), never accumulated JSON.
 
-Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
+Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path — remember `workspaceRoot` reflects the *dispatching session's* cwd, not necessarily the worktree the job was told to `cd` into. With several teammates dispatched at once, several `jobs/*.json` files land in the same shared state directory; match each to its dispatch by `startedAt` proximity to when that teammate was spawned (seconds apart, in spawn order) and by `result.touchedFiles`, never by `sessionId` — each teammate's job carries its own dispatching session's id, not a value the coordinator can predict or match against in advance. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
 
 `codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal when not going through the companion's job state.
 
