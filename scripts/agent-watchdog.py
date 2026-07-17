@@ -10,11 +10,11 @@ session's swarm socket positively by pane ID and agent type before trusting pane
 absence, and all disappearance signals require consecutive confirmation.
 
 Codex Companion jobs are a separate Source D state machine. Candidate state
-directories are derived only from the selected team's lead, active members,
-and Source C worktrees. Detailed records must match both the effective Claude
-session and canonical workspace. Healthy work is silent; terminal status,
-stall, recovery, verified runtime disappearance, and confirmed record removal
-emit only the documented transition grammar.
+directories come from the selected team, Source C worktrees, and a bounded
+session-workspace scan of the plugin state root. Detailed records must match
+both the effective Claude session and canonical workspace. Healthy work is
+silent; terminal status, stall, recovery, verified runtime disappearance, and
+confirmed record removal emit only the documented transition grammar.
 
 Stdout is a hard protocol: it contains transition lines only. Startup details,
 selection notes, unsupported private-store formats, and transient diagnostics
@@ -32,9 +32,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import time
+import traceback
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 
@@ -47,13 +49,23 @@ TERMINAL_STATUSES = {
 }
 SUPPORTED_STATE_VERSIONS = {1}
 STATE_HEADER_LIMIT = 4096
+JSON_FILE_LIMIT = 10 * 1024 * 1024
+JSON_REJECTION_LIMIT = 512
 # Per-poll cost scales with the number of retained jobs/*.json files in a
 # workspace (the Codex Companion keeps terminal job records on disk). Warn once
 # per workspace when enumerating them exceeds this, signalling the directory has
 # grown enough to justify pruning old records or a bounded-scan optimization.
 JOBS_GLOB_WARN_SECS = 0.5
-# Keep active jobs indefinitely, but age terminal records out after six hours.
+# Job files older than this relative to the poll (or newest retained job for
+# direct scanner callers) are skipped before parsing. Override with
+# --codex-job-recency-secs when longer-running jobs need a wider window.
+DEFAULT_JOB_RECENCY_SECS = 7 * 24 * 60 * 60
+# Within the scan window, age terminal records out after six hours.
 TERMINAL_JOB_RETENTION_SECS = 6 * 60 * 60
+WARNING_CACHE_LIMIT = 1024
+CRASH_LOG_NAME = "agent-watchdog-crash.log"
+CRASH_LOG_LIMIT = 1024 * 1024
+CRASH_LOG_TRUNCATED = b"\n[traceback truncated to crash-log limit]\n"
 STATE_VERSION_PREFIX = re.compile(r'^\s*\{\s*"version"\s*:\s*')
 # Sentinel: the state file is a JSON object but its version could not be read
 # from the bounded header (file too large and "version" is not near the start).
@@ -106,6 +118,7 @@ SUBCOMMAND_BUILDS = {
     "pip": {"install"},
     "pip3": {"install"},
 }
+_JSON_REJECTIONS: OrderedDict[Path, tuple[int, int]] = OrderedDict()
 
 
 @dataclass(frozen=True)
@@ -190,6 +203,7 @@ class ScanResult:
 
     records: list[CodexRecord]
     warnings: list[tuple[str, str]] = field(default_factory=list)
+    workspace_count: int = 0
 
 
 @dataclass
@@ -209,6 +223,7 @@ class Options:
     stall_secs: int = 300
     resume_secs: int = 60
     poll_secs: int = 45
+    codex_job_recency_secs: int = DEFAULT_JOB_RECENCY_SECS
 
 
 def canonical_label(label: str) -> str:
@@ -216,13 +231,44 @@ def canonical_label(label: str) -> str:
     return label[6:] if label.startswith("agent-") else label
 
 
+def _is_agent_worktree_dir(path: Path) -> bool:
+    """Return whether a directory is eligible for worktree monitoring."""
+    return path.is_dir() and (
+        path.name.startswith("agent-") or (path / ".git").exists()
+    )
+
+
 def safe_json(path: Path) -> Any | None:
     """Read JSON defensively, returning None for transient failures."""
+    signature: tuple[int, int] | None = None
     try:
-        with path.open(encoding="utf-8") as handle:
-            return json.load(handle)
-    except (OSError, UnicodeError, json.JSONDecodeError):
+        file_info = path.stat()
+        signature = (file_info.st_mtime_ns, file_info.st_size)
+        if _JSON_REJECTIONS.get(path) == signature:
+            _JSON_REJECTIONS.move_to_end(path)
+            return None
+        with path.open("rb") as handle:
+            payload = handle.read(JSON_FILE_LIMIT + 1)
+        if len(payload) > JSON_FILE_LIMIT:
+            print(
+                f"agent-watchdog: JSON file {path} exceeds the "
+                f"{JSON_FILE_LIMIT}-byte read limit; skipped",
+                file=sys.stderr,
+                flush=True,
+            )
+            _JSON_REJECTIONS[path] = signature
+            while len(_JSON_REJECTIONS) > JSON_REJECTION_LIMIT:
+                _JSON_REJECTIONS.popitem(last=False)
+            return None
+        value = json.loads(payload.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError):
+        if signature is not None:
+            _JSON_REJECTIONS[path] = signature
+            while len(_JSON_REJECTIONS) > JSON_REJECTION_LIMIT:
+                _JSON_REJECTIONS.popitem(last=False)
         return None
+    _JSON_REJECTIONS.pop(path, None)
+    return value
 
 
 def _safe_state_header(path: Path) -> _StateHeader | None:
@@ -460,8 +506,26 @@ def member_activity(
 ) -> Activity | None:
     """Resolve worktree, cwd, then transcript activity for one team member."""
     key = canonical_label(member.name)
-    worktree = worktrees_dir / f"agent-{key}"
-    if worktree.is_dir():
+    exact_worktree = worktrees_dir / f"agent-{key}"
+    worktree: Path | None = exact_worktree if exact_worktree.is_dir() else None
+    if worktree is None:
+        try:
+            worktree = next(
+                (
+                    path
+                    for path in sorted(worktrees_dir.iterdir())
+                    if _is_agent_worktree_dir(path)
+                    and (path / ".git").exists()
+                    and (
+                        canonical_label(path.name) == key
+                        or path.name.endswith(f"-{key}")
+                    )
+                ),
+                None,
+            )
+        except OSError:
+            worktree = None
+    if worktree is not None:
         epoch = newest_mtime_under(worktree)
         return Activity(epoch, worktree) if epoch is not None else None
     if member.cwd and cwd_counts.get(member.cwd, 0) >= 2:
@@ -824,17 +888,24 @@ class CodexScanner:
         env: Mapping[str, str] | None = None,
         proc: ProcInspector | None = None,
         cache_limit: int = 512,
+        job_recency_secs: int = DEFAULT_JOB_RECENCY_SECS,
     ) -> None:
         self.env = dict(os.environ if env is None else env)
         self.proc = proc or ProcInspector()
         self.cache = _JsonCache(cache_limit)
         self.state_headers = _StateHeaderCache(cache_limit)
-        self.warned: set[str] = set()
+        self.job_recency_secs = job_recency_secs
+        self.warning_limit = cache_limit
+        self.warned: OrderedDict[str, None] = OrderedDict()
 
     def _warning(self, key: str, message: str, warnings: list[tuple[str, str]]) -> None:
-        if key not in self.warned:
-            self.warned.add(key)
-            warnings.append((key, message))
+        if key in self.warned:
+            self.warned.move_to_end(key)
+            return
+        self.warned[key] = None
+        while len(self.warned) > self.warning_limit:
+            self.warned.popitem(last=False)
+        warnings.append((key, message))
 
     def _session(
         self,
@@ -882,13 +953,127 @@ class CodexScanner:
             return value
         return {"pid": value.get("pid"), "endpoint": value.get("endpoint")}
 
+    def _job_paths(
+        self,
+        state_dir: Path,
+        workspace_key: str,
+        now: float | None,
+        warnings: list[tuple[str, str]],
+    ) -> list[Path]:
+        glob_start = time.monotonic()
+        try:
+            paths = sorted((state_dir / "jobs").glob("*.json"))
+        except OSError:
+            paths = []
+        glob_elapsed = time.monotonic() - glob_start
+        if glob_elapsed > JOBS_GLOB_WARN_SECS:
+            self._warning(
+                f"codex-jobs-glob-slow:{workspace_key}",
+                f"Codex job enumeration for {workspace_key} took "
+                f"{glob_elapsed:.2f}s ({len(paths)} files); old records are "
+                "recency-filtered, but pruning jobs/*.json also bounds enumeration",
+                warnings,
+            )
+        mtimes = [(path, safe_mtime(path)) for path in paths]
+        valid_mtimes = [mtime for _, mtime in mtimes if mtime is not None]
+        reference = now if now is not None else max(valid_mtimes, default=0)
+        cutoff = reference - self.job_recency_secs
+        recent = [
+            path for path, mtime in mtimes if mtime is not None and mtime >= cutoff
+        ]
+        skipped = len(paths) - len(recent)
+        if skipped:
+            self._warning(
+                f"codex-jobs-recency:{workspace_key}",
+                f"Codex state {workspace_key} skipped {skipped} job file(s) "
+                f"older than the {self.job_recency_secs}s recency window",
+                warnings,
+            )
+        return recent
+
+    @staticmethod
+    def _canonical_workspace(value: str) -> Path:
+        try:
+            return Path(value).resolve(strict=True)
+        except (OSError, ValueError):
+            return Path(os.path.realpath(value))
+
+    def _direct_workspaces(
+        self,
+        candidates: Iterable[Path],
+        effective_session: str,
+        now: float | None,
+        warnings: list[tuple[str, str]],
+    ) -> list[WorkspaceInfo]:
+        allowed: set[Path] = set()
+        for candidate in candidates:
+            try:
+                if candidate.is_dir():
+                    allowed.add(resolve_workspace(candidate, self.env).canonical)
+            except (OSError, ValueError):
+                continue
+        if not allowed:
+            return []
+        state_root = codex_state_root(self.env)
+        allowed_hashes = {sha256_path(canonical) for canonical in allowed}
+        try:
+            state_dirs = sorted(
+                path
+                for path in state_root.iterdir()
+                if path.is_dir()
+                and not path.is_symlink()
+                and any(
+                    path.name.endswith(f"-{path_hash}") for path_hash in allowed_hashes
+                )
+            )
+        except OSError:
+            return []
+        discovered: dict[Path, WorkspaceInfo] = {}
+        for state_dir in state_dirs:
+            for job_path in self._job_paths(state_dir, state_dir.name, now, warnings):
+                try:
+                    raw = self.cache.read(job_path, self._minimal_job)
+                    if not isinstance(raw, dict):
+                        continue
+                    session = raw.get("sessionId")
+                    if not (
+                        isinstance(session, str)
+                        and session
+                        and _prefix_matches(session, effective_session)
+                    ):
+                        continue
+                    workspace_root = raw.get("workspaceRoot")
+                    if not isinstance(workspace_root, str) or not workspace_root:
+                        continue
+                    canonical = self._canonical_workspace(workspace_root)
+                    if canonical not in allowed:
+                        continue
+                    root = Path(workspace_root)
+                    expected_key = workspace_key(root, canonical)
+                    if state_dir.name != expected_key:
+                        continue
+                    discovered.setdefault(
+                        canonical,
+                        WorkspaceInfo(root, canonical, state_dir.name, state_dir),
+                    )
+                except Exception as error:
+                    self._warning(
+                        f"codex-job-scan-error:{state_dir.name}:{job_path.name}:"
+                        f"{type(error).__name__}",
+                        f"Codex job {job_path.name!r} in {state_dir.name} raised "
+                        f"{type(error).__name__} during discovery; job skipped",
+                        warnings,
+                    )
+        return list(discovered.values())
+
     def scan(
         self,
         candidates: Iterable[Path],
         effective_session: str,
         now: float | None = None,
+        discovery_candidates: Iterable[Path] = (),
     ) -> ScanResult:
-        """Scan active and recent matching jobs without enumerating global state."""
+        """Scan active and recent jobs from mapped and session-root discovery."""
         warnings: list[tuple[str, str]] = []
         if not effective_session:
             return ScanResult([], warnings)
@@ -903,6 +1088,10 @@ class CodexScanner:
             except OSError:
                 continue
             info = resolve_workspace(candidate, self.env)
+            workspaces.setdefault(info.canonical, info)
+        for info in self._direct_workspaces(
+            discovery_candidates, effective_session, now, warnings
+        ):
             workspaces.setdefault(info.canonical, info)
 
         raw_by_workspace: list[
@@ -948,103 +1137,123 @@ class CodexScanner:
                 )
                 continue
             jobs: list[tuple[Path, dict[str, Any]]] = []
-            glob_start = time.monotonic()
-            try:
-                job_paths = sorted((info.state_dir / "jobs").glob("*.json"))
-            except OSError:
-                job_paths = []
-            glob_elapsed = time.monotonic() - glob_start
-            if glob_elapsed > JOBS_GLOB_WARN_SECS:
-                self._warning(
-                    f"codex-jobs-glob-slow:{info.key}",
-                    f"Codex job enumeration for {info.key} took {glob_elapsed:.2f}s "
-                    f"({len(job_paths)} files); per-poll cost scales with retained "
-                    "jobs/*.json — prune old job records",
-                    warnings,
-                )
-            for job_path in job_paths:
-                raw = self.cache.read(job_path, self._minimal_job)
-                if not isinstance(raw, dict):
-                    continue
-                workspace_root = raw.get("workspaceRoot")
-                if not isinstance(workspace_root, str) or not workspace_root:
-                    continue
+            for job_path in self._job_paths(info.state_dir, info.key, now, warnings):
                 try:
-                    raw_canonical = Path(workspace_root).resolve(strict=True)
-                except OSError:
-                    raw_canonical = Path(os.path.realpath(workspace_root))
-                if raw_canonical != info.canonical:
-                    job_session = raw.get("sessionId")
-                    plausibly_tracked = not (
-                        isinstance(job_session, str)
-                        and job_session
-                        and not _prefix_matches(job_session, effective_session)
-                    )
-                    if plausibly_tracked:
+                    raw = self.cache.read(job_path, self._minimal_job)
+                    if not isinstance(raw, dict):
+                        continue
+                    workspace_root = raw.get("workspaceRoot")
+                    if not isinstance(workspace_root, str) or not workspace_root:
+                        continue
+                    raw_canonical = self._canonical_workspace(workspace_root)
+                    if raw_canonical != info.canonical:
+                        job_session = raw.get("sessionId")
+                        plausibly_tracked = not (
+                            isinstance(job_session, str)
+                            and job_session
+                            and not _prefix_matches(job_session, effective_session)
+                        )
+                        if plausibly_tracked:
+                            self._warning(
+                                f"codex-job-workspace-mismatch:{info.key}:"
+                                f"{job_path.name}",
+                                f"Codex job {job_path.name!r} in {info.key} reports "
+                                f"workspaceRoot={workspace_root!r} which doesn't match "
+                                f"this candidate's resolved path {info.canonical} — "
+                                "job skipped, may be silently invisible to CODEX_* events",
+                                warnings,
+                            )
+                        continue
+                    job_id = raw.get("id")
+                    if not isinstance(job_id, str) or not SAFE_FIELD.fullmatch(job_id):
                         self._warning(
-                            f"codex-job-workspace-mismatch:{info.key}:{job_path.name}",
-                            f"Codex job {job_path.name!r} in {info.key} reports "
-                            f"workspaceRoot={workspace_root!r} which doesn't match this "
-                            f"candidate's resolved path {info.canonical} — job skipped, "
-                            "may be silently invisible to CODEX_* events",
+                            f"codex-job-id:{info.key}:{job_path.name}",
+                            f"Codex state {info.key} contains an unsafe/missing "
+                            "job id; skipped",
                             warnings,
                         )
-                    continue
-                persisted_status = raw.get("status")
-                if persisted_status not in ACTIVE_STATUSES:
-                    terminal_status = TERMINAL_STATUSES.get(str(persisted_status), "")
-                    if terminal_status:
+                        continue
+                    persisted_status = raw.get("status")
+                    if (
+                        persisted_status not in ACTIVE_STATUSES
+                        and str(persisted_status) not in TERMINAL_STATUSES
+                    ):
+                        self._warning(
+                            f"codex-job-status:{info.key}:{job_id}:{persisted_status}",
+                            f"Codex job {job_id} has unknown status "
+                            f"{persisted_status!r}; skipped",
+                            warnings,
+                        )
+                        continue
+                    if persisted_status not in ACTIVE_STATUSES:
                         job_mtime = safe_mtime(job_path)
                         if job_mtime is not None and job_mtime < terminal_cutoff:
-                            # Aged-out terminal job: exclude from session
-                            # disambiguation too, not just from records —
-                            # otherwise a long-dead session can still make
-                            # _session() see it as a live ambiguity candidate.
                             continue
-                session = raw.get("sessionId")
-                if isinstance(session, str) and session:
-                    sessions.add(session)
-                jobs.append((job_path, raw))
+                    session = raw.get("sessionId")
+                    if isinstance(session, str) and session:
+                        sessions.add(session)
+                    jobs.append((job_path, raw))
+                except Exception as error:
+                    self._warning(
+                        f"codex-job-scan-error:{info.key}:{job_path.name}:"
+                        f"{type(error).__name__}",
+                        f"Codex job {job_path.name!r} in {info.key} raised "
+                        f"{type(error).__name__} during scanning; job skipped",
+                        warnings,
+                    )
             raw_by_workspace.append((info, jobs, safe_mtime(state_path)))
 
         session = self._session(effective_session, sessions, warnings)
         if not session:
-            return ScanResult([], warnings)
+            return ScanResult([], warnings, len(raw_by_workspace))
         records: list[CodexRecord] = []
         for info, jobs, state_mtime in raw_by_workspace:
+            workspace_active_count = sum(
+                raw.get("status") in ACTIVE_STATUSES for _, raw in jobs
+            )
             matching: list[tuple[Path, dict[str, Any], str]] = []
             for job_path, raw in jobs:
-                if raw.get("sessionId") != session:
-                    continue
-                job_id = raw.get("id")
-                if not isinstance(job_id, str) or not SAFE_FIELD.fullmatch(job_id):
+                try:
+                    if raw.get("sessionId") != session:
+                        continue
+                    job_id = raw.get("id")
+                    if not isinstance(job_id, str) or not SAFE_FIELD.fullmatch(job_id):
+                        self._warning(
+                            f"codex-job-id:{info.key}:{job_path.name}",
+                            f"Codex state {info.key} contains an unsafe/missing "
+                            "job id; skipped",
+                            warnings,
+                        )
+                        continue
+                    persisted_status = raw.get("status")
+                    if persisted_status in ACTIVE_STATUSES:
+                        status = "active"
+                    else:
+                        status = TERMINAL_STATUSES.get(str(persisted_status), "")
+                    if not status:
+                        self._warning(
+                            f"codex-job-status:{info.key}:{job_id}:{persisted_status}",
+                            f"Codex job {job_id} has unknown status "
+                            f"{persisted_status!r}; skipped",
+                            warnings,
+                        )
+                        continue
+                    job_mtime = safe_mtime(job_path)
+                    if (
+                        status != "active"
+                        and job_mtime is not None
+                        and job_mtime < terminal_cutoff
+                    ):
+                        continue
+                    matching.append((job_path, raw, status))
+                except Exception as error:
                     self._warning(
-                        f"codex-job-id:{info.key}:{job_path.name}",
-                        f"Codex state {info.key} contains an unsafe/missing job id; skipped",
+                        f"codex-job-scan-error:{info.key}:{job_path.name}:"
+                        f"{type(error).__name__}",
+                        f"Codex job {job_path.name!r} in {info.key} raised "
+                        f"{type(error).__name__} during normalization; job skipped",
                         warnings,
                     )
-                    continue
-                persisted_status = raw.get("status")
-                if persisted_status in ACTIVE_STATUSES:
-                    status = "active"
-                else:
-                    status = TERMINAL_STATUSES.get(str(persisted_status), "")
-                if not status:
-                    self._warning(
-                        f"codex-job-status:{info.key}:{job_id}:{persisted_status}",
-                        f"Codex job {job_id} has unknown status {persisted_status!r}; skipped",
-                        warnings,
-                    )
-                    continue
-                job_mtime = safe_mtime(job_path)
-                if (
-                    status != "active"
-                    and job_mtime is not None
-                    and job_mtime < terminal_cutoff
-                ):
-                    continue
-                matching.append((job_path, raw, status))
-            active_count = sum(status == "active" for _, _, status in matching)
             broker = self.cache.read(
                 info.state_dir / "broker.json", self._minimal_broker
             )
@@ -1053,50 +1262,61 @@ class CodexScanner:
                 self.proc.broker(broker_record, info.canonical) if matching else None
             )
             for job_path, raw, status in matching:
-                job_id = str(raw["id"])
-                clocks = [safe_mtime(job_path)]
-                log_file = raw.get("logFile")
-                declared = Path(str(log_file)) if log_file else None
-                sibling = info.state_dir / "jobs" / f"{job_id}.log"
-                log_path = declared if declared and declared.exists() else sibling
-                clocks.append(safe_mtime(log_path))
-                clocks.append(_parse_timestamp(raw.get("updatedAt")))
-                if status == "active" and active_count == 1:
-                    clocks.append(state_mtime)
-                valid_clocks = [value for value in clocks if value is not None]
-                activity = max(valid_clocks) if valid_clocks else None
-                if activity is not None and activity > int(time.time()) + 5:
-                    self._warning(
-                        f"codex-clock-future:{info.key}:{job_id}",
-                        f"Codex job {job_id} has a future activity clock; idle clamped to zero",
-                        warnings,
-                    )
-                launcher = self.proc.launcher(raw.get("pid"), info.canonical)
-                runtime = classify_runtime([launcher], [broker_evidence])
                 try:
-                    created = float(raw.get("createdAt") or 0)
-                except (TypeError, ValueError):
-                    created = 0.0
-                records.append(
-                    CodexRecord(
-                        key=f"codex:{info.key}:{job_id}",
-                        job_id=job_id,
-                        workspace_key=info.key,
-                        workspace_root=info.canonical,
-                        status=status,
-                        phase=_safe_phase(raw.get("phase")),
-                        activity_epoch=activity,
-                        runtime=runtime,
-                        created_at=created,
-                        error_message=(
-                            str(raw["errorMessage"])
-                            if raw.get("errorMessage") is not None
-                            else None
+                    job_id = str(raw["id"])
+                    clocks = [safe_mtime(job_path)]
+                    log_file = raw.get("logFile")
+                    declared = Path(str(log_file)) if log_file else None
+                    sibling = info.state_dir / "jobs" / f"{job_id}.log"
+                    log_path = declared if declared and declared.exists() else sibling
+                    clocks.append(safe_mtime(log_path))
+                    clocks.append(_parse_timestamp(raw.get("updatedAt")))
+                    if status == "active" and workspace_active_count == 1:
+                        clocks.append(state_mtime)
+                    valid_clocks = [value for value in clocks if value is not None]
+                    activity = max(valid_clocks) if valid_clocks else None
+                    if activity is not None and activity > int(time.time()) + 5:
+                        self._warning(
+                            f"codex-clock-future:{info.key}:{job_id}",
+                            f"Codex job {job_id} has a future activity clock; "
+                            "idle clamped to zero",
+                            warnings,
+                        )
+                    launcher = self.proc.launcher(raw.get("pid"), info.canonical)
+                    runtime = classify_runtime([launcher], [broker_evidence])
+                    try:
+                        created = float(raw.get("createdAt") or 0)
+                    except (TypeError, ValueError):
+                        created = 0.0
+                    records.append(
+                        CodexRecord(
+                            key=f"codex:{info.key}:{job_id}",
+                            job_id=job_id,
+                            workspace_key=info.key,
+                            workspace_root=info.canonical,
+                            status=status,
+                            phase=_safe_phase(raw.get("phase")),
+                            activity_epoch=activity,
+                            runtime=runtime,
+                            created_at=created,
+                            error_message=(
+                                str(raw["errorMessage"])
+                                if raw.get("errorMessage") is not None
+                                else None
+                            ),
                         ),
                     )
-                )
+                except Exception as error:
+                    self._warning(
+                        f"codex-job-scan-error:{info.key}:{job_path.name}:"
+                        f"{type(error).__name__}",
+                        f"Codex job {job_path.name!r} in {info.key} raised "
+                        f"{type(error).__name__} during record construction; "
+                        "job skipped",
+                        warnings,
+                    )
         records.sort(key=lambda item: (item.created_at, item.job_id))
-        return ScanResult(records, warnings)
+        return ScanResult(records, warnings, len(raw_by_workspace))
 
 
 class ClaudeStateMachine:
@@ -1582,7 +1802,8 @@ class Watchdog:
         self.options = options
         self.env = dict(os.environ if env is None else env)
         self.home = Path(self.env.get("HOME", str(Path.home())))
-        self.warned: set[str] = set()
+        self.session_cwd = Path(self.env.get("PWD", str(Path.cwd())))
+        self.warned: OrderedDict[str, None] = OrderedDict()
         self.claude = ClaudeStateMachine(
             options.stall_secs,
             options.resume_secs,
@@ -1595,14 +1816,21 @@ class Watchdog:
             options.gone_polls,
             options.gone_enabled,
         )
-        self.scanner = CodexScanner(self.env, ProcInspector(proc_root))
+        self.scanner = CodexScanner(
+            self.env,
+            ProcInspector(proc_root),
+            job_recency_secs=options.codex_job_recency_secs,
+        )
         self.have_tmux = options.gone_enabled and _command_exists("tmux", self.env)
 
     def warn_once(self, key: str, message: str) -> None:
         """Emit one diagnostic to stderr without touching protocol stdout."""
         if key in self.warned:
+            self.warned.move_to_end(key)
             return
-        self.warned.add(key)
+        self.warned[key] = None
+        while len(self.warned) > WARNING_CACHE_LIMIT:
+            self.warned.popitem(last=False)
         print(f"agent-watchdog: {message}", file=sys.stderr, flush=True)
 
     def _task_dir(self, team: Team | None) -> Path | None:
@@ -1782,7 +2010,7 @@ class Watchdog:
                 )
         try:
             source_c = sorted(
-                path for path in worktrees.glob("agent-*") if path.is_dir()
+                path for path in worktrees.iterdir() if _is_agent_worktree_dir(path)
             )
         except OSError:
             source_c = []
@@ -1835,28 +2063,35 @@ class Watchdog:
             codex_candidates.extend(member.cwd for member in team.members if member.cwd)
         codex_candidates.extend(source_c)
         codex_records: Iterable[CodexRecord] = ()
+        scan = ScanResult([])
         if effective_session:
-            if not codex_candidates:
-                if team is None:
-                    cause = "no team config and no discovered agent worktrees"
-                    remedy = "dispatch at least one NAMED teammate to create a team"
-                else:
-                    cause = (
-                        "a team config with no active member or lead cwd, and no "
-                        "discovered agent worktrees"
-                    )
-                    remedy = "dispatch a NAMED teammate that reports a cwd"
-                self.warn_once(
-                    "codex-zero-candidates",
-                    f"Codex Source D: {cause} — 0 candidate workspaces to scan "
-                    "this poll; Codex job monitoring is effectively disabled "
-                    f"({remedy}, or verify --worktrees points at where Codex "
-                    "worktrees actually live, if Codex jobs are expected).",
-                )
-            scan = self.scanner.scan(codex_candidates, effective_session, epoch)
+            scan = self.scanner.scan(
+                codex_candidates,
+                effective_session,
+                epoch,
+                discovery_candidates=[self.session_cwd],
+            )
             for warning_key, message in scan.warnings:
                 self.warn_once(warning_key, message)
             codex_records = scan.records
+        if team is None and not source_c and scan.workspace_count == 0:
+            self.warn_once(
+                "zero-monitored",
+                "monitoring 0 Claude agents and 0 Codex jobs/workspaces: no team "
+                "config, no discovered worktrees, and no session-workspace Codex "
+                "state; dispatch a named teammate or verify --worktrees, "
+                "--session-id, and the watchdog working directory.",
+            )
+        elif team is not None and not codex_candidates and scan.workspace_count == 0:
+            self.warn_once(
+                "codex-zero-candidates",
+                "Codex Source D: a team config with no active member or lead cwd, "
+                "and no discovered agent worktrees — 0 candidate workspaces to "
+                "scan this poll; Codex job monitoring is effectively disabled "
+                "(dispatch a NAMED teammate that reports a cwd, or verify "
+                "--worktrees points at where Codex worktrees actually live, if "
+                "Codex jobs are expected).",
+            )
         events.extend(
             self.codex.evaluate(
                 codex_records,
@@ -1872,10 +2107,13 @@ Usage: agent-watchdog.py [--session-id ID] [--team-dir DIR] [--tasks-dir DIR]
                          [--projects-dir DIR] [--worktrees DIR] [--watch-subagents]
                          [--no-gone] [--gone-polls N] [--stall-secs N]
                          [--resume-secs N] [--poll-secs N]
+                         [--codex-job-recency-secs N]
 STALL = owns an in_progress task AND idle >= threshold AND no build under the
 agent's worktree/cwd. An idle agent owning no in_progress task is never flagged.
 --session-id (default $CLAUDE_SESSION_ID) scopes ALL discovery to THIS session's
 team; precedence --team-dir > --session-id > $CLAUDE_SESSION_ID > newest autodetect.
+--worktrees precedence: flag > $CLAUDIUS_WORKTREE_ROOT > .claude/worktrees.
+--codex-job-recency-secs defaults to 604800 (7 days); older job files are not parsed.
 Emits ONLY transition lines to stdout; diagnostics to stderr.
 """
 
@@ -1894,11 +2132,17 @@ def _integer(flag: str, value: str) -> int:
 
 def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Options:
     """Parse the exact Bash-compatible CLI surface and defaults."""
+    if not argv:
+        # Bare defaults miss pre-created worktrees while appearing to monitor normally.
+        print(USAGE, file=sys.stderr, end="")
+        die("no arguments provided; use explicit flags or --help")
     environment = os.environ if env is None else env
     home = Path(environment.get("HOME", str(Path.home())))
+    worktree_root = environment.get("CLAUDIUS_WORKTREE_ROOT", "").strip()
     options = Options(
         session_id=environment.get("CLAUDE_SESSION_ID", ""),
         projects_dir=home / ".claude" / "projects",
+        worktrees=(Path(worktree_root) if worktree_root else Path(".claude/worktrees")),
     )
     index = 0
     value_flags = {
@@ -1911,6 +2155,7 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
         "--stall-secs",
         "--resume-secs",
         "--poll-secs",
+        "--codex-job-recency-secs",
     }
     while index < len(argv):
         argument = argv[index]
@@ -1948,11 +2193,15 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
             options.resume_secs = _integer(argument, value)
         elif argument == "--poll-secs":
             options.poll_secs = _integer(argument, value)
+        elif argument == "--codex-job-recency-secs":
+            options.codex_job_recency_secs = _integer(argument, value)
         index += 2
     if options.poll_secs < 1:
         die("--poll-secs must be >= 1")
     if options.gone_polls < 1:
         die("--gone-polls must be >= 1")
+    if options.codex_job_recency_secs < 1:
+        die("--codex-job-recency-secs must be >= 1")
     if options.resume_secs >= options.stall_secs:
         die(
             f"--resume-secs ({options.resume_secs}) must be < "
@@ -1971,6 +2220,64 @@ def _command_exists(command: str, env: Mapping[str, str] | None = None) -> bool:
     )
 
 
+def _write_crash_log(
+    traceback_text: str, env: Mapping[str, str] | None = None
+) -> Path | None:
+    """Append an uncaught exception traceback to the watchdog crash log."""
+    environment = os.environ if env is None else env
+    plugin_data = environment.get("CLAUDE_PLUGIN_DATA", "")
+    if plugin_data:
+        primary = Path(plugin_data) / "logs"
+    else:
+        state_home = environment.get("XDG_STATE_HOME", "")
+        primary = (
+            Path(state_home)
+            if state_home
+            else Path(environment.get("HOME", str(Path.home()))) / ".local" / "state"
+        ) / "claudius"
+    candidates = [primary, Path("/tmp") / f"claudius-{os.geteuid()}"]
+    entry = (
+        f"\n[{datetime.now(timezone.utc).isoformat()}] uncaught exception\n"
+        f"{traceback_text}"
+    ).encode()
+    if len(entry) > CRASH_LOG_LIMIT:
+        entry = (
+            entry[: CRASH_LOG_LIMIT - len(CRASH_LOG_TRUNCATED)] + CRASH_LOG_TRUNCATED
+        )
+    for directory in candidates:
+        try:
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            directory_info = directory.lstat()
+            if not stat.S_ISDIR(directory_info.st_mode):
+                continue
+            if directory_info.st_uid != os.geteuid():
+                continue
+            directory.chmod(0o700)
+            path = directory / CRASH_LOG_NAME
+            flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+            flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+            descriptor = os.open(path, flags, 0o600)
+            try:
+                file_info = os.fstat(descriptor)
+                if not stat.S_ISREG(file_info.st_mode):
+                    continue
+                if file_info.st_uid != os.geteuid():
+                    continue
+                os.fchmod(descriptor, 0o600)
+                if file_info.st_size + len(entry) > CRASH_LOG_LIMIT:
+                    os.ftruncate(descriptor, 0)
+                with os.fdopen(descriptor, "ab") as handle:
+                    descriptor = -1
+                    handle.write(entry)
+            finally:
+                if descriptor >= 0:
+                    os.close(descriptor)
+            return path
+        except OSError:
+            continue
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the persistent monitor until interrupted."""
     options = parse_args(sys.argv[1:] if argv is None else argv)
@@ -1983,7 +2290,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"session={options.session_id or '<auto>'} "
         f"team-dir={options.team_dir or '<auto>'} "
         f"tasks-dir={options.tasks_dir or '<auto>'} worktrees={options.worktrees} "
-        f"watch-subagents={int(options.watch_subagents)}",
+        f"watch-subagents={int(options.watch_subagents)} "
+        f"codex-job-recency={options.codex_job_recency_secs}s",
         file=sys.stderr,
         flush=True,
     )
@@ -1995,7 +2303,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         except Exception as error:
             monitor.warn_once(
                 f"poll-error:{type(error).__name__}",
-                f"transient poll failure ignored ({type(error).__name__})",
+                "transient poll failure ignored "
+                f"({type(error).__name__}: {_error_field(str(error))})",
             )
         try:
             time.sleep(options.poll_secs)
@@ -2008,3 +2317,12 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except KeyboardInterrupt:
         raise SystemExit(0) from None
+    except Exception:
+        crash_path = _write_crash_log(traceback.format_exc())
+        location = str(crash_path) if crash_path else "unavailable"
+        print(
+            f"agent-watchdog: uncaught exception traceback written to {location}",
+            file=sys.stderr,
+            flush=True,
+        )
+        raise

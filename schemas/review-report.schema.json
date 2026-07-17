@@ -330,6 +330,11 @@
         }
       }
     },
+    "finding_section_array": {
+      "type": "array",
+      "description": "Producer-stage output containing finding sections before consolidation.",
+      "items": { "$ref": "#/$defs/finding_section" }
+    },
     "triage_decision": {
       "type": "object",
       "required": ["finding_id", "action"],

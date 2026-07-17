@@ -50,7 +50,7 @@ ci_iterations = 0, review_iterations = 0, findings_fixed = 0, findings_deferred 
      ├── Grumpy Stream   — FRESH /grumpy-review on current code → fix
      └── Review Stream   — request copilot + check for NEW reviews → fix
      ↕ Streams communicate to CLAIM findings and avoid duplicate fixes
-  3. MERGE          — combine code fixes from all streams into working tree
+  3. MERGE          — combine code fixes from all streams, then sync with the PR's base branch
   4. RESOLVE        — resolve addressed bot review threads
   5. EXIT CHECK     — three outcomes:
      → EXIT SUCCESS: no fixes applied AND CI green AND no MEDIUM+ findings
@@ -77,7 +77,7 @@ Spawn each stream as a named `Agent()` — every session has one implicit team, 
 - `grumpy-stream`
 - `review-stream`
 
-**Named spawning requires this skill to be running in the session lead.** If a lead delegates the whole `/ci-dance` invocation to a teammate rather than running it itself, every named spawn above fails outright — "Teammates cannot spawn other teammates" (flat team roster). If you find yourself running this skill as a non-lead teammate: spawn the three streams as **unnamed** background subagents instead (omit `name`), skip the entire Inter-Stream Communication claim/completion protocol below (unnamed agents can't be addressed by `SendMessage`), and rely solely on Step 3's merge-time cherry-pick/conflict resolution as the overlap trust boundary — it already degrades gracefully to this. Step 3/6's `shutdown_request` likewise doesn't apply to unnamed subagents; they simply run to completion.
+**Named spawning requires this skill to be running in the session lead.** If a lead delegates the whole `/ci-dance` invocation to a teammate rather than running it itself, every named spawn above fails outright — "Teammates cannot spawn other teammates" (flat team roster). If you find yourself running this skill as a non-lead teammate: spawn the three streams as **unnamed** background subagents instead (omit `name`), skip the entire Inter-Stream Communication claim/completion protocol below (unnamed agents can't be addressed by `SendMessage`), and rely solely on Step 3's merge-time cherry-pick/conflict resolution as the overlap trust boundary — it already degrades gracefully to this. Step 3's `shutdown_request` likewise doesn't apply to unnamed subagents; they simply run to completion.
 
 ### Team-spawn worktree quirk
 
@@ -85,7 +85,7 @@ See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary fo
 
 - **`isolation="worktree"` silently dropped for agents in the session's implicit team.** Every named `Agent()` spawned from the lead's session joins that one implicit team automatically, and `isolation="worktree"` is ignored either way — the agent lands in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
 
-**Workaround (single canonical path)**: the lead pre-creates one worktree per stream via `git worktree add .claude/worktrees/agent-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and includes the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s into its assigned path on its first turn and works there. This is the stable path; do not attempt other workarounds.
+**Workaround (single canonical path)**: the lead pre-creates one worktree per stream under the configured root (`$CLAUDIUS_WORKTREE_ROOT`, default `.claude/worktrees`; see `grand-admiral` § Worktree Isolation and `codex-crew` § Sandbox & Workdir) via `git worktree add <worktree-root>/<repo-path-slug>-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and includes the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s into its assigned path on its first turn and works there. This is the stable path; do not attempt other workarounds. Pointing the stall watchdog's `--worktrees` flag at the same configured root keeps every stream discoverable.
 
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
@@ -139,6 +139,8 @@ SendMessage(to="grumpy-stream", message="I'm fixing src/auth.rs:17-25, skip this
 ```
 Use for: overlapping finding alerts, completion summaries, conflict flags.
 
+**Addressing fallback**: `to="main"` and `to="*"` both fail for a stream whose own session registered as the root node — it has no coordinator or siblings to address that way. This is intermittent, not deterministic: in the observed case one of three parallel streams hit it while the others addressed `"main"` fine. On failure, retry the same message with `to="team-lead"`, which reaches the actual coordinator, before treating it as a hard error.
+
 ### Step 3: Merge
 
 After all three streams complete:
@@ -148,9 +150,10 @@ After all three streams complete:
 3. Cherry-pick each stream's commits into the main working branch
 4. If cherry-pick conflicts (two streams edited overlapping lines despite claim coordination), resolve — prefer the more comprehensive fix
 5. **Verify every deferred finding.** For each finding a stream deferred to another's claim, check the claiming stream's commits/diff actually address that location. Addressed → drop it. Not addressed (claimant never got to it, or fixed something else there) → do NOT drop it: reassign it to a stream for an immediate follow-up fix if time remains this iteration, otherwise carry it forward explicitly into the Final Report and next iteration's fix queue. A deferred finding only ever resolves to confirmed-fixed or carried-forward — never silently dropped.
-6. Shut down each stream agent via `SendMessage({type: "shutdown_request"})` (see `grand-admiral` § Terminating Teammates)
-7. Clean up worktrees (`git worktree remove` + `prune`)
-8. The merged working tree is ready for the next push
+6. **Sync with the PR's base branch — every iteration, before the next push (Step 1).** Stream commits fork from this branch's own HEAD, never from base, so no cherry-pick can surface what landed on base mid-run. Invoke `claudius:merge-base` to fetch `origin/<baseRefName>`, merge, and resolve conflicts. Also hunt **silent collisions** — changes that merge cleanly yet are wrong together, notably a version bump another PR independently made to the same SemVer field. If the branch's version now duplicates one already on base, re-bump past it. Run this unconditionally; never skip it on the assumption base is unchanged.
+7. Shut down each stream agent via `SendMessage({type: "shutdown_request"})` (see `grand-admiral` § Terminating Teammates)
+8. Clean up worktrees (`git worktree remove` + `prune`)
+9. The merged working tree is ready for the next push
 
 ### Step 4: Resolve Threads
 

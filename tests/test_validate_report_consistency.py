@@ -270,10 +270,10 @@ class TestCleanReport:
 # ---------------------------------------------------------------------------
 # CLI integration — warnings go to stderr; exit code stays 0 when valid.
 # ---------------------------------------------------------------------------
-def _run_cli(report: dict, tmp_path: Path, monkeypatch, capsys):
+def _run_cli(report: object, tmp_path: Path, monkeypatch, capsys, *extra_args: str):
     path = tmp_path / "report.json"
     path.write_text(json.dumps(report))
-    monkeypatch.setattr(sys, "argv", ["validate_report.py", str(path)])
+    monkeypatch.setattr(sys, "argv", ["validate_report.py", str(path), *extra_args])
     code = vr.main()
     captured = capsys.readouterr()
     return code, captured.out, captured.err
@@ -327,6 +327,60 @@ class TestCliExitCodes:
         code, _out, err = _run_cli(bad, tmp_path, monkeypatch, capsys)
         assert code == 1
         assert "Validation failed" in err
+
+    def test_producer_mode_accepts_finding_section_array(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        producer_report = [_section([_finding(1)])]
+
+        code, out, err = _run_cli(
+            producer_report, tmp_path, monkeypatch, capsys, "--producer"
+        )
+
+        assert code == 0
+        assert "Valid:" in out
+        assert err == ""
+
+    def test_default_mode_rejects_finding_section_array(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        producer_report = [_section([_finding(1)])]
+
+        code, _out, err = _run_cli(producer_report, tmp_path, monkeypatch, capsys)
+
+        assert code == 1
+        assert "not of type 'object'" in err
+
+    def test_producer_mode_rejects_bare_finding_array(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        code, _out, err = _run_cli(
+            [_finding(1)], tmp_path, monkeypatch, capsys, "--producer"
+        )
+
+        assert code == 1
+        assert "'findings' is a required property" in err
+
+    def test_producer_mode_rejects_non_object_schema_root(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        schema = tmp_path / "array-schema.json"
+        schema.write_text("[]")
+
+        code, out, err = _run_cli(
+            [],
+            tmp_path,
+            monkeypatch,
+            capsys,
+            "--producer",
+            "--schema",
+            str(schema),
+        )
+
+        assert code == 2
+        assert out == ""
+        assert "Schema error: schema root must be a JSON object" in err
+        assert "Traceback" not in err
 
     @pytest.mark.parametrize(
         "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]

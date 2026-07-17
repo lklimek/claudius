@@ -27,20 +27,23 @@
 #   K20 two independent clones    -> different auto-derived CARGO_TARGET_DIR
 #   K21 same checkout invoked 2x -> SAME derived dir (deterministic, stays warm)
 #   K22 explicit CARGO_TARGET_DIR-> respected, not overridden by auto-derivation
-#   K23 identical tree, 2 checkouts -> ledger REPLAY across different target dirs
+#   K23 identical tree, 2 checkouts -> distinct ledger keys (no cross-replay)
 #   K24 fake-green banner (auto-isolated) -> names own dir, no manual recipe
 #   K25 two DIFFERENT explicit CARGO_TARGET_DIRs -> must NOT cross-replay (in key)
 #   K26 sccache present + HOME unset -> no crash (SCCACHE_BASEDIRS=toplevel)
 #   K27 sccache < 0.14.0 -> SCCACHE_BASEDIRS NOT set (version gate)
 #   K28 underivable target dir (mkdir fails) -> isolation abandoned, cargo runs
 #   K29 cargo metadata resolution fails -> loud stderr warning, cargo still runs
-#   K30 fake-green REPLAY from other checkout -> banner names RECORD's dir
+#   K30 fake-green run in other checkout -> banner names that checkout's dir
 #   K31 explicit (shared) override -> banner says hazard LIVE, not "auto-isolated"
 #   K32 BSD sort rejects -V        -> sccache >= 0.14.0 gate still evaluates true
 #   K33 timeout absent             -> metadata probe is skipped without blocking
 #   K34 target prefix set          -> unique per checkout and stable on repeat
 #   K35 explicit target + prefix   -> explicit CARGO_TARGET_DIR wins unchanged
 #   K36 target prefix unset        -> existing canonical-derived path is unchanged
+#   K37 --target-dir CLI variants  -> distinct keys, no auto-isolation
+#   K38 unwritable ledger root     -> workspace-local fallback with one note
+#   K39 both ledger roots unwritable -> loud plain-cargo fallback
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -438,12 +441,10 @@ else
   bad "K22 (expected '$EXPLICIT' got '$tgt_explicit')"
 fi
 
-echo "=== K23: a byte-identical tree in two checkouts REPLAYS across different target dirs ==="
-# The core regression: two checkouts of one repo (shared object store => identical
-# head_oid/diff_hash/untracked_hash/rel_dir/cmd) differ ONLY in path, hence in the
-# auto-derived CARGO_TARGET_DIR. The key must EXCLUDE CARGO_TARGET_DIR so the 2nd
-# checkout replays the 1st's record. RED against the old env_hash (which folded
-# CARGO_TARGET_DIR in => distinct keys => a miss instead of a replay).
+echo "=== K23: a byte-identical tree in two checkouts gets distinct ledger keys ==="
+# Two checkouts of one repo share the object store and can have identical HEAD,
+# tracked changes, untracked files, cwd, environment, and command. Their absolute
+# checkout roots must still distinguish the ledger verdicts.
 KREPO="$WORK/krepo"; mkdir -p "$KREPO"
 ( cd "$KREPO" && git init -q && git config user.email test@example.com && git config user.name test \
   && echo "fn main() {}" > lib.rs && git add -A && git commit -qm init ) \
@@ -454,17 +455,20 @@ K23CACHE="$WORK/cache-k23"
 BEFORE=$(counter)
 OUT=$( cd "$KREPO" && CLAUDIUS_CACHE_DIR="$K23CACHE" CLAUDIUS_FORCE=0 \
        env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 )
-tgt_krepo=$(sed -n 's/^STUB_TGT=//p' <<<"$OUT" | tail -1)
 MID=$(counter)
 OUT2=$( cd "$KWT" && CLAUDIUS_CACHE_DIR="$K23CACHE" CLAUDIUS_FORCE=0 \
         env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 ); RC2=$?
 AFTER=$(counter)
-if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER" = "$MID" ] \
+key_krepo=$(sed -n '1p' "$K23CACHE/ledger/records.jsonl" | jq -r '.key')
+key_kwt=$(sed -n '2p' "$K23CACHE/ledger/records.jsonl" | jq -r '.key')
+if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER" = "$((MID + 1))" ] \
    && grep -q "STUB CARGO INVOCATION" <<<"$OUT" \
-   && grep -q "CACHED verification" <<<"$OUT2"; then
-  ok "K23 2nd checkout ($KWT, target $tgt_krepo <- 1st's) replayed the 1st's record (no re-run)"
+   && grep -q "STUB CARGO INVOCATION" <<<"$OUT2" \
+   && ! grep -q "CACHED verification" <<<"$OUT2" \
+   && [ -n "$key_krepo" ] && [ -n "$key_kwt" ] && [ "$key_krepo" != "$key_kwt" ]; then
+  ok "K23 same-commit checkouts produced distinct keys and both ran cargo"
 else
-  bad "K23 (before=$BEFORE mid=$MID after=$AFTER rc2=$RC2 out2='${OUT2//$'\n'/ }')"
+  bad "K23 (before=$BEFORE mid=$MID after=$AFTER rc2=$RC2 key1=$key_krepo key2=$key_kwt out2='${OUT2//$'\n'/ }')"
 fi
 
 echo "=== K24: an auto-isolated fake-green banner names its own dir, no manual recipe ==="
@@ -570,21 +574,21 @@ else
   bad "K29 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
 fi
 
-echo "=== K30: a cross-checkout fake-green REPLAY banner names the RECORD's dir, not the replayer's ==="
-# The whole point of cross-checkout sharing: checkout B replays A's flagged record.
-# The replay banner must name A's ORIGINAL dir (from the record), not B's own live
-# derived dir. RED against the code that interpolated the live process env.
+echo "=== K30: a fake-green run in another checkout names its own target dir ==="
+# Checkout identity prevents B from replaying A's verdict. B's real-run warning
+# must therefore describe B's own auto-isolated target directory.
 hash_krepo=$(printf '%s' "$KREPO" | sha256sum | cut -c1-16)
 hash_kwt=$(printf '%s' "$KWT" | sha256sum | cut -c1-16)
 K30CACHE="$WORK/cache-k30"
 ( cd "$KREPO" && CLAUDIUS_CACHE_DIR="$K30CACHE" CLAUDIUS_FORCE=0 \
     env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test >/dev/null 2>&1 )  # miss, fast => flagged
 OUT=$( cd "$KWT" && CLAUDIUS_CACHE_DIR="$K30CACHE" CLAUDIUS_FORCE=0 \
-       env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 )          # replay B
-banner=$(grep -A12 "CACHED FAKE-GREEN SUSPECT" <<<"$OUT")
-if grep -q "CACHED FAKE-GREEN SUSPECT" <<<"$OUT" \
-   && grep -q "$hash_krepo" <<<"$banner" && ! grep -q "$hash_kwt" <<<"$banner"; then
-  ok "K30 replay banner names the record's dir ($hash_krepo), not the replaying checkout's ($hash_kwt)"
+       env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" test 2>&1 )          # distinct miss
+banner=$(grep -A12 "POSSIBLE FAKE GREEN" <<<"$OUT")
+if ! grep -q "CACHED verification" <<<"$OUT" \
+   && grep -q "POSSIBLE FAKE GREEN" <<<"$OUT" \
+   && grep -q "$hash_kwt" <<<"$banner" && ! grep -q "$hash_krepo" <<<"$banner"; then
+  ok "K30 second checkout ran and its warning names its own target dir ($hash_kwt)"
 else
   bad "K30 (banner='${banner//$'\n'/ }')"
 fi
@@ -617,7 +621,7 @@ fi
 
 echo "=== K33: without timeout, the metadata probe skips immediately and fails open ==="
 NO_TIMEOUT_BIN="$WORK/no-timeout-bin"; mkdir -p "$NO_TIMEOUT_BIN"
-for t in bash cat cut date env git grep jq mkdir sha256sum sleep sort tail tee tr xargs; do
+for t in bash cat cut date env git grep jq mkdir rm sha256sum sleep sort tail tee tr xargs; do
   src=$(command -v "$t" 2>/dev/null) && ln -sf "$src" "$NO_TIMEOUT_BIN/$t"
 done
 ln -sf "$STUBDIR/cargo" "$NO_TIMEOUT_BIN/cargo"
@@ -676,6 +680,107 @@ if [ "$default_tgt" = "$expected_default" ]; then
   ok "K36 unset prefix kept the existing canonical-derived path byte-for-byte"
 else
   bad "K36 (expected='$expected_default' got='$default_tgt')"
+fi
+
+echo "=== K37: --target-dir CLI variants stay distinct and skip auto-isolation ==="
+K37CACHE="$WORK/cache-k37"
+BEFORE=$(counter)
+OUT_BASE=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K37CACHE" CLAUDIUS_FORCE=0 \
+            CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
+            "$BASHBIN" "$WRAPPER" test 2>&1 )
+MID=$(counter)
+OUT_SEPARATE=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K37CACHE" CLAUDIUS_FORCE=0 \
+                CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
+                "$BASHBIN" "$WRAPPER" --target-dir "$WORK/cli-target-a" test 2>&1 )
+OUT_JOINED=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K37CACHE" CLAUDIUS_FORCE=0 \
+              CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
+              "$BASHBIN" "$WRAPPER" --target-dir="$WORK/cli-target-b" test 2>&1 )
+AFTER_VARIANTS=$(counter)
+OUT_PASSTHROUGH=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K37CACHE" CLAUDIUS_FORCE=0 \
+                   CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
+                   "$BASHBIN" "$WRAPPER" test -- --target-dir "$WORK/test-arg" 2>&1 )
+AFTER=$(counter)
+record_count=$(wc -l < "$K37CACHE/ledger/records.jsonl")
+key_base=$(sed -n '1p' "$K37CACHE/ledger/records.jsonl" | jq -r '.key')
+key_separate=$(sed -n '2p' "$K37CACHE/ledger/records.jsonl" | jq -r '.key')
+key_joined=$(sed -n '3p' "$K37CACHE/ledger/records.jsonl" | jq -r '.key')
+auto_separate=$(sed -n '2p' "$K37CACHE/ledger/records.jsonl" | jq -r '.auto_isolated')
+auto_joined=$(sed -n '3p' "$K37CACHE/ledger/records.jsonl" | jq -r '.auto_isolated')
+target_separate=$(sed -n '2p' "$K37CACHE/ledger/records.jsonl" | jq -r '.target_dir')
+target_joined=$(sed -n '3p' "$K37CACHE/ledger/records.jsonl" | jq -r '.target_dir')
+if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER_VARIANTS" = "$((MID + 2))" ] \
+   && [ "$AFTER" = "$((AFTER_VARIANTS + 1))" ] \
+   && [ "$record_count" = 4 ] \
+   && [ -n "$key_base" ] && [ -n "$key_separate" ] && [ -n "$key_joined" ] \
+   && [ "$key_base" != "$key_separate" ] \
+   && [ "$key_base" != "$key_joined" ] \
+   && [ "$key_separate" != "$key_joined" ] \
+   && [ "$auto_separate" = false ] && [ "$auto_joined" = false ] \
+   && [ "$target_separate" = "$WORK/cli-target-a" ] \
+   && [ "$target_joined" = "$WORK/cli-target-b" ] \
+   && ! grep -q "CACHED verification" <<<"$OUT_SEPARATE" \
+   && ! grep -q "CACHED verification" <<<"$OUT_JOINED" \
+   && ! grep -q "CACHED verification" <<<"$OUT_PASSTHROUGH" \
+   && grep -q '^STUB_TGT=$' <<<"$OUT_SEPARATE" \
+   && grep -q '^STUB_TGT=$' <<<"$OUT_JOINED"; then
+  ok "K37 explicit CLI target dirs produced distinct keys and auto_isolated=false"
+else
+  bad "K37 (before=$BEFORE mid=$MID variants=$AFTER_VARIANTS after=$AFTER records=$record_count keys=$key_base,$key_separate,$key_joined auto=$auto_separate,$auto_joined targets=$target_separate,$target_joined)"
+fi
+
+echo "=== K38: an unwritable ledger root falls back inside the checkout ==="
+PRIMARY38="$WORK/unwritable-primary"
+FALLBACK38="$REPO/.claudius-ledger"
+mkdir -p "$PRIMARY38"
+chmod 500 "$PRIMARY38"
+rm -rf "$FALLBACK38"
+bust k38
+BEFORE=$(counter)
+OUT=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$PRIMARY38/cache" CLAUDIUS_FORCE=0 \
+       CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
+       "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
+MID=$(counter)
+OUT_REPLAY=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$PRIMARY38/cache" CLAUDIUS_FORCE=0 \
+              CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
+              "$BASHBIN" "$WRAPPER" test 2>&1 ); RC_REPLAY=$?
+AFTER=$(counter)
+chmod 700 "$PRIMARY38"
+fallback_notes=$(grep -c "ledger unavailable.*workspace-local ledger" <<<"$OUT")
+if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER" = "$MID" ] \
+   && [ "$RC" = 0 ] && [ "$RC_REPLAY" = 0 ] \
+   && [ "$fallback_notes" = 1 ] \
+   && [ -f "$FALLBACK38/records.jsonl" ] \
+   && [ ! -e "$PRIMARY38/cache/ledger/records.jsonl" ] \
+   && grep -q "CACHED verification" <<<"$OUT_REPLAY"; then
+  ok "K38 unwritable primary emitted one note, recorded locally, and replayed"
+else
+  bad "K38 (before=$BEFORE mid=$MID after=$AFTER rc=$RC replay_rc=$RC_REPLAY notes=$fallback_notes out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K39: two unwritable ledger roots fall open loudly to plain cargo ==="
+PRIMARY39="$WORK/unwritable-primary-both"
+FALLBACK39="$REPO/.claudius-ledger"
+mkdir -p "$PRIMARY39"
+chmod 500 "$PRIMARY39"
+rm -rf "$FALLBACK39"
+bust k39
+chmod 555 "$REPO"
+BEFORE=$(counter)
+OUT=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$PRIMARY39/cache" CLAUDIUS_FORCE=0 \
+       CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
+       "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
+AFTER=$(counter)
+chmod 755 "$REPO"
+chmod 700 "$PRIMARY39"
+fallback_notes=$(grep -c "ledger unavailable.*AND workspace-local.*WITHOUT replay/dedup/fake-green protection" <<<"$OUT")
+if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = 0 ] \
+   && [ "$fallback_notes" = 1 ] \
+   && [ ! -e "$PRIMARY39/cache/ledger/records.jsonl" ] \
+   && [ ! -e "$FALLBACK39/records.jsonl" ] \
+   && grep -q "STUB CARGO INVOCATION" <<<"$OUT"; then
+  ok "K39 dual ledger failure emitted one loud note and ran cargo directly"
+else
+  bad "K39 (before=$BEFORE after=$AFTER rc=$RC notes=$fallback_notes out='${OUT//$'\n'/ }')"
 fi
 
 echo ""

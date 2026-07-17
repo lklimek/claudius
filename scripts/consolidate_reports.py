@@ -838,10 +838,73 @@ def _write_json_output(
 # ---------------------------------------------------------------------------
 # Phase 1: prepare
 # ---------------------------------------------------------------------------
+def _infer_bare_finding_category(findings: list[dict[str, Any]]) -> str:
+    """Infer a category from the majority of recognized finding ID prefixes."""
+    prefix_categories = {
+        prefix: category for category, prefix in CATEGORY_PREFIX.items()
+    }
+    counts: dict[str, int] = defaultdict(int)
+    for finding in findings:
+        finding_id = finding.get("id")
+        if not isinstance(finding_id, str):
+            continue
+        for prefix, category in prefix_categories.items():
+            if finding_id.startswith(prefix):
+                counts[category] += 1
+                break
+
+    if not counts:
+        return "code_quality"
+    highest = max(counts.values())
+    winners = [category for category, count in counts.items() if count == highest]
+    if len(winners) != 1 or highest * 2 <= sum(counts.values()):
+        return "code_quality"
+    return winners[0]
+
+
 def _flatten_agent_report(
     agent_name: str, sections: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Flatten agent sections into raw findings and section positives."""
+    finding_markers = {
+        "id",
+        "risk",
+        "impact",
+        "scope",
+        "location",
+        "description",
+        "recommendation",
+    }
+    normalized_sections: list[dict[str, Any]] = []
+    stray_findings: list[dict[str, Any]] = []
+    for item in sections:
+        if (
+            isinstance(item, dict)
+            and "findings" not in item
+            and any(marker in item for marker in finding_markers)
+        ):
+            stray_findings.append(item)
+        else:
+            normalized_sections.append(item)
+
+    if stray_findings:
+        inferred_category = _infer_bare_finding_category(stray_findings)
+        log.warning(
+            "Agent '%s' report: rescued %d stray bare finding(s) by auto-wrapping "
+            "them in a finding section with inferred category %s",
+            agent_name,
+            len(stray_findings),
+            inferred_category,
+        )
+        normalized_sections.append(
+            {
+                "title": f"{agent_name} findings",
+                "category": inferred_category,
+                "findings": stray_findings,
+            }
+        )
+    sections = normalized_sections
+
     raw: list[dict[str, Any]] = []
     positives: list[dict[str, Any]] = []
 

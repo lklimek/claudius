@@ -2,10 +2,9 @@
 # Verification ledger for cargo. Usage: cargo-cached.sh <cargo args...>
 #   e.g. cargo-cached.sh clippy -p my-crate --all-targets -- -D warnings
 #
-# Identical command + identical tree (ANY agent, ANY worktree on this machine)
-# => REPLAY the recorded log + exit code (the agent gets its output at zero
-# compile cost). Otherwise run the real cargo, tee the full log, and append a
-# JSONL record to the ledger.
+# Identical command + identical tree in the same checkout => REPLAY the recorded
+# log + exit code (the agent gets its output at zero compile cost). Otherwise run
+# the real cargo, tee the full log, and append a JSONL record to the ledger.
 #
 # FAIL-OPEN throughout: any internal error (missing jq, not a git repo, no flock)
 # falls through to a plain `cargo "$@"`. Correctness of a real build always wins
@@ -16,8 +15,6 @@
 set -uo pipefail
 
 CACHE_ROOT="${CLAUDIUS_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claudius}"
-LEDGER_DIR="$CACHE_ROOT/ledger"
-RECORDS="$LEDGER_DIR/records.jsonl"
 TTL_HOURS=24
 
 command -v jq >/dev/null 2>&1 || exec cargo "$@"
@@ -27,18 +24,55 @@ command -v jq >/dev/null 2>&1 || exec cargo "$@"
 # record in the ledger (cross-command replay poisoning). Fail open instead.
 command -v sha256sum >/dev/null 2>&1 || exec cargo "$@"
 command -v xargs >/dev/null 2>&1 || exec cargo "$@"
-mkdir -p "$LEDGER_DIR/logs" "$LEDGER_DIR/locks" 2>/dev/null || exec cargo "$@"
-# Capture the checkout root once — serves as the fail-open git guard AND the key
-# for per-checkout target-dir isolation below.
+# Capture and canonicalize the checkout root once. It guards git-dependent cache
+# operations and identifies both the ledger key and isolated target directory.
 toplevel=$(git rev-parse --show-toplevel 2>/dev/null)
 [[ -n "$toplevel" ]] || exec cargo "$@"
+toplevel=$(cd "$toplevel" 2>/dev/null && pwd -P)
+[[ -n "$toplevel" ]] || exec cargo "$@"
 
-# Whether the CALLER explicitly set CARGO_TARGET_DIR (vs the wrapper auto-deriving
-# it). Captured BEFORE auto-derivation consumes/overwrites it — the env_hash
-# branch below depends on this distinction. auto_isolated flips to 1 ONLY when the
-# wrapper itself derived and exported the dir (used by the banners + ledger record
-# so they never misreport an explicit or absent override as "auto-isolated").
+prepare_ledger() {
+  local probe="$LEDGER_DIR/locks/.write-test.$$"
+  mkdir -p "$LEDGER_DIR/logs" "$LEDGER_DIR/locks" 2>/dev/null || return 1
+  ( umask 077; : > "$probe" ) 2>/dev/null || return 1
+  rm -f "$probe" 2>/dev/null || return 1
+}
+
+LEDGER_DIR="$CACHE_ROOT/ledger"
+RECORDS="$LEDGER_DIR/records.jsonl"
+if ! prepare_ledger; then
+  primary_ledger_dir="$LEDGER_DIR"
+  LEDGER_DIR="$toplevel/.claudius-ledger"
+  RECORDS="$LEDGER_DIR/records.jsonl"
+  if ! prepare_ledger; then
+    echo "claudius: ledger unavailable at $primary_ledger_dir AND workspace-local $LEDGER_DIR (not writable); running cargo directly, WITHOUT replay/dedup/fake-green protection" >&2
+    exec cargo "$@"
+  fi
+  echo "claudius: ledger unavailable at $primary_ledger_dir (not writable); using workspace-local ledger $LEDGER_DIR" >&2
+fi
+
+# Capture an explicit CARGO_TARGET_DIR or --target-dir before auto-derivation;
+# replay identity and diagnostics depend on who selected the target directory.
 caller_target_dir="${CARGO_TARGET_DIR:-}"
+cli_target_dir=""
+cli_args=("$@")
+for ((arg_index = 0; arg_index < ${#cli_args[@]}; arg_index++)); do
+  case "${cli_args[arg_index]}" in
+    --) break ;;
+    --target-dir)
+      if (( arg_index + 1 < ${#cli_args[@]} )); then
+        caller_target_dir="${cli_args[arg_index + 1]}"
+        cli_target_dir="$caller_target_dir"
+      fi
+      break
+      ;;
+    --target-dir=*)
+      caller_target_dir="${cli_args[arg_index]#--target-dir=}"
+      cli_target_dir="$caller_target_dir"
+      break
+      ;;
+  esac
+done
 auto_isolated=0
 
 # --- Structural per-checkout target-dir isolation ---------------------------
@@ -55,8 +89,8 @@ auto_isolated=0
 # check): independent clones of the same repo at the same commit are each their
 # own "primary" tree yet collide identically, and hashing the path covers
 # worktrees, clones and submodules uniformly. Deterministic — a checkout's own
-# repeat builds reuse the same dir and stay warm. An explicit caller-set
-# CARGO_TARGET_DIR is the manual escape hatch and is left untouched.
+# repeat builds reuse the same dir and stay warm. An explicit caller-selected
+# CARGO_TARGET_DIR or --target-dir is the manual escape hatch.
 # NOTE: these default <canonical>/claudius-checkouts/<hash> dirs (or
 # CLAUDIUS_TARGET_PREFIX/<hash>) accumulate PERMANENTLY — there is deliberately
 # NO automatic GC. Pruning stale ones is the user's/coordinator's responsibility.
@@ -99,6 +133,7 @@ if [[ -z "$caller_target_dir" ]]; then
     echo "claudius: per-checkout isolation skipped ($derivation_failure) — using shared/default target dir, same-HEAD collision hazard applies" >&2
   fi
 fi
+effective_target_dir="${cli_target_dir:-${CARGO_TARGET_DIR:-}}"
 
 # Keep per-checkout isolation cheap: sccache does NOT cache linker-invoking crates
 # (bin/dylib/cdylib/proc-macro — a test binary is a bin, exactly what a test loop
@@ -135,16 +170,16 @@ diff_hash=$(git diff HEAD 2>/dev/null | sha256sum | cut -d' ' -f1)
 # `-r`/--no-run-if-empty is a GNU xargs extension BSD/macOS xargs rejects.
 # Without it, zero untracked files still runs sha256sum once with an already-
 # drained stdin, hashing empty input — deterministic and portable either way.
-untracked_hash=$(git ls-files --others --exclude-standard -z 2>/dev/null \
+# The workspace-local ledger is generated output and must not invalidate its own
+# replay key when the invoking repository does not ignore it.
+untracked_hash=$(git ls-files --others --exclude-standard --exclude='/.claudius-ledger/' -z 2>/dev/null \
   | sort -z | xargs -0 sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1)
-# CARGO_TARGET_DIR's role in the key depends on WHO set it:
-#  - Auto-derived (caller left it unset): pure path noise. Two byte-identical
-#    trees in different checkouts get different derived dirs but must still share
-#    a replay hit, so EXCLUDE it from the key.
-#  - Caller-set explicitly (the CLAUDIUS_ISOLATE_TARGET=1 escape hatch): a verdict
-#    input. The caller chose a specific dir precisely to force a real build there
-#    (e.g. a known-clean dir for re-verification); two different explicit dirs
-#    must NOT cross-replay, so INCLUDE it. Every other CARGO_* var always counts.
+# The selected target dir's role in the key depends on who set it:
+#  - Auto-derived (caller left it unset): pure path noise. The checkout root is
+#    keyed independently, so EXCLUDE the wrapper-derived target dir.
+#  - Caller-selected explicitly: a verdict input. The environment spelling is
+#    included here; the CLI spelling remains in cmd_norm below. Two different
+#    explicit dirs must NOT cross-replay. Every other CARGO_* var always counts.
 if [[ -n "$caller_target_dir" ]]; then
   env_hash=$(env | grep -E '^(RUSTFLAGS|RUSTDOCFLAGS|CARGO_)' | sort | sha256sum | cut -d' ' -f1)
 else
@@ -156,8 +191,18 @@ toolchain=$(rustc -V 2>/dev/null || echo unknown)
 # a member dir vs the workspace root — that must be part of what makes a tree+
 # command combination unique.
 rel_dir=$(git rev-parse --show-prefix 2>/dev/null)
-cmd_norm=$(printf '%s' "cargo $*" | tr -s '[:space:]' ' ')
-key=$(printf '%s' "$head_oid:$diff_hash:$untracked_hash:$toolchain:$env_hash:$rel_dir:$cmd_norm" \
+normalize_cargo_command() {
+  local out="cargo"
+  while (( $# )); do
+    out+=" $1"
+    shift
+  done
+  printf '%s' "$out" | tr -s '[:space:]' ' '
+}
+cmd_norm=$(normalize_cargo_command "$@")
+checkout_id=$(printf '%s' "$toplevel" | sha256sum | cut -d' ' -f1)
+[[ -n "$checkout_id" ]] || exec cargo "$@"
+key=$(printf '%s' "$head_oid:$diff_hash:$untracked_hash:$toolchain:$env_hash:$checkout_id:$rel_dir:$cmd_norm" \
       | sha256sum | cut -c1-32)
 # Belt-and-braces: an empty key (e.g. a hashing tool failed silently above)
 # must never be looked up or recorded — it would alias every other empty key.
@@ -179,7 +224,7 @@ SELF_CMD=$(rerun_cmd "$@")
 # (1/true if the WRAPPER derived & exported the dir), $2=effective target dir.
 # Describes the state of the run being reported — for a REPLAY that is the
 # ORIGINAL run's RECORDED state (read from the matched ledger record), never the
-# replaying process's own live env, which may be a different checkout entirely.
+# replaying process's own live environment.
 isolation_status_line() {
   local iso="$1" tgt="$2"
   if [[ "$iso" == 1 || "$iso" == true ]]; then
@@ -243,9 +288,8 @@ replay_if_hit() {
   fg=$(jq -r '.fake_green_suspected // false' <<<"$hit" 2>/dev/null)
   dur_rec=$(jq -r '.duration_s // empty' <<<"$hit" 2>/dev/null)
   # The isolation status must reflect the ORIGINAL run (this record), not the
-  # replaying process — a cross-checkout replay runs in a DIFFERENT dir, and a
-  # replay of a non-isolated run must not be dressed up as isolated. Old records
-  # predating these fields read as not-isolated / unknown dir (jq defaults).
+  # replaying process. Old records predating these fields read as not-isolated /
+  # unknown dir (jq defaults).
   rec_tgt=$(jq -r '.target_dir // empty' <<<"$hit" 2>/dev/null)
   rec_autoiso=$(jq -r '.auto_isolated // false' <<<"$hit" 2>/dev/null)
   if [[ "$fg" == true ]]; then
@@ -334,7 +378,7 @@ record=$(jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg key "$key" --arg
   --arg head "$head_oid" --arg log "$logf" \
   --argjson exit "$rc" --argjson dur "$dur" --arg sid "${CLAUDE_SESSION_ID:-}" \
   --argjson fg "$fake_green_suspected" \
-  --arg tgt "${CARGO_TARGET_DIR:-}" --argjson autoiso "$auto_isolated_json" \
+  --arg tgt "$effective_target_dir" --argjson autoiso "$auto_isolated_json" \
   '{ts:$ts,key:$key,cmd:$cmd,head:$head,exit:$exit,duration_s:$dur,fake_green_suspected:$fg,target_dir:$tgt,auto_isolated:$autoiso,log:$log,session:$sid}')
 if command -v flock >/dev/null 2>&1; then
   printf '%s\n' "$record" | flock "$RECORDS" tee -a "$RECORDS" >/dev/null
@@ -358,7 +402,7 @@ fake_green_banner() {
 !!! --------------------------------------------------------------------------
 !!! WARNING: POSSIBLE FAKE GREEN — this run finished in ${dur}s (below ${fg_min}s),
 !!! so cargo may have compiled little (or nothing) and executed a PRE-EXISTING binary.
-$(isolation_status_line "$auto_isolated" "${CARGO_TARGET_DIR:-}")
+$(isolation_status_line "$auto_isolated" "$effective_target_dir")
 !!! 1. Before trusting this result, confirm YOUR new/renamed test names appear
 !!!    in the output above (full log: $logf).
 !!! 2. If they do not, this is NOT evidence. Force a genuine re-run:

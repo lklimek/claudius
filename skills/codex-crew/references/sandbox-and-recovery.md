@@ -27,6 +27,8 @@ writable_roots = ["/data/git-worktrees", "/data/tmp", "/data/artifacts", "/data/
 network_access = true
 ```
 
+The first `writable_roots` entry should track `$CLAUDIUS_WORKTREE_ROOT` when the configured worktree root changes.
+
 - `writable_roots` **adds** to the always-writable workspace root (cwd). It makes `/data` worktrees, scratch, and the shared cargo target dir (`/data/target`) writable and lets tests reach the network.
 - `network_access = true` unblocks localhost test sockets (e.g. a test server) — it also enables general outbound network, the tradeoff `workspace-write` disables by default.
 - The `# Self-commit scope (repo .git) intentionally NOT added yet` comment is now known to be misleading as an explanation for commit behavior (see below) — kept here verbatim since it's still the live config text, but don't treat it as proof commit is blocked.
@@ -46,7 +48,7 @@ network_access = true
 
 Two stacked restrictions were previously confirmed across sessions:
 
-1. **Path allowlist.** A linked worktree created by `git worktree add /data/git-worktrees/foo` from main repo `/home/ubuntu/git/<repo>` stores its per-worktree git metadata (HEAD, index, refs) under the **main repo's** `.git/worktrees/foo/`, and objects under the main repo's `.git/objects/`. Those paths are outside the sandbox's writable set, so `git commit` (which writes `index.lock`, refs, objects there) would be rejected under a strict path allowlist alone.
+1. **Path allowlist.** A linked worktree created by `git worktree add <worktree-root>/foo` from main repo `/home/ubuntu/git/<repo>` stores its per-worktree git metadata (HEAD, index, refs) under the **main repo's** `.git/worktrees/foo/`, and objects under the main repo's `.git/objects/`. Those paths are outside the sandbox's writable set, so `git commit` (which writes `index.lock`, refs, objects there) would be rejected under a strict path allowlist alone.
 2. **Git-metadata block.** A separate read-only block on git metadata was observed to apply even when the path was writable — at the time, widening `writable_roots` to include the repo `.git` was not considered a reliable fix.
 
 If the fallback triggers, these are the mechanics to investigate first.
@@ -63,7 +65,7 @@ state/<workspace-slug>-<hash>/
   jobs/<job-id>.log      # streamed progress + final result / error text
 ```
 
-Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `completed` | `failed`), `phase`, `errorMessage`, `startedAt`, `completedAt`, `workspaceRoot`, `logFile`. `pid` is often `null` (jobs run inside the shared app-server, not as a tracked child).
+Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `completed` | `failed`), `phase`, `errorMessage`, `startedAt`, `completedAt`, `workspaceRoot`, `logFile`, `pid`, `result`. `pid` is `null` for some job classes (running inside the shared app-server), but `task-worker`-class jobs (spawned as `codex-companion.mjs task-worker --cwd <dir> --job-id <id>`) carry a real, independently verifiable `pid` — cross-check with `ps -p <pid>` or `/proc/<pid>`; a populated `pid` with no matching process means the Codex engine crashed silently while `status` stays stuck at `"running"` forever (the record is never updated on crash). `result.rawOutput` is the full final report text — read it directly instead of waiting for the wrapper agent to relay it, and `result.touchedFiles` lists the worktree/files the job actually edited.
 
 **Memory discipline (long sessions).** The watchdog polls repeatedly. Do **not** parse `state.json` per poll — it embeds every job and grows over the session. Instead:
 
@@ -71,9 +73,17 @@ Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `c
 - Parse an individual `jobs/<id>.json` only when its mtime advanced since the last poll, and extract only the few fields above.
 - Keep a bounded per-job last-seen map (`job-id → {status, mtime}`), never accumulated JSON.
 
-Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
+Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path — remember `workspaceRoot` reflects the *dispatching session's* cwd, not necessarily the worktree the job was told to `cd` into. With several teammates dispatched at once, several `jobs/*.json` files land in the same shared state directory; match each to its dispatch by `startedAt` proximity to when that teammate was spawned (seconds apart, in spawn order) and by `result.touchedFiles`, never by `sessionId` — each teammate's job carries its own dispatching session's id, not a value the coordinator can predict or match against in advance. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
 
 `codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal when not going through the companion's job state.
+
+## Harness Kills of a Backgrounded Task
+
+A `codex-companion.mjs task --write --background` run launched via a `run_in_background` Bash call can be killed by the harness mid-run — confirmed via a tmux pane reading `Background command ... was stopped`. Nothing reports it: `codex:codex-rescue` is a forwarder whose own turn ended at dispatch time and which never polls its background task, so it cannot notice or surface the kill. **Silence is not evidence of health.**
+
+- **Detect it coordinator-side.** Periodically read the job's actual log content (`jobs/<job-id>.log`) and inspect the tmux pane directly. Do not infer health from `status` alone — it can sit at `running` after the process is gone.
+- **On-disk edits survive.** Files Codex already wrote stay written; the work is partial, not lost.
+- **Resume, don't restart.** Redispatch with `--resume-last` to continue from the surviving state instead of redoing completed edits from scratch.
 
 ## Broker Recovery
 
