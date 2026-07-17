@@ -290,12 +290,12 @@ A stall is **owning an in_progress task AND idle past threshold AND no build run
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
-        command="python3 \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.py\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300 --worktrees /data/git-worktrees")
+        command="python3 \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.py\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300 --worktrees \"${CLAUDIUS_WORKTREE_ROOT:-.claude/worktrees}\"")
 ```
 
 `${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(python3 */scripts/agent-watchdog.py *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
 
-**Point `--worktrees` at the canonical worktree root** (`/data/git-worktrees` here; the flag defaults to `.claude/worktrees`, which pre-created worktrees never land in). It carries double duty: Source C stall-tracks the worktrees it finds there, AND those same dirs are appended to the Codex workspace candidate list. Without it, Codex Source D sees only the team's lead/member cwds — so an **unnamed** Codex dispatch, which contributes no member cwd, is invisible and its jobs go unmonitored. Source C matches worktree dirs under that root by this repo's `<repo-path-slug>` naming (per Worktree Isolation), not an `agent-` prefix.
+**Point `--worktrees` or exported `$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root.** The flag takes precedence over the environment, and the built-in default is `.claude/worktrees`; a host-specific `/data` root is only an operator-selected example when configured. The selected root carries double duty: Source C stall-tracks the worktrees it finds there, AND those same dirs are appended to the Codex Source D workspace candidate list. Without the correct root, Source D sees only the team's lead/member cwds — so an **unnamed** Codex dispatch, which contributes no member cwd, is invisible and its jobs go unmonitored. Source C matches worktree dirs under that root by this repo's `<repo-path-slug>` naming (per Worktree Isolation), not an `agent-` prefix.
 
 **Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops yielding a signal (worktree removed, member deactivated) is auto-cleared — but only after several consecutive signalless polls (`--gone-polls`, default 2), so a one-poll config/`find` glitch never spuriously clears a stall. `TaskStop` the Monitor when the wave completes.
 

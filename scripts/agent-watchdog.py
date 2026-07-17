@@ -2090,6 +2090,7 @@ STALL = owns an in_progress task AND idle >= threshold AND no build under the
 agent's worktree/cwd. An idle agent owning no in_progress task is never flagged.
 --session-id (default $CLAUDE_SESSION_ID) scopes ALL discovery to THIS session's
 team; precedence --team-dir > --session-id > $CLAUDE_SESSION_ID > newest autodetect.
+--worktrees precedence: flag > $CLAUDIUS_WORKTREE_ROOT > .claude/worktrees.
 --codex-job-recency-secs defaults to 604800 (7 days); older job files are not parsed.
 Emits ONLY transition lines to stdout; diagnostics to stderr.
 """
@@ -2109,11 +2110,17 @@ def _integer(flag: str, value: str) -> int:
 
 def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Options:
     """Parse the exact Bash-compatible CLI surface and defaults."""
+    if not argv:
+        # Bare defaults miss pre-created worktrees while appearing to monitor normally.
+        print(USAGE, file=sys.stderr, end="")
+        die("no arguments provided; use explicit flags or --help")
     environment = os.environ if env is None else env
     home = Path(environment.get("HOME", str(Path.home())))
+    worktree_root = environment.get("CLAUDIUS_WORKTREE_ROOT", "").strip()
     options = Options(
         session_id=environment.get("CLAUDE_SESSION_ID", ""),
         projects_dir=home / ".claude" / "projects",
+        worktrees=(Path(worktree_root) if worktree_root else Path(".claude/worktrees")),
     )
     index = 0
     value_flags = {

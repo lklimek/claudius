@@ -27,6 +27,8 @@ writable_roots = ["/data/git-worktrees", "/data/tmp", "/data/artifacts", "/data/
 network_access = true
 ```
 
+The first `writable_roots` entry should track `$CLAUDIUS_WORKTREE_ROOT` when the configured worktree root changes.
+
 - `writable_roots` **adds** to the always-writable workspace root (cwd). It makes `/data` worktrees, scratch, and the shared cargo target dir (`/data/target`) writable and lets tests reach the network.
 - `network_access = true` unblocks localhost test sockets (e.g. a test server) — it also enables general outbound network, the tradeoff `workspace-write` disables by default.
 - The `# Self-commit scope (repo .git) intentionally NOT added yet` comment is now known to be misleading as an explanation for commit behavior (see below) — kept here verbatim since it's still the live config text, but don't treat it as proof commit is blocked.
@@ -46,7 +48,7 @@ network_access = true
 
 Two stacked restrictions were previously confirmed across sessions:
 
-1. **Path allowlist.** A linked worktree created by `git worktree add /data/git-worktrees/foo` from main repo `/home/ubuntu/git/<repo>` stores its per-worktree git metadata (HEAD, index, refs) under the **main repo's** `.git/worktrees/foo/`, and objects under the main repo's `.git/objects/`. Those paths are outside the sandbox's writable set, so `git commit` (which writes `index.lock`, refs, objects there) would be rejected under a strict path allowlist alone.
+1. **Path allowlist.** A linked worktree created by `git worktree add <worktree-root>/foo` from main repo `/home/ubuntu/git/<repo>` stores its per-worktree git metadata (HEAD, index, refs) under the **main repo's** `.git/worktrees/foo/`, and objects under the main repo's `.git/objects/`. Those paths are outside the sandbox's writable set, so `git commit` (which writes `index.lock`, refs, objects there) would be rejected under a strict path allowlist alone.
 2. **Git-metadata block.** A separate read-only block on git metadata was observed to apply even when the path was writable — at the time, widening `writable_roots` to include the repo `.git` was not considered a reliable fix.
 
 If the fallback triggers, these are the mechanics to investigate first.

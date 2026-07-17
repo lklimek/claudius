@@ -1922,20 +1922,40 @@ def test_cli_validation_and_healthy_silence(tmp_path: Path) -> None:
     assert "--poll-secs must be >= 1" in bad.stderr
 
 
+def test_cli_zero_arguments_exit_1(tmp_path: Path) -> None:
+    """The executable rejects a silent default-only invocation."""
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        text=True,
+        capture_output=True,
+        check=False,
+        env={"HOME": str(tmp_path / "home"), "PATH": os.environ["PATH"]},
+        timeout=5,
+    )
+    assert result.returncode == 1
+    assert "Usage: agent-watchdog.py" in result.stderr
+    assert (
+        "agent-watchdog: no arguments provided; use explicit flags or --help"
+        in result.stderr
+    )
+
+
 def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
     """Every Bash flag and default remains available on the Python CLI."""
     defaults = watchdog.parse_args(
-        [], {"HOME": str(tmp_path), "CLAUDE_SESSION_ID": "env"}
+        ["--session-id", "env"],
+        {"HOME": str(tmp_path), "CLAUDE_SESSION_ID": "environment"},
     )
     assert (
         defaults.session_id,
+        defaults.worktrees,
         defaults.stall_secs,
         defaults.resume_secs,
         defaults.gone_polls,
         defaults.poll_secs,
         defaults.watch_subagents,
         defaults.gone_enabled,
-    ) == ("env", 300, 60, 2, 45, False, True)
+    ) == ("env", Path(".claude/worktrees"), 300, 60, 2, 45, False, True)
     options = watchdog.parse_args(
         [
             "--session-id",
@@ -1972,6 +1992,42 @@ def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
     assert options.poll_secs == 1
     assert options.codex_job_recency_secs == 3600
     assert options.watch_subagents and not options.gone_enabled
+
+
+def test_cli_worktree_root_env_var(tmp_path: Path) -> None:
+    """Explicit worktree roots override nonblank environment roots and defaults."""
+    base_env = {"HOME": str(tmp_path)}
+
+    assert watchdog.parse_args(["--session-id", "test"], base_env).worktrees == Path(
+        ".claude/worktrees"
+    )
+    assert watchdog.parse_args(
+        ["--session-id", "test"],
+        {**base_env, "CLAUDIUS_WORKTREE_ROOT": "/custom/root"},
+    ).worktrees == Path("/custom/root")
+    for value in ("", "   \t"):
+        assert watchdog.parse_args(
+            ["--session-id", "test"],
+            {**base_env, "CLAUDIUS_WORKTREE_ROOT": value},
+        ).worktrees == Path(".claude/worktrees")
+    assert watchdog.parse_args(
+        ["--session-id", "test", "--worktrees", "/explicit/path"],
+        {**base_env, "CLAUDIUS_WORKTREE_ROOT": "/env/root"},
+    ).worktrees == Path("/explicit/path")
+
+
+def test_cli_requires_at_least_one_argument(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Empty argv prints usage and a stable actionable diagnostic."""
+    with pytest.raises(SystemExit) as caught:
+        watchdog.parse_args([], {"HOME": "/tmp"})
+    assert caught.value.code == 1
+    stderr = capsys.readouterr().err
+    assert "Usage: agent-watchdog.py" in stderr
+    assert (
+        "agent-watchdog: no arguments provided; use explicit flags or --help" in stderr
+    )
 
 
 @pytest.mark.parametrize(
