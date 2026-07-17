@@ -44,16 +44,35 @@ if ! prepare_ledger; then
   primary_ledger_dir="$LEDGER_DIR"
   LEDGER_DIR="$toplevel/.claudius-ledger"
   RECORDS="$LEDGER_DIR/records.jsonl"
-  prepare_ledger || exec cargo "$@"
+  if ! prepare_ledger; then
+    echo "claudius: ledger unavailable at $primary_ledger_dir AND workspace-local $LEDGER_DIR (not writable); running cargo directly, WITHOUT replay/dedup/fake-green protection" >&2
+    exec cargo "$@"
+  fi
   echo "claudius: ledger unavailable at $primary_ledger_dir (not writable); using workspace-local ledger $LEDGER_DIR" >&2
 fi
 
-# Whether the CALLER explicitly set CARGO_TARGET_DIR (vs the wrapper auto-deriving
-# it). Captured BEFORE auto-derivation consumes/overwrites it — the env_hash
-# branch below depends on this distinction. auto_isolated flips to 1 ONLY when the
-# wrapper itself derived and exported the dir (used by the banners + ledger record
-# so they never misreport an explicit or absent override as "auto-isolated").
+# Capture an explicit CARGO_TARGET_DIR or --target-dir before auto-derivation;
+# replay identity and diagnostics depend on who selected the target directory.
 caller_target_dir="${CARGO_TARGET_DIR:-}"
+cli_target_dir=""
+cli_args=("$@")
+for ((arg_index = 0; arg_index < ${#cli_args[@]}; arg_index++)); do
+  case "${cli_args[arg_index]}" in
+    --) break ;;
+    --target-dir)
+      if (( arg_index + 1 < ${#cli_args[@]} )); then
+        caller_target_dir="${cli_args[arg_index + 1]}"
+        cli_target_dir="$caller_target_dir"
+      fi
+      break
+      ;;
+    --target-dir=*)
+      caller_target_dir="${cli_args[arg_index]#--target-dir=}"
+      cli_target_dir="$caller_target_dir"
+      break
+      ;;
+  esac
+done
 auto_isolated=0
 
 # --- Structural per-checkout target-dir isolation ---------------------------
@@ -70,8 +89,8 @@ auto_isolated=0
 # check): independent clones of the same repo at the same commit are each their
 # own "primary" tree yet collide identically, and hashing the path covers
 # worktrees, clones and submodules uniformly. Deterministic — a checkout's own
-# repeat builds reuse the same dir and stay warm. An explicit caller-set
-# CARGO_TARGET_DIR is the manual escape hatch and is left untouched.
+# repeat builds reuse the same dir and stay warm. An explicit caller-selected
+# CARGO_TARGET_DIR or --target-dir is the manual escape hatch.
 # NOTE: these default <canonical>/claudius-checkouts/<hash> dirs (or
 # CLAUDIUS_TARGET_PREFIX/<hash>) accumulate PERMANENTLY — there is deliberately
 # NO automatic GC. Pruning stale ones is the user's/coordinator's responsibility.
@@ -114,6 +133,7 @@ if [[ -z "$caller_target_dir" ]]; then
     echo "claudius: per-checkout isolation skipped ($derivation_failure) — using shared/default target dir, same-HEAD collision hazard applies" >&2
   fi
 fi
+effective_target_dir="${cli_target_dir:-${CARGO_TARGET_DIR:-}}"
 
 # Keep per-checkout isolation cheap: sccache does NOT cache linker-invoking crates
 # (bin/dylib/cdylib/proc-macro — a test binary is a bin, exactly what a test loop
@@ -154,13 +174,12 @@ diff_hash=$(git diff HEAD 2>/dev/null | sha256sum | cut -d' ' -f1)
 # replay key when the invoking repository does not ignore it.
 untracked_hash=$(git ls-files --others --exclude-standard --exclude='/.claudius-ledger/' -z 2>/dev/null \
   | sort -z | xargs -0 sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1)
-# CARGO_TARGET_DIR's role in the key depends on WHO set it:
+# The selected target dir's role in the key depends on who set it:
 #  - Auto-derived (caller left it unset): pure path noise. The checkout root is
 #    keyed independently, so EXCLUDE the wrapper-derived target dir.
-#  - Caller-set explicitly (the CLAUDIUS_ISOLATE_TARGET=1 escape hatch): a verdict
-#    input. The caller chose a specific dir precisely to force a real build there
-#    (e.g. a known-clean dir for re-verification); two different explicit dirs
-#    must NOT cross-replay, so INCLUDE it. Every other CARGO_* var always counts.
+#  - Caller-selected explicitly: a verdict input. The environment spelling is
+#    included here; the CLI spelling remains in cmd_norm below. Two different
+#    explicit dirs must NOT cross-replay. Every other CARGO_* var always counts.
 if [[ -n "$caller_target_dir" ]]; then
   env_hash=$(env | grep -E '^(RUSTFLAGS|RUSTDOCFLAGS|CARGO_)' | sort | sha256sum | cut -d' ' -f1)
 else
@@ -175,16 +194,6 @@ rel_dir=$(git rev-parse --show-prefix 2>/dev/null)
 normalize_cargo_command() {
   local out="cargo"
   while (( $# )); do
-    case "$1" in
-      --)
-        while (( $# )); do out+=" $1"; shift; done
-        break
-        ;;
-      --target-dir)
-        if (( $# > 1 )); then shift 2; continue; fi
-        ;;
-      --target-dir=*) shift; continue ;;
-    esac
     out+=" $1"
     shift
   done
@@ -369,7 +378,7 @@ record=$(jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg key "$key" --arg
   --arg head "$head_oid" --arg log "$logf" \
   --argjson exit "$rc" --argjson dur "$dur" --arg sid "${CLAUDE_SESSION_ID:-}" \
   --argjson fg "$fake_green_suspected" \
-  --arg tgt "${CARGO_TARGET_DIR:-}" --argjson autoiso "$auto_isolated_json" \
+  --arg tgt "$effective_target_dir" --argjson autoiso "$auto_isolated_json" \
   '{ts:$ts,key:$key,cmd:$cmd,head:$head,exit:$exit,duration_s:$dur,fake_green_suspected:$fg,target_dir:$tgt,auto_isolated:$autoiso,log:$log,session:$sid}')
 if command -v flock >/dev/null 2>&1; then
   printf '%s\n' "$record" | flock "$RECORDS" tee -a "$RECORDS" >/dev/null
@@ -393,7 +402,7 @@ fake_green_banner() {
 !!! --------------------------------------------------------------------------
 !!! WARNING: POSSIBLE FAKE GREEN — this run finished in ${dur}s (below ${fg_min}s),
 !!! so cargo may have compiled little (or nothing) and executed a PRE-EXISTING binary.
-$(isolation_status_line "$auto_isolated" "${CARGO_TARGET_DIR:-}")
+$(isolation_status_line "$auto_isolated" "$effective_target_dir")
 !!! 1. Before trusting this result, confirm YOUR new/renamed test names appear
 !!!    in the output above (full log: $logf).
 !!! 2. If they do not, this is NOT evidence. Force a genuine re-run:

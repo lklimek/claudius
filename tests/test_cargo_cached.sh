@@ -41,8 +41,9 @@
 #   K34 target prefix set          -> unique per checkout and stable on repeat
 #   K35 explicit target + prefix   -> explicit CARGO_TARGET_DIR wins unchanged
 #   K36 target prefix unset        -> existing canonical-derived path is unchanged
-#   K37 --target-dir CLI variants  -> same key and recorded log path
+#   K37 --target-dir CLI variants  -> distinct keys, no auto-isolation
 #   K38 unwritable ledger root     -> workspace-local fallback with one note
+#   K39 both ledger roots unwritable -> loud plain-cargo fallback
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -681,15 +682,13 @@ else
   bad "K36 (expected='$expected_default' got='$default_tgt')"
 fi
 
-echo "=== K37: --target-dir CLI variants share one key and recorded log path ==="
+echo "=== K37: --target-dir CLI variants stay distinct and skip auto-isolation ==="
 K37CACHE="$WORK/cache-k37"
 BEFORE=$(counter)
 OUT_BASE=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K37CACHE" CLAUDIUS_FORCE=0 \
             CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
             "$BASHBIN" "$WRAPPER" test 2>&1 )
 MID=$(counter)
-key_base=$(jq -r '.key' "$K37CACHE/ledger/records.jsonl")
-log_base=$(jq -r '.log' "$K37CACHE/ledger/records.jsonl")
 OUT_SEPARATE=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K37CACHE" CLAUDIUS_FORCE=0 \
                 CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
                 "$BASHBIN" "$WRAPPER" --target-dir "$WORK/cli-target-a" test 2>&1 )
@@ -702,17 +701,31 @@ OUT_PASSTHROUGH=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K37CACHE" CLAUDIUS_FORCE=0
                    "$BASHBIN" "$WRAPPER" test -- --target-dir "$WORK/test-arg" 2>&1 )
 AFTER=$(counter)
 record_count=$(wc -l < "$K37CACHE/ledger/records.jsonl")
-if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER_VARIANTS" = "$MID" ] \
-   && [ "$AFTER" = "$((MID + 1))" ] \
-   && [ -n "$key_base" ] && [ "$record_count" = 2 ] \
-   && grep -q "CACHED verification" <<<"$OUT_SEPARATE" \
-   && grep -q "CACHED verification" <<<"$OUT_JOINED" \
+key_base=$(sed -n '1p' "$K37CACHE/ledger/records.jsonl" | jq -r '.key')
+key_separate=$(sed -n '2p' "$K37CACHE/ledger/records.jsonl" | jq -r '.key')
+key_joined=$(sed -n '3p' "$K37CACHE/ledger/records.jsonl" | jq -r '.key')
+auto_separate=$(sed -n '2p' "$K37CACHE/ledger/records.jsonl" | jq -r '.auto_isolated')
+auto_joined=$(sed -n '3p' "$K37CACHE/ledger/records.jsonl" | jq -r '.auto_isolated')
+target_separate=$(sed -n '2p' "$K37CACHE/ledger/records.jsonl" | jq -r '.target_dir')
+target_joined=$(sed -n '3p' "$K37CACHE/ledger/records.jsonl" | jq -r '.target_dir')
+if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER_VARIANTS" = "$((MID + 2))" ] \
+   && [ "$AFTER" = "$((AFTER_VARIANTS + 1))" ] \
+   && [ "$record_count" = 4 ] \
+   && [ -n "$key_base" ] && [ -n "$key_separate" ] && [ -n "$key_joined" ] \
+   && [ "$key_base" != "$key_separate" ] \
+   && [ "$key_base" != "$key_joined" ] \
+   && [ "$key_separate" != "$key_joined" ] \
+   && [ "$auto_separate" = false ] && [ "$auto_joined" = false ] \
+   && [ "$target_separate" = "$WORK/cli-target-a" ] \
+   && [ "$target_joined" = "$WORK/cli-target-b" ] \
+   && ! grep -q "CACHED verification" <<<"$OUT_SEPARATE" \
+   && ! grep -q "CACHED verification" <<<"$OUT_JOINED" \
    && ! grep -q "CACHED verification" <<<"$OUT_PASSTHROUGH" \
-   && grep -qF "$log_base" <<<"$OUT_SEPARATE" \
-   && grep -qF "$log_base" <<<"$OUT_JOINED"; then
-  ok "K37 cargo target-dir variants replayed key $key_base/log $log_base; test args stayed keyed"
+   && grep -q '^STUB_TGT=$' <<<"$OUT_SEPARATE" \
+   && grep -q '^STUB_TGT=$' <<<"$OUT_JOINED"; then
+  ok "K37 explicit CLI target dirs produced distinct keys and auto_isolated=false"
 else
-  bad "K37 (before=$BEFORE mid=$MID variants=$AFTER_VARIANTS after=$AFTER records=$record_count key=$key_base log=$log_base)"
+  bad "K37 (before=$BEFORE mid=$MID variants=$AFTER_VARIANTS after=$AFTER records=$record_count keys=$key_base,$key_separate,$key_joined auto=$auto_separate,$auto_joined targets=$target_separate,$target_joined)"
 fi
 
 echo "=== K38: an unwritable ledger root falls back inside the checkout ==="
@@ -742,6 +755,32 @@ if [ "$MID" = "$((BEFORE + 1))" ] && [ "$AFTER" = "$MID" ] \
   ok "K38 unwritable primary emitted one note, recorded locally, and replayed"
 else
   bad "K38 (before=$BEFORE mid=$MID after=$AFTER rc=$RC replay_rc=$RC_REPLAY notes=$fallback_notes out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K39: two unwritable ledger roots fall open loudly to plain cargo ==="
+PRIMARY39="$WORK/unwritable-primary-both"
+FALLBACK39="$REPO/.claudius-ledger"
+mkdir -p "$PRIMARY39"
+chmod 500 "$PRIMARY39"
+rm -rf "$FALLBACK39"
+bust k39
+chmod 555 "$REPO"
+BEFORE=$(counter)
+OUT=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$PRIMARY39/cache" CLAUDIUS_FORCE=0 \
+       CLAUDIUS_MIN_PLAUSIBLE_DUR=0 env PATH="$STUBDIR:$PATH" \
+       "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
+AFTER=$(counter)
+chmod 755 "$REPO"
+chmod 700 "$PRIMARY39"
+fallback_notes=$(grep -c "ledger unavailable.*AND workspace-local.*WITHOUT replay/dedup/fake-green protection" <<<"$OUT")
+if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = 0 ] \
+   && [ "$fallback_notes" = 1 ] \
+   && [ ! -e "$PRIMARY39/cache/ledger/records.jsonl" ] \
+   && [ ! -e "$FALLBACK39/records.jsonl" ] \
+   && grep -q "STUB CARGO INVOCATION" <<<"$OUT"; then
+  ok "K39 dual ledger failure emitted one loud note and ran cargo directly"
+else
+  bad "K39 (before=$BEFORE after=$AFTER rc=$RC notes=$fallback_notes out='${OUT//$'\n'/ }')"
 fi
 
 echo ""

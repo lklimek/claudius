@@ -231,6 +231,13 @@ def canonical_label(label: str) -> str:
     return label[6:] if label.startswith("agent-") else label
 
 
+def _is_agent_worktree_dir(path: Path) -> bool:
+    """Return whether a directory is eligible for worktree monitoring."""
+    return path.is_dir() and (
+        path.name.startswith("agent-") or (path / ".git").exists()
+    )
+
+
 def safe_json(path: Path) -> Any | None:
     """Read JSON defensively, returning None for transient failures."""
     signature: tuple[int, int] | None = None
@@ -499,8 +506,26 @@ def member_activity(
 ) -> Activity | None:
     """Resolve worktree, cwd, then transcript activity for one team member."""
     key = canonical_label(member.name)
-    worktree = worktrees_dir / f"agent-{key}"
-    if worktree.is_dir():
+    exact_worktree = worktrees_dir / f"agent-{key}"
+    worktree: Path | None = exact_worktree if exact_worktree.is_dir() else None
+    if worktree is None:
+        try:
+            worktree = next(
+                (
+                    path
+                    for path in sorted(worktrees_dir.iterdir())
+                    if _is_agent_worktree_dir(path)
+                    and (path / ".git").exists()
+                    and (
+                        canonical_label(path.name) == key
+                        or path.name.endswith(f"-{key}")
+                    )
+                ),
+                None,
+            )
+        except OSError:
+            worktree = None
+    if worktree is not None:
         epoch = newest_mtime_under(worktree)
         return Activity(epoch, worktree) if epoch is not None else None
     if member.cwd and cwd_counts.get(member.cwd, 0) >= 2:
@@ -1985,10 +2010,7 @@ class Watchdog:
                 )
         try:
             source_c = sorted(
-                path
-                for path in worktrees.iterdir()
-                if path.is_dir()
-                and (path.name.startswith("agent-") or (path / ".git").exists())
+                path for path in worktrees.iterdir() if _is_agent_worktree_dir(path)
             )
         except OSError:
             source_c = []
@@ -2279,11 +2301,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             for event in events:
                 print(event, flush=True)
         except Exception as error:
-            print(
-                "agent-watchdog: transient poll failure ignored "
-                f"({type(error).__name__}: {error})",
-                file=sys.stderr,
-                flush=True,
+            monitor.warn_once(
+                f"poll-error:{type(error).__name__}",
+                "transient poll failure ignored "
+                f"({type(error).__name__}: {_error_field(str(error))})",
             )
         try:
             time.sleep(options.poll_secs)

@@ -1143,6 +1143,22 @@ def test_activity_clock_fallback_chain(tmp_path: Path) -> None:
     assert watchdog.member_activity(member, wt_root, {cwd: 2}, {}) is None
 
 
+def test_member_activity_finds_slug_named_git_worktree(tmp_path: Path) -> None:
+    """Member clocks use slug-named Git worktrees before the shared lead cwd."""
+    wt_root = tmp_path / "worktrees"
+    wt = wt_root / "home-ubuntu-git-claudius-bilby"
+    cwd = workspace(tmp_path)
+    touch(wt / ".git", 50)
+    touch(wt / "work.py", 100)
+    os.utime(wt, (90, 90))
+    touch(cwd / "lead-work.py", 200)
+    member = watchdog.Member("bilby", cwd, "aid", "developer", "", "")
+
+    activity = watchdog.member_activity(member, wt_root, {cwd: 1}, {})
+
+    assert activity == watchdog.Activity(100, wt)
+
+
 def test_cwd_activity_clock_prunes_git_metadata(tmp_path: Path) -> None:
     """Repository metadata churn does not refresh the cwd activity clock."""
     cwd = workspace(tmp_path)
@@ -2014,6 +2030,48 @@ def test_cli_worktree_root_env_var(tmp_path: Path) -> None:
         ["--session-id", "test", "--worktrees", "/explicit/path"],
         {**base_env, "CLAUDIUS_WORKTREE_ROOT": "/env/root"},
     ).worktrees == Path("/explicit/path")
+
+
+def test_main_deduplicates_and_sanitizes_poll_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Repeated poll exceptions emit one bounded, escaped diagnostic."""
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            projects_dir=tmp_path / "projects",
+            worktrees=tmp_path / "worktrees",
+            gone_enabled=False,
+        ),
+        env={
+            "HOME": str(tmp_path / "home"),
+            "CLAUDE_PLUGIN_DATA": str(tmp_path / "plugin"),
+        },
+        proc_root=tmp_path / "proc",
+    )
+    polls = 0
+
+    def fail_poll() -> list[str]:
+        nonlocal polls
+        polls += 1
+        raise OSError("bad line\n\x1b[31mcontrol")
+
+    def stop_after_two_polls(_seconds: int) -> None:
+        if polls >= 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(monitor, "poll_once", fail_poll)
+    monkeypatch.setattr(watchdog, "Watchdog", lambda _options: monitor)
+    monkeypatch.setattr(watchdog.time, "sleep", stop_after_two_polls)
+
+    with pytest.raises(KeyboardInterrupt):
+        watchdog.main(["--session-id", "test", "--no-gone", "--poll-secs", "1"])
+
+    stderr = capsys.readouterr().err
+    assert stderr.count("transient poll failure ignored (OSError:") == 1
+    assert "bad line\n\x1b[31mcontrol" not in stderr
+    assert '"bad line \\u001b[31mcontrol"' in stderr
 
 
 def test_cli_requires_at_least_one_argument(

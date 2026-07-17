@@ -361,6 +361,27 @@ class TestCliExitCodes:
         assert code == 1
         assert "'findings' is a required property" in err
 
+    def test_producer_mode_rejects_non_object_schema_root(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        schema = tmp_path / "array-schema.json"
+        schema.write_text("[]")
+
+        code, out, err = _run_cli(
+            [],
+            tmp_path,
+            monkeypatch,
+            capsys,
+            "--producer",
+            "--schema",
+            str(schema),
+        )
+
+        assert code == 2
+        assert out == ""
+        assert "Schema error: schema root must be a JSON object" in err
+        assert "Traceback" not in err
+
     @pytest.mark.parametrize(
         "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
     )

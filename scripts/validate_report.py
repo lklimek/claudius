@@ -191,6 +191,12 @@ def main() -> int:
         return 2
 
     if args.producer:
+        if not isinstance(schema, dict):
+            print(
+                "Schema error: schema root must be a JSON object",
+                file=sys.stderr,
+            )
+            return 2
         definitions = schema.get("$defs")
         if (
             not isinstance(definitions, dict)
