@@ -6,6 +6,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.12.0] - 2026-07-20
+
+### Added
+
+- **`skills/track-minions/SKILL.md`**: new skill — the durable-tracking mechanics (memcan TODOs, plain-file fallback, session-start/after-compaction recovery) extracted from `grand-admiral` § Spawning → Track Progress. Standalone and reloadable, same rationale as `delegate`.
+
+### Changed
+
+- **`skills/spawn-checklist/SKILL.md` renamed to `skills/delegate/SKILL.md`** (`name: delegate`): same content and triggers, framed around delegation generally rather than only `Agent()` spawning. All repo cross-references (`grand-admiral`, `workflow-feature`, `workflow-simplified`, `grumpy-review`, `codex-crew`) updated to point at `claudius:delegate`.
+- **`skills/grand-admiral/SKILL.md`** § Spawning → Track Progress: full mechanics replaced with a pointer to the new `track-minions` skill, now an obligatory load (alongside `delegate`) before spawning or while multi-step work is in flight.
+
 ## [5.11.0] - 2026-07-16
 
 ### Added

@@ -1,15 +1,15 @@
 ---
-name: spawn-checklist
-description: "This skill should be used immediately before any Agent() spawn — a single agent or a whole wave — and whenever the user says \"spawn an agent\", \"delegate this\", \"parallelize this\", \"split this work\", or \"use a subagent\". Also applies when choosing a model tier, batching small tasks, or deciding inline-vs-spawn. Reload before every spawn, not once per session."
+name: delegate
+description: "Use before delegating any task to an agent — a single Agent() spawn or a whole wave — and whenever the user says \"spawn an agent\", \"delegate this\", \"parallelize this\", \"split this work\", or \"use a subagent\". Also applies when choosing a model tier, batching small tasks, or deciding inline-vs-spawn. Reload before every delegation, not once per session."
 ---
 
-# Spawn Checklist
+# Delegate
 
 Run before every `Agent()` call. Spawning is the dominant token cost — every subagent rebuilds its context cache from scratch, and that cache-creation, not model output, is the bulk of the bill. The cheapest work is the spawn that never happens.
 
-Cheap enough to reload before each spawn. Reload it.
+Cheap enough to reload before each delegation. Reload it.
 
-## Pre-Spawn Checklist
+## Pre-Delegation Checklist
 
 1. **Total scope size** — sum the estimated diff/output across the whole batch, not per item. Under ~100 lines total: fold into an existing or sibling agent via `SendMessage`; do not spawn.
 2. **Genuine parallelism** — is there a real wall-clock or file-independence need, or would sequential work merely take "a bit longer"? No real need → one agent, sequential.
