@@ -13,7 +13,7 @@ Complete operations manual for coordinator agents. Covers session protocol, plan
 - Reread available skills and agents before each task
 - Check MemCan (if available): `memcan:recall` for architecture decisions, coding standards, design patterns, known pitfalls, and to understand user's mindset and values. `search_code` for existing implementations, `search_standards` for compliance.
 - Before finishing, invoke `claudius:lessons-learned` to save decisions, patterns, and corrections per Source of Truth categories (injected at session start). Skip only if nothing new was established.
-- **Track work for EVERY task** in a durable store, not just an in-context list (which dies on compaction — how multi-task work silently drops tasks): memcan TODOs, or a plain file when memcan is absent (see § Spawning → Track Progress). Record every task, update status as steps complete, and re-list after any context loss. Applies to solo, delegated, and multi-agent work alike.
+- **Track work for EVERY task** in a durable store, not just an in-context list (which dies on compaction — how multi-task work silently drops tasks): load `claudius:track-minions`. Applies to solo, delegated, and multi-agent work alike.
 - Past work is sunk cost — do what is correct, even if it means redoing work
 - After completing a task, end with two lines in character voice:
   **Task**: what the user wanted (<=8 words).
@@ -63,20 +63,9 @@ Workflow skills define phases and agent sequencing. Claudius is the coordinator 
 
 ## Spawning
 
-### Track Progress (Always)
+### Track Progress (Mandatory)
 
-An in-context checklist is not enough — it dies on compaction, which is exactly how multi-task work silently drops tasks. Track work in a durable store the coordinator can re-list from scratch after any context loss.
-
-**Primary — memcan TODOs** (`memcan:todo`; tools `add_todo`/`list_todos`/`update_todo`/`complete_todo`). Scope by `project` = the repo short name from `git remote get-url origin`, so the list is recoverable with nothing to remember.
-
-1. **Session start / after compaction**: `list_todos(project=<repo>, status="pending")` to recover in-flight work — never assume the in-context list is complete.
-2. **Before starting**: `add_todo` one item per logical unit (agent dispatch, phase, file group).
-3. **While working**: `complete_todo` when done, `update_todo` otherwise. Status is `pending`/`done` only — encode in-progress / blocked / postponed and the owning agent in the title or description, and use `priority` for ordering.
-4. **Between steps**: re-list to decide the next action and catch forgotten work.
-
-**Fallback — a plain durable file**, only when the memcan tools are unavailable (e.g. headless/cron). Keep the same list in a file outside any git tree; choose a stable, deterministic location and simple format yourself and re-read it after context loss — durability and recoverability are the point, not a fixed schema.
-
-The durable store is the source of truth for outstanding work.
+**Before spawning, and while multi-step work is in flight, load `claudius:track-minions`.** It owns the durable-tracking mechanics — memcan TODOs, plain-file fallback, session-start/after-compaction recovery. Reload it the same way as `delegate`: cheap enough to not skip.
 
 ### Monitoring (Mandatory)
 
@@ -136,12 +125,12 @@ See `ci-dance` § Inter-Stream Communication for the production coordination pat
 ### Spawning Rules
 
 - Spawn independent agents **in parallel** in a single message
-- **Model override**: each agent carries an explicit tiered `model:` fallback (see `spawn-checklist` § Token Economy); that fallback applies only when a spawn omits an explicit model, so still set model per spawn to override when the task's risk/complexity differs from the agent's default tier.
+- **Model override**: each agent carries an explicit tiered `model:` fallback (see `delegate` § Token Economy); that fallback applies only when a spawn omits an explicit model, so still set model per spawn to override when the task's risk/complexity differs from the agent's default tier.
 - `run_in_background: true` for very large tasks
 
-### Token Economy, Scaling & the Pre-Spawn Checklist
+### Token Economy, Scaling & the Pre-Delegation Checklist
 
-**Before any `Agent()` call — one agent or a whole wave — load `claudius:spawn-checklist`.** It owns the spawn decision: the pre-spawn checklist, the four Token Economy rules (spawn discipline, mandatory model tiering with the Opus/Sonnet/Haiku table, read discipline, coordinator context), and Scaling (splitting and batching). Reload it before each spawn, not once per session — it is deliberately short so that is affordable.
+**Before any `Agent()` call — one agent or a whole wave — load `claudius:delegate`.** It owns the spawn decision: the pre-delegation checklist, the four Token Economy rules (spawn discipline, mandatory model tiering with the Opus/Sonnet/Haiku table, read discipline, coordinator context), and Scaling (splitting and batching). Reload it before each spawn, not once per session — it is deliberately short so that is affordable.
 
 It is a standalone skill because every agent carrying a Task tool can spawn, not just coordinators loading this manual.
 
@@ -340,7 +329,7 @@ Codex events are separately namespaced: `CODEX_STALL job=<id> workspace=<slug-ha
 4. No output location — always specify where standalone agents write
 5. Parallelizing tightly coupled work — use single opus agent sequentially for cross-file dependencies
 6. Trusting stale diagnostics — check the ledger for the current tree key first; a fresh build is warranted only when no record exists for the current tree (`CLAUDIUS_FORCE=1` for the rare justified exception — suspected flake or corrupted fingerprint)
-7. Spawning agents for tiny tasks — inline small/sequential work by default (see `spawn-checklist` § Token Economy); independent files justify a separate worktree/commit, not automatically a separate spawn
+7. Spawning agents for tiny tasks — inline small/sequential work by default (see `delegate` § Token Economy); independent files justify a separate worktree/commit, not automatically a separate spawn
 8. Auto-deleting data on errors — NEVER delete databases, wipe volumes, or destroy data without explicit user confirmation (see CLAUDE.md Safety section)
 9. Not verifying branch context after worktree cleanup — `git worktree remove` can change checked-out branch, causing cherry-picks into wrong branch
 10. Spawning fresh agents for follow-up work — reuse running agents via SendMessage to leverage accumulated context
