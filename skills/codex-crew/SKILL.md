@@ -48,7 +48,14 @@ Mitigation: stagger dispatches, or verify each dispatch has its own dedicated br
 **Get notified, don't just poll on request.** After ruling out a false-early `idle_notification`, arm a `Bash` `run_in_background` until-loop on that job's own `state/<workspace-slug>-<hash>/jobs/<job-id>.json` (resolve the path per § On-Disk Job State above) — a single, job-specific completion signal that needs no team/session discovery:
 
 ```bash
-until python3 -c "import json,sys; d=json.load(open('state/<workspace-slug>-<hash>/jobs/<job-id>.json')); sys.exit(0 if d.get('status') in ('completed','failed','cancelled','canceled') else 1)"; do sleep 20; done
+until python3 -c "
+import json
+try:
+    d = json.load(open('state/<workspace-slug>-<hash>/jobs/<job-id>.json'))
+except Exception:
+    exit(1)
+exit(0 if d.get('status') in ('completed','failed','cancelled','canceled') else 1)
+"; do sleep 20; done
 ```
 
 This loop is itself a backgrounded Bash call, so it inherits the same silent-kill risk as § Harness Kills of a Backgrounded Task below — periodically confirm it's still alive rather than trusting silence as health.
