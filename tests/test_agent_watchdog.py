@@ -537,6 +537,35 @@ def test_direct_discovery_prefilters_foreign_workspace_state(
     assert foreign_job not in scanner.cache.items
 
 
+def test_direct_discovery_survives_zero_match_ambient_session(
+    tmp_path: Path,
+) -> None:
+    """A failed ambient session match cannot suppress a direct workspace."""
+    ambient = workspace(tmp_path, "ambient")
+    direct = workspace(tmp_path, "direct")
+    _, env = codex_store(
+        tmp_path,
+        ambient,
+        [{"id": "ambient", "sessionId": "ambient-session"}],
+    )
+    codex_store(
+        tmp_path,
+        direct,
+        [{"id": "direct", "sessionId": "worker-session"}],
+    )
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+
+    result = scanner.scan(
+        [ambient],
+        "coordinator-session",
+        now=100,
+        discovery_candidates=[direct],
+    )
+
+    assert [item.job_id for item in result.records] == ["direct"]
+    assert result.warnings == []
+
+
 def test_codex_scanner_never_parses_growing_state_json(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1679,6 +1708,55 @@ def test_teamless_watchdog_discovers_codex_state_from_session_cwd(
         "idle=101s phase=running reason=no-progress"
     ]
     assert "zero-monitored" not in monitor.warned
+
+
+def test_direct_workspace_surfaces_jobs_from_multiple_foreign_sessions(
+    tmp_path: Path,
+) -> None:
+    """Direct workspace ownership includes jobs from every dispatch session."""
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
+    ws = workspace(worktrees, "agent-rescue")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "worker-one",
+                "sessionId": "worker-session-one",
+                "epoch": 100,
+                "updatedAt": None,
+            },
+            {
+                "id": "worker-two",
+                "sessionId": "worker-session-two",
+                "epoch": 100,
+                "updatedAt": None,
+            },
+        ],
+        state_epoch=100,
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="coordinator-session",
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=200) == []
+    key = watchdog.resolve_workspace(ws, env).key
+    assert monitor.poll_once(now=201) == [
+        f"CODEX_STALL job=worker-one workspace={key} "
+        "idle=101s phase=running reason=no-progress",
+        f"CODEX_STALL job=worker-two workspace={key} "
+        "idle=101s phase=running reason=no-progress",
+    ]
 
 
 def test_watchdog_poll_opt_in_source_b_stall_resume(tmp_path: Path) -> None:

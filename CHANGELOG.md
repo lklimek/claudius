@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.12.1] - 2026-07-20
+
+### Fixed
+
+- **`scripts/agent-watchdog.py`** `CodexScanner`: workspaces discovered via an explicit `--worktrees` path or a Source C worktree no longer require a job's `sessionId` to match the watchdog's own effective session before surfacing (`WorkspaceInfo.direct` tags the discovery origin; the strict session gate now applies only to ambient team/member-cwd discovery). Closes a blind spot where `codex-companion.mjs` stamps each job's `sessionId` from its own dispatching Claude session — so a wave of 2+ named `codex:codex-rescue` teammates, each an independent session, previously made Source D silently report zero `CODEX_*` events even though every job was genuinely running or done.
+
+### Changed
+
+- **`skills/codex-crew/SKILL.md`** § Monitoring a Codex Job: documents arming a `Bash` `run_in_background` until-loop on a job's own on-disk state file as a proactive completion signal after ruling out a false-early `idle_notification`, instead of reaching for `ScheduleWakeup` (which is `/loop` dynamic-mode-only and errors outside that context); the loop's terminal-status check now also matches `cancelled`/`canceled`, not just `completed`/`failed` (a cancelled job previously never tripped it); the multi-teammate under-report bullet is narrowed to reflect this PR's own fix — only ambient (team/member-cwd) discovery still carries the single-session-match limitation; the poll-loop snippet now catches read/parse errors (missing or mid-write job file) and treats them as "not done yet" instead of letting the traceback print to stderr on every retry.
+
 ## [5.12.0] - 2026-07-20
 
 ### Added
