@@ -45,6 +45,16 @@ Mitigation: stagger dispatches, or verify each dispatch has its own dedicated br
 
 **Primary method: read the job's on-disk state directly** (mtime-gated, minimal-field reads — never load the full state blob). See `references/sandbox-and-recovery.md` § On-Disk Job State for the field list, `result.rawOutput`/`result.touchedFiles` usage, and matching jobs to dispatches. This is load-bearing, not a fallback — it is what actually recovers status/results when the stall watchdog can't.
 
+**Get notified, don't just poll on request.** After ruling out a false-early `idle_notification`, arm a `Bash` `run_in_background` until-loop on that job's own `state/<workspace-slug>-<hash>/jobs/<job-id>.json` (resolve the path per § On-Disk Job State above) — a single, job-specific completion signal that needs no team/session discovery:
+
+```bash
+until python3 -c "import json,sys; d=json.load(open('state/<workspace-slug>-<hash>/jobs/<job-id>.json')); sys.exit(0 if d.get('status') in ('completed','failed') else 1)"; do sleep 20; done
+```
+
+This loop is itself a backgrounded Bash call, so it inherits the same silent-kill risk as § Harness Kills of a Backgrounded Task below — periodically confirm it's still alive rather than trusting silence as health.
+
+`ScheduleWakeup` is not a substitute — it's `/loop` dynamic-mode-only and errors outside that context. Don't reach for it as an ad-hoc "check back later" for a Codex dispatch.
+
 - The stall watchdog (`grand-admiral` § Recovery → `scripts/agent-watchdog.py`) discovers Codex jobs and emits `CODEX_*` transition events. Launching it is **mandatory** whenever any agent — Claude or Codex — is dispatched (see `grand-admiral` § Spawning → Monitoring). Treat its `CODEX_*` events as **best-effort, layered on top of** the direct job-state check above — never as a substitute for it.
 - **Codex discovery is gated on team membership or `--worktrees`.** The watchdog reaches Codex jobs only through named teammates or an explicit `--worktrees` path on the Monitor command. A session whose Codex work is entirely unnamed background `codex:codex-rescue` dispatches, launched without `--worktrees`, gets **zero** Codex monitoring — the watchdog emits a one-time startup warning on detecting this. Either name Codex dispatches so they join the team, or always point the Monitor command's `--worktrees` flag at the configured worktree root.
 - **Even correctly configured, `CODEX_*` events can still silently under-report a multi-teammate wave.** Each named `codex:codex-rescue` teammate is its own independent Claude session, and `codex-companion.mjs` stamps every job's `sessionId` from that dispatching session — never the coordinator's, never the team's `leadSessionId`. No single watchdog session value can match every teammate's independently-minted job `sessionId` at once, so the watchdog can report zero `CODEX_*` events for a wave whose jobs are all genuinely running or done. This is a known gap (tracked for a code-level fix); the direct job-state check above is unaffected by it, which is why it's the primary method, not the stopgap.
