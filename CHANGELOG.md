@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [5.11.1] - 2026-07-20
+## [5.12.1] - 2026-07-20
 
 ### Fixed
 
@@ -15,6 +15,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 ### Changed
 
 - **`skills/codex-crew/SKILL.md`** § Monitoring a Codex Job: documents arming a `Bash` `run_in_background` until-loop on a job's own on-disk state file as a proactive completion signal after ruling out a false-early `idle_notification`, instead of reaching for `ScheduleWakeup` (which is `/loop` dynamic-mode-only and errors outside that context); the loop's terminal-status check now also matches `cancelled`/`canceled`, not just `completed`/`failed` (a cancelled job previously never tripped it); the multi-teammate under-report bullet is narrowed to reflect this PR's own fix — only ambient (team/member-cwd) discovery still carries the single-session-match limitation; the poll-loop snippet now catches read/parse errors (missing or mid-write job file) and treats them as "not done yet" instead of letting the traceback print to stderr on every retry.
+
+## [5.12.0] - 2026-07-20
+
+### Added
+
+- **`skills/track-minions/SKILL.md`**: new skill — the durable-tracking mechanics (memcan TODOs, plain-file fallback, session-start/after-compaction recovery) extracted from `grand-admiral` § Spawning → Track Progress. Standalone and reloadable, same rationale as `delegate`.
+
+### Changed
+
+- **`skills/spawn-checklist/SKILL.md` renamed to `skills/delegate/SKILL.md`** (`name: delegate`): same content and triggers, framed around delegation generally rather than only `Agent()` spawning. All repo cross-references (`grand-admiral`, `workflow-feature`, `workflow-simplified`, `grumpy-review`, `codex-crew`) updated to point at `claudius:delegate`.
+- **`skills/grand-admiral/SKILL.md`** § Spawning → Track Progress: full mechanics replaced with a pointer to the new `track-minions` skill, now an obligatory load (alongside `delegate`) before spawning or while multi-step work is in flight.
 
 ## [5.11.0] - 2026-07-16
 
