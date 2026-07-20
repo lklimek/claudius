@@ -11,10 +11,11 @@ absence, and all disappearance signals require consecutive confirmation.
 
 Codex Companion jobs are a separate Source D state machine. Candidate state
 directories come from the selected team, Source C worktrees, and a bounded
-session-workspace scan of the plugin state root. Detailed records must match
-both the effective Claude session and canonical workspace. Healthy work is
-silent; terminal status, stall, recovery, verified runtime disappearance, and
-confirmed record removal emit only the documented transition grammar.
+session-workspace scan of the plugin state root. Ambient team records must
+match both the effective Claude session and canonical workspace; directly
+named workspaces rely on the canonical path match. Healthy work is silent;
+terminal status, stall, recovery, verified runtime disappearance, and confirmed
+record removal emit only the documented transition grammar.
 
 Stdout is a hard protocol: it contains transition lines only. Startup details,
 selection notes, unsupported private-store formats, and transient diagnostics
@@ -171,6 +172,7 @@ class WorkspaceInfo:
     canonical: Path
     key: str
     state_dir: Path
+    direct: bool = False
 
 
 @dataclass(frozen=True)
@@ -1001,7 +1003,6 @@ class CodexScanner:
     def _direct_workspaces(
         self,
         candidates: Iterable[Path],
-        effective_session: str,
         now: float | None,
         warnings: list[tuple[str, str]],
     ) -> list[WorkspaceInfo]:
@@ -1035,13 +1036,6 @@ class CodexScanner:
                     raw = self.cache.read(job_path, self._minimal_job)
                     if not isinstance(raw, dict):
                         continue
-                    session = raw.get("sessionId")
-                    if not (
-                        isinstance(session, str)
-                        and session
-                        and _prefix_matches(session, effective_session)
-                    ):
-                        continue
                     workspace_root = raw.get("workspaceRoot")
                     if not isinstance(workspace_root, str) or not workspace_root:
                         continue
@@ -1054,7 +1048,9 @@ class CodexScanner:
                         continue
                     discovered.setdefault(
                         canonical,
-                        WorkspaceInfo(root, canonical, state_dir.name, state_dir),
+                        WorkspaceInfo(
+                            root, canonical, state_dir.name, state_dir, direct=True
+                        ),
                     )
                 except Exception as error:
                     self._warning(
@@ -1089,10 +1085,8 @@ class CodexScanner:
                 continue
             info = resolve_workspace(candidate, self.env)
             workspaces.setdefault(info.canonical, info)
-        for info in self._direct_workspaces(
-            discovery_candidates, effective_session, now, warnings
-        ):
-            workspaces.setdefault(info.canonical, info)
+        for info in self._direct_workspaces(discovery_candidates, now, warnings):
+            workspaces[info.canonical] = info
 
         raw_by_workspace: list[
             tuple[
@@ -1190,7 +1184,7 @@ class CodexScanner:
                         if job_mtime is not None and job_mtime < terminal_cutoff:
                             continue
                     session = raw.get("sessionId")
-                    if isinstance(session, str) and session:
+                    if not info.direct and isinstance(session, str) and session:
                         sessions.add(session)
                     jobs.append((job_path, raw))
                 except Exception as error:
@@ -1204,17 +1198,19 @@ class CodexScanner:
             raw_by_workspace.append((info, jobs, safe_mtime(state_path)))
 
         session = self._session(effective_session, sessions, warnings)
-        if not session:
+        if not session and not any(info.direct for info, _, _ in raw_by_workspace):
             return ScanResult([], warnings, len(raw_by_workspace))
         records: list[CodexRecord] = []
         for info, jobs, state_mtime in raw_by_workspace:
+            if not info.direct and not session:
+                continue
             workspace_active_count = sum(
                 raw.get("status") in ACTIVE_STATUSES for _, raw in jobs
             )
             matching: list[tuple[Path, dict[str, Any], str]] = []
             for job_path, raw in jobs:
                 try:
-                    if raw.get("sessionId") != session:
+                    if not info.direct and raw.get("sessionId") != session:
                         continue
                     job_id = raw.get("id")
                     if not isinstance(job_id, str) or not SAFE_FIELD.fullmatch(job_id):
@@ -2061,7 +2057,6 @@ class Watchdog:
             if team.lead_cwd:
                 codex_candidates.append(team.lead_cwd)
             codex_candidates.extend(member.cwd for member in team.members if member.cwd)
-        codex_candidates.extend(source_c)
         codex_records: Iterable[CodexRecord] = ()
         scan = ScanResult([])
         if effective_session:
@@ -2069,7 +2064,7 @@ class Watchdog:
                 codex_candidates,
                 effective_session,
                 epoch,
-                discovery_candidates=[self.session_cwd],
+                discovery_candidates=[self.session_cwd, *source_c],
             )
             for warning_key, message in scan.warnings:
                 self.warn_once(warning_key, message)
