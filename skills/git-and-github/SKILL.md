@@ -59,7 +59,7 @@ Always ask explicit confirmation before every push, even if the user agreed earl
 
 Check for a PR template first. If a template exists, read and fill it in, folding its required content into the skeleton linked below rather than replacing it.
 
-The PR body **must lead with a plain-language summary before any implementation detail** — a technical product manager or an external reviewer with no code context must understand everything before `Detailed discussion` at a glance. Copy [pr-body-template.md](references/pr-body-template.md) and fill it in.
+The PR body **must lead with a plain-language summary before any implementation detail** — a technical product manager or an external reviewer with no code context must understand everything before `Detailed discussion` at a glance. Copy the skeleton from [pr-body-template.md](references/pr-body-template.md) (the fenced block only, not the page's title or explanatory text) and fill it in.
 
 **`TL;DR` / `User story` / `Scenario` are user-facing** — plain language only, no specialized terms, no internal implementation details, no code identifiers. Describe strictly user-observable behavior (for an API/CLI, the calling developer *is* the user). `User story` follows the same "As a `<role>`..." shape as the Issues `User story` below, phrased for a change already made. `Scenario` isn't only for bugs: for a new feature, `Actual behavior` is what's missing/impossible today and `Expected behavior` is what becomes possible after this PR — no failure or "actual" bug is required. For a pure internal change with no user-observable effect, drop `User story` and `Scenario` entirely and say so in `Detailed discussion`. Note any blocking relationship (prerequisite for / depends on / stacked atop PR #N) in `Detailed discussion`.
 
@@ -79,7 +79,7 @@ See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR 
 
 Before creating, search existing issues (open + closed) and PRs for duplicates. If found, show to user and ask before proceeding. Check for issue templates first; if one exists, fold its required content into the skeleton linked below rather than replacing it.
 
-Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a PR for the full rationale). Copy [issue-body-template.md](references/issue-body-template.md) and fill it in: `TL;DR` → `User story` → `Scenario` → `Detailed discussion`. `User story` uses the same "As a **\<role\>**, I want to ..., to achieve ..." shape as PRs — multiple personas are fine, repeat the line. Always append the attribution footer.
+Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a PR for the full rationale). Copy the skeleton from [issue-body-template.md](references/issue-body-template.md) (the fenced block only, not the page's title or explanatory text) and fill it in: `TL;DR` → `User story` → `Scenario` → `Detailed discussion`. `User story` uses the same "As a **\<role\>**, I want to ..., to achieve ..." shape as PRs — multiple personas are fine, repeat the line. Always append the attribution footer last.
 
 ## Safety Rules
 

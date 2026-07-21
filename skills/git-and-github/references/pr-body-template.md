@@ -1,9 +1,10 @@
 # PR Body Template
 
-Canonical PR-body skeleton for `git-and-github` §Creating a PR. Drop whole sections or
-sub-sections that don't apply, keep the section order. `TL;DR` / `User story` / `Scenario`
-are plain-language and user-facing; `Detailed discussion` is technical, for implementors
-and AI agents.
+Canonical PR-body skeleton for `git-and-github` §Creating a PR. Copy only the contents of
+the fenced block below into the PR body — not this page's title or explanatory text. Drop
+whole sections or sub-sections that don't apply, keep the section order. `TL;DR` /
+`User story` / `Scenario` are plain-language and user-facing; `Detailed discussion` is
+technical, for implementors and AI agents.
 
 ```markdown
 **TL;DR:** <one plain-language sentence describing what this PR does>
@@ -28,8 +29,9 @@ As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
 ### Testing
 ### Breaking changes
 ### Checklist
-### Attribution
 
 ### Prior work
 <links to possibly related or similar PRs/issues, each with a one-sentence summary of how it relates to this one; omit if none>
+
+### Attribution
 ```

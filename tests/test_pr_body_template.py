@@ -55,7 +55,9 @@ def test_template_sections_are_ordered() -> None:
     actual = text.index("### Actual behavior")
     expected = text.index("### Expected behavior")
     detailed = text.index(DETAILED)
+    checklist = text.index("### Checklist")
     prior_work = text.index("### Prior work")
+    attribution = text.index("### Attribution")
     assert tldr < user_story < scenario < detailed, (
         f"{TEMPLATE}: sections must appear in order TL;DR -> User story -> Scenario -> Detailed discussion"
     )
@@ -63,8 +65,11 @@ def test_template_sections_are_ordered() -> None:
         f"{TEMPLATE}: 'Scenario' sub-sections must appear in order "
         "Base flow -> Actual behavior -> Expected behavior, before 'Detailed discussion'"
     )
-    assert prior_work == max(text.index(h) for h in SKELETON_HEADINGS), (
-        f"{TEMPLATE}: 'Prior work' must be the last section in the skeleton"
+    assert checklist < prior_work < attribution, (
+        f"{TEMPLATE}: 'Prior work' must sit between 'Checklist' and 'Attribution'"
+    )
+    assert attribution == max(text.index(h) for h in SKELETON_HEADINGS), (
+        f"{TEMPLATE}: 'Attribution' (the mandatory footer) must be the last section in the skeleton"
     )
 
 

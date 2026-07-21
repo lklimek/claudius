@@ -58,11 +58,11 @@ def test_template_sections_are_ordered() -> None:
         f"{TEMPLATE}: 'Scenario' sub-sections must appear in order "
         "Base flow -> Actual behavior -> Expected behavior, before 'Detailed discussion'"
     )
-    assert detailed < attribution, (
-        f"{TEMPLATE}: 'Attribution' must be nested under 'Detailed discussion'"
+    assert detailed < prior_work < attribution, (
+        f"{TEMPLATE}: 'Prior work' must sit between 'Detailed discussion' and 'Attribution'"
     )
-    assert prior_work == max(text.index(h) for h in SKELETON_HEADINGS), (
-        f"{TEMPLATE}: 'Prior work' must be the last section in the skeleton"
+    assert attribution == max(text.index(h) for h in SKELETON_HEADINGS), (
+        f"{TEMPLATE}: 'Attribution' (the mandatory footer) must be the last section in the skeleton"
     )
 
 
