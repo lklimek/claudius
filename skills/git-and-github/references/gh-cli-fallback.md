@@ -12,59 +12,12 @@ Check for a PR template first:
 git ls-tree HEAD --name-only -r .github/ | grep -i pull_request_template
 ```
 
-If a template exists, read and fill it in, folding its required content into the skeleton below. See the main skill's §Creating a PR for the full rationale (plain language up top, technical detail in `Detailed discussion`).
+If a template exists, read and fill it in, folding its required content into the linked skeleton below. See the main skill's §Creating a PR for the full rationale (plain language up top, technical detail in `Detailed discussion`).
 
-Always create PRs as drafts:
+Fill in [pr-body-template.md](pr-body-template.md), save the completed body to a file, then create the PR as a draft, passing the body via `--body-file` (not `--body` — avoids shell-escaping the whole skeleton inline):
 
 ```bash
-gh pr create --draft --title "<type>: <description>" --body "$(cat <<'EOF'
-**TL;DR:** <one plain-language sentence describing what this PR does>
-
-## User story
-
-As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
-
-## Scenario
-
-### Base flow
-
-<the ordinary steps that lead to this situation — plain narrative>
-
-### Actual behavior
-
-<what happens today>
-
-### Expected behavior
-
-<what should happen instead>
-
-## Detailed discussion
-
-### What was done
-
-<description of changes>
-
-Closes #<issue-number>
-
-### Testing
-
-<testing details>
-
-### Breaking changes
-
-None
-
-### Checklist
-
-- [x] I have performed a self-review of my own code
-- [x] I have added or updated relevant tests
-- [x] I have made corresponding changes to the documentation if needed
-
-### Attribution
-
-<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
-EOF
-)"
+gh pr create --draft --title "<type>: <description>" --body-file /path/to/filled-in-pr-body.md
 ```
 
 ## Reviewing a PR
@@ -85,6 +38,12 @@ Check for issue templates before creating:
 
 ```bash
 git ls-tree HEAD --name-only -r .github/ | grep -i issue_template
+```
+
+If none exists, fill in [issue-body-template.md](issue-body-template.md) (see the main skill's §Issues), save the completed body to a file, then:
+
+```bash
+gh issue create --title "<title>" --body-file /path/to/filled-in-issue-body.md
 ```
 
 ## Elevated Permissions (ghsudo) -- Optional Fallback

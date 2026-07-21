@@ -57,35 +57,11 @@ Always ask explicit confirmation before every push, even if the user agreed earl
 
 ### Creating a PR
 
-Check for a PR template first. If a template exists, read and fill it in, folding its required content into the skeleton below rather than replacing it.
+Check for a PR template first. If a template exists, read and fill it in, folding its required content into the skeleton linked below rather than replacing it.
 
-The PR body **must lead with a plain-language summary before any implementation detail** — a technical product manager or an external reviewer with no code context must understand the first four sections at a glance. Use this skeleton (drop whole sections or sub-sections that don't apply, keep the section order):
+The PR body **must lead with a plain-language summary before any implementation detail** — a technical product manager or an external reviewer with no code context must understand everything before `Detailed discussion` at a glance. Copy [pr-body-template.md](references/pr-body-template.md) and fill it in.
 
-```markdown
-**TL;DR:** <one plain-language sentence describing what this PR does>
-
-## User story
-As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
-
-## Scenario
-### Base flow
-<the ordinary steps that lead to this situation — plain narrative>
-
-### Actual behavior
-<what happens today — the bug, gap, or missing capability>
-
-### Expected behavior
-<what should happen, or become possible, after this PR>
-
-## Detailed discussion
-### What was done
-### Testing
-### Breaking changes
-### Checklist
-### Attribution
-```
-
-**`TL;DR` / `User story` / `Scenario` are user-facing** — plain language only, no specialized terms, no internal implementation details, no code identifiers. Describe strictly user-observable behavior (for an API/CLI, the calling developer *is* the user). `User story` follows the same "As a `<role>`..." shape as the Issues `### User Story` below, phrased for a change already made. `Scenario` isn't only for bugs: for a new feature, `Actual behavior` is what's missing/impossible today and `Expected behavior` is what becomes possible after this PR — no failure or "actual" bug is required. For a pure internal change with no user-observable effect, drop `User story` and `Scenario` entirely and say so in `Detailed discussion`. Note any blocking relationship (prerequisite for / depends on / stacked atop PR #N) in `Detailed discussion`.
+**`TL;DR` / `User story` / `Scenario` are user-facing** — plain language only, no specialized terms, no internal implementation details, no code identifiers. Describe strictly user-observable behavior (for an API/CLI, the calling developer *is* the user). `User story` follows the same "As a `<role>`..." shape as the Issues `User story` below, phrased for a change already made. `Scenario` isn't only for bugs: for a new feature, `Actual behavior` is what's missing/impossible today and `Expected behavior` is what becomes possible after this PR — no failure or "actual" bug is required. For a pure internal change with no user-observable effect, drop `User story` and `Scenario` entirely and say so in `Detailed discussion`. Note any blocking relationship (prerequisite for / depends on / stacked atop PR #N) in `Detailed discussion`.
 
 **`Detailed discussion` is for implementors and AI agents** — it may get as technical as needed: problem/rationale, code-level specifics, and the sub-sections above.
 
@@ -101,9 +77,9 @@ See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR 
 
 ### Issues
 
-Before creating, search existing issues (open + closed) and PRs for duplicates. If found, show to user and ask before proceeding. Check for issue templates. Always append attribution footer.
+Before creating, search existing issues (open + closed) and PRs for duplicates. If found, show to user and ask before proceeding. Check for issue templates first; if one exists, fold its required content into the skeleton linked below rather than replacing it.
 
-**Feature/enhancement issues must include a `### User Story` section** -- an informal story describing what the user can achieve (no technical details). Start with "As a **\<persona\>**, I want to ... so that ...". Multiple personas are fine. Place user stories before technical details.
+Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a PR for the full rationale). Copy [issue-body-template.md](references/issue-body-template.md) and fill it in: `TL;DR` → `User story` → `Scenario` → `Detailed discussion`. `User story` uses the same "As a **\<role\>**, I want to ..., to achieve ..." shape as PRs — multiple personas are fine, repeat the line. Always append the attribution footer.
 
 ## Safety Rules
 
