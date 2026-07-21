@@ -24,7 +24,7 @@ gh pr create --draft --title "<type>: <description>" --body "$(cat <<'EOF'
 
 As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
 
-## Reproduction scenario
+## Scenario
 
 ### Base flow
 

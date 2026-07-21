@@ -67,7 +67,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 ## User story
 As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
 
-## Reproduction scenario
+## Scenario
 ### Base flow
 <the ordinary steps that lead to this situation — plain narrative>
 
@@ -85,11 +85,11 @@ As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
 ### Attribution
 ```
 
-**`TL;DR` / `User story` / `Reproduction scenario` are user-facing** — plain language only, no specialized terms, no internal implementation details, no code identifiers. Describe strictly user-observable behavior (for an API/CLI, the calling developer *is* the user). `User story` follows the same "As a `<role>`..." shape as the Issues `### User Story` below, phrased for a change already made. `Reproduction scenario` isn't only for bugs: for a new feature, `Actual behavior` is what's missing/impossible today and `Expected behavior` is what becomes possible after this PR — no failure or "actual" bug is required. For a pure internal change with no user-observable effect, drop `User story` and `Reproduction scenario` entirely and say so in `Detailed discussion`. Note any blocking relationship (prerequisite for / depends on / stacked atop PR #N) in `Detailed discussion`.
+**`TL;DR` / `User story` / `Scenario` are user-facing** — plain language only, no specialized terms, no internal implementation details, no code identifiers. Describe strictly user-observable behavior (for an API/CLI, the calling developer *is* the user). `User story` follows the same "As a `<role>`..." shape as the Issues `### User Story` below, phrased for a change already made. `Scenario` isn't only for bugs: for a new feature, `Actual behavior` is what's missing/impossible today and `Expected behavior` is what becomes possible after this PR — no failure or "actual" bug is required. For a pure internal change with no user-observable effect, drop `User story` and `Scenario` entirely and say so in `Detailed discussion`. Note any blocking relationship (prerequisite for / depends on / stacked atop PR #N) in `Detailed discussion`.
 
 **`Detailed discussion` is for implementors and AI agents** — it may get as technical as needed: problem/rationale, code-level specifics, and the sub-sections above.
 
-`TL;DR` → `User story` → `Reproduction scenario` → `Detailed discussion`, in that order. Always create PRs as drafts.
+`TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts.
 
 **PR descriptions describe net final state only** — no development history, changelog, or step-by-step iteration/debugging narrative; that belongs in commit messages. This doesn't conflict with `### Actual behavior`, which describes the pre-existing problem being solved, not the PR's own iteration history. Concise final testing/verification results (the `### Testing` sub-section) describe the final state, not history, and are expected.
 

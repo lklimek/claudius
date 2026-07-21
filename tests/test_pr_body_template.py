@@ -3,7 +3,7 @@
 PR descriptions are owned by ONE skill (`git-and-github`); `push` delegates to it.
 This test pins the contract so a refactor can't silently demote the human-readable
 sections below implementation detail: `git-and-github/SKILL.md` must define, in
-order, `TL;DR` -> `## User story` -> `## Reproduction scenario` (with `### Base flow`,
+order, `TL;DR` -> `## User story` -> `## Scenario` (with `### Base flow`,
 `### Actual behavior`, `### Expected behavior`) -> `## Detailed discussion`, and
 `push/SKILL.md` must reference that skeleton rather than inlining a duplicate.
 """
@@ -17,7 +17,7 @@ GIT_GITHUB = REPO_ROOT / "skills" / "git-and-github" / "SKILL.md"
 PUSH = REPO_ROOT / "skills" / "push" / "SKILL.md"
 
 USER_STORY = "## User story"
-REPRO = "## Reproduction scenario"
+SCENARIO = "## Scenario"
 DETAILED = "## Detailed discussion"
 
 
@@ -26,7 +26,7 @@ def test_git_github_has_required_headings() -> None:
     for heading in (
         "**TL;DR:**",
         USER_STORY,
-        REPRO,
+        SCENARIO,
         "### Base flow",
         "### Actual behavior",
         "### Expected behavior",
@@ -39,23 +39,23 @@ def test_sections_are_ordered() -> None:
     text = GIT_GITHUB.read_text(encoding="utf-8")
     tldr = text.index("**TL;DR:**")
     user_story = text.index(USER_STORY)
-    repro = text.index(REPRO)
+    scenario = text.index(SCENARIO)
     base_flow = text.index("### Base flow")
     actual = text.index("### Actual behavior")
     expected = text.index("### Expected behavior")
     detailed = text.index(DETAILED)
-    assert tldr < user_story < repro < detailed, (
+    assert tldr < user_story < scenario < detailed, (
         f"{GIT_GITHUB}: sections must appear in order TL;DR -> User story -> "
-        "Reproduction scenario -> Detailed discussion"
+        "Scenario -> Detailed discussion"
     )
-    assert repro < base_flow < actual < expected < detailed, (
-        f"{GIT_GITHUB}: 'Reproduction scenario' sub-sections must appear in order "
+    assert scenario < base_flow < actual < expected < detailed, (
+        f"{GIT_GITHUB}: 'Scenario' sub-sections must appear in order "
         "Base flow -> Actual behavior -> Expected behavior, before 'Detailed discussion'"
     )
 
 
 def test_user_facing_sections_demand_plain_language() -> None:
-    """TL;DR / User story / Reproduction scenario must be scoped to plain, user-observable info."""
+    """TL;DR / User story / Scenario must be scoped to plain, user-observable info."""
     text = GIT_GITHUB.read_text(encoding="utf-8")
     lowered = text.lower()
     assert "plain language" in lowered or "plain-language" in lowered, (
@@ -83,7 +83,7 @@ def test_push_references_skeleton_without_inlining_it() -> None:
         f"{PUSH}: must delegate to git-and-github for the template"
     )
     # No duplicated skeleton: push references the sections, it doesn't redefine the headings.
-    for heading in (USER_STORY, REPRO, DETAILED):
+    for heading in (USER_STORY, SCENARIO, DETAILED):
         assert heading not in text, (
             f"{PUSH}: must not inline a duplicate '{heading}' template — delegate to git-and-github"
         )
