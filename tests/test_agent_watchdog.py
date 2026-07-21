@@ -2034,6 +2034,93 @@ def test_cli_zero_arguments_exit_1(tmp_path: Path) -> None:
     )
 
 
+def test_dump_job_prints_full_record_without_starting_monitor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The one-shot CLI prints the complete requested job view and exits."""
+    ws = workspace(tmp_path)
+    state_dir, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "dump-me",
+                "status": "completed",
+                "phase": "finalizing",
+                "pid": 1234,
+                "startedAt": "2026-07-20T10:00:00Z",
+                "completedAt": "2026-07-20T10:05:00Z",
+                "errorMessage": None,
+                "result": {
+                    "rawOutput": "done\nwith details",
+                    "touchedFiles": ["scripts/example.py", "tests/test_example.py"],
+                },
+            }
+        ],
+    )
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", env["CLAUDE_PLUGIN_DATA"])
+
+    def fail_monitor(_options: watchdog.Options) -> None:
+        raise AssertionError("dump mode must not start the persistent monitor")
+
+    monkeypatch.setattr(watchdog, "Watchdog", fail_monitor)
+
+    assert watchdog.main(["--dump-job", "dump-me"]) == 0
+
+    assert capsys.readouterr().out.splitlines() == [
+        f"path = {state_dir / 'jobs' / 'dump-me.json'}",
+        'id = "dump-me"',
+        'status = "completed"',
+        'phase = "finalizing"',
+        "pid = 1234",
+        'startedAt = "2026-07-20T10:00:00Z"',
+        'completedAt = "2026-07-20T10:05:00Z"',
+        "errorMessage = null",
+        'rawOutput = "done\\nwith details"',
+        'touchedFiles = ["scripts/example.py", "tests/test_example.py"]',
+    ]
+
+
+def test_dump_job_not_found_is_a_clean_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An unknown dump id reports the searched root without a traceback."""
+    plugin_data = tmp_path / "plugin-data"
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(plugin_data))
+
+    assert watchdog.main(["--dump-job", "missing-job"]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"no job 'missing-job' found under {plugin_data / 'state'}" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_dump_job_reports_malformed_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A corrupt matching job file produces a clear one-shot error."""
+    ws = workspace(tmp_path)
+    state_dir, env = codex_store(tmp_path, ws, [{"id": "broken-job"}])
+    job_path = state_dir / "jobs" / "broken-job.json"
+    job_path.write_text('{"id": "broken-job"', encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", env["CLAUDE_PLUGIN_DATA"])
+
+    assert watchdog.main(["--dump-job", "broken-job"]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert str(job_path) in captured.err
+    assert "JSONDecodeError" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
     """Every Bash flag and default remains available on the Python CLI."""
     defaults = watchdog.parse_args(

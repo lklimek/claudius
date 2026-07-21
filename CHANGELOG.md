@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.13.0] - 2026-07-20
+
+### Added
+
+- **`scripts/agent-watchdog.py`**: new one-shot `--dump-job <job-id>` CLI mode — searches every workspace's `jobs/<job-id>.json` directly (bypassing all team/session/ownership discovery), prints the full record (`id`, `status`, `phase`, `pid`, `startedAt`, `completedAt`, `errorMessage`, `result.rawOutput`, `result.touchedFiles`) for each match, and exits without starting the persistent poll loop. Exits 1 with a clear stderr message (no traceback) when the job isn't found or its record is malformed. Replaces the hand-rolled copy-paste `python3` snippet in `skills/codex-crew/references/sandbox-and-recovery.md` § On-Disk Job State with a tested, reusable flag — ported from a doctrine gap found in a user-level `codex-monitoring` skill.
+
 ## [5.12.1] - 2026-07-20
 
 ### Fixed

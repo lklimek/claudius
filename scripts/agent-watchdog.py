@@ -214,6 +214,7 @@ class Options:
 
     team_dir: Path | None = None
     session_id: str = ""
+    dump_job: str = ""
     tasks_dir: Path | None = None
     projects_dir: Path = field(
         default_factory=lambda: Path.home() / ".claude" / "projects"
@@ -2098,7 +2099,8 @@ class Watchdog:
 
 
 USAGE = """agent-watchdog.py -- edge-triggered agent-stall watchdog (silent when healthy)
-Usage: agent-watchdog.py [--session-id ID] [--team-dir DIR] [--tasks-dir DIR]
+Usage: agent-watchdog.py [--dump-job ID] [--session-id ID] [--team-dir DIR]
+                         [--tasks-dir DIR]
                          [--projects-dir DIR] [--worktrees DIR] [--watch-subagents]
                          [--no-gone] [--gone-polls N] [--stall-secs N]
                          [--resume-secs N] [--poll-secs N]
@@ -2107,6 +2109,7 @@ STALL = owns an in_progress task AND idle >= threshold AND no build under the
 agent's worktree/cwd. An idle agent owning no in_progress task is never flagged.
 --session-id (default $CLAUDE_SESSION_ID) scopes ALL discovery to THIS session's
 team; precedence --team-dir > --session-id > $CLAUDE_SESSION_ID > newest autodetect.
+--dump-job ID prints every matching Codex job record once and exits.
 --worktrees precedence: flag > $CLAUDIUS_WORKTREE_ROOT > .claude/worktrees.
 --codex-job-recency-secs defaults to 604800 (7 days); older job files are not parsed.
 Emits ONLY transition lines to stdout; diagnostics to stderr.
@@ -2141,6 +2144,7 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
     )
     index = 0
     value_flags = {
+        "--dump-job",
         "--team-dir",
         "--session-id",
         "--tasks-dir",
@@ -2170,7 +2174,9 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
         if index + 1 >= len(argv):
             die(f"{argument} needs a value")
         value = argv[index + 1]
-        if argument == "--team-dir":
+        if argument == "--dump-job":
+            options.dump_job = value
+        elif argument == "--team-dir":
             options.team_dir = Path(value)
         elif argument == "--session-id":
             options.session_id = value
@@ -2203,6 +2209,75 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
             f"--stall-secs ({options.stall_secs})"
         )
     return options
+
+
+def dump_job(job_id: str, env: Mapping[str, str] | None = None) -> int:
+    """Print every Codex job record matching an id and return its exit status."""
+    state_root = codex_state_root(env)
+    try:
+        matches = sorted(state_root.glob(f"*/jobs/{job_id}.json"))
+    except OSError as error:
+        print(
+            f"agent-watchdog: unable to search for job {job_id!r} under "
+            f"{state_root} ({type(error).__name__})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 1
+    if not matches:
+        print(
+            f"agent-watchdog: no job {job_id!r} found under {state_root}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 1
+
+    printed = False
+    fields = (
+        "id",
+        "status",
+        "phase",
+        "pid",
+        "startedAt",
+        "completedAt",
+        "errorMessage",
+    )
+    for path in matches:
+        try:
+            with path.open(encoding="utf-8") as handle:
+                record = json.load(handle)
+            if not isinstance(record, dict):
+                raise TypeError("expected a JSON object")
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            RecursionError,
+            TypeError,
+        ) as error:
+            print(
+                f"agent-watchdog: unable to read job {job_id!r} at {path} "
+                f"({type(error).__name__})",
+                file=sys.stderr,
+                flush=True,
+            )
+            continue
+
+        print(f"path = {path}")
+        for field_name in fields:
+            print(
+                f"{field_name} = "
+                f"{json.dumps(record.get(field_name), ensure_ascii=False)}"
+            )
+        result = record.get("result")
+        if isinstance(result, dict):
+            for field_name in ("rawOutput", "touchedFiles"):
+                print(
+                    f"{field_name} = "
+                    f"{json.dumps(result.get(field_name), ensure_ascii=False)}"
+                )
+        printed = True
+    return 0 if printed else 1
 
 
 def _command_exists(command: str, env: Mapping[str, str] | None = None) -> bool:
@@ -2274,8 +2349,10 @@ def _write_crash_log(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the persistent monitor until interrupted."""
+    """Run a one-shot inspection or the persistent monitor."""
     options = parse_args(sys.argv[1:] if argv is None else argv)
+    if options.dump_job:
+        return dump_job(options.dump_job)
     monitor = Watchdog(options)
     print(
         "agent-watchdog: "
