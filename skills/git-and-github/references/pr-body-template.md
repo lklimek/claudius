@@ -29,4 +29,7 @@ As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
 ### Breaking changes
 ### Checklist
 ### Attribution
+
+### Prior work
+<links to possibly related or similar PRs/issues, each with a one-sentence summary of how it relates to this one; omit if none>
 ```

@@ -28,6 +28,7 @@ SKELETON_HEADINGS = (
     "### Expected behavior",
     DETAILED,
     "### Attribution",
+    "### Prior work",
 )
 
 
@@ -47,6 +48,7 @@ def test_template_sections_are_ordered() -> None:
     expected = text.index("### Expected behavior")
     detailed = text.index(DETAILED)
     attribution = text.index("### Attribution")
+    prior_work = text.index("### Prior work")
     assert tldr < user_story < scenario < detailed, (
         f"{TEMPLATE}: sections must appear in order TL;DR -> User story -> Scenario -> Detailed discussion"
     )
@@ -56,6 +58,9 @@ def test_template_sections_are_ordered() -> None:
     )
     assert detailed < attribution, (
         f"{TEMPLATE}: 'Attribution' must be nested under 'Detailed discussion'"
+    )
+    assert prior_work == max(text.index(h) for h in SKELETON_HEADINGS), (
+        f"{TEMPLATE}: 'Prior work' must be the last section in the skeleton"
     )
 
 
