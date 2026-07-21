@@ -30,7 +30,7 @@ Load `claudius:git-and-github` skill first — all commit, push, PR, and attribu
 4. **Push** to remote
 
 5. **PR**
-   - PR body MUST lead with a "Why this PR exists" section per `git-and-github` §Creating a PR
+   - PR body MUST follow the TL;DR → User story → Scenario → Detailed discussion skeleton per `git-and-github` §Creating a PR
    - If PR exists for this branch: update its title and description to reflect current changes
    - If no PR: create a draft PR with summary + test plan per `git-and-github`
 

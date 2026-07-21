@@ -57,26 +57,17 @@ Always ask explicit confirmation before every push, even if the user agreed earl
 
 ### Creating a PR
 
-Check for a PR template first. If a template exists, read and fill it in. When applicable, include an informal user story (what the user can achieve, no technical details -- start with "Imagine you are...").
+Check for a PR template first. If a template exists, read and fill it in, folding its required content into the skeleton linked below rather than replacing it.
 
-The PR body **must lead with a `## Why this PR exists` section** — reviewers read motivation before mechanics. Use this skeleton (drop empty sections):
+The PR body **must lead with a plain-language summary before any implementation detail** — a technical product manager or an external reviewer with no code context must understand everything before `Detailed discussion` at a glance. Copy the skeleton from [pr-body-template.md](references/pr-body-template.md) (the fenced block only, not the page's title or explanatory text) and fill it in.
 
-```markdown
-## Why this PR exists
-- **Problem**: 1-2 plain-language sentences on what's broken or missing.
-- **What breaks without it**: a concrete reproduction or threat scenario — numbered steps or a short narrative showing the actual failure/misbehaviour, not an abstract claim.
-- **Blocking relationship**: prerequisite for / depends on / stacked atop PR #N, if any.
+**`TL;DR` / `User story` / `Scenario` are user-facing** — plain language only, no specialized terms, no internal implementation details, no code identifiers. Describe strictly user-observable behavior (for an API/CLI, the calling developer *is* the user). `User story` follows the same "As a `<role>`..." shape as the Issues `User story` below, phrased for a change already made. `Scenario` isn't only for bugs: for a new feature, `Actual behavior` is what's missing/impossible today and `Expected behavior` is what becomes possible after this PR — no failure or "actual" bug is required. For a pure internal change with no user-observable effect, drop `User story` and `Scenario` entirely and say so in `Detailed discussion`. Note any blocking relationship (prerequisite for / depends on / stacked atop PR #N) in `Detailed discussion`.
 
-## What was done
-## Testing
-## Breaking changes
-## Checklist
-## Attribution
-```
+**`Detailed discussion` is for implementors and AI agents** — it may get as technical as needed: problem/rationale, code-level specifics, and the sub-sections above.
 
-`Why this PR exists` comes first; the remaining sections follow in that order. Always create PRs as drafts.
+`TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts.
 
-**PR descriptions describe net final state only** — no development history, changelog, or step-by-step iteration/debugging narrative; that belongs in commit messages. Concise final testing/verification results (the `## Testing` section) describe the final state, not history, and are expected.
+**PR descriptions describe net final state only** — no development history, changelog, or step-by-step iteration/debugging narrative; that belongs in commit messages. This doesn't conflict with `### Actual behavior`, which describes the pre-existing problem being solved, not the PR's own iteration history. Concise final testing/verification results (the `### Testing` sub-section) describe the final state, not history, and are expected.
 
 ### Reviewing a PR
 
@@ -86,9 +77,9 @@ See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR 
 
 ### Issues
 
-Before creating, search existing issues (open + closed) and PRs for duplicates. If found, show to user and ask before proceeding. Check for issue templates. Always append attribution footer.
+Before creating, search existing issues (open + closed) and PRs for duplicates. If found, show to user and ask before proceeding. Check for issue templates first; if one exists, fold its required content into the skeleton linked below rather than replacing it.
 
-**Feature/enhancement issues must include a `### User Story` section** -- an informal story describing what the user can achieve (no technical details). Start with "As a **\<persona\>**, I want to ... so that ...". Multiple personas are fine. Place user stories before technical details.
+Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a PR for the full rationale). Copy the skeleton from [issue-body-template.md](references/issue-body-template.md) (the fenced block only, not the page's title or explanatory text) and fill it in: `TL;DR` → `User story` → `Scenario` → `Detailed discussion`. `User story` uses the same "As a **\<role\>**, I want to ..., to achieve ..." shape as PRs — multiple personas are fine, repeat the line. Always append the attribution footer last.
 
 ## Safety Rules
 

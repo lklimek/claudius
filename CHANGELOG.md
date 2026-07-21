@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.14.0] - 2026-07-21
+
+### Changed
+
+- **PR-body template** (`skills/git-and-github/SKILL.md` §Creating a PR): replaced the "Why this PR exists" skeleton with a plain-language-first structure — `TL;DR` (one sentence) -> `## User story` ("As a **\<role\>**, I want to \<what-to-do\>, to achieve \<user-goal\>.") -> `## Scenario` (`### Base flow` / `### Actual behavior` / `### Expected behavior`) -> `## Detailed discussion` (nests the former `What was done`/`Testing`/`Breaking changes`/`Checklist`/`Attribution` sub-sections, plus problem statement and blocking relationship). The first three sections must stay free of specialized terms and code identifiers — aimed at a technical product manager or external reviewer; `Detailed discussion` is the technical section for implementors and AI agents.
+- **Issue-body template** (`skills/git-and-github/SKILL.md` §Issues): unified onto the same `TL;DR` -> `User story` -> `Scenario` -> `Detailed discussion` shape as PRs, replacing the old "feature/enhancement issues need a `### User Story`" bullet. For bug reports, `Scenario` doubles as the reproduction; feature requests with nothing to reproduce may drop it.
+- **Both templates externalized**: the literal skeletons moved out of `SKILL.md` prose into `skills/git-and-github/references/pr-body-template.md` and `references/issue-body-template.md`; `SKILL.md` and `references/gh-cli-fallback.md` now link to them instead of inlining a copy (the `gh` CLI fallback now fills in the template file and passes it via `--body-file`); `push/SKILL.md` continues to delegate to `git-and-github` without inlining its own copy. Pinned by `tests/test_pr_body_template.py` and the new `tests/test_issue_body_template.py`.
+- Both templates gained a `### Prior work` section (links to possibly related/similar PRs or issues, each with a one-sentence summary of how it relates to the one being filed), placed between `Checklist`/`Detailed discussion` and `Attribution` so the mandatory attribution footer stays the true last section, per Copilot review on #76. Same review flagged the template pointer sentences (`SKILL.md`, `gh-cli-fallback.md`) as ambiguous about copying the whole template file vs. just its fenced skeleton — both templates and all four pointer sentences now say explicitly to copy only the fenced block.
+
 ## [5.13.0] - 2026-07-20
 
 ### Added

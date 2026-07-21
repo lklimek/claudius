@@ -12,41 +12,12 @@ Check for a PR template first:
 git ls-tree HEAD --name-only -r .github/ | grep -i pull_request_template
 ```
 
-If a template exists, read and fill it in. When applicable, include an informal user story (what the user can achieve, no technical details -- start with "Imagine you are...").
+If a template exists, read and fill it in, folding its required content into the linked skeleton below. See the main skill's §Creating a PR for the full rationale (plain language up top, technical detail in `Detailed discussion`).
 
-Always create PRs as drafts:
+Fill in the skeleton from [pr-body-template.md](pr-body-template.md) (the fenced block only, not the page's title or explanatory text), save the completed body to a file, then create the PR as a draft, passing the body via `--body-file` (not `--body` — avoids shell-escaping the whole skeleton inline):
 
 ```bash
-gh pr create --draft --title "<type>: <description>" --body "$(cat <<'EOF'
-## Issue being fixed or feature implemented
-
-### User Story
-
-### Details
-
-Closes #<issue-number>
-
-## What was done?
-
-<description of changes>
-
-## How has this been tested?
-
-<testing details>
-
-## Breaking Changes
-
-None
-
-## Checklist
-
-- [x] I have performed a self-review of my own code
-- [x] I have added or updated relevant tests
-- [x] I have made corresponding changes to the documentation if needed
-
-<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
-EOF
-)"
+gh pr create --draft --title "<type>: <description>" --body-file /path/to/filled-in-pr-body.md
 ```
 
 ## Reviewing a PR
@@ -67,6 +38,12 @@ Check for issue templates before creating:
 
 ```bash
 git ls-tree HEAD --name-only -r .github/ | grep -i issue_template
+```
+
+If none exists, fill in the skeleton from [issue-body-template.md](issue-body-template.md) (the fenced block only, not the page's title or explanatory text; see the main skill's §Issues), save the completed body to a file, then:
+
+```bash
+gh issue create --title "<title>" --body-file /path/to/filled-in-issue-body.md
 ```
 
 ## Elevated Permissions (ghsudo) -- Optional Fallback
