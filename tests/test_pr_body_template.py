@@ -15,7 +15,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GIT_GITHUB = REPO_ROOT / "skills" / "git-and-github" / "SKILL.md"
 PUSH = REPO_ROOT / "skills" / "push" / "SKILL.md"
-TEMPLATE = REPO_ROOT / "skills" / "git-and-github" / "references" / "pr-body-template.md"
+TEMPLATE = (
+    REPO_ROOT / "skills" / "git-and-github" / "references" / "pr-body-template.md"
+)
 
 USER_STORY = "## User story"
 SCENARIO = "## Scenario"

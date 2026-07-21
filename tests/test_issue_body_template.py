@@ -13,7 +13,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GIT_GITHUB = REPO_ROOT / "skills" / "git-and-github" / "SKILL.md"
-TEMPLATE = REPO_ROOT / "skills" / "git-and-github" / "references" / "issue-body-template.md"
+TEMPLATE = (
+    REPO_ROOT / "skills" / "git-and-github" / "references" / "issue-body-template.md"
+)
 
 USER_STORY = "## User story"
 SCENARIO = "## Scenario"
@@ -77,6 +79,8 @@ def test_skill_issues_section_scoped_to_shared_template() -> None:
     issues_heading = text.index("### Issues")
     issues_section = text[issues_heading:]
     for heading in SKELETON_HEADINGS:
-        assert re.search(r"^" + re.escape(heading), issues_section, re.MULTILINE) is None, (
+        assert (
+            re.search(r"^" + re.escape(heading), issues_section, re.MULTILINE) is None
+        ), (
             f"{GIT_GITHUB}: §Issues must not inline a duplicate '{heading}' heading — delegate to issue-body-template.md"
         )
