@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [5.13.0] - 2026-07-21
+## [5.14.0] - 2026-07-21
 
 ### Changed
 
@@ -14,6 +14,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - **Issue-body template** (`skills/git-and-github/SKILL.md` §Issues): unified onto the same `TL;DR` -> `User story` -> `Scenario` -> `Detailed discussion` shape as PRs, replacing the old "feature/enhancement issues need a `### User Story`" bullet. For bug reports, `Scenario` doubles as the reproduction; feature requests with nothing to reproduce may drop it.
 - **Both templates externalized**: the literal skeletons moved out of `SKILL.md` prose into `skills/git-and-github/references/pr-body-template.md` and `references/issue-body-template.md`; `SKILL.md` and `references/gh-cli-fallback.md` now link to them instead of inlining a copy (the `gh` CLI fallback now fills in the template file and passes it via `--body-file`); `push/SKILL.md` continues to delegate to `git-and-github` without inlining its own copy. Pinned by `tests/test_pr_body_template.py` and the new `tests/test_issue_body_template.py`.
 - Both templates gained a trailing `### Prior work` section — links to possibly related/similar PRs or issues, each with a one-sentence summary of how it relates to the one being filed.
+
+## [5.13.0] - 2026-07-20
+
+### Added
+
+- **`scripts/agent-watchdog.py`**: new one-shot `--dump-job <job-id>` CLI mode — searches every workspace's `jobs/<job-id>.json` directly (bypassing all team/session/ownership discovery), prints the full record (`id`, `status`, `phase`, `pid`, `startedAt`, `completedAt`, `errorMessage`, `result.rawOutput`, `result.touchedFiles`) for each match, and exits without starting the persistent poll loop. Exits 1 with a clear stderr message (no traceback) when the job isn't found or its record is malformed. Replaces the hand-rolled copy-paste `python3` snippet in `skills/codex-crew/references/sandbox-and-recovery.md` § On-Disk Job State with a tested, reusable flag — ported from a doctrine gap found in a user-level `codex-monitoring` skill.
 
 ## [5.12.1] - 2026-07-20
 
