@@ -1,10 +1,11 @@
-"""Regression guard: the canonical PR-body template must lead with "Why this PR exists".
+"""Regression guard: the canonical PR-body template leads with a plain-language summary.
 
 PR descriptions are owned by ONE skill (`git-and-github`); `push` delegates to it.
-This test pins the contract so a refactor can't silently demote the rationale section
-below the mechanics: `git-and-github/SKILL.md` must define a "Why this PR exists"
-heading positioned AHEAD of the "What was done"/"Testing" sections, and `push/SKILL.md`
-must reference it rather than inlining a duplicate template.
+This test pins the contract so a refactor can't silently demote the human-readable
+sections below implementation detail: `git-and-github/SKILL.md` must define, in
+order, `TL;DR` -> `## User story` -> `## Reproduction scenario` (with `### Base flow`,
+`### Actual behavior`, `### Expected behavior`) -> `## Detailed discussion`, and
+`push/SKILL.md` must reference that skeleton rather than inlining a duplicate.
 """
 
 from __future__ import annotations
@@ -15,44 +16,74 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 GIT_GITHUB = REPO_ROOT / "skills" / "git-and-github" / "SKILL.md"
 PUSH = REPO_ROOT / "skills" / "push" / "SKILL.md"
 
-WHY = "Why this PR exists"
+USER_STORY = "## User story"
+REPRO = "## Reproduction scenario"
+DETAILED = "## Detailed discussion"
 
 
-def test_git_github_has_why_section() -> None:
+def test_git_github_has_required_headings() -> None:
     text = GIT_GITHUB.read_text(encoding="utf-8")
-    assert f"## {WHY}" in text, (
-        f"{GIT_GITHUB}: missing '## {WHY}' heading in PR-body template"
+    for heading in (
+        "**TL;DR:**",
+        USER_STORY,
+        REPRO,
+        "### Base flow",
+        "### Actual behavior",
+        "### Expected behavior",
+        DETAILED,
+    ):
+        assert heading in text, f"{GIT_GITHUB}: missing '{heading}' in PR-body template"
+
+
+def test_sections_are_ordered() -> None:
+    text = GIT_GITHUB.read_text(encoding="utf-8")
+    tldr = text.index("**TL;DR:**")
+    user_story = text.index(USER_STORY)
+    repro = text.index(REPRO)
+    base_flow = text.index("### Base flow")
+    actual = text.index("### Actual behavior")
+    expected = text.index("### Expected behavior")
+    detailed = text.index(DETAILED)
+    assert tldr < user_story < repro < detailed, (
+        f"{GIT_GITHUB}: sections must appear in order TL;DR -> User story -> "
+        "Reproduction scenario -> Detailed discussion"
+    )
+    assert repro < base_flow < actual < expected < detailed, (
+        f"{GIT_GITHUB}: 'Reproduction scenario' sub-sections must appear in order "
+        "Base flow -> Actual behavior -> Expected behavior, before 'Detailed discussion'"
     )
 
 
-def test_why_section_leads_what_and_testing() -> None:
-    text = GIT_GITHUB.read_text(encoding="utf-8")
-    why = text.index(f"## {WHY}")
-    what = text.index("## What was done")
-    testing = text.index("## Testing")
-    assert why < what, f"{GIT_GITHUB}: '{WHY}' must precede 'What was done'"
-    assert why < testing, f"{GIT_GITHUB}: '{WHY}' must precede 'Testing'"
-
-
-def test_why_section_demands_reproduction_and_blocking() -> None:
-    """The skeleton must prompt for a concrete repro/threat scenario and blocking relationship."""
+def test_user_facing_sections_demand_plain_language() -> None:
+    """TL;DR / User story / Reproduction scenario must be scoped to plain, user-observable info."""
     text = GIT_GITHUB.read_text(encoding="utf-8")
     lowered = text.lower()
-    assert "reproduction" in lowered or "threat scenario" in lowered, (
-        f"{GIT_GITHUB}: '{WHY}' skeleton must ask for a reproduction or threat scenario"
+    assert "plain language" in lowered or "plain-language" in lowered, (
+        f"{GIT_GITHUB}: template must require plain language in the user-facing sections"
     )
-    assert "blocking" in lowered, (
-        f"{GIT_GITHUB}: '{WHY}' skeleton must ask for the blocking relationship"
+    assert "user-observable" in lowered, (
+        f"{GIT_GITHUB}: template must scope user-facing sections to user-observable behavior"
     )
 
 
-def test_push_references_why_without_inlining_template() -> None:
+def test_detailed_discussion_holds_implementation_content() -> None:
+    """Former 'Why this PR exists' content (What was done/Testing/etc.) now lives under Detailed discussion."""
+    text = GIT_GITHUB.read_text(encoding="utf-8")
+    detailed = text.index(DETAILED)
+    for sub_heading in ("### What was done", "### Testing", "### Breaking changes", "### Checklist", "### Attribution"):
+        pos = text.index(sub_heading)
+        assert pos > detailed, (
+            f"{GIT_GITHUB}: '{sub_heading}' must be nested under '{DETAILED}'"
+        )
+
+
+def test_push_references_skeleton_without_inlining_it() -> None:
     text = PUSH.read_text(encoding="utf-8")
-    assert WHY in text, f"{PUSH}: must reference the '{WHY}' section"
     assert "git-and-github" in text, (
         f"{PUSH}: must delegate to git-and-github for the template"
     )
-    # No duplicated skeleton: push references the section, it doesn't redefine the heading.
-    assert f"## {WHY}" not in text, (
-        f"{PUSH}: must not inline a duplicate '## {WHY}' template — delegate to git-and-github"
-    )
+    # No duplicated skeleton: push references the sections, it doesn't redefine the headings.
+    for heading in (USER_STORY, REPRO, DETAILED):
+        assert heading not in text, (
+            f"{PUSH}: must not inline a duplicate '{heading}' template — delegate to git-and-github"
+        )

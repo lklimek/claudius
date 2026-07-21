@@ -57,26 +57,41 @@ Always ask explicit confirmation before every push, even if the user agreed earl
 
 ### Creating a PR
 
-Check for a PR template first. If a template exists, read and fill it in. When applicable, include an informal user story (what the user can achieve, no technical details -- start with "Imagine you are...").
+Check for a PR template first. If a template exists, read and fill it in, folding its required content into the skeleton below rather than replacing it.
 
-The PR body **must lead with a `## Why this PR exists` section** — reviewers read motivation before mechanics. Use this skeleton (drop empty sections):
+The PR body **must lead with a plain-language summary before any implementation detail** — a technical product manager or an external reviewer with no code context must understand the first four sections at a glance. Use this skeleton (drop whole sections or sub-sections that don't apply, keep the section order):
 
 ```markdown
-## Why this PR exists
-- **Problem**: 1-2 plain-language sentences on what's broken or missing.
-- **What breaks without it**: a concrete reproduction or threat scenario — numbered steps or a short narrative showing the actual failure/misbehaviour, not an abstract claim.
-- **Blocking relationship**: prerequisite for / depends on / stacked atop PR #N, if any.
+**TL;DR:** <one plain-language sentence describing what this PR does>
 
-## What was done
-## Testing
-## Breaking changes
-## Checklist
-## Attribution
+## User story
+As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
+
+## Reproduction scenario
+### Base flow
+<the ordinary steps that lead to this situation — plain narrative>
+
+### Actual behavior
+<what happens today — the bug, gap, or missing capability>
+
+### Expected behavior
+<what should happen, or become possible, after this PR>
+
+## Detailed discussion
+### What was done
+### Testing
+### Breaking changes
+### Checklist
+### Attribution
 ```
 
-`Why this PR exists` comes first; the remaining sections follow in that order. Always create PRs as drafts.
+**`TL;DR` / `User story` / `Reproduction scenario` are user-facing** — plain language only, no specialized terms, no internal implementation details, no code identifiers. Describe strictly user-observable behavior (for an API/CLI, the calling developer *is* the user). `User story` follows the same "As a `<role>`..." shape as the Issues `### User Story` below, phrased for a change already made. `Reproduction scenario` isn't only for bugs: for a new feature, `Actual behavior` is what's missing/impossible today and `Expected behavior` is what becomes possible after this PR — no failure or "actual" bug is required. For a pure internal change with no user-observable effect, drop `User story` and `Reproduction scenario` entirely and say so in `Detailed discussion`. Note any blocking relationship (prerequisite for / depends on / stacked atop PR #N) in `Detailed discussion`.
 
-**PR descriptions describe net final state only** — no development history, changelog, or step-by-step iteration/debugging narrative; that belongs in commit messages. Concise final testing/verification results (the `## Testing` section) describe the final state, not history, and are expected.
+**`Detailed discussion` is for implementors and AI agents** — it may get as technical as needed: problem/rationale, code-level specifics, and the sub-sections above.
+
+`TL;DR` → `User story` → `Reproduction scenario` → `Detailed discussion`, in that order. Always create PRs as drafts.
+
+**PR descriptions describe net final state only** — no development history, changelog, or step-by-step iteration/debugging narrative; that belongs in commit messages. This doesn't conflict with `### Actual behavior`, which describes the pre-existing problem being solved, not the PR's own iteration history. Concise final testing/verification results (the `### Testing` sub-section) describe the final state, not history, and are expected.
 
 ### Reviewing a PR
 

@@ -12,37 +12,55 @@ Check for a PR template first:
 git ls-tree HEAD --name-only -r .github/ | grep -i pull_request_template
 ```
 
-If a template exists, read and fill it in. When applicable, include an informal user story (what the user can achieve, no technical details -- start with "Imagine you are...").
+If a template exists, read and fill it in, folding its required content into the skeleton below. See the main skill's §Creating a PR for the full rationale (plain language up top, technical detail in `Detailed discussion`).
 
 Always create PRs as drafts:
 
 ```bash
 gh pr create --draft --title "<type>: <description>" --body "$(cat <<'EOF'
-## Issue being fixed or feature implemented
+**TL;DR:** <one plain-language sentence describing what this PR does>
 
-### User Story
+## User story
 
-### Details
+As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
 
-Closes #<issue-number>
+## Reproduction scenario
 
-## What was done?
+### Base flow
+
+<the ordinary steps that lead to this situation — plain narrative>
+
+### Actual behavior
+
+<what happens today>
+
+### Expected behavior
+
+<what should happen instead>
+
+## Detailed discussion
+
+### What was done
 
 <description of changes>
 
-## How has this been tested?
+Closes #<issue-number>
+
+### Testing
 
 <testing details>
 
-## Breaking Changes
+### Breaking changes
 
 None
 
-## Checklist
+### Checklist
 
 - [x] I have performed a self-review of my own code
 - [x] I have added or updated relevant tests
 - [x] I have made corresponding changes to the documentation if needed
+
+### Attribution
 
 <sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
 EOF
