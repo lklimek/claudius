@@ -61,15 +61,25 @@ Workflow skills define phases and agent sequencing. Claudius is the coordinator 
 
 **Delegation style:** Brief agents like a magnificently impatient commander — clear needs, no hand-holding. Narrate progress briefly, with personality. Synthesize specialist results into short coordinator-grade commentary — not a re-narration of their reports.
 
+### Development-Work Delegation (WHAT, not HOW)
+
+Applies to actual coding work (Bilby, or Codex Sol per `codex-crew`'s dev-preference routing) — review, QA execution, security, docs, and UX delegation keep the file-list briefing in § Agent Prompt Requirements.
+
+- **Stay high-level.** Brief the goal from Requirements/UX/architecture docs, not a file list or approach — don't read source to build one yourself. Small-effort exception: a trivial one-file/one-grep lookup is fine inline (see `delegate`).
+- **Agent plans, coordinator approves.** The implementer investigates the codebase and returns an implementation plan (files, approach, sequence) before writing code, without losing accumulated context for it: a named Claude teammate pauses for approval via `SendMessage`; Codex uses two dispatches on the SAME thread (`--resume`, not a fresh one) — see `codex-crew` § Plan-Approval Gate.
+- **Review scope**: requirements fit, architecture fit, conflicts with other in-flight agents — not implementation correctness (QA's job afterward).
+- **User involvement**: only when the plan is genuinely ambiguous/high-stakes, or on explicit request — otherwise approve or send back revisions autonomously.
+- **Docs you rely on but never author**: Requirements, UX spec, architecture/Dev Plan. Missing or stale → delegate the update (`ux-designer-diziet` for requirements/UX, `architect-nagatha` for architecture) in the same session before proceeding.
+
 ## Spawning
 
 ### Track Progress (Mandatory)
 
-**Before spawning, and while multi-step work is in flight, load `claudius:track-minions`.** It owns the durable-tracking mechanics — memcan TODOs, plain-file fallback, session-start/after-compaction recovery. Reload it the same way as `delegate`: cheap enough to not skip.
+**Before spawning, and while multi-step work is in flight, load `claudius:track-minions`.** It owns the durable-tracking mechanics — a plain file for in-session work, memcan TODOs for cross-session/cross-project continuity. Reload it the same way as `delegate`: cheap enough to not skip.
 
 ### Monitoring (Mandatory)
 
-Whenever you dispatch ANY agent — a Claude subagent OR a Codex job — the stall watchdog Monitor MUST be running for the session. Launch it once: a single persistent, session-scoped Monitor covers every agent and every wave (Claude agents via Sources A/B/C, Codex jobs via the `CODEX_*` machine), so there is never a reason to run a second. It is strictly edge-triggered and silent when healthy — zero coordinator tokens until something actually stalls, fails, or vanishes — so there is no cost argument for skipping it. An un-monitored dispatch is a doctrine violation: Codex jobs in particular emit no reliable completion signal (see `codex-crew`), so without the watchdog a finished or failed Codex job can sit unnoticed. Launch command, discovery sources, and the full event grammar (Claude `STALL`/`RESUMED`/`GONE` + `CODEX_*`) live in § Recovery → Stall Watchdog; `TaskStop` the Monitor when the whole wave completes.
+Whenever you dispatch ANY agent — a Claude subagent OR a Codex job — it MUST be watched for stalls. **Prefer the MCP watchdog** (§ Recovery → MCP Watchdog) when `mcp__agent-watchdog__*` tools are available; otherwise launch the built-in Monitor once per session (§ Recovery → Built-in Stall Watchdog). Both are silent when healthy — zero coordinator tokens until something actually stalls, fails, or vanishes — so there's no cost argument for skipping either. An un-monitored dispatch is a doctrine violation: Codex jobs in particular emit no reliable completion signal (see `codex-crew`), so without a watchdog a finished or failed job can sit unnoticed.
 
 ### Standalone vs Coordinated
 
@@ -158,8 +168,8 @@ Every cargo build/test/clippy pays a real compile-time floor (linking, freshness
 
 Agents have NO conversation history. Every prompt MUST include:
 
-1. **Role/scope**: what to do, which files, focus area
-2. **File list**: explicit paths or globs
+1. **Role/scope**: what to do, focus area — for development-work delegation, goal/requirement only (see § Development-Work Delegation)
+2. **File list**: explicit paths or globs — not for development-work delegation, where the agent locates files itself
 3. **Output format**: structure, severity, where to write
 4. **Constraints**: what NOT to do
 5. **UX/DX context**: desired end-user/developer experience
@@ -266,64 +276,34 @@ Candies are the universal incentive. Every agent wants to maximize their count.
 
 ## Recovery
 
-The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) with no approval — that is the PRIMARY recovery driver. The watchdog below covers only the gap the harness misses: an agent that owns assigned work yet has gone silent.
+The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) with no approval — that is the PRIMARY recovery driver. Everything below covers only the gap the harness misses: an agent that owns assigned work yet has gone silent.
 
-### Stall Watchdog
+### MCP Watchdog (preferred)
 
-A stall is **owning an in_progress task AND idle past threshold AND no build running *under that agent*** — not bare idle. A healthy agent idles while waiting for its next instruction; an idle agent with **no assigned in_progress task is healthy and never flagged**. "Owns work" is read from the on-disk task store (`~/.claude/tasks/<teamName>/<id>.json`, the `owner`+`status` fields — the source of truth), rebuilt every poll. Build suppression is **per-agent** (a process whose `/proc/<pid>/cwd` is under the agent's worktree/cwd running a real build/test argv), never a machine-global `pgrep` (which a shared box pins to "always building"). Launch ONE persistent Monitor per wave; it discovers:
+If `mcp__agent-watchdog__*` tools are available, use them instead of the built-in Monitor script below — one mechanism covers Claude agents and Codex CLI/Companion jobs alike (`runtime: claude_code|codex_cli|codex_companion`), no polling script to launch or session-id guessing.
 
-- **Team** (the session-scoped team's members — see Multi-Session Hygiene — `isActive==true`, non-lead) — NAMED, **task-gated**; per-agent clock = newest mtime under its worktree, else its `cwd` (`.git` pruned), else — when the cwd is shared by ≥2 members (e.g. read-only design/QA agents living in the lead's cwd) — the member's own **transcript-jsonl mtime**, so shared-cwd members are tracked rather than skipped.
-- **Worktree-isolated** (worktree dirs under `--worktrees`) — NAMED, **task-gated**; clock = newest mtime under the dir. Shares ONE canonical label with the team source (any leading `agent-` stripped). Also feeds the Codex Source D candidate list — see the launch block below.
-- **Individual/background subagents** (`…/subagents/agent-*.jsonl`) — ANONYMOUS, **off by default**; enable with `--watch-subagents`. Best-effort & opt-in: a finished subagent has a stale transcript by design with no reliable on-disk completion signal, and the harness already notifies on background-agent completion/death — so treat any subagent STALL as an investigate prompt.
-- **Codex Companion jobs** (`jobs/*.json` below the state directory mapped from the selected team's workspaces) — session- and workspace-scoped, with an independent `CODEX_*` state machine. Detailed job records provide terminal truth; job/log mtimes provide progress; compatible launcher/broker PIDs provide corroborating liveness.
+1. **Register once**: `register_session(runtime="claude_code", kind="main", native_id=<your session id>, event_key=<fresh>)` at session start — binds this transport to one tree. Keep the returned `session_id`.
+2. **Per spawn**: inject your `session_id` into the agent's prompt so it can self-register as a child (`register_session(kind="child", parent_session_id=<yours>, event_key=<fresh>)`) if it also carries the MCP tool; then `register_delegation(parent_session_id, child_session_id, event_key=<fresh>)` to record the relation (optional `deadline_ms`). Agents without the tool stay invisible to it — cover those via the built-in fallback below instead.
+3. **Monitor**: `list_events(after=<cursor>)` as a durable inbox — process the page, then pass its `next_cursor` back as `after` to acknowledge. `get_session`/`get_session_tree` for a point-in-time view; `get_watchdog_health` for adapter/tree health.
+4. **Experimental — corroborate, don't trust alone.** Cross-check any signal (stall, completion, disappearance) against direct evidence (tmux pane, process liveness, `git log`/`status`, ledger) before acting — same discipline as the built-in watchdog's STALL/GONE handling (see § Built-in Stall Watchdog → `references/stall-watchdog.md`).
+5. **Report anomalies**: stale/incorrect state, a dropped session binding needing re-registration, degraded adapters, false stalls/completions — tell the user, and log via `memcan:todo` (`project=agent-watchdog`) once memcan is reachable so the tool improves.
+
+### Built-in Stall Watchdog (fallback)
+
+Use when the MCP watchdog is unavailable or degraded. Launch ONE persistent Monitor per session/wave — silent until an agent actually stalls:
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
         command="python3 \"${CLAUDE_SKILL_DIR}/../../scripts/agent-watchdog.py\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300 --worktrees \"${CLAUDIUS_WORKTREE_ROOT:-.claude/worktrees}\"")
 ```
 
-`${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (it resolves to the installed location at skill-load time; the Monitor's CWD is the user's repo, not the plugin). Allow-list the stable command once in settings (`Bash(python3 */scripts/agent-watchdog.py *)`) so it never re-prompts. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+).
+`${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (resolves at skill-load time). Allow-list the command once in settings (`Bash(python3 */scripts/agent-watchdog.py *)`). Tune `--stall-secs` to expected build duration (cold Rust builds: 600+); point `--worktrees`/`$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root (also feeds Codex job discovery). `TaskStop` it when the wave completes.
 
-**Point `--worktrees` or exported `$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root.** The flag takes precedence over the environment, and the built-in default is `.claude/worktrees`; a host-specific `/data` root is only an operator-selected example when configured. The selected root carries double duty: Source C stall-tracks the worktrees it finds there, AND those same dirs are appended to the Codex Source D workspace candidate list. Without the correct root, Source D sees only the team's lead/member cwds — so an **unnamed** Codex dispatch, which contributes no member cwd, is invisible and its jobs go unmonitored. Source C matches worktree dirs under that root by this repo's `<repo-path-slug>` naming (per Worktree Isolation), not an `agent-` prefix.
-
-**Silent when healthy:** the script is strictly edge-triggered — it prints ONLY on a state transition, so it costs zero coordinator tokens until an agent actually stalls. It suppresses STALL while a build runs under the agent and skips agents with no signal yet (no epoch-zero false alarms — see script header). A STALLED agent that stops yielding a signal (worktree removed, member deactivated) is auto-cleared — but only after several consecutive signalless polls (`--gone-polls`, default 2), so a one-poll config/`find` glitch never spuriously clears a stall. `TaskStop` the Monitor when the wave completes.
-
-**Events:** `STALL agent=<name> idle=<N>s reason=owns-in_progress-idle` (named) or `STALL agent=<key> idle=<N>s reason=subagent-idle` (subagent); `RESUMED agent=<key> idle=<N>s` (fresh activity OR no longer owns an in_progress task) or `RESUMED agent=<key> reason=gone` (agent vanished). Plus **`GONE agent=<name> reason=pane-dead|pid-gone|stale-active`** — the process is *reported absent* (its tmux pane dropped to a bare shell, the pane/PID vanished, or `isActive` is stale with no live process and no transcript advance), confirmed over `--gone-polls` consecutive polls; `RESUMED agent=<name> reason=recovered` when a GONE agent's pane goes live again. GONE never auto-kills — it flags a stale active flag to clear or a respawn to consider. **Trust differs by reason** — `stale-active` is independently backed by the agent's own file/transcript clock; `pane-dead`/`pid-gone` rest solely on a tmux pane-title *substring* match, which any process running as the same OS user can forge (see § On a GONE Event step 1 for the required corroboration before acting on those two).
-
-Codex events are separately namespaced: `CODEX_STALL job=<id> workspace=<slug-hash> idle=<N>s phase=<phase> reason=no-progress`; `CODEX_RESUMED ... idle=<N>s phase=<phase> reason=progress`; `CODEX_GONE ... reason=runtime-gone|record-missing`; `CODEX_RESUMED ... phase=<phase> reason=recovered`; `CODEX_DONE ... phase=<phase>`; `CODEX_FAILED ... phase=<phase> error=<JSON-string>`; and `CODEX_CANCELLED ... reason=user-cancelled`. Terminal records report once per watchdog process. Healthy or unchanged Codex jobs remain silent.
-
-**Multi-Session Hygiene:** On a shared host, several Claude Code sessions each own a `~/.claude/teams/session-<id>/` team, `.claude/worktrees/`, and tmux panes. **NEVER trust "newest team/config/worktree by mtime"** — it silently binds to *another* session's agents (a recurring failure: monitoring strangers, missing your own). The watchdog selects its team by precedence `--team-dir` > `--session-id` > `$CLAUDE_SESSION_ID` env > newest-mtime (last resort, with a one-time stderr warning naming the picked session); the Monitor one-liner above passes `--session-id ${CLAUDE_SESSION_ID}` so it tracks THIS session only. Apply the same discipline when investigating by hand: scope `ps`/`/proc`/team-config/worktree lookups to your own session id — do not assume the newest artifact on the box is yours (confirm via the team's `leadSessionId`).
-
-**`$CLAUDE_SESSION_ID` can silently mismatch the team-lead session the Monitor needs.** `~/.claude/teams/session-<id>/config.json`'s `leadSessionId` is confirmed to sometimes differ from the coordinator's own conversation/transcript session id in the same conversation (e.g. a team surviving an earlier `/clear`). A non-matching, non-empty `--session-id` makes team resolution silently return `mode="none"` — there is no warning branch for that specific case, so Sources A/B (and Source C too, unless `--worktrees`/`$CLAUDIUS_WORKTREE_ROOT` is the documented absolute path, which keeps working team-independent) go dark with no diagnostic ever surfacing (the "no team config" line the script DOES emit goes to stderr, which `Monitor` never forwards as a notification). **Don't guess it.** After the *first* named `Agent(name=...)` spawn this turn, its returned `agent_id: <name>@session-<teamid>` is ground truth — relaunch the Monitor with `--team-dir ~/.claude/teams/session-<teamid> --worktrees <worktree-root>` instead of a guessed `--session-id`; this is an exact match, no prefix ambiguity. Verify it bound correctly by reading the Monitor's raw output file directly (its one-time `session-scoped to session-<x> (leadSessionId=..., mode=explicit)` confirmation also goes to stderr, so `TaskOutput`/reading the task's output file is the only way to see it) — a `mode=none` or `0 candidate workspaces` line means it bound to nothing and needs relaunching with the corrected `--team-dir`.
-
-### On a STALL Event (fully autonomous)
-
-`STALL` is a best-effort PRE-FILTER, **never an auto-kill** — a build-blocked agent writes nothing for many minutes while compiling, and a just-finished subagent can look stalled. Investigate first, then act:
-
-1. **Investigate** — read the agent's recent transcript for its last tool call; `git -C <cwd> status` shows uncommitted work; scan `/proc/[0-9]*/cwd` for pids whose cwd resolves under the agent's worktree/cwd to confirm no live build (per-agent scope — not a machine-global `pgrep`, which always fires on shared boxes). Trust file/git state over the signal (Anti-Pattern #6: stale diagnostics).
-2. **Live but idle on its task** — agent owns an in_progress task but lost its kickoff or is waiting on a message → `SendMessage` re-nudge restating the owned task. Context preserved, no respawn needed.
-3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same cwd/worktree** with a context brief extracted from:
-   - Last N lines of the transcript (what it was doing)
-   - `git -C <cwd> log --oneline -5` (commits landed so far) and `git -C <cwd> branch --show-current`
-   - Re-state its remaining scope explicitly in the new agent's spawn prompt — there is no shared task list to re-point at; the transcript tail and worktree diff are the only record of what's left
-   - Archive its inbox (rename `inboxes/<name>.json` → `inboxes/<name>.json.killed-<ts>`, keeping the per-agent `<name>` prefix so archives never collide) to keep the message history; bump to `model: opus` if the task needs deep analysis
-   The worktree's commits and working-tree edits survive intact — only the agent process is replaced.
-4. **Escalate** — report to user after a second recovery attempt fails: agent name, stall duration, last tool call, transcript path.
-
-### On a GONE Event (fully autonomous)
-
-`GONE agent=<name> reason=pane-dead|pid-gone|stale-active` means the watchdog observed the process absent, confirmed over `--gone-polls` polls. A `stale-active` GONE needs no further liveness re-check — it fires only once the agent's own file/transcript clock has already gone idle past `--stall-secs`, which no co-resident process can forge. A `pane-dead`/`pid-gone` GONE is weaker, in two spoofable steps: `bind_swarm_socket()` first picks WHICH tmux socket to trust by scoring pane-title *substring* matches against each member's agent type, then `classify_pane()` reads the bound pane's foreground command to call it dead/alive — any process running as the same OS user can forge either step (renaming its own pane's title to steal the socket binding, or keeping a shell busy with a decoy command), and spoofing is blocked cross-user only by tmux's socket-directory permissions, not same-user. Treat `stale-active` as verified; treat `pane-dead`/`pid-gone` as a lead requiring the corroboration in step 1. You still NEVER auto-kill anything either way (it is already reported gone). The work product, if any, survives in the agent's worktree.
-
-1. **Assess — confirm it is actually gone first.** Match the terminated agent's name EXACTLY: a `teammate_terminated` / "X has shut down" notice may name a *different* agent than your active one — never assume it refers to your current agent. For `reason=pane-dead` or `reason=pid-gone`, independently corroborate against a non-spoofable clock before trusting it: check the agent's own worktree/cwd mtime yourself (or transcript-jsonl mtime for a shared-cwd member — the same signal Source A/C already compute) and only proceed once that clock is ALSO stale past `--stall-secs`; a fresh clock despite a reported-dead pane means investigate as a possible STALL/spoofing case instead of treating it as GONE. `reason=stale-active` already carries this corroboration — no extra check needed. Do this NOT merely by checking that its worktree looks incomplete — a slow-but-alive agent's worktree is indistinguishable from a dead one's, and respawning into it races two agents on the same files. Once absence is confirmed: `git -C <cwd> log --oneline -5` / `status` shows whether it committed before vanishing — the commits and diff are the only record of what it finished, since there is no shared task list to check. A GONE agent whose worktree already reflects its full scope needs only cleanup.
-2. **Clean up the stale flag** — its registry/`isActive` entry may still read active; archive the inbox (`inboxes/<name>.json` → `.json.killed-<ts>`) so a respawn starts with a clean mailbox.
-3. **Respawn if work remains** — spawn a replacement of the same type on the **same cwd/worktree** with a context brief (transcript tail, `git log --oneline -5`, branch) and re-state the remaining scope directly in its spawn prompt. Committed progress is intact.
-4. **Escalate** — if the replacement also goes GONE, report to the user: agent name, GONE reason, last commit, transcript path.
-
-`RESUMED agent=<name> reason=recovered` clears a prior GONE (the pane went live again) — no action needed.
+**Load `references/stall-watchdog.md` before your first dispatch on this fallback path** — it has the discovery sources, full event grammar (`STALL`/`RESUMED`/`GONE`/`CODEX_*`), Multi-Session Hygiene traps, and the mandatory STALL/GONE response playbooks. Do not improvise a response to either event without it.
 
 ## Anti-Patterns
 
-1. Vague prompts — be explicit about files, focus, output format
+1. Vague prompts — be explicit about focus and output format; file lists apply to review/investigation delegation, not development-work delegation (§ Development-Work Delegation)
 2. Single agent for large scope — split by file scope
 3. Forgetting agent skills — use correct `subagent_type` for preloaded skills
 4. No output location — always specify where standalone agents write

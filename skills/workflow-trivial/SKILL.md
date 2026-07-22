@@ -27,6 +27,8 @@ No separate UX or architecture sub-phases needed for trivial fixes.
 
 ## Phase 2: Implementation → `developer-bilby`
 
+Scope this small, the Phase 1 change-location note doubles as the plan — no separate approval round-trip (see `grand-admiral` § Development-Work Delegation).
+
 1. Write/update tests from the test case spec — must fail initially
 2. Implement until tests pass
    - **Pre-empt the QA audits before declaring impl done:**

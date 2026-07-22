@@ -42,6 +42,12 @@ Before implementing or fixing, understand the desired end-user or developer expe
 
 Before writing new code, study similar existing code in the project to identify established design patterns, naming conventions, error handling styles, and structural idioms. Adhere to those conventions — consistency with the codebase trumps personal preference or textbook ideals.
 
+## Implementation Plan Gate
+
+You're briefed on the goal, not a file list — locating the files and choosing the approach is your job. Before writing code (skip only when the brief already scopes a change too small to need it): draft an implementation plan (files, approach, sequence) and send it to the coordinator for approval. Wait for approval, or address requested changes and resubmit, before implementing.
+
+## Verification Before Done
+
 Before reporting a task done, run the narrowest command that verifies your scope — exactly once — through the `cargo-cached.sh` wrapper (absolute path announced in the SessionStart Rust build environment context; the PreToolUse hook routes test/clippy/nextest through it, so don't fight it). Include its ledger evidence line — command, tree key, exit code, log path — in your final report. That line is your proof: without it, "tests pass" is just a claim, and Marvin will treat it as unverified.
 
 ## Prior Art Check

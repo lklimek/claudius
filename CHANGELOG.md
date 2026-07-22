@@ -6,6 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.15.0] - 2026-07-22
+
+### Added
+
+- **`skills/grand-admiral/references/stall-watchdog.md`**: new reference file — the built-in Monitor's discovery sources, event grammar, Multi-Session Hygiene traps, and STALL/GONE playbooks, extracted from `grand-admiral` § Recovery so they load only when the fallback path is actually used.
+- **`grand-admiral` § Recovery → MCP Watchdog**: new preferred watchdog path using `mcp__agent-watchdog__*` tools (register once, poll `list_events`) when available, covering Claude agents and Codex jobs alike; the built-in Monitor script is now the explicit fallback. Flagged experimental — corroborate signals against direct evidence before acting, and report anomalies to the user (and `memcan:todo` `project=agent-watchdog`).
+- **`grand-admiral` § Workflows & Delegation → Development-Work Delegation (WHAT, not HOW)**: new doctrine for delegating actual coding work (Bilby, or Codex Sol) — brief the goal from Requirements/UX/architecture docs, not a file list; the implementer investigates and returns its own implementation plan for coordinator approval (requirements/architecture/coordination fit, not implementation correctness) before writing code; user involved only when genuinely unclear or on request. Threaded through `delegate` (new pre-delegation checklist item), `workflow-feature`/`workflow-simplified`/`workflow-trivial` Phase 2, `developer-bilby` (new § Implementation Plan Gate), and `codex-crew` (new § Plan-Approval Gate — two dispatches on the SAME Codex thread via `--resume`/`task --resume-last`, not a fresh one, so the plan-then-implement split doesn't rebuild context from scratch).
+
+### Changed
+
+- **`skills/track-minions/SKILL.md`**: in-session task tracking now defaults to a plain durable file (not `/tmp`) instead of memcan TODOs; `memcan:todo` is reserved for cross-session continuity (`/clear`, restart) and cross-project (programme-management) tracking. `grand-admiral` § Spawning → Track Progress updated to match.
+- **`grand-admiral` § Agent Prompt Requirements** and **Anti-Patterns #1**: file-list requirement now scoped to review/investigation delegation; development-work delegation states the goal only (see Development-Work Delegation above).
+- **`skills/delegate/SKILL.md`**: Pre-Delegation Checklist item 6 now names the MCP-preferred/built-in-fallback watchdog choice; new item 7 points development-work briefs at § Development-Work Delegation.
+
+### Fixed
+
+- **`skills/codex-crew/SKILL.md`** § Sandbox & Workdir rule 3: documents that injecting a worktree's absolute path into the dispatch prompt text does NOT bind the Codex broker to it — the broker keys off the invoking session's actual `$PWD`, so a dispatch not physically `EnterWorktree`'d into the worktree can have ALL writes blocked, even on the first dispatch. Fix: `EnterWorktree(path=<worktree-abs-path>)` before dispatching; `ExitWorktree(action="keep")` before switching streams. The `Plan-Approval Gate` above now opens with this step, since `--resume` needs both dispatches bound to the identical workspace to find the right thread. § Never Dispatch Back-to-Back from the Same cwd rewritten around the same root cause: the safe rule is polling dispatch N's job for terminal status before firing N+1 from that cwd, not a time-based stagger (confirmed dispatches 6–9 min apart still collided) — closes `memcan:todo` `445f8637`/`8d5cc5fb` (project=claudius).
+
 ## [5.14.0] - 2026-07-21
 
 ### Changed

@@ -16,7 +16,8 @@ Cheap enough to reload before each delegation. Reload it.
 3. **Reuse** — is an agent already live in the same file/domain scope? → `SendMessage` it. Accumulated context beats a cold spawn (see § Agent Reuse in `grand-admiral`).
 4. **Model tier** — set explicitly on this spawn per the table below. Never leave it to the agent's frontmatter fallback.
 5. **Worktree** — for code-mutating agents: pre-create it and inject the resolved SHA. Never rely on `isolation: "worktree"` alone (see § Worktree Isolation in `grand-admiral`).
-6. **Monitoring** — is the stall watchdog Monitor running for this session? An un-monitored dispatch is a doctrine violation (see § Recovery in `grand-admiral`).
+6. **Monitoring** — is a watchdog running for this session (MCP preferred, else the built-in Monitor)? An un-monitored dispatch is a doctrine violation (see § Recovery in `grand-admiral`).
+7. **Development work?** — brief the goal only, no file list/approach; the agent plans and the coordinator approves (see `grand-admiral` § Development-Work Delegation).
 
 **Anti-pattern — file-independence is not spawn-justification.** A real case: four doc-only fixes, each under 20 lines, each in its own file, got four separate Opus spawns. Independent files justify a separate worktree or commit; they do NOT automatically justify a separate agent. The batch totalled well under 100 lines and belonged to one agent.
 
