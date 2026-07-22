@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [5.16.0] - 2026-07-22
+
+### Changed
+
+- **`skills/codex-crew/SKILL.md`**: coordinator-orchestrated Codex dispatch now bypasses the `codex:codex-rescue` subagent entirely — call `codex-companion.mjs task` directly with `--cwd <worktree>` and `--prompt-file <abs-path>` (new § Direct Dispatch). `codex:codex-rescue` is a thin forwarder that never exposed `--cwd`/`--prompt-file`, forcing worktree binding through `EnterWorktree`/`ExitWorktree` (which serializes concurrent multi-worktree dispatch) and shell-inlined prompts (which corrupts on embedded quotes/Rust `Debug` dumps). Direct dispatch fixes both structurally and removes the wrapper's unreliable `idle_notification`/stall-watchdog signal entirely — there's no agent lifecycle to watch. `codex:codex-rescue` remains reserved for the upstream, user-typed `/codex:rescue` interactive command only.
+- **`skills/codex-crew/SKILL.md`** § Never Dispatch Concurrently to the Same `--cwd` (renamed from § Never Dispatch Back-to-Back from the Same cwd): collision risk is now scoped to literal same-`--cwd` dispatches (e.g. plan-then-implement, or a retry), not every dispatch sharing one coordinator session.
+- **`skills/codex-crew/SKILL.md`** § Sandbox & Workdir rule 3 and § Plan-Approval Gate: `EnterWorktree`/`ExitWorktree` is no longer required just to bind a Codex dispatch to its worktree — `--cwd` does that directly, so genuinely concurrent multi-worktree dispatch is now possible.
+- **`skills/codex-crew/references/sandbox-and-recovery.md`**: on-disk job state's `workspaceRoot` now reliably matches the intended worktree for direct dispatch (it's the `--cwd` value); the old dispatching-session-cwd caveat is scoped to the interactive `codex:codex-rescue` path only.
+
 ## [5.15.0] - 2026-07-22
 
 ### Added

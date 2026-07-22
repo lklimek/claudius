@@ -9,7 +9,7 @@ Codex CLI supports three sandbox modes:
 | Mode | Behavior |
 |---|---|
 | `read-only` (default / review) | No writes; used for review/diagnosis runs. |
-| `workspace-write` | Writes allowed under cwd + configured `writable_roots`; network disabled unless `network_access = true`. `codex:codex-rescue` uses this for `--write` tasks. |
+| `workspace-write` | Writes allowed under cwd + configured `writable_roots`; network disabled unless `network_access = true`. Used for any `--write` `task` dispatch, direct or via `codex:codex-rescue`. |
 | `danger-full-access` | No sandbox. Not used by claudius dispatch. |
 
 ## `workspace-write` Config (this host)
@@ -75,13 +75,13 @@ Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `c
 - Parse an individual `jobs/<id>.json` only when its mtime advanced since the last poll, and extract only the few fields above.
 - Keep a bounded per-job last-seen map (`job-id → {status, mtime}`), never accumulated JSON.
 
-Map a monitored worktree to its state dir by matching a job's `workspaceRoot` (or `broker.json`'s cwd) to the worktree path — remember `workspaceRoot` reflects the *dispatching session's* cwd, not necessarily the worktree the job was told to `cd` into. With several teammates dispatched at once, several `jobs/*.json` files land in the same shared state directory; match each to its dispatch by `startedAt` proximity to when that teammate was spawned (seconds apart, in spawn order) and by `result.touchedFiles`, never by `sessionId` — each teammate's job carries its own dispatching session's id, not a value the coordinator can predict or match against in advance. `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
+For a direct dispatch, `workspaceRoot` is exactly the `--cwd` passed to `task` — map a monitored worktree to its state dir directly by that path. (Only the interactive `codex:codex-rescue` path, which never passes `--cwd`, has `workspaceRoot` instead reflect the *dispatching session's* cwd, not necessarily the worktree the job was told to `cd` into — if several such dispatches share one session cwd, match each to its request by `startedAt` proximity and `result.touchedFiles`, never by `sessionId`, which each carries independently and unpredictably.) `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
 
 `codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal when not going through the companion's job state.
 
 ## Harness Kills of a Backgrounded Task
 
-A `codex-companion.mjs task --write --background` run launched via a `run_in_background` Bash call can be killed by the harness mid-run — confirmed via a tmux pane reading `Background command ... was stopped`. Nothing reports it: `codex:codex-rescue` is a forwarder whose own turn ended at dispatch time and which never polls its background task, so it cannot notice or surface the kill. **Silence is not evidence of health.**
+A `codex-companion.mjs task --write --background` run launched via a `run_in_background` Bash call can be killed by the harness mid-run — confirmed via a tmux pane reading `Background command ... was stopped`. Nothing reports it automatically, whether dispatched directly or via `codex:codex-rescue`: the `--background` flag already detaches and returns immediately, so nobody is polling the background task once it's queued. **Silence is not evidence of health.**
 
 - **Detect it coordinator-side.** Periodically read the job's actual log content (`jobs/<job-id>.log`) and inspect the tmux pane directly. Do not infer health from `status` alone — it can sit at `running` after the process is gone.
 - **On-disk edits survive.** Files Codex already wrote stay written; the work is partial, not lost.
