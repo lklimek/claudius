@@ -53,11 +53,12 @@ Batch small tasks so each agent gets ≥100 lines of work — respect specializa
 
 ## Phase 2: Implementation → `developer-bilby`
 
-Execute the Development Plan task by task. For each task:
-1. Write unit/integration tests from the Test Case Specification — tests MUST fail initially
-2. Implement until tests pass
-3. Self-review: deduplication, code quality, formatting, linting
-4. Commit
+Brief each task by goal and acceptance criteria, not files or approach — Bilby investigates the codebase and designs the HOW itself (see `grand-admiral` § Development-Work Delegation). For each task:
+1. Investigate, draft an implementation plan (files, approach, sequence), get coordinator sign-off before writing code
+2. Write unit/integration tests from the Test Case Specification — tests MUST fail initially
+3. Implement until tests pass
+4. Self-review: deduplication, code quality, formatting, linting
+5. Commit
 
 **Pre-empt the QA audits before declaring impl done:**
 1. **Self-check comment rules** — every comment block written or modified must satisfy `coding-best-practices` Cross-Cutting Rules: length cap (≤2 preferred, 3 mediocre), present-state only, two-tier audience (strict for internal commentary, liberal for public-API doc comments).
