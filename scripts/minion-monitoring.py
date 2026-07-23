@@ -2077,7 +2077,7 @@ class Watchdog:
                 "monitoring 0 Claude agents and 0 Codex jobs/workspaces: no team "
                 "config, no discovered worktrees, and no session-workspace Codex "
                 "state; dispatch a named teammate or verify --worktrees, "
-                "--session-id, and the watchdog working directory.",
+                "--session-id, and the monitor working directory.",
             )
         elif team is not None and not codex_candidates and scan.workspace_count == 0:
             self.warn_once(

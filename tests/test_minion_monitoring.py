@@ -1459,7 +1459,7 @@ def test_watchdog_warns_once_when_codex_has_zero_candidates(
         "minion-monitoring: monitoring 0 Claude agents and 0 Codex jobs/workspaces: "
         "no team config, no discovered worktrees, and no session-workspace Codex "
         "state; dispatch a named teammate or verify --worktrees, --session-id, and "
-        "the watchdog working directory.\n"
+        "the monitor working directory.\n"
     )
 
 
