@@ -1,4 +1,4 @@
-"""Contract tests for the Python agent watchdog."""
+"""Contract tests for the Python minion monitor."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from typing import Any
 import pytest
 
 
-SCRIPT = Path(__file__).parents[1] / "scripts" / "agent-watchdog.py"
-SPEC = importlib.util.spec_from_file_location("agent_watchdog", SCRIPT)
+SCRIPT = Path(__file__).parents[1] / "scripts" / "minion-monitoring.py"
+SPEC = importlib.util.spec_from_file_location("minion_monitoring", SCRIPT)
 assert SPEC and SPEC.loader
 watchdog = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = watchdog
@@ -1295,7 +1295,7 @@ def test_watchdog_relative_worktrees_use_team_cwd(tmp_path: Path) -> None:
     monitor = watchdog.Watchdog(
         watchdog.Options(
             projects_dir=tmp_path / "projects",
-            worktrees=Path(".claude/worktrees"),
+            worktrees=Path("relative/worktrees"),
             gone_enabled=False,
         ),
         env={
@@ -1306,10 +1306,10 @@ def test_watchdog_relative_worktrees_use_team_cwd(tmp_path: Path) -> None:
     )
 
     assert monitor._worktrees(watchdog.Team(lead_cwd=lead_cwd)) == (
-        lead_cwd / ".claude" / "worktrees"
+        lead_cwd / "relative" / "worktrees"
     )
     assert monitor._worktrees(watchdog.Team(members=(member,))) == (
-        member_cwd / ".claude" / "worktrees"
+        member_cwd / "relative" / "worktrees"
     )
 
 
@@ -1456,10 +1456,10 @@ def test_watchdog_warns_once_when_codex_has_zero_candidates(
     assert captured.out == ""
     assert set(monitor.warned) == {"zero-monitored"}
     assert captured.err == (
-        "agent-watchdog: monitoring 0 Claude agents and 0 Codex jobs/workspaces: "
+        "minion-monitoring: monitoring 0 Claude agents and 0 Codex jobs/workspaces: "
         "no team config, no discovered worktrees, and no session-workspace Codex "
         "state; dispatch a named teammate or verify --worktrees, --session-id, and "
-        "the watchdog working directory.\n"
+        "the monitor working directory.\n"
     )
 
 
@@ -2027,9 +2027,9 @@ def test_cli_zero_arguments_exit_1(tmp_path: Path) -> None:
         timeout=5,
     )
     assert result.returncode == 1
-    assert "Usage: agent-watchdog.py" in result.stderr
+    assert "Usage: minion-monitoring.py" in result.stderr
     assert (
-        "agent-watchdog: no arguments provided; use explicit flags or --help"
+        "minion-monitoring: no arguments provided; use explicit flags or --help"
         in result.stderr
     )
 
@@ -2136,7 +2136,7 @@ def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
         defaults.poll_secs,
         defaults.watch_subagents,
         defaults.gone_enabled,
-    ) == ("env", Path(".claude/worktrees"), 300, 60, 2, 45, False, True)
+    ) == ("env", Path("/data/git-worktrees"), 300, 60, 2, 45, False, True)
     options = watchdog.parse_args(
         [
             "--session-id",
@@ -2180,7 +2180,7 @@ def test_cli_worktree_root_env_var(tmp_path: Path) -> None:
     base_env = {"HOME": str(tmp_path)}
 
     assert watchdog.parse_args(["--session-id", "test"], base_env).worktrees == Path(
-        ".claude/worktrees"
+        "/data/git-worktrees"
     )
     assert watchdog.parse_args(
         ["--session-id", "test"],
@@ -2190,7 +2190,7 @@ def test_cli_worktree_root_env_var(tmp_path: Path) -> None:
         assert watchdog.parse_args(
             ["--session-id", "test"],
             {**base_env, "CLAUDIUS_WORKTREE_ROOT": value},
-        ).worktrees == Path(".claude/worktrees")
+        ).worktrees == Path("/data/git-worktrees")
     assert watchdog.parse_args(
         ["--session-id", "test", "--worktrees", "/explicit/path"],
         {**base_env, "CLAUDIUS_WORKTREE_ROOT": "/env/root"},
@@ -2247,9 +2247,10 @@ def test_cli_requires_at_least_one_argument(
         watchdog.parse_args([], {"HOME": "/tmp"})
     assert caught.value.code == 1
     stderr = capsys.readouterr().err
-    assert "Usage: agent-watchdog.py" in stderr
+    assert "Usage: minion-monitoring.py" in stderr
     assert (
-        "agent-watchdog: no arguments provided; use explicit flags or --help" in stderr
+        "minion-monitoring: no arguments provided; use explicit flags or --help"
+        in stderr
     )
 
 
@@ -2279,7 +2280,7 @@ def test_cli_help_is_stderr_and_success(capsys: pytest.CaptureFixture[str]) -> N
     with pytest.raises(SystemExit) as caught:
         watchdog.parse_args(["--help"], {"HOME": "/tmp"})
     assert caught.value.code == 0
-    assert "Usage: agent-watchdog.py" in capsys.readouterr().err
+    assert "Usage: minion-monitoring.py" in capsys.readouterr().err
 
 
 def test_codex_cli_state_store_integration_is_isolated(tmp_path: Path) -> None:

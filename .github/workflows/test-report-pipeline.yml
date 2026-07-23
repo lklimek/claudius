@@ -45,7 +45,7 @@ jobs:
         run: ./tests/test_report_pipeline.sh
 
       - name: Watchdog GONE detection (e2e, real tmux)
-        run: ./tests/test_agent_watchdog_gone.sh
+        run: ./tests/test_minion_monitoring_gone.sh
 
       - name: block-github-writes hook fixtures
         run: ./tests/test_block_github_writes.sh

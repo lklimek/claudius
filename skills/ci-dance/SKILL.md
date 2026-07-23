@@ -79,13 +79,15 @@ Spawn each stream as a named `Agent()` — every session has one implicit team, 
 
 **Named spawning requires this skill to be running in the session lead.** If a lead delegates the whole `/ci-dance` invocation to a teammate rather than running it itself, every named spawn above fails outright — "Teammates cannot spawn other teammates" (flat team roster). If you find yourself running this skill as a non-lead teammate: spawn the three streams as **unnamed** background subagents instead (omit `name`), skip the entire Inter-Stream Communication claim/completion protocol below (unnamed agents can't be addressed by `SendMessage`), and rely solely on Step 3's merge-time cherry-pick/conflict resolution as the overlap trust boundary — it already degrades gracefully to this. Step 3's `shutdown_request` likewise doesn't apply to unnamed subagents; they simply run to completion.
 
+Every stream spawn prompt must forbid ending the stream's turn to wait for a `Monitor`/background-task notification from a sub-job it spawned (such as a Codex dispatch): after the turn ends, that notification returns to the coordinator, not the stream, so the stream silently stalls. Poll the sub-job's status directly with a bounded local wait loop instead (see `codex-crew` § Monitoring a Codex Job), and never let a stuck sub-job block the stream.
+
 ### Team-spawn worktree quirk
 
 See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary for ci-dance:
 
-- **`isolation="worktree"` silently dropped for agents in the session's implicit team.** Every named `Agent()` spawned from the lead's session joins that one implicit team automatically, and `isolation="worktree"` is ignored either way — the agent lands in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `.claude/worktrees/agent-...`. A stream that proceeds anyway will edit the main repo directly.
+- **`isolation="worktree"` silently dropped for agents in the session's implicit team.** Every named `Agent()` spawned from the lead's session joins that one implicit team automatically, and `isolation="worktree"` is ignored either way — the agent lands in the lead's CWD, not a dedicated worktree. `pwd` returns the lead's path instead of `/data/git-worktrees/<repo-path-slug>`. A stream that proceeds anyway will edit the main repo directly.
 
-**Workaround (single canonical path)**: the lead pre-creates one worktree per stream under the configured root (`$CLAUDIUS_WORKTREE_ROOT`, default `.claude/worktrees`; see `grand-admiral` § Worktree Isolation and `codex-crew` § Sandbox & Workdir) via `git worktree add <worktree-root>/<repo-path-slug>-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and includes the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s into its assigned path on its first turn and works there. This is the stable path; do not attempt other workarounds. Pointing the stall watchdog's `--worktrees` flag at the same configured root keeps every stream discoverable.
+**Workaround (single canonical path)**: the lead pre-creates one worktree per stream under the configured root (`$CLAUDIUS_WORKTREE_ROOT`, default `/data/git-worktrees`; see `grand-admiral` § Worktree Isolation and `codex-crew` § Sandbox & Workdir) via `git worktree add <worktree-root>/<repo-path-slug>-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and includes the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s into its assigned path on its first turn and works there. This is the stable path; do not attempt other workarounds. Pointing the stall watchdog's `--worktrees` flag at the same configured root keeps every stream discoverable.
 
 All three streams run concurrently. Each stream is a **complete unit** that finds AND fixes its own issues. Every stream follows the same lifecycle: **trigger → wait → collect & classify → fix**.
 
@@ -144,6 +146,8 @@ Use for: overlapping finding alerts, completion summaries, conflict flags.
 ### Step 3: Merge
 
 After all three streams complete:
+
+**Empty task-notification is not clean completion.** If a stream's task-notification contains no substantive report or findings, treat it as a possible STALL to investigate and resume per `grand-admiral` § Recovery → Built-in Stall Watchdog, never as a zero-finding result.
 
 1. Collect each stream's final report — findings fixed, findings deferred (claimed by another stream, not yet self-verified) — from its completion `SendMessage`, and its worktree commit log (`git -C <worktree> log --oneline`)
 2. Enumerate worktree branches — collect commits from each stream's worktree

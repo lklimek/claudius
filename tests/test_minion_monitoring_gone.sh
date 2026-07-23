@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Integration test: agent-watchdog GONE detection over per-session tmux swarm sockets.
+# Integration test: minion-monitoring GONE detection over tmux swarm sockets.
 #
 # Proves the swarm-socket discovery fix end-to-end against REAL tmux servers:
 #   T1  the correct socket is chosen among >=2 sibling claude-swarm-* sockets
@@ -15,7 +15,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WATCHDOG="${WATCHDOG:-$SCRIPT_DIR/../scripts/agent-watchdog.py}"
+WATCHDOG="${WATCHDOG:-$SCRIPT_DIR/../scripts/minion-monitoring.py}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YEL='\033[0;33m'; NC='\033[0m'
 pass=0; fail=0
