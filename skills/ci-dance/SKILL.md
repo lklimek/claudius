@@ -79,6 +79,8 @@ Spawn each stream as a named `Agent()` — every session has one implicit team, 
 
 **Named spawning requires this skill to be running in the session lead.** If a lead delegates the whole `/ci-dance` invocation to a teammate rather than running it itself, every named spawn above fails outright — "Teammates cannot spawn other teammates" (flat team roster). If you find yourself running this skill as a non-lead teammate: spawn the three streams as **unnamed** background subagents instead (omit `name`), skip the entire Inter-Stream Communication claim/completion protocol below (unnamed agents can't be addressed by `SendMessage`), and rely solely on Step 3's merge-time cherry-pick/conflict resolution as the overlap trust boundary — it already degrades gracefully to this. Step 3's `shutdown_request` likewise doesn't apply to unnamed subagents; they simply run to completion.
 
+Every stream spawn prompt must forbid ending the stream's turn to wait for a `Monitor`/background-task notification from a sub-job it spawned (such as a Codex dispatch): after the turn ends, that notification returns to the coordinator, not the stream, so the stream silently stalls. Poll the sub-job's status directly with a bounded local wait loop instead (see `codex-crew` § Monitoring a Codex Job), and never let a stuck sub-job block the stream.
+
 ### Team-spawn worktree quirk
 
 See `grand-admiral` § Worktree Isolation for the canonical write-up. Summary for ci-dance:
@@ -144,6 +146,8 @@ Use for: overlapping finding alerts, completion summaries, conflict flags.
 ### Step 3: Merge
 
 After all three streams complete:
+
+**Empty task-notification is not clean completion.** If a stream's task-notification contains no substantive report or findings, treat it as a possible STALL to investigate and resume per `grand-admiral` § Recovery → Built-in Stall Watchdog, never as a zero-finding result.
 
 1. Collect each stream's final report — findings fixed, findings deferred (claimed by another stream, not yet self-verified) — from its completion `SendMessage`, and its worktree commit log (`git -C <worktree> log --oneline`)
 2. Enumerate worktree branches — collect commits from each stream's worktree
