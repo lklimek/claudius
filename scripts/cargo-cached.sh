@@ -6,9 +6,9 @@
 # log + exit code (the agent gets its output at zero compile cost). Otherwise run
 # the real cargo, tee the full log, and append a JSONL record to the ledger.
 #
-# FAIL-OPEN throughout: any internal error (missing jq, not a git repo, no flock)
-# falls through to a plain `cargo "$@"`. Correctness of a real build always wins
-# over the caching optimization.
+# Cache infrastructure failures (missing jq, not a git repo, no flock) fail open
+# to plain cargo. Auto-isolation setup fails closed because a shared target dir
+# can make cargo report stale artifacts as fresh under concurrent checkouts.
 #
 # Ledger location is portable — NEVER hardcoded. A user who wants it elsewhere
 # (e.g. a big disk) sets CLAUDIUS_CACHE_DIR; otherwise it follows the XDG cache.
@@ -94,44 +94,37 @@ auto_isolated=0
 # NOTE: these default <canonical>/claudius-checkouts/<hash> dirs (or
 # CLAUDIUS_TARGET_PREFIX/<hash>) accumulate PERMANENTLY — there is deliberately
 # NO automatic GC. Pruning stale ones is the user's/coordinator's responsibility.
+resolve_target_root() {
+  local timeout_seconds="$1" canonical
+  canonical=$(timeout "$timeout_seconds" cargo metadata --format-version 1 --no-deps 2>/dev/null \
+    | jq -r '.target_directory // empty' 2>/dev/null) || return 1
+  [[ -n "$canonical" ]] || return 1
+  target_root="${canonical%/}/claudius-checkouts"
+}
+
 if [[ -z "$caller_target_dir" ]]; then
-  derivation_ready=0
-  derivation_failure="cargo metadata resolution failed"
   if [[ -n "${CLAUDIUS_TARGET_PREFIX:-}" ]]; then
     target_root="${CLAUDIUS_TARGET_PREFIX%/}"
-    derivation_ready=1
   elif command -v timeout >/dev/null 2>&1; then
-    # Resolve cargo's true default before setting our override. The probe is
-    # bounded when timeout exists; without it, skip the potentially locked call.
-    canonical=$(timeout 3 cargo metadata --format-version 1 --no-deps 2>/dev/null \
-      | jq -r '.target_directory // empty' 2>/dev/null)
-    if [[ -n "$canonical" ]]; then
-      target_root="${canonical%/}/claudius-checkouts"
-      derivation_ready=1
+    # Resolve cargo's true default before setting our override. Cargo metadata
+    # can block on its internal locks, so retry once with a longer timeout.
+    if ! resolve_target_root 3 && ! resolve_target_root 15; then
+      echo "claudius: ERROR: cannot establish per-checkout isolation: cargo metadata failed after 2 attempts (timeouts: 3s, 15s); refusing to use cargo's shared/default target dir" >&2
+      exit 1
     fi
   else
-    derivation_failure="timeout unavailable"
+    echo "claudius: ERROR: cannot establish per-checkout isolation: timeout unavailable; refusing to use cargo's shared/default target dir" >&2
+    exit 1
   fi
 
-  if [[ "$derivation_ready" == 1 ]]; then
-    tl_hash=$(printf '%s' "$toplevel" | sha256sum | cut -c1-16)
-    derived="${target_root%/}/$tl_hash"
-    # Export ONLY after the dir exists. A failed mkdir must NOT leave
-    # CARGO_TARGET_DIR pointing at an uncreatable path — cargo would then hard-
-    # fail (exit 101), that false RED would be ledgered as a real verdict, and
-    # (since the auto-derived dir is excluded from the key) replay to every other
-    # checkout sharing the tree. On failure, abandon isolation and fall through.
-    if mkdir -p "$derived" 2>/dev/null; then
-      export CARGO_TARGET_DIR="$derived"
-      auto_isolated=1
-    else
-      echo "claudius: per-checkout isolation skipped (could not create $derived) — using shared/default target dir, same-HEAD collision hazard applies" >&2
-    fi
-  else
-    # Fail open loudly because this drops a correctness protection, not merely
-    # an optimization, under the same concurrency that makes collisions likely.
-    echo "claudius: per-checkout isolation skipped ($derivation_failure) — using shared/default target dir, same-HEAD collision hazard applies" >&2
+  tl_hash=$(printf '%s' "$toplevel" | sha256sum | cut -c1-16)
+  derived="${target_root%/}/$tl_hash"
+  if ! mkdir -p "$derived" 2>/dev/null; then
+    echo "claudius: ERROR: cannot establish per-checkout isolation: could not create $derived; refusing to use cargo's shared/default target dir" >&2
+    exit 1
   fi
+  export CARGO_TARGET_DIR="$derived"
+  auto_isolated=1
 fi
 effective_target_dir="${cli_target_dir:-${CARGO_TARGET_DIR:-}}"
 
@@ -351,6 +344,14 @@ cargo "$@" 2>&1 | tee "$logf" | tail -100
 rc=${PIPESTATUS[0]}
 dur=$(( $(date +%s) - start ))
 
+# Keep target-dir provenance in the full ledger log, not only its JSON record.
+if [[ "$auto_isolated" == 1 ]]; then
+  printf 'claudius: used isolated target dir: %s\n' "$effective_target_dir" | tee -a "$logf"
+else
+  printf 'claudius: WARNING: wrapper auto-isolation not used; caller-selected target dir: %s\n' \
+    "${effective_target_dir:-cargo default}" | tee -a "$logf"
+fi
+
 # Fake-green suspicion, decided ONCE here (see the guard's rationale below) and
 # persisted, so a later cache replay can re-surface it instead of laundering it.
 # A test/clippy/nextest MISS that finished implausibly fast compiled nothing and
@@ -390,10 +391,10 @@ echo "=== exit $rc | full log: $logf | recorded in verification ledger (key $key
 # --- Fake-green guard: implausibly fast verification ------------------------
 # The suspicion was decided above; this only renders the banner. Per-checkout
 # target-dir isolation (top of script) normally prevents the same-HEAD collision,
-# but this stays as a residual backstop for the paths where isolation did NOT
-# apply (metadata resolution failed, or an explicit/shared CARGO_TARGET_DIR
-# override) — there an implausibly fast run may have executed a CONCURRENT agent's
-# build, green without ever containing this agent's tests. The isolation-status
+# but this stays as a residual backstop when the caller deliberately selects a
+# possibly shared target directory. There an implausibly fast run may have
+# executed a CONCURRENT agent's build, green without ever containing this agent's
+# tests. The isolation-status
 # line reflects THIS run's actual state (live auto_isolated), so it stays honest
 # even when the collision hazard is genuinely live. A legitimate no-op re-run
 # looks identical from here, so this only WARNS; rc is never touched (fail-open).

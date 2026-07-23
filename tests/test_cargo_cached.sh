@@ -32,18 +32,21 @@
 #   K25 two DIFFERENT explicit CARGO_TARGET_DIRs -> must NOT cross-replay (in key)
 #   K26 sccache present + HOME unset -> no crash (SCCACHE_BASEDIRS=toplevel)
 #   K27 sccache < 0.14.0 -> SCCACHE_BASEDIRS NOT set (version gate)
-#   K28 underivable target dir (mkdir fails) -> isolation abandoned, cargo runs
-#   K29 cargo metadata resolution fails -> loud stderr warning, cargo still runs
+#   K28 underivable target dir (mkdir fails) -> wrapper aborts before cargo
+#   K29 cargo metadata resolution fails twice -> wrapper aborts before cargo
 #   K30 fake-green run in other checkout -> banner names that checkout's dir
 #   K31 explicit (shared) override -> banner says hazard LIVE, not "auto-isolated"
 #   K32 BSD sort rejects -V        -> sccache >= 0.14.0 gate still evaluates true
-#   K33 timeout absent             -> metadata probe is skipped without blocking
+#   K33 timeout absent             -> wrapper aborts without blocking
 #   K34 target prefix set          -> unique per checkout and stable on repeat
 #   K35 explicit target + prefix   -> explicit CARGO_TARGET_DIR wins unchanged
 #   K36 target prefix unset        -> existing canonical-derived path is unchanged
 #   K37 --target-dir CLI variants  -> distinct keys, no auto-isolation
 #   K38 unwritable ledger root     -> workspace-local fallback with one note
 #   K39 both ledger roots unwritable -> loud plain-cargo fallback
+#   K40 transient metadata failure -> retry succeeds and cargo runs isolated
+#   K41 auto-isolated build log    -> records the isolated target dir
+#   K42 explicit target build log  -> warns wrapper isolation was not used
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -538,40 +541,38 @@ else
   bad "K27 (out='${OUT//$'\n'/ }')"
 fi
 
-echo "=== K28: an underivable target dir abandons isolation instead of exporting a broken path ==="
-# If mkdir on the derived dir fails, the wrapper must NOT leave CARGO_TARGET_DIR
-# pointing at an uncreatable path (real cargo would exit 101 and that false RED
-# would be ledgered + replayed). It must unset it so cargo falls back. Make the
-# canonical parent a regular FILE so mkdir -p fails with ENOTDIR. RED against the
-# 'export then mkdir||true' code (which leaves STUB_TGT set to the broken path).
+echo "=== K28: an underivable target dir aborts before cargo can use a shared dir ==="
+# Make the canonical parent a regular FILE so mkdir -p fails with ENOTDIR.
+# Isolation is a correctness boundary: cargo must not run without it.
 bust k28
 BLOCK="$WORK/blocker-file"; : > "$BLOCK"   # a regular file, not a dir
 BEFORE=$(counter)
 OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" STUB_TARGET_DIR="$BLOCK/sub" CLAUDIUS_FORCE=1 \
        "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
 AFTER=$(counter)
-if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = "0" ] \
-   && grep -q "STUB_TGT=$" <<<"$OUT" \
-   && grep -q "isolation skipped (could not create" <<<"$OUT"; then
-  ok "K28 mkdir-fail abandons isolation (CARGO_TARGET_DIR unset), wrapper still runs cargo"
+if [ "$AFTER" = "$BEFORE" ] && [ "$RC" != "0" ] \
+   && ! grep -q "STUB CARGO INVOCATION" <<<"$OUT" \
+   && grep -q "cannot establish per-checkout isolation: could not create" <<<"$OUT"; then
+  ok "K28 mkdir failure aborted loudly before cargo ran"
 else
   bad "K28 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
 fi
 
-echo "=== K29: a failed cargo metadata resolution warns loudly and still runs cargo ==="
-# Losing isolation drops a CORRECTNESS protection (not just an optimization), so
-# unlike the silent fail-open guards this one must be observable on stderr.
+echo "=== K29: repeated cargo metadata failure aborts before cargo runs ==="
 bust k29
+METADATA_COUNTER="$WORK/metadata-counter-k29"; echo 0 > "$METADATA_COUNTER"
 BEFORE=$(counter)
-OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" STUB_NO_METADATA=1 CLAUDIUS_FORCE=1 \
+OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" STUB_NO_METADATA=1 \
+       METADATA_COUNTER="$METADATA_COUNTER" CLAUDIUS_FORCE=1 \
        "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
 AFTER=$(counter)
-if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = "0" ] \
-   && grep -q "isolation skipped (cargo metadata resolution failed)" <<<"$OUT" \
-   && grep -q "STUB_TGT=$" <<<"$OUT"; then
-  ok "K29 metadata-fail: loud warning emitted, isolation skipped, cargo still ran"
+if [ "$(cat "$METADATA_COUNTER")" = 2 ] \
+   && [ "$AFTER" = "$BEFORE" ] && [ "$RC" != "0" ] \
+   && ! grep -q "STUB CARGO INVOCATION" <<<"$OUT" \
+   && grep -q "cannot establish per-checkout isolation: cargo metadata failed after 2 attempts" <<<"$OUT"; then
+  ok "K29 metadata failed twice and the wrapper aborted loudly before cargo ran"
 else
-  bad "K29 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
+  bad "K29 (metadata=$(cat "$METADATA_COUNTER") before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
 fi
 
 echo "=== K30: a fake-green run in another checkout names its own target dir ==="
@@ -619,7 +620,7 @@ else
   bad "K32 (out='${OUT//$'\n'/ }')"
 fi
 
-echo "=== K33: without timeout, the metadata probe skips immediately and fails open ==="
+echo "=== K33: without timeout, the wrapper aborts immediately instead of sharing ==="
 NO_TIMEOUT_BIN="$WORK/no-timeout-bin"; mkdir -p "$NO_TIMEOUT_BIN"
 for t in bash cat cut date env git grep jq mkdir rm sha256sum sleep sort tail tee tr xargs; do
   src=$(command -v "$t" 2>/dev/null) && ln -sf "$src" "$NO_TIMEOUT_BIN/$t"
@@ -636,9 +637,10 @@ OUT=$( cd "$REPO" && env -i PATH="$NO_TIMEOUT_BIN" HOME="$WORK" \
 elapsed=$(( $(date +%s) - start ))
 AFTER=$(counter)
 if [ "$(cat "$METADATA_COUNTER")" = 0 ] && [ "$elapsed" -lt 3 ] \
-   && [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = 0 ] \
-   && grep -q "isolation skipped (timeout unavailable)" <<<"$OUT"; then
-  ok "K33 timeout absent: metadata was not invoked and cargo ran fail-open in ${elapsed}s"
+   && [ "$AFTER" = "$BEFORE" ] && [ "$RC" != 0 ] \
+   && ! grep -q "STUB CARGO INVOCATION" <<<"$OUT" \
+   && grep -q "cannot establish per-checkout isolation: timeout unavailable" <<<"$OUT"; then
+  ok "K33 timeout absent: wrapper aborted loudly without invoking metadata or cargo"
 else
   bad "K33 (metadata=$(cat "$METADATA_COUNTER") elapsed=${elapsed}s before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
 fi
@@ -781,6 +783,62 @@ if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = 0 ] \
   ok "K39 dual ledger failure emitted one loud note and ran cargo directly"
 else
   bad "K39 (before=$BEFORE after=$AFTER rc=$RC notes=$fallback_notes out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K40: transient metadata failure retries and then builds in isolation ==="
+K40CACHE="$WORK/cache-k40"
+K40TIMEOUTDIR="$WORK/timeout-k40"; mkdir -p "$K40TIMEOUTDIR"
+TIMEOUT_BUDGETS="$WORK/timeout-budgets-k40"; : > "$TIMEOUT_BUDGETS"; export TIMEOUT_BUDGETS
+cat > "$K40TIMEOUTDIR/timeout" <<'EOF'
+#!/usr/bin/env bash
+budget="$1"; shift
+printf '%s\n' "$budget" >> "$TIMEOUT_BUDGETS"
+[ "$budget" = 3 ] && exit 124
+exec "$@"
+EOF
+chmod +x "$K40TIMEOUTDIR/timeout"
+METADATA_COUNTER="$WORK/metadata-counter-k40"; echo 0 > "$METADATA_COUNTER"
+BEFORE=$(counter)
+OUT=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K40CACHE" CLAUDIUS_FORCE=1 \
+       METADATA_COUNTER="$METADATA_COUNTER" \
+       env PATH="$K40TIMEOUTDIR:$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" build 2>&1 ); RC=$?
+AFTER=$(counter)
+if [ "$(tr '\n' ' ' < "$TIMEOUT_BUDGETS")" = "3 15 " ] \
+   && [ "$(cat "$METADATA_COUNTER")" = 1 ] \
+   && [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = 0 ] \
+   && grep -q "STUB_TGT=$STUB_TARGET_DIR/claudius-checkouts/" <<<"$OUT"; then
+  ok "K40 3s timeout retried at 15s and cargo built in the isolated target dir"
+else
+  bad "K40 (budgets='$(tr '\n' ' ' < "$TIMEOUT_BUDGETS")' metadata=$(cat "$METADATA_COUNTER") before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K41: an auto-isolated build records target provenance in its full log ==="
+K41CACHE="$WORK/cache-k41"
+OUT=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K41CACHE" CLAUDIUS_FORCE=1 \
+       env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" build 2>&1 ); RC=$?
+record41=$(tail -1 "$K41CACHE/ledger/records.jsonl")
+log41=$(jq -r '.log' <<<"$record41")
+target41=$(jq -r '.target_dir' <<<"$record41")
+if [ "$RC" = 0 ] && [ -f "$log41" ] \
+   && grep -qF "claudius: used isolated target dir: $target41" "$log41"; then
+  ok "K41 isolated build log records the target dir used"
+else
+  bad "K41 (rc=$RC log='$log41' target='$target41' out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K42: a caller-selected build target is visibly not wrapper-isolated ==="
+K42CACHE="$WORK/cache-k42"
+EXPLICIT42="$WORK/explicit-k42"
+OUT=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K42CACHE" CLAUDIUS_FORCE=1 \
+       CARGO_TARGET_DIR="$EXPLICIT42" env PATH="$STUBDIR:$PATH" \
+       "$BASHBIN" "$WRAPPER" build 2>&1 ); RC=$?
+record42=$(tail -1 "$K42CACHE/ledger/records.jsonl")
+log42=$(jq -r '.log' <<<"$record42")
+if [ "$RC" = 0 ] && [ -f "$log42" ] \
+   && grep -qF "claudius: WARNING: wrapper auto-isolation not used; caller-selected target dir: $EXPLICIT42" "$log42"; then
+  ok "K42 explicit target build log distinguishes caller selection from isolation"
+else
+  bad "K42 (rc=$RC log='$log42' out='${OUT//$'\n'/ }')"
 fi
 
 echo ""
