@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Edge-triggered Claude and Codex multi-agent stall watchdog.
+"""Edge-triggered Claude and Codex minion stall monitor.
 
 Claude named agents stall only while owning an ``in_progress`` task, their
 per-agent activity clock is at or beyond the threshold, and no build/test runs
@@ -61,10 +61,11 @@ JOBS_GLOB_WARN_SECS = 0.5
 # direct scanner callers) are skipped before parsing. Override with
 # --codex-job-recency-secs when longer-running jobs need a wider window.
 DEFAULT_JOB_RECENCY_SECS = 7 * 24 * 60 * 60
+DEFAULT_WORKTREE_ROOT = Path("/data/git-worktrees")
 # Within the scan window, age terminal records out after six hours.
 TERMINAL_JOB_RETENTION_SECS = 6 * 60 * 60
 WARNING_CACHE_LIMIT = 1024
-CRASH_LOG_NAME = "agent-watchdog-crash.log"
+CRASH_LOG_NAME = "minion-monitoring-crash.log"
 CRASH_LOG_LIMIT = 1024 * 1024
 CRASH_LOG_TRUNCATED = b"\n[traceback truncated to crash-log limit]\n"
 STATE_VERSION_PREFIX = re.compile(r'^\s*\{\s*"version"\s*:\s*')
@@ -219,7 +220,7 @@ class Options:
     projects_dir: Path = field(
         default_factory=lambda: Path.home() / ".claude" / "projects"
     )
-    worktrees: Path = Path(".claude/worktrees")
+    worktrees: Path = DEFAULT_WORKTREE_ROOT
     watch_subagents: bool = False
     gone_enabled: bool = True
     gone_polls: int = 2
@@ -254,7 +255,7 @@ def safe_json(path: Path) -> Any | None:
             payload = handle.read(JSON_FILE_LIMIT + 1)
         if len(payload) > JSON_FILE_LIMIT:
             print(
-                f"agent-watchdog: JSON file {path} exceeds the "
+                f"minion-monitoring: JSON file {path} exceeds the "
                 f"{JSON_FILE_LIMIT}-byte read limit; skipped",
                 file=sys.stderr,
                 flush=True,
@@ -1828,7 +1829,7 @@ class Watchdog:
         self.warned[key] = None
         while len(self.warned) > WARNING_CACHE_LIMIT:
             self.warned.popitem(last=False)
-        print(f"agent-watchdog: {message}", file=sys.stderr, flush=True)
+        print(f"minion-monitoring: {message}", file=sys.stderr, flush=True)
 
     def _task_dir(self, team: Team | None) -> Path | None:
         if self.options.tasks_dir:
@@ -2098,8 +2099,8 @@ class Watchdog:
         return events
 
 
-USAGE = """agent-watchdog.py -- edge-triggered agent-stall watchdog (silent when healthy)
-Usage: agent-watchdog.py [--dump-job ID] [--session-id ID] [--team-dir DIR]
+USAGE = """minion-monitoring.py -- edge-triggered minion stall monitor (silent when healthy)
+Usage: minion-monitoring.py [--dump-job ID] [--session-id ID] [--team-dir DIR]
                          [--tasks-dir DIR]
                          [--projects-dir DIR] [--worktrees DIR] [--watch-subagents]
                          [--no-gone] [--gone-polls N] [--stall-secs N]
@@ -2110,15 +2111,15 @@ agent's worktree/cwd. An idle agent owning no in_progress task is never flagged.
 --session-id (default $CLAUDE_SESSION_ID) scopes ALL discovery to THIS session's
 team; precedence --team-dir > --session-id > $CLAUDE_SESSION_ID > newest autodetect.
 --dump-job ID prints every matching Codex job record once and exits.
---worktrees precedence: flag > $CLAUDIUS_WORKTREE_ROOT > .claude/worktrees.
+--worktrees precedence: flag > $CLAUDIUS_WORKTREE_ROOT > /data/git-worktrees.
 --codex-job-recency-secs defaults to 604800 (7 days); older job files are not parsed.
 Emits ONLY transition lines to stdout; diagnostics to stderr.
 """
 
 
 def die(message: str) -> None:
-    """Exit with the watchdog's stable diagnostic prefix."""
-    print(f"agent-watchdog: {message}", file=sys.stderr)
+    """Exit with the monitor's stable diagnostic prefix."""
+    print(f"minion-monitoring: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -2140,7 +2141,7 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
     options = Options(
         session_id=environment.get("CLAUDE_SESSION_ID", ""),
         projects_dir=home / ".claude" / "projects",
-        worktrees=(Path(worktree_root) if worktree_root else Path(".claude/worktrees")),
+        worktrees=(Path(worktree_root) if worktree_root else DEFAULT_WORKTREE_ROOT),
     )
     index = 0
     value_flags = {
@@ -2218,7 +2219,7 @@ def dump_job(job_id: str, env: Mapping[str, str] | None = None) -> int:
         matches = sorted(state_root.glob(f"*/jobs/{job_id}.json"))
     except OSError as error:
         print(
-            f"agent-watchdog: unable to search for job {job_id!r} under "
+            f"minion-monitoring: unable to search for job {job_id!r} under "
             f"{state_root} ({type(error).__name__})",
             file=sys.stderr,
             flush=True,
@@ -2226,7 +2227,7 @@ def dump_job(job_id: str, env: Mapping[str, str] | None = None) -> int:
         return 1
     if not matches:
         print(
-            f"agent-watchdog: no job {job_id!r} found under {state_root}",
+            f"minion-monitoring: no job {job_id!r} found under {state_root}",
             file=sys.stderr,
             flush=True,
         )
@@ -2256,7 +2257,7 @@ def dump_job(job_id: str, env: Mapping[str, str] | None = None) -> int:
             TypeError,
         ) as error:
             print(
-                f"agent-watchdog: unable to read job {job_id!r} at {path} "
+                f"minion-monitoring: unable to read job {job_id!r} at {path} "
                 f"({type(error).__name__})",
                 file=sys.stderr,
                 flush=True,
@@ -2355,7 +2356,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return dump_job(options.dump_job)
     monitor = Watchdog(options)
     print(
-        "agent-watchdog: "
+        "minion-monitoring: "
         f"poll={options.poll_secs}s stall={options.stall_secs}s "
         f"resume={options.resume_secs}s gone-polls={options.gone_polls} "
         f"gone-detect={int(options.gone_enabled)} tmux={int(monitor.have_tmux)} "
@@ -2393,7 +2394,7 @@ if __name__ == "__main__":
         crash_path = _write_crash_log(traceback.format_exc())
         location = str(crash_path) if crash_path else "unavailable"
         print(
-            f"agent-watchdog: uncaught exception traceback written to {location}",
+            f"minion-monitoring: uncaught exception traceback written to {location}",
             file=sys.stderr,
             flush=True,
         )
