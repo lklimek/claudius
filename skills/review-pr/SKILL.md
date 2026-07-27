@@ -54,7 +54,7 @@ Run all three; at most one finding per axis-trigger (per promise on Axis 2). Ver
 
 Trigger hints give `risk`/`impact` float ranges (the only severity fields a producer emits — the coordinator computes `overall_severity` and the integer band). Cross-check the rubric and band table in `claudius:severity`, including its blast-radius definition of `scope`. Never hand-type a severity label.
 
-**Pass C `scope` rule**: promise *mismatches* on axes 1–3 get `scope=1.0` — a genuine full-PR blast radius (reviewer trust across the whole change; the gap is by definition about THIS PR's diff), not a lazy default. The two *informational* findings — "PR self-description verified" and "PR body unparseable" — describe no actionable diff work, so they use `scope=0.0` instead (mirroring `check-pr-comments`' RESOLVED convention), letting their low floats derive to INFO/LOW as intended; pinning them at `1.0` would push both a band too high.
+**Pass C `scope` exception**: promise *mismatches* on axes 1–3 get `scope=1.0` — a genuine full-PR blast radius (reviewer trust across the whole change; the gap is by definition about THIS PR's diff), not a lazy default. The two *informational* findings — "PR self-description verified" and "PR body unparseable" — describe no actionable diff work, so they use `scope=0.0` instead (mirroring `check-pr-comments`' RESOLVED convention), letting their low floats derive to INFO/LOW as intended; pinning them at `1.0` would push both a band too high.
 
 #### Axis 1 — Title ↔ diff
 
