@@ -1,6 +1,6 @@
 ---
 name: merge-base
-description: Use for merging base into feature branch with conflict resolution.
+description: "This skill should be used when the user asks to \"merge the base branch\", \"update this feature branch from base\", or resolve conflicts while merging base into a feature branch."
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git *), Bash(gh pr view *)
 ---
 

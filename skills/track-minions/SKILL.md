@@ -1,6 +1,6 @@
 ---
 name: track-minions
-description: "Use to track delegated and multi-step work in a durable store that survives context loss — before spawning agents, while a multi-task wave is in flight, and after compaction or any context loss to recover pending work. Applies to solo, delegated, and multi-agent work alike."
+description: "This skill should be used when tracking delegated or multi-step work in a durable store that survives context loss — before spawning agents, while a multi-task wave is in flight, and after compaction or other context loss to recover pending work. It applies to solo, delegated, and multi-agent work alike."
 ---
 
 # Track Minions

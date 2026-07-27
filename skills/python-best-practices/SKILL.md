@@ -1,6 +1,6 @@
 ---
 name: python-best-practices
-description: "Python best practices — PEP 8, type hints, testing, error handling, code quality tools. Use when writing, reviewing, or discussing Python code."
+description: "This skill should be used when writing, reviewing, or discussing Python code — PEP 8, type hints, testing, error handling, and code quality tooling."
 allowed-tools: Read
 ---
 

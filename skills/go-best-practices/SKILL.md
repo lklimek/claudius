@@ -1,6 +1,6 @@
 ---
 name: go-best-practices
-description: "Go best practices — idioms, error handling, concurrency, testing patterns. Use when writing, reviewing, or discussing Go code."
+description: "This skill should be used when writing, reviewing, or discussing Go code — idioms, error handling, concurrency, and testing patterns."
 allowed-tools: Read
 ---
 

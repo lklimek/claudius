@@ -1,6 +1,6 @@
 ---
 name: git-and-github
-description: Invoke for all git and gh commands, GitHub interactions. Solves git and gh access / permission denied issues.
+description: "This skill should be used when running git or gh commands, interacting with GitHub, or resolving git and gh access or permission-denied failures."
 ---
 
 # GitHub Workflow

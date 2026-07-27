@@ -1,6 +1,6 @@
 ---
 name: triage-findings
-description: Use for interactive browser-based triage of review findings. Only invoke when explicitly requested.
+description: "This skill should be used when the user explicitly asks to \"triage findings\" through an interactive browser-based workflow. Only invoke when explicitly requested."
 user-invocable: true
 argument-hint: path/to/report.json
 allowed-tools: Read, Write, Edit, Bash(*validate_report.py *), Bash(*triage_server.py *), Bash(fuser -k */tcp), Glob, Grep

@@ -1,6 +1,6 @@
 ---
 name: workflow-simplified
-description: "Use for bug fixes or small-to-medium changes (≤1000 LOC): one high-capability agent runs plan → TDD tests → implement → self-review/self-fix loop end-to-end, WHAT-not-HOW brief, unattended."
+description: "This skill should be used when handling a bug fix or small-to-medium change of no more than 1000 LOC. One high-capability agent runs plan → TDD tests → implementation → self-review/self-fix end-to-end from a WHAT-not-HOW brief, unattended."
 ---
 
 # Simplified Workflow

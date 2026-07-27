@@ -1,6 +1,6 @@
 ---
 name: workflow-feature
-description: "Use for new projects, features, or major refactoring. Phases: Planning (Req→UX→Test Spec→Dev Plan) → Implementation → QA → Lessons Learned. Auto-retry on failure, unattended."
+description: "This skill should be used when the user asks to \"build a new project\", \"add a feature\", or perform a major refactoring. It runs Planning (Req→UX→Test Spec→Dev Plan) → Implementation → QA → Lessons Learned, with unattended auto-retry on failure."
 ---
 
 # Feature Workflow

@@ -1,6 +1,6 @@
 ---
 name: push
-description: "Commit, push, and create PR. Auto-creates feature branch if on base. Use when user wants to commit and push, create a PR, ship work, send changes upstream, open a pull request, or publish a branch."
+description: "This skill should be used when the user asks to \"commit and push\", \"create a PR\", \"ship this\", \"send changes upstream\", \"open a pull request\", or \"publish this branch\". It commits, pushes, creates a PR, and automatically creates a feature branch when currently on a base branch."
 user-invocable: true
 allowed-tools: ["Bash", "Read", "Grep", "Glob"]
 ---

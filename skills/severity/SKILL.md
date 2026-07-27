@@ -1,6 +1,6 @@
 ---
 name: severity
-description: Use when rating findings in reviews, audits, and assessments. Preloaded on finding-producing agents.
+description: "This skill should be used when rating findings in reviews, audits, and assessments. Preloaded on finding-producing agents."
 ---
 
 # Severity Classification

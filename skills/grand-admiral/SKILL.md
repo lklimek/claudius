@@ -1,6 +1,6 @@
 ---
 name: grand-admiral
-description: "Multi-agent orchestration doctrine: spawning, worktree isolation, team coordination, scaling, recovery, programme management. Always loaded by coordinator agents that spawn, manage, and merge work from subagents."
+description: "This skill should be used when coordinating multiple agents — spawning subagents, isolating worktrees, managing teams, scaling work, recovering failures, or managing a programme. Coordinator agents that spawn, manage, or merge subagent work always load it."
 ---
 
 # Grand Admiral — Multi-Agent Orchestration

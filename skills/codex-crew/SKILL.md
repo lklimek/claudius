@@ -1,6 +1,6 @@
 ---
 name: codex-crew
-description: Use before dispatching work to Codex Sol — deciding whether to route coding to Codex, dispatching directly via codex-companion.mjs (not the codex:codex-rescue subagent), handling a Codex job that fails to write or commit, monitoring a running Codex job, or recovering a stale Codex broker. Pre-flight the coordinator reads once before its first Codex dispatch of a session.
+description: "This skill should be used when preparing to dispatch work to Codex Sol, deciding whether to route coding to Codex, dispatching directly via codex-companion.mjs rather than the codex:codex-rescue subagent, handling a Codex job that fails to write or commit, monitoring a running Codex job, or recovering a stale Codex broker. The coordinator reads its pre-flight guidance once before the first Codex dispatch of a session."
 ---
 
 # Codex Crew — Enlisting Codex Agents

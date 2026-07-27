@@ -1,6 +1,6 @@
 ---
 name: bug-investigation
-description: Use when investigating a reported bug, diagnosing a failure, or doing root-cause analysis — especially before concluding "not a bug", tracing a symptom, or explaining unexpected behavior. Preloaded on investigation agents.
+description: "This skill should be used when investigating a reported bug, diagnosing a failure, or performing root-cause analysis — especially before concluding \"not a bug\", tracing a symptom, or explaining unexpected behavior. Preloaded on investigation agents."
 user-invocable: true
 ---
 
