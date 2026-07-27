@@ -186,7 +186,7 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `severity` | Consistent severity classification (CRITICAL-INFO) for review findings |
 | `triage-findings` | Interactive finding triage -- classify in browser, decisions feed back to Claude |
 | `workflow-feature` | Full workflow for new features or major refactoring |
-| `workflow-simplified` | Lighter workflow for bug fixes or small changes |
+| `workflow-simplified` | Single-agent plan/TDD/implement/self-review loop for bug fixes or small-to-medium changes (≤1000 LOC) |
 
 ## Evaluated Skills
 

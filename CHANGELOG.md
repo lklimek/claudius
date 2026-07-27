@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-07-27
+
+### Changed
+
+- **`workflow-simplified` skill, rewritten**: replaced the 4-phase multi-agent pipeline (Requirements/UX → Test Spec → Dev Plan → Implementation → QA trio → Lessons Learned) with a single high-capability agent (Codex Sol, `opus`, or `fable`) running the full mini-lifecycle unattended: plan → TDD tests → implement → self-review → self-fix, looping the review/fix step until a pass finds nothing new (capped at 5 passes). Briefed WHAT (goal + acceptance criteria), never HOW, per `grand-admiral` § Development-Work Delegation. Drops the separate Marvin/Smythe/Adams QA fan-out in favor of the same agent's own general self-review (not `grumpy-review`). Threshold raised from ≤200 lines to ≤1000 LOC. `grand-admiral`'s Skills Reference catalog entry updated to match.
+
 ## [6.0.0] - 2026-07-27
 
 ### Removed
