@@ -8,8 +8,8 @@ Codex CLI supports three sandbox modes:
 
 | Mode | Behavior |
 |---|---|
-| `read-only` (default / review) | No writes; used for review/diagnosis runs. |
-| `workspace-write` | Writes allowed under cwd + configured `writable_roots`; network disabled unless `network_access = true`. Used for any `--write` `task` dispatch, direct or via `codex:codex-rescue`. |
+| `read-only` (default / review) | No writes; review/diagnosis runs. |
+| `workspace-write` | Writes under cwd + configured `writable_roots`; network disabled unless `network_access = true`. Used for any `--write` `task` dispatch. |
 | `danger-full-access` | No sandbox. Not used by claudius dispatch. |
 
 ## `workspace-write` Config (this host)
@@ -27,31 +27,30 @@ writable_roots = ["/data/git-worktrees", "/data/tmp", "/data/artifacts", "/data/
 network_access = true
 ```
 
-The first `writable_roots` entry should track `$CLAUDIUS_WORKTREE_ROOT` when the configured worktree root changes.
-
-- `writable_roots` **adds** to the always-writable workspace root (cwd). It makes `/data` worktrees, scratch, and the shared cargo target dir (`/data/target`) writable and lets tests reach the network.
-- `network_access = true` unblocks localhost test sockets (e.g. a test server) — it also enables general outbound network, the tradeoff `workspace-write` disables by default.
-- The `# Self-commit scope (repo .git) intentionally NOT added yet` comment is now known to be misleading as an explanation for commit behavior (see below) — kept here verbatim since it's still the live config text, but don't treat it as proof commit is blocked.
+- The first `writable_roots` entry should track `$CLAUDIUS_WORKTREE_ROOT` when the configured worktree root changes.
+- `writable_roots` **adds** to the always-writable workspace root (cwd): `/data` worktrees, scratch, and the shared cargo target dir (`/data/target`).
+- `network_access = true` unblocks localhost test sockets — and also enables general outbound network, the tradeoff `workspace-write` disables by default.
+- The `# Self-commit scope ... NOT added yet` comment is misleading as an explanation of commit behavior (see below) — kept verbatim as live config text, but not proof commit is blocked.
 - Validate any change with `codex --strict-config doctor` (hard-errors on unknown fields). Keep a timestamped backup of `config.toml` before editing.
 
-## Git Commit in a Linked Worktree — Status (updated 2026-07-16)
+## Git Commit in a Linked Worktree — Status
 
-**Confirmed inconsistent — both outcomes observed the same day (2026-07-16), same repo.** Dispatch 1: Codex successfully ran `git add` + `git commit` inside a linked worktree (`/data/git-worktrees/home-ubuntu-git-claudius-watchdog-fixes`) — commit `f2639aa`, independently verified via `git log`/`git show` afterward, no approval prompt. Dispatch 2, a different worktree (`/data/git-worktrees/home-ubuntu-git-claudius-codex-diag`) later the same day: `git add` failed outright with `fatal: Unable to create '.../index.lock': Read-only file system` — the exact historical error below. The coordinator committed on Codex's behalf instead (`7c2d3e8`).
+**Confirmed inconsistent — both outcomes observed the same day, same repo.** Dispatch 1: Codex ran `git add` + `git commit` in a linked worktree successfully (commit `f2639aa`, verified via `git log`/`git show`, no approval prompt). Dispatch 2, a different worktree later that day: `git add` failed with `fatal: Unable to create '.../index.lock': Read-only file system` — the exact historical error below — and the coordinator committed instead (`7c2d3e8`).
 
-`writable_roots` was unchanged across both dispatches and still excludes the repo `.git` — so `writable_roots` is not the lever, and whatever gates this isn't a static per-repo setting (both dispatches targeted the same repo, same day). Working theory: `approval_policy = "on-request"` combined with the project's `trust_level = "trusted"` entry (`[projects."<repo>"] trust_level = "trusted"`) sometimes auto-approves the escalated git-metadata write and sometimes doesn't — not independently confirmed against the actual mechanism. **Don't treat a successful Codex commit as evidence the fallback is no longer needed** — the very next dispatch can still hit the old block.
+`writable_roots` was unchanged across both and still excludes the repo `.git`, so it is not the lever, and the gate isn't a static per-repo setting. Working theory: `approval_policy = "on-request"` plus the project's `trust_level = "trusted"` entry (`[projects."<repo>"] trust_level = "trusted"`) sometimes auto-approves the escalated git-metadata write — not independently confirmed. **A successful Codex commit is NOT evidence the fallback is no longer needed** — the very next dispatch can hit the old block.
 
-**Pattern:** it's fine to instruct Codex to run its own `git add`/`git commit` as the final dispatch step (with an explicit, well-formed commit message — it doesn't know your commit conventions unless given them), but always verify independently afterward (`git -C <worktree> log`/`git status`) rather than trusting Codex's self-report, and be ready to commit yourself when it didn't land. Pushing remains the coordinator's job regardless of who committed, and still requires explicit user authorization.
+**Pattern:** instruct Codex to run its own `git add`/`git commit` as the final dispatch step (with an explicit, well-formed commit message — it doesn't know the project's conventions unless given them), then verify independently (`git -C <worktree> log`/`git status`) rather than trusting Codex's self-report, and commit yourself when it didn't land. Pushing remains the coordinator's job regardless of who committed, and still requires explicit user authorization.
 
-**When commit fails:** symptom is a job `errorMessage` like *"the sandbox prevented creating the requested commit because the worktree's Git metadata is read-only"*, or a git error about being unable to create `index.lock` under the main repo's external `.git`. This is a routine, expected outcome, not a sign of a special regression — coordinator-commits: Codex writes files only, the coordinator (unsandboxed) runs `git -C <worktree> add -A && git -C <worktree> commit -m ...`.
+**When commit fails:** symptom is a job `errorMessage` like *"the sandbox prevented creating the requested commit because the worktree's Git metadata is read-only"*, or a git error about `index.lock` under the main repo's external `.git`. Routine and expected, not a regression — the coordinator commits: Codex writes files only; the coordinator (unsandboxed) runs `git -C <worktree> add -A && git -C <worktree> commit -m ...`.
 
-### Historical mechanics (why it was blocked before — kept for troubleshooting the fallback case)
+### Historical mechanics (why it was blocked before — for troubleshooting the fallback case)
 
-Two stacked restrictions were previously confirmed across sessions:
+Two stacked restrictions were previously confirmed:
 
-1. **Path allowlist.** A linked worktree created by `git worktree add <worktree-root>/foo` from main repo `/home/ubuntu/git/<repo>` stores its per-worktree git metadata (HEAD, index, refs) under the **main repo's** `.git/worktrees/foo/`, and objects under the main repo's `.git/objects/`. Those paths are outside the sandbox's writable set, so `git commit` (which writes `index.lock`, refs, objects there) would be rejected under a strict path allowlist alone.
-2. **Git-metadata block.** A separate read-only block on git metadata was observed to apply even when the path was writable — at the time, widening `writable_roots` to include the repo `.git` was not considered a reliable fix.
+1. **Path allowlist.** A linked worktree created by `git worktree add <worktree-root>/foo` from main repo `/home/ubuntu/git/<repo>` stores its git metadata (HEAD, index, refs) under the **main repo's** `.git/worktrees/foo/`, and objects under the main repo's `.git/objects/` — outside the sandbox's writable set, so `git commit` (which writes `index.lock`, refs, objects there) is rejected under a strict path allowlist alone.
+2. **Git-metadata block.** A separate read-only block on git metadata was observed even when the path was writable — widening `writable_roots` to include the repo `.git` was not considered a reliable fix.
 
-If the fallback triggers, these are the mechanics to investigate first.
+If the fallback triggers, investigate these mechanics first.
 
 ## On-Disk Job State (for Monitoring)
 
@@ -65,27 +64,27 @@ state/<workspace-slug>-<hash>/
   jobs/<job-id>.log      # streamed progress + final result / error text
 ```
 
-Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `completed` | `failed`), `phase`, `errorMessage`, `startedAt`, `completedAt`, `workspaceRoot`, `logFile`, `pid`, `result`. `pid` is `null` for some job classes (running inside the shared app-server), but `task-worker`-class jobs (spawned as `codex-companion.mjs task-worker --cwd <dir> --job-id <id>`) carry a real, independently verifiable `pid` — cross-check with `ps -p <pid>` or `/proc/<pid>`; a populated `pid` with no matching process means the Codex engine crashed silently while `status` stays stuck at `"running"` forever (the record is never updated on crash). `result.rawOutput` is the full final report text — read it directly instead of waiting for the wrapper agent to relay it, and `result.touchedFiles` lists the worktree/files the job actually edited.
+Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `completed` | `failed`), `phase`, `errorMessage`, `startedAt`, `completedAt`, `workspaceRoot`, `logFile`, `pid`, `result`. `pid` is `null` for some job classes (running inside the shared app-server), but `task-worker`-class jobs (spawned as `codex-companion.mjs task-worker --cwd <dir> --job-id <id>`) carry a real pid — cross-check with `ps -p <pid>` or `/proc/<pid>`; a populated `pid` with no matching process means the Codex engine crashed silently while `status` stays stuck at `"running"` forever (the record is never updated on crash). `result.rawOutput` is the full final report text — read it directly; `result.touchedFiles` lists what the job actually edited.
 
-**One-shot lookup by job id**: `scripts/minion-monitoring.py --dump-job <job-id>` searches every known workspace's `jobs/<job-id>.json` directly (no team/session/worktree setup needed) and prints the full record — including `result.rawOutput`/`result.touchedFiles` — then exits. Prefer this over hand-rolling the `python3 -c "..."` read yourself; it's tested and handles the not-found and malformed-record cases cleanly (exit 1, clear stderr, no traceback).
+**One-shot lookup by job id**: `scripts/minion-monitoring.py --dump-job <job-id>` searches every known workspace's `jobs/<job-id>.json` (no team/session/worktree setup) and prints the full record — including `result.rawOutput`/`result.touchedFiles` — then exits. Prefer it over a hand-rolled `python3 -c "..."` read; it's tested and handles not-found and malformed records cleanly (exit 1, clear stderr, no traceback).
 
-**Memory discipline (long sessions).** The watchdog polls repeatedly. Do **not** parse `state.json` per poll — it embeds every job and grows over the session. Instead:
+**Memory discipline (long sessions).** Do **not** parse `state.json` per poll — it embeds every job and grows over the session. Instead:
 
 - Use the newest mtime under `jobs/` (or `state.json`'s mtime) as the cheap **activity clock**.
-- Parse an individual `jobs/<id>.json` only when its mtime advanced since the last poll, and extract only the few fields above.
+- Parse an individual `jobs/<id>.json` only when its mtime advanced since the last poll; extract only the few fields above.
 - Keep a bounded per-job last-seen map (`job-id → {status, mtime}`), never accumulated JSON.
 
-For a direct dispatch, `workspaceRoot` is exactly the `--cwd` passed to `task` — map a monitored worktree to its state dir directly by that path. (Only the interactive `codex:codex-rescue` path, which never passes `--cwd`, has `workspaceRoot` instead reflect the *dispatching session's* cwd, not necessarily the worktree the job was told to `cd` into — if several such dispatches share one session cwd, match each to its request by `startedAt` proximity and `result.touchedFiles`, never by `sessionId`, which each carries independently and unpredictably.) `status: failed` with an `errorMessage` is the signal to surface — that is exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure path above) that otherwise goes unnoticed.
+For a direct dispatch, `workspaceRoot` is exactly the `--cwd` passed to `task` — map a monitored worktree to its state dir by that path. (Only the interactive `codex:codex-rescue` path, which never passes `--cwd`, has `workspaceRoot` reflect the *dispatching session's* cwd instead — if several such dispatches share one session cwd, match each to its request by `startedAt` proximity and `result.touchedFiles`, never by `sessionId`, which each carries independently and unpredictably.) `status: failed` with an `errorMessage` is the signal to surface — exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure above) that otherwise goes unnoticed.
 
-`codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal when not going through the companion's job state.
+`codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal outside the companion's job state.
 
 ## Harness Kills of a Backgrounded Task
 
-A `codex-companion.mjs task --write --background` run launched via a `run_in_background` Bash call can be killed by the harness mid-run — confirmed via a tmux pane reading `Background command ... was stopped`. Nothing reports it automatically, whether dispatched directly or via `codex:codex-rescue`: the `--background` flag already detaches and returns immediately, so nobody is polling the background task once it's queued. **Silence is not evidence of health.**
+A `codex-companion.mjs task --write --background` run launched via a `run_in_background` Bash call can be killed by the harness mid-run — confirmed via a tmux pane reading `Background command ... was stopped`. Nothing reports it automatically: `--background` detaches and returns immediately, so nobody is polling the task once queued. **Silence is not evidence of health.**
 
-- **Detect it coordinator-side.** Periodically read the job's actual log content (`jobs/<job-id>.log`) and inspect the tmux pane directly. Do not infer health from `status` alone — it can sit at `running` after the process is gone.
+- **Detect it coordinator-side.** Periodically read the job's log (`jobs/<job-id>.log`) and inspect the tmux pane. Don't infer health from `status` alone — it can sit at `running` after the process is gone.
 - **On-disk edits survive.** Files Codex already wrote stay written; the work is partial, not lost.
-- **Resume, don't restart.** Redispatch with `--resume-last` to continue from the surviving state instead of redoing completed edits from scratch.
+- **Resume, don't restart.** Redispatch with `--resume-last` to continue from the surviving state.
 
 ## Broker Recovery
 
@@ -102,4 +101,4 @@ rm -rf /tmp/cxc-<id>
 # 3. Redispatch — a fresh broker binds automatically
 ```
 
-Prefer namespacing/avoiding worktree remove+recreate at an identical path during an active session; when unavoidable, recover the broker first.
+Avoid worktree remove+recreate at an identical path during an active session; when unavoidable, recover the broker first.
