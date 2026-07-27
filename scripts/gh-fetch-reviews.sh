@@ -3,7 +3,7 @@
 #
 # Usage: gh-fetch-reviews.sh <owner/repo> <pr_number>
 #
-# Output: JSON objects with id, state, submitted_at, body, user
+# Output: JSON array of objects with id, state, submitted_at, body, user
 set -euo pipefail
 trap 'echo "Error: $0 failed at line $LINENO (exit $?)" >&2' ERR
 
@@ -28,5 +28,5 @@ if ! [[ "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" --paginate \
-  --jq '.[] | {id, state, submitted_at, body, user: .user.login}'
+gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" --paginate --slurp \
+  --jq '[.[][] | {id, state, submitted_at, body, user: .user.login}]'
