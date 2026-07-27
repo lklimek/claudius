@@ -1,7 +1,7 @@
 ---
 name: grumpy-review
 description: "Parallel-agent code review for quality, security, dependencies, and docs. Use for reviews, audits, or quality assessments. Produces deduplicated severity-ranked report."
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Agent, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Bash(mv *), Agent, SendMessage, TaskStop
 ---
 
 # Code Review Methodology
@@ -19,11 +19,21 @@ Keep the Claudius/Skippy persona — sarcastic superiority, theatrical sighs, dr
 ```bash
 # If reviewing a branch
 BASE_BRANCH=<main-branch>
-git log $BASE_BRANCH..HEAD --oneline
-git diff $BASE_BRANCH...HEAD --stat
+git rev-parse --verify "$BASE_BRANCH" >/dev/null 2>&1 || BASE_BRANCH="origin/$BASE_BRANCH"
+git log "${BASE_BRANCH}..HEAD" --oneline
+git diff "${BASE_BRANCH}...HEAD" --stat
 
 # If reviewing specific paths
-git diff $BASE_BRANCH...HEAD -- <paths>
+git diff "${BASE_BRANCH}...HEAD" -- <paths>
+```
+
+Before spawning reviewers, choose one collision-resistant scratch directory for all producer and intermediate output. Include a session-specific suffix even when the PR number is known; two coordinators may review the same PR concurrently:
+
+```bash
+REVIEW_KEY=<PR-number-or-branch>
+SESSION_FRAGMENT=<current-session-id-fragment>
+SCRATCH_DIR="/data/tmp/grumpy-${REVIEW_KEY}-${SESSION_FRAGMENT}"
+mkdir -p "$SCRATCH_DIR"
 ```
 
 Assess scale:
@@ -82,6 +92,8 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 5. **UX/DX lens**: assess how findings affect end-user workflows and developer experience, not just code correctness
 6. **CI context**: when MemCan/WebSearch are unavailable (e.g., CI), instruct: "Do not use memcan tools or WebSearch/WebFetch."
 7. **File output**: use the Write tool for creating files — never `cat > file` or heredoc redirections
+8. **Full roster**: list every teammate name, role/focus, and file scope in this fan-out, including conditional and scaled reviewers; state that all listed peers are already live so agents do not pause to ask or spawn duplicates
+9. **Cross-domain hints**: passively report any issue noticed in a peer's primary domain rather than hunting outside the assigned scope, silently duplicating it, or omitting it; tag the finding with `cross_domain_hint: "<peer-role>"` so consolidation can weigh the overlap
 
 ### Finding format (JSON)
 
@@ -116,11 +128,23 @@ Agents MUST write findings to the specified file path as a JSON array of `findin
 
 **Required finding fields**: `id`, `risk`/`impact`/`scope` (floats 0.0–1.0), `title`, `location`, `description`, `recommendation`. See `claudius:severity` for the OWASP-normalized recipes producing the float trio and the band table the coordinator uses to derive integer `severity`. Rate `scope` as real blast radius per `claudius:severity` — never default it to `1.0`. The float trio is the single source of truth; never hand-type a severity label.
 
-**Optional**: `tags`, `impact_description` (Markdown impact narrative; the numeric `impact` float is separate), `code_snippets` (only when you captured the exact source during analysis — never invent one).
+**Optional**: `tags`, `impact_description` (Markdown impact narrative; the numeric `impact` float is separate), `code_snippets` (only when you captured the exact source during analysis — never invent one), `cross_domain_hint` (a peer role whose primary domain owns an issue noticed incidentally; never actively search that domain).
 
-**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, `merge_class`, `intent_basis`, and the derived integer `severity` when emitting floats. `risk`/`impact`/`scope` are required — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
+**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, any `metadata`/`commit`/`repository`/`date`/`branch` field, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, `merge_class`, `intent_basis`, and the derived integer `severity` when emitting floats. `risk`/`impact`/`scope` are required — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 
-**Metadata**: emit `metadata.commit` as the full 40-character SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` when the branch has no upstream — use the pushed commit so permalinks resolve on GitHub; not `--short`); omit when not in a git repo. The coordinator derives `metadata.repository` from `git remote get-url origin` — producers do not emit it.
+**Metadata is coordinator-owned**: producers emit only the bare `finding_section[]` array, with no envelope object or metadata fields. The coordinator resolves the full 40-character commit SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` when the branch has no upstream) and supplies commit/date/branch/project through `prepare --metadata`; `prepare` derives repository metadata from `--repo-root`.
+
+Include this contract, with the actual roster and output path substituted, in every producer spawn prompt:
+
+```text
+Deployed peers (all already live; do not ask whether they are running):
+- <teammate-name> — <reviewer role/focus> — <file scope>
+- <teammate-name> — <reviewer role/focus> — <file scope>
+
+Write ONLY the bare finding_section[] JSON array to <SCRATCH_DIR>/<role>-findings.json. Do not add an envelope object or any metadata/commit/repository/date/branch field; the coordinator supplies metadata separately through consolidate_reports.py prepare --metadata. Do NOT run consolidate_reports.py yourself and do NOT pre-assemble report.json shape; the coordinator does that.
+Before writing, check whether the target already exists. If it is not your own in-progress output, preserve it as <role>-findings.PRE-COLLISION.json before writing; never overwrite another session's output silently.
+Passively tag an incidentally noticed peer-domain issue with cross_domain_hint: "<peer-role>"; do not actively search outside your assigned scope.
+```
 
 **ID prefixes**: `SEC-` security, `PROJ-` project, `QA-`/`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` code quality (jointly owned by `project-reviewer-adams` and `qa-engineer-marvin` — see `report-format`'s ID-prefix table; prefix reflects finding category/language, not agent identity), `DOC-` docs, `CALL-` call-tree. Agents assign provisional sequential IDs within their prefix (e.g., `SEC-001`, `SEC-002`); collisions across parallel agents are fine — consolidation (5c) deduplicates and reassigns final IDs.
 
@@ -143,7 +167,7 @@ Skip the walk for pure additions, doc-only PRs, and changes confined to test fil
 After each agent emits findings, run the dumb ephemeral-ID lint against the diff:
 
 ```bash
-git diff $BASE_BRANCH...HEAD | python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --diff
+git diff "${BASE_BRANCH}...HEAD" | python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --diff
 ```
 
 For each hit, judge genuine violation vs quoted/escaped example (a code fence demonstrating the rule, a test fixture asserting it, this lint's own docstring). Dismiss in-skill examples; promote genuine violations to `code_quality` findings with `tags: ["ephemeral-id-reference"]` and ID prefix `CODE-` (coordinator-assigned). The lint always exits 0 — judgement is yours.
@@ -174,11 +198,11 @@ Flatten all agent reports, detect duplicate candidates, scan for INTENTIONAL com
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py prepare \
-    security-engineer:${TMPDIR:-/tmp}/security-findings.json \
-    project-reviewer:${TMPDIR:-/tmp}/project-findings.json \
-    qa-engineer:${TMPDIR:-/tmp}/qa-findings.json \
+    security-engineer:"$SCRATCH_DIR"/security-findings.json \
+    project-reviewer:"$SCRATCH_DIR"/project-findings.json \
+    qa-engineer:"$SCRATCH_DIR"/qa-findings.json \
     --repo-root $(git rev-parse --show-toplevel) \
-    --output ${TMPDIR:-/tmp}/intermediate.json \
+    --output "$SCRATCH_DIR"/intermediate.json \
     --metadata '{"project":"...","date":"...","branch":"...","commit":"..."}'
 ```
 
@@ -195,6 +219,23 @@ Read `intermediate.json` and decide:
 5. **Merge sections**: combine same-category agent sections into unified sections.
 6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding.
 7. **Agent stats**: record per-agent unique vs redundant counts.
+
+For reviews above roughly 30 raw findings, generate `merged-findings.json` with a small Python helper instead of transcribing the entire document by hand. Shallow-copy every untouched raw finding dict verbatim so all fields survive; hand-author text only for true duplicate clusters, with an inline comment explaining each merge decision. This makes the diff show exactly what was merged and why. For example:
+
+```python
+from json import loads
+from pathlib import Path
+raw = [dict(f) for f in loads(Path("intermediate.json").read_text())["raw_findings"]]
+cluster = {("security", "SEC-001"), ("qa", "QA-003")}
+# Merge: both findings describe the same unchecked parser failure.
+base, peer = (next(f for f in raw if (f["agent"], f["original_id"]) == key) for key in cluster)
+merged = dict(base)
+merged.update(description="Hand-authored merged text.", tags=sorted(set(base.get("tags", []) + peer.get("tags", []))), code_snippets=base.get("code_snippets", []) + peer.get("code_snippets", []))
+findings = [f for f in raw if (f["agent"], f["original_id"]) not in cluster]
+findings.append(merged)
+```
+
+Wrap the resulting `findings` into the sectioned `merged-findings.json` shape below; keep the helper in the scratch directory so its merge decisions remain auditable.
 
 Write the result as `merged-findings.json`:
 
@@ -238,6 +279,10 @@ python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR
 ```
 
 Produces `report.md` next to the JSON file.
+
+### 5f. Stop reviewer processes
+
+After every reviewer output has been read and consolidation is complete, run `TaskStop` once for each spawned teammate using its bare name, including teammates already marked inactive. Do not assume agent completion tears down the tmux-backend process.
 
 ## 6. Iterate if Needed
 
