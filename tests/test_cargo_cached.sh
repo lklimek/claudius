@@ -47,6 +47,9 @@
 #   K40 transient metadata failure -> retry succeeds and cargo runs isolated
 #   K41 auto-isolated build log    -> records the isolated target dir
 #   K42 explicit target build log  -> warns wrapper isolation was not used
+#   K43 Claude Code session env     -> preferred ledger session identity
+#   K44 Claude session env fallback -> ledger session identity remains attributable
+#   K45 no session env              -> ledger records "unknown", never empty
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -839,6 +842,43 @@ if [ "$RC" = 0 ] && [ -f "$log42" ] \
   ok "K42 explicit target build log distinguishes caller selection from isolation"
 else
   bad "K42 (rc=$RC log='$log42' out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K43: Claude Code session identity takes precedence in ledger records ==="
+K43CACHE="$WORK/cache-k43"
+OUT=$( cd "$REPO" && CLAUDIUS_CACHE_DIR="$K43CACHE" CLAUDIUS_FORCE=1 \
+       CLAUDE_CODE_SESSION_ID="code-session" CLAUDE_SESSION_ID="claude-session" \
+       env PATH="$STUBDIR:$PATH" "$BASHBIN" "$WRAPPER" build 2>&1 ); RC=$?
+session43=$(tail -1 "$K43CACHE/ledger/records.jsonl" | jq -r '.session')
+if [ "$RC" = 0 ] && [ "$session43" = "code-session" ]; then
+  ok "K43 preferred Claude Code session identity recorded"
+else
+  bad "K43 (rc=$RC session='$session43' out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K44: documented Claude session identity remains a supported fallback ==="
+K44CACHE="$WORK/cache-k44"
+OUT=$( cd "$REPO" && env -u CLAUDE_CODE_SESSION_ID PATH="$STUBDIR:$PATH" \
+       CLAUDIUS_CACHE_DIR="$K44CACHE" CLAUDIUS_FORCE=1 \
+       CLAUDE_SESSION_ID="claude-session" \
+       "$BASHBIN" "$WRAPPER" build 2>&1 ); RC=$?
+session44=$(tail -1 "$K44CACHE/ledger/records.jsonl" | jq -r '.session')
+if [ "$RC" = 0 ] && [ "$session44" = "claude-session" ]; then
+  ok "K44 documented Claude session identity recorded"
+else
+  bad "K44 (rc=$RC session='$session44' out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K45: missing session identity is explicit rather than empty ==="
+K45CACHE="$WORK/cache-k45"
+OUT=$( cd "$REPO" && env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_SESSION_ID \
+       PATH="$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K45CACHE" CLAUDIUS_FORCE=1 \
+       "$BASHBIN" "$WRAPPER" build 2>&1 ); RC=$?
+session45=$(tail -1 "$K45CACHE/ledger/records.jsonl" | jq -r '.session')
+if [ "$RC" = 0 ] && [ "$session45" = "unknown" ]; then
+  ok "K45 missing session identity recorded as unknown"
+else
+  bad "K45 (rc=$RC session='$session45' out='${OUT//$'\n'/ }')"
 fi
 
 echo ""

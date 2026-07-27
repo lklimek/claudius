@@ -1759,6 +1759,48 @@ def test_direct_workspace_surfaces_jobs_from_multiple_foreign_sessions(
     ]
 
 
+def test_worktree_session_filter_excludes_unrelated_workspace_jobs(
+    tmp_path: Path,
+) -> None:
+    """An opt-in worktree slug prefix excludes sibling-session Codex jobs."""
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
+    selected = workspace(worktrees, "agent-session-one-rescue")
+    unrelated = workspace(worktrees, "agent-other-session-rescue")
+    _, env = codex_store(
+        tmp_path,
+        selected,
+        [{"id": "selected", "epoch": 100, "updatedAt": None}],
+        state_epoch=100,
+    )
+    codex_store(
+        tmp_path,
+        unrelated,
+        [{"id": "unrelated", "epoch": 100, "updatedAt": None}],
+        state_epoch=100,
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="coordinator-session",
+            projects_dir=tmp_path / "projects",
+            worktrees=worktrees,
+            worktrees_session_filter="agent-session-one",
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+
+    assert monitor.poll_once(now=200) == []
+    key = watchdog.resolve_workspace(selected, env).key
+    assert monitor.poll_once(now=201) == [
+        f"CODEX_STALL job=selected workspace={key} "
+        "idle=101s phase=running reason=no-progress"
+    ]
+
+
 def test_watchdog_poll_opt_in_source_b_stall_resume(tmp_path: Path) -> None:
     """Anonymous transcripts retain their opt-in stall/resume grammar."""
     home = tmp_path / "home"
@@ -2149,6 +2191,8 @@ def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
             "/projects",
             "--worktrees",
             "/worktrees",
+            "--worktrees-session-filter",
+            "project-session-",
             "--stall-secs",
             "10",
             "--resume-secs",
@@ -2169,6 +2213,7 @@ def test_cli_preserves_all_flags_and_defaults(tmp_path: Path) -> None:
     assert options.tasks_dir == Path("/tasks")
     assert options.projects_dir == Path("/projects")
     assert options.worktrees == Path("/worktrees")
+    assert options.worktrees_session_filter == "project-session-"
     assert (options.stall_secs, options.resume_secs, options.gone_polls) == (10, 2, 3)
     assert options.poll_secs == 1
     assert options.codex_job_recency_secs == 3600
