@@ -155,7 +155,7 @@ See [ghsudo on GitHub](https://github.com/lklimek/ghsudo) for full documentation
 
 ## Recommended Permissions
 
-The autonomous skills (`ci-dance`, `review-loop`, `review-dependency`, `review-pr`, `check-pr-comments`, `grumpy-review`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively -- which defeats the purpose of autonomous operation.
+The autonomous skills (`ci-dance`, `review-dependency`, `review-pr`, `check-pr-comments`, `grumpy-review`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively -- which defeats the purpose of autonomous operation.
 
 Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
 
@@ -180,7 +180,6 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `release` | Bump version (SemVer), update changelog, commit, push, and create GitHub release |
 | `report-format` | Unified review report format for all finding-producing agents |
 | `review-dependency` | Security-focused dependency update review |
-| `review-loop` | Autonomous peer review feedback loop |
 | `review-pr` | Audit and review pull requests |
 | `rust-best-practices` | Rust programming checklists (Microsoft Pragmatic + Rust API Guidelines) |
 | `security-best-practices` | OWASP-based secure programming checklists |
@@ -188,7 +187,6 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `triage-findings` | Interactive finding triage -- classify in browser, decisions feed back to Claude |
 | `workflow-feature` | Full workflow for new features or major refactoring |
 | `workflow-simplified` | Lighter workflow for bug fixes or small changes |
-| `workflow-trivial` | Minimal workflow for typos or single-line fixes |
 
 ## Evaluated Skills
 
