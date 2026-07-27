@@ -375,9 +375,10 @@ fi
 # target_dir + auto_isolated are recorded so a later replay banner reflects THIS
 # run's actual isolation state, not the (possibly different-checkout) replayer's.
 if [[ "$auto_isolated" == 1 ]]; then auto_isolated_json=true; else auto_isolated_json=false; fi
+ledger_session="${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-unknown}}"
 record=$(jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg key "$key" --arg cmd "$cmd_norm" \
   --arg head "$head_oid" --arg log "$logf" \
-  --argjson exit "$rc" --argjson dur "$dur" --arg sid "${CLAUDE_SESSION_ID:-}" \
+  --argjson exit "$rc" --argjson dur "$dur" --arg sid "$ledger_session" \
   --argjson fg "$fake_green_suspected" \
   --arg tgt "$effective_target_dir" --argjson autoiso "$auto_isolated_json" \
   '{ts:$ts,key:$key,cmd:$cmd,head:$head,exit:$exit,duration_s:$dur,fake_green_suspected:$fg,target_dir:$tgt,auto_isolated:$autoiso,log:$log,session:$sid}')

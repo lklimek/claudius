@@ -221,6 +221,7 @@ class Options:
         default_factory=lambda: Path.home() / ".claude" / "projects"
     )
     worktrees: Path = DEFAULT_WORKTREE_ROOT
+    worktrees_session_filter: str = ""
     watch_subagents: bool = False
     gone_enabled: bool = True
     gone_polls: int = 2
@@ -2008,7 +2009,13 @@ class Watchdog:
                 )
         try:
             source_c = sorted(
-                path for path in worktrees.iterdir() if _is_agent_worktree_dir(path)
+                path
+                for path in worktrees.iterdir()
+                if _is_agent_worktree_dir(path)
+                and (
+                    not self.options.worktrees_session_filter
+                    or path.name.startswith(self.options.worktrees_session_filter)
+                )
             )
         except OSError:
             source_c = []
@@ -2102,7 +2109,8 @@ class Watchdog:
 USAGE = """minion-monitoring.py -- edge-triggered minion stall monitor (silent when healthy)
 Usage: minion-monitoring.py [--dump-job ID] [--session-id ID] [--team-dir DIR]
                          [--tasks-dir DIR]
-                         [--projects-dir DIR] [--worktrees DIR] [--watch-subagents]
+                         [--projects-dir DIR] [--worktrees DIR]
+                         [--worktrees-session-filter PREFIX] [--watch-subagents]
                          [--no-gone] [--gone-polls N] [--stall-secs N]
                          [--resume-secs N] [--poll-secs N]
                          [--codex-job-recency-secs N]
@@ -2112,6 +2120,7 @@ agent's worktree/cwd. An idle agent owning no in_progress task is never flagged.
 team; precedence --team-dir > --session-id > $CLAUDE_SESSION_ID > newest autodetect.
 --dump-job ID prints every matching Codex job record once and exits.
 --worktrees precedence: flag > $CLAUDIUS_WORKTREE_ROOT > /data/git-worktrees.
+--worktrees-session-filter restricts worktree discovery to basename PREFIX.
 --codex-job-recency-secs defaults to 604800 (7 days); older job files are not parsed.
 Emits ONLY transition lines to stdout; diagnostics to stderr.
 """
@@ -2151,6 +2160,7 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
         "--tasks-dir",
         "--projects-dir",
         "--worktrees",
+        "--worktrees-session-filter",
         "--gone-polls",
         "--stall-secs",
         "--resume-secs",
@@ -2187,6 +2197,8 @@ def parse_args(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Opt
             options.projects_dir = Path(value)
         elif argument == "--worktrees":
             options.worktrees = Path(value)
+        elif argument == "--worktrees-session-filter":
+            options.worktrees_session_filter = value
         elif argument == "--gone-polls":
             options.gone_polls = _integer(argument, value)
         elif argument == "--stall-secs":
@@ -2363,6 +2375,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"session={options.session_id or '<auto>'} "
         f"team-dir={options.team_dir or '<auto>'} "
         f"tasks-dir={options.tasks_dir or '<auto>'} worktrees={options.worktrees} "
+        f"worktrees-filter={options.worktrees_session_filter or '<none>'} "
         f"watch-subagents={int(options.watch_subagents)} "
         f"codex-job-recency={options.codex_job_recency_secs}s",
         file=sys.stderr,
