@@ -8,13 +8,13 @@ allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Bash(mktemp *), Bash(git d
 
 # Dependency Security Review
 
-Perform a security-focused review of a dependency update.
+Security-focused review of a dependency update.
 
-**Argument**: `$ARGUMENTS` — the dependency name (e.g., `github.com/lib/pq`, `express`, `tokio`), optionally with version range (e.g., `github.com/lib/pq 1.11.1..1.11.2`). If empty, auto-detect from the current branch by diffing the dependency manifest against the main branch.
+**Argument**: `$ARGUMENTS` — dependency name (e.g., `github.com/lib/pq`, `express`, `tokio`), optionally with version range (e.g., `github.com/lib/pq 1.11.1..1.11.2`). If empty, auto-detect from the current branch by diffing the dependency manifest against the main branch.
 
 ## 1. Identify the Dependency Change
 
-Detect the project ecosystem and locate the dependency manifest:
+Detect the ecosystem and locate the manifest:
 
 | Ecosystem | Manifest files |
 |---|---|
@@ -24,14 +24,14 @@ Detect the project ecosystem and locate the dependency manifest:
 | Node.js | `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` |
 | Other | Identify automatically |
 
-Diff the manifest against the base branch to extract: package name, old version, new version, and any other dependency changes bundled in the same commit.
+Diff the manifest against the base branch: package name, old version, new version, and any other dependency changes bundled in the same commit.
 
 ## 2. Gather Upstream Intelligence
 
-Run these steps in parallel:
+Run in parallel:
 
 ### 2a. Changelog and Diff
-- Fetch release notes from the upstream repository's releases/tags page
+- Fetch release notes from the upstream releases/tags page
 - Fetch the comparison between old and new versions
 - Summarize: what changed, how many commits, which files, nature of changes
 
@@ -42,14 +42,13 @@ Create a session temp dir (if not already created) and clone the new version int
 SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/XXXXXX)
 ```
 
-**Input validation**: Before using the package name in any shell command, validate that it contains only alphanumeric characters, hyphens, underscores, dots, forward slashes, and `@` symbols. Reject any input containing shell metacharacters (`;`, `|`, `&`, `$`, `` ` ``, `(`, `)`, `<`, `>`, `!`, `#`, `~`, `{`, `}`).
+**Input validation**: before using the package name in any shell command, validate it contains only alphanumerics, hyphens, underscores, dots, forward slashes, and `@`. Reject any input containing shell metacharacters (`;`, `|`, `&`, `$`, `` ` ``, `(`, `)`, `<`, `>`, `!`, `#`, `~`, `{`, `}`).
 
 ```bash
 git clone --depth=100 --config core.hooksPath=/dev/null -- <upstream-repo-url> "$SESSION_DIR/<package-name>"
 ```
 
 ### 2c. Known Vulnerability Scan
-Search for CVEs and security advisories using ecosystem-appropriate sources:
 
 | Source | Method |
 |---|---|
@@ -59,19 +58,19 @@ Search for CVEs and security advisories using ecosystem-appropriate sources:
 | Ecosystem-specific | `govulncheck` (Go), `cargo audit` (Rust), `npm audit` (Node), `pip-audit` (Python) |
 | Web search | `<package-name> CVE vulnerability security advisory` |
 
-Check if there are commonly confused packages with similar names that may pollute search results.
+Check for commonly confused similarly-named packages that may pollute search results.
 
 ## 3. Security Audit of the Library
 
-Spawn a `security-engineer-smythe` agent to review the cloned library source at `$SESSION_DIR/<package-name>`.
+Spawn a `security-engineer-smythe` agent to review the cloned source at `$SESSION_DIR/<package-name>`.
 
 ### Scope
-- **Primary**: All changes between old and new version (the diff)
-- **Secondary**: Full audit of security-critical code paths in the library
+- **Primary**: all changes between old and new version (the diff)
+- **Secondary**: full audit of security-critical code paths
 
 ### Audit Checklist
 
-Select and apply relevant categories based on the library's purpose:
+Apply the categories relevant to the library's purpose:
 
 **Network / Protocol libraries** — TLS certificate validation and defaults, protocol message parsing and length validation, authentication mechanisms (password handling, token security), connection string / URL parsing injection, buffer safety and unbounded allocations from network data
 
@@ -86,18 +85,18 @@ Select and apply relevant categories based on the library's purpose:
 **All libraries** — Input validation and sanitization, memory safety and resource limits, error handling and information disclosure, concurrency safety (races, deadlocks), file system operations (path traversal, symlink attacks), transitive dependency risk, debug/logging modes that may leak sensitive data
 
 ### Output Format
-Rate findings: **CRITICAL / HIGH / MEDIUM / LOW / INFO** (see `severity` skill for definitions). When emitting v3 report JSON, the coordinator running this skill also assigns `merge_class`/`intent_basis` per `severity` skill § Merge Classification (coordinator-inline classification — DEP- findings have no separate consolidation pass).
+Rate findings: **CRITICAL / HIGH / MEDIUM / LOW / INFO** (see `severity` skill). When emitting v3 report JSON, the coordinator running this skill also assigns `merge_class`/`intent_basis` per `severity` skill § Merge Classification (coordinator-inline classification — DEP- findings have no separate consolidation pass).
 Include: file:line references, CWE IDs where applicable, impact, and remediation.
 
 ## 4. Vulnerability Research
 
-Spawn an `architect-nagatha` agent in parallel with step 3. The agent must:
+Spawn an `architect-nagatha` agent in parallel with step 3, to:
 
-- Query all major vulnerability databases listed in step 2c
-- Search the library's issue tracker for security-related discussions and responsible disclosures
-- Identify **unregistered security fixes** — code fixes that were never assigned CVEs/GHSAs
-- Assess library security posture: `SECURITY.md` presence, disclosure process, CVE registration discipline, maintainer activity
-- Check if ecosystem vulnerability tooling actually covers this library
+- Query all major vulnerability databases from step 2c
+- Search the library's issue tracker for security discussions and responsible disclosures
+- Identify **unregistered security fixes** — code fixes never assigned CVEs/GHSAs
+- Assess security posture: `SECURITY.md` presence, disclosure process, CVE registration discipline, maintainer activity
+- Check whether ecosystem vulnerability tooling actually covers this library
 
 ## 5. Codebase Impact Assessment
 
@@ -129,7 +128,7 @@ Table: Recommendation | Status | Action Needed? — for each finding, assess whe
 ### Risk Assessment
 - Overall rating: **Safe / Low Risk / Medium Risk / High Risk / Do Not Upgrade**
 - Key concerns and mitigations
-- Flag if the library has poor CVE registration discipline (automated scanning may be blind)
+- Flag poor CVE registration discipline (automated scanning may be blind)
 
 ### Recommendations
 Numbered actionable items for our codebase, plus long-term considerations (e.g., migration to alternatives).

@@ -52,7 +52,7 @@ allowed-tools: Read
 
 ## Design Quality
 
-For high-fidelity UI work, invoke the `frontend-design:frontend-design` skill for design quality guidance.
+For high-fidelity UI work, invoke the `frontend-design:frontend-design` skill.
 
 ## Code Quality Tools
 - **Linting**: ESLint with TypeScript plugin

@@ -7,23 +7,21 @@ description: "Use for new projects, features, or major refactoring. Phases: Plan
 
 Use for new projects, new/fundamentally modified features, major refactoring.
 
-Four phases, MANDATORY and SEQUENTIAL. Never skip, merge, reorder, or run phases in parallel. Within a phase, tasks and sub-phases MAY be combined or parallelized as appropriate.
+Four phases, MANDATORY and SEQUENTIAL. Never skip, merge, reorder, or run phases in parallel. Within a phase, tasks and sub-phases MAY be combined or parallelized.
 
 ## Before You Start
 
-Search project and global memories for relevant context before planning or dispatching agents:
-1. `search_memories(query="<topic>", project="<repo>")` — discover what past sessions learned about this area
-2. `get_memories(memory_id="<id>")` — read full details of relevant memories found in step 1
-
-These are MCP tools on the MemCan server. Use them if available. Skip silently if not.
+Search project and global memories before planning or dispatching agents (MemCan MCP tools — use if available, skip silently if not):
+1. `search_memories(query="<topic>", project="<repo>")` — what past sessions learned about this area
+2. `get_memories(memory_id="<id>")` — full details of relevant hits
 
 ## Unattended Operation
 
-This workflow runs without user interaction unless a decision is required. Do NOT pause for confirmation between phases. Accumulate reports and present a single **Final Report** when all phases complete or the workflow cannot proceed.
+Runs without user interaction unless a decision is required. Do NOT pause for confirmation between phases. Accumulate reports and present a single **Final Report** when all phases complete or the workflow cannot proceed.
 
 ## Phase 1: Planning
 
-Four sequential sub-phases. Each produces an artifact consumed by the next. Sub-phases may be combined into fewer agent invocations when scope is small, but the concerns must still be addressed in order.
+Four sequential sub-phases, each producing an artifact consumed by the next. Sub-phases may be combined into fewer agent invocations for small scope, but the concerns must be addressed in order.
 
 ### 1a. Requirements → `ux-designer-diziet`
 
@@ -39,13 +37,13 @@ User journeys, interaction patterns, UI mocks/wireframes, accessibility, DX plan
 
 ### 1c. Test Case Specification → `qa-engineer-marvin`
 
-Write test case SPECIFICATIONS (not code) derived from Requirements + UX artifacts. Each test case: ID, description, preconditions, steps, expected outcome, requirement traceability. These define the acceptance criteria that QA validates against.
+Test case SPECIFICATIONS (not code) derived from Requirements + UX artifacts. Each: ID, description, preconditions, steps, expected outcome, requirement traceability. These define the acceptance criteria QA validates against.
 
 **Artifact**: Test case specification document.
 
 ### 1d. Development Plan → `architect-nagatha`
 
-System layers and responsibilities, tool/tech selection, prefer reuse, guide code placement, deployment model. Decompose work into implementation tasks. Each task references which test cases it satisfies.
+System layers and responsibilities, tool/tech selection, prefer reuse, guide code placement, deployment model. Decompose into implementation tasks, each referencing the test cases it satisfies.
 
 Batch small tasks so each agent gets ≥100 lines of work — respect specialization boundaries (don't merge frontend with backend, security with docs, or unrelated domains).
 
@@ -62,8 +60,8 @@ Brief each task by goal and acceptance criteria, not files or approach — Bilby
 
 **Pre-empt the QA audits before declaring impl done:**
 1. **Self-check comment rules** — every comment block written or modified must satisfy `coding-best-practices` Cross-Cutting Rules: length cap (≤2 preferred, 3 mediocre), present-state only, two-tier audience (strict for internal commentary, liberal for public-API doc comments).
-2. **Self-check duplication** — for every helper, parser, signer, fetch loop, atomic-write, etc. introduced, briefly grep the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and any project-defined reference repos for an existing equivalent before rolling a new one. If found and publicly exported, use it. If crate-private (or language equivalent), propose promoting it. If only partially overlaps, document the rationale for the new copy.
-3. **Report rejected equivalents** — list any candidate equivalent considered and rejected, with one-line rationale, in the implementation summary so QA has context.
+2. **Self-check duplication** — for every helper, parser, signer, fetch loop, atomic-write, etc. introduced, grep the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and any project-defined reference repos for an existing equivalent first. If found and publicly exported, use it. If crate-private (or language equivalent), propose promoting it. If it only partially overlaps, document the rationale for the new copy.
+3. **Report rejected equivalents** — list candidates considered and rejected, one-line rationale each, in the implementation summary so QA has context.
 
 Multiple Bilby agents may run in parallel on independent tasks. Use teams for shared-file tasks.
 
@@ -72,8 +70,8 @@ Multiple Bilby agents may run in parallel on independent tasks. Use teams for sh
 Tests are written FIRST within each task, before implementation code.
 
 1. **Tests derive from the Test Case Specification** (Phase 1c), not from implementation.
-2. **Tests must fail before implementation begins.** A test that passes without new code is either wrong or testing the wrong thing.
-3. **Failures are verified against the spec.** If a test matches the Test Case Specification, the *code* is wrong — fix the code, not the test. Only adjust a test when the specification itself changed.
+2. **Tests must fail before implementation begins.** A test that passes without new code is wrong or testing the wrong thing.
+3. **Failures are verified against the spec.** If a test matches the Test Case Specification, the *code* is wrong — fix the code, not the test. Adjust a test only when the specification itself changed.
 
 ## Phase 3: QA
 
@@ -81,13 +79,13 @@ Separate agent per concern — run in parallel:
 
 | Agent | Focus |
 |-------|-------|
-| `qa-engineer-marvin` | **Tests** — execute test cases from spec, verify all pass, coverage gaps. This is Marvin's full and only remit here now — docs-review and dedup-audit have moved to `project-reviewer-adams` below. |
+| `qa-engineer-marvin` | **Tests** — execute test cases from spec, verify all pass, coverage gaps. Marvin's full and only remit here — docs-review and dedup-audit belong to `project-reviewer-adams` below. |
 | `security-engineer-smythe` | Security audit, dependency security |
 | `ux-designer-diziet` | UX/DX audit against UX specification |
 | `technical-writer-trillian` | End-user, developer, deployment docs |
-| `project-reviewer-adams` | Validate Development Plan fully executed, code quality — **plus two absorbed read-only passes**:<br>• **Docs review** — apply `coding-best-practices` Cross-Cutting Rules (length cap + present-state + two-tier audience) to comments and API doc comments (rustdoc, JSDoc, docstrings, godoc, etc.) introduced by the PR diff. Findings with file:line citations and proposed rewrites at `/tmp/claudius-<scope>-docs-report.md`.<br>• **Dedup audit** — for every new publicly exported function, type, trait/interface, and module introduced by the PR, search the workspace, direct dependencies (per the project's manifest — `Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, etc.), and project-defined reference repos for equivalent functionality. Findings (high-confidence duplicates, partial overlaps, reviewed-and-rejected) with file:line citations both sides at `/tmp/claudius-<scope>-dedup-report.md`. |
+| `project-reviewer-adams` | Validate Development Plan fully executed, code quality — **plus two absorbed read-only passes**:<br>• **Docs review** — apply `coding-best-practices` Cross-Cutting Rules (length cap + present-state + two-tier audience) to comments and API doc comments (rustdoc, JSDoc, docstrings, godoc, etc.) introduced by the PR diff. Findings with file:line citations and proposed rewrites at `/tmp/claudius-<scope>-docs-report.md`.<br>• **Dedup audit** — for every new publicly exported function, type, trait/interface, and module in the PR, search the workspace, direct dependencies (per the project's manifest), and project-defined reference repos for equivalent functionality. Findings (high-confidence duplicates, partial overlaps, reviewed-and-rejected) with file:line citations both sides at `/tmp/claudius-<scope>-dedup-report.md`. |
 
-**Only `qa-engineer-marvin` executes the build/test/lint suite.** `security-engineer-smythe`, `ux-designer-diziet`, `technical-writer-trillian`, and `project-reviewer-adams` review via diff/read/grep and MUST NOT independently re-run build, test, or lint commands unless investigating a specific Marvin-reported failure — redundant compiles waste wall-clock and tokens and risk lock contention on a shared target dir. Word each spawn prompt accordingly; do not leave build ownership implicit.
+**Only `qa-engineer-marvin` executes the build/test/lint suite.** The other four review via diff/read/grep and MUST NOT re-run build, test, or lint commands unless investigating a specific Marvin-reported failure — redundant compiles waste wall-clock and tokens and risk lock contention on a shared target dir. Word each spawn prompt accordingly; never leave build ownership implicit.
 
 **Both audits are READ-ONLY by mandate** — emphasize this in the agent prompt template. Findings go to the lead, who decides follow-up:
 - Trivial fixes can land in the same PR via a separate commit
@@ -120,7 +118,7 @@ When a phase produces MEDIUM+ findings, test failures, or incomplete coverage:
 2. **Auto-return to the previous phase** — do NOT wait for user acceptance
 3. Previous phase receives the failure report and addresses the issues
 4. Re-execute the failed phase with updated artifacts
-5. **Exception**: if the failure requires a USER DECISION (ambiguous requirements, conflicting constraints, scope change), pause and present options. Otherwise, proceed autonomously.
+5. **Exception**: if the failure requires a USER DECISION (ambiguous requirements, conflicting constraints, scope change), pause and present options. Otherwise proceed autonomously.
 
 ### Retry Map
 
@@ -153,7 +151,7 @@ Agents default to `model: inherit`; set model per spawn (see `claudius:delegate`
 Severity levels (via `claudius:severity` skill): CRITICAL > HIGH > MEDIUM > LOW > INFO.
 Iterate until no issues above LOW remain.
 
-**Severity inflation guard:** if a finding reappears across iterations (same meaning, possibly different agent/ID/wording), its severity must not increase. Downgrade to the previous iteration's level.
+**Severity inflation guard:** if a finding reappears across iterations (same meaning, possibly different agent/ID/wording), its severity must not increase — downgrade to the previous iteration's level.
 
 ## Code Deduplication
 
@@ -161,14 +159,14 @@ Include a deduplication pass — scan for duplicated logic, extract shared helpe
 
 ## Multi-Agent Coordination
 
-For phases with multiple agents on shared files, coordinate via named spawns + `SendMessage` claim/completion broadcasts to prevent duplicate work and conflicts. See `grand-admiral` § Spawning and `ci-dance` § Inter-Stream Communication for the pattern.
+For phases with multiple agents on shared files, coordinate via named spawns + `SendMessage` claim/completion broadcasts to prevent duplicate work and conflicts. See `grand-admiral` § Spawning and `ci-dance` § Inter-Stream Communication.
 
 ## Commit Discipline
 
 Agents must commit all changes before exiting — uncommitted work cannot be merged.
 
-ALL code-mutating spawned agents MUST work in an isolated git worktree — no exceptions. The `isolation` flag is unreliable (silently dropped); the coordinator pre-creates the worktree (see Pre-flight below).
+ALL code-mutating spawned agents MUST work in an isolated git worktree — no exceptions. The `isolation` flag is unreliable (silently dropped); the coordinator pre-creates the worktree.
 
-**Pre-flight pattern**: see `grand-admiral` skill — Worktree Isolation. Default is Option A (local-SHA injection, no push); Option B (push first) is the explicit fallback.
+**Pre-flight pattern**: see `grand-admiral` § Worktree Isolation. Default is Option A (local-SHA injection, no push); Option B (push first) is the explicit fallback.
 
-**Post-wave**: verify worktree commits, merge into the feature branch, run tests, then clean up worktrees. Push only when the user explicitly authorizes it (e.g., via `/push`, `/ci-dance`, or direct instruction) — never push as an automatic step.
+**Post-wave**: verify worktree commits, merge into the feature branch, run tests, then clean up worktrees. Push only when the user explicitly authorizes it (e.g., via `/push`, `/ci-dance`, or direct instruction) — never as an automatic step.

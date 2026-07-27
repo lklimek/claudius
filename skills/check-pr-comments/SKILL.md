@@ -6,19 +6,19 @@ allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view 
 
 # Check PR Comments Workflow
 
-When asked to check/triage/verify existing PR review comments, follow this workflow.
+Workflow for checking/triaging/verifying existing PR review comments.
 
 ## 1. Fetch All Comments
 
-**ALWAYS fetch fresh comments from GitHub on every invocation** -- never assume none are new; comments may have just appeared.
+**ALWAYS fetch fresh comments from GitHub on every invocation** — never assume none are new.
 
-Use GitHub MCP tools to fetch all comment types:
+Fetch all comment types via GitHub MCP `pull_request_read`:
 
-- **Review threads** (inline comments with resolution status): `pull_request_read` with `method: "get_review_comments"` — returns threads with `isResolved`, `isOutdated`, `isCollapsed` metadata and grouped comments. Carry `isResolved` forward per thread — step 3 uses it to skip re-verification of already-resolved threads.
-- **Review summaries**: `pull_request_read` with `method: "get_reviews"` — returns review state, body, and author.
-- **PR-level comments** (non-diff): `pull_request_read` with `method: "get_comments"` — returns general PR discussion.
+- **Review threads** (inline, with resolution status): `method: "get_review_comments"` — threads with `isResolved`, `isOutdated`, `isCollapsed` metadata and grouped comments. Carry `isResolved` forward per thread — step 3 uses it to skip re-verification of already-resolved threads.
+- **Review summaries**: `method: "get_reviews"` — review state, body, author.
+- **PR-level comments** (non-diff): `method: "get_comments"` — general PR discussion.
 
-Paginate with `perPage` and `page` (for get_reviews/get_comments) or `perPage` and `after` cursor (for get_review_comments) to fetch all results.
+Paginate to fetch all results: `perPage` + `page` (get_reviews/get_comments) or `perPage` + `after` cursor (get_review_comments).
 
 If GitHub MCP is unavailable, see [gh-cli-fallback.md](references/gh-cli-fallback.md) for `gh` CLI equivalents.
 
@@ -31,35 +31,31 @@ git pull
 
 ## 3. Verify Each Comment Against Current Code
 
-**Trust GitHub's resolved status — do not re-verify already-resolved threads.** For any thread where step 1's fetch returned `isResolved: true`, classify it as **Resolved** and skip the rest of this section: do not re-read the referenced code, re-run the call-tree walk, or second-guess a prior resolution. Apply the verification steps below only to threads with `isResolved: false`.
+**Trust GitHub's resolved status — do not re-verify already-resolved threads.** Classify any thread fetched with `isResolved: true` as **Resolved** and skip the rest of this section for it: no re-reading code, no call-tree walk, no second-guessing a prior resolution. Verify only `isResolved: false` threads.
 
-When verifying resolution, apply `coding-best-practices` Cross-Cutting Rules to the changed code. For every **unresolved** inline comment, read the file at the referenced location and **verify whether the identified issue is actually fixed** -- not just whether the code changed. Specifically:
+For every unresolved inline comment, apply `coding-best-practices` Cross-Cutting Rules to the changed code, read the file at the referenced location, and **verify the identified issue is actually fixed** — not just that the code changed:
 
-- **Verify state before resolving — broad instructions are not authorization.** Before classifying an unresolved thread as resolved *in this session*, verify the actual code state at the referenced location matches the reviewer's request. Do NOT mark a thread resolved based on the user's blanket instruction ("just resolve everything") or on a follow-up commit message that *claims* to fix it. If a thread cannot be verified resolved against current code, classify it as `Unresolved` with an explicit "needs verification" recommendation. Surface the mismatch — never silently resolve. (Specific application of `coding-best-practices` Cross-Cutting Rules — "Verify facts before acting on broad instructions". This governs threads you are about to resolve yourself; it does not reopen threads already resolved on GitHub — see above.)
-- Read the current code at the location the comment references
-- Understand what the comment is asking for
-- Determine if the current code satisfies the request (semantically, not just syntactically)
-- For comments with multiple sub-items, verify each one independently
-- A comment is only "resolved" if **all** of its sub-items are addressed
-- Verify the fix achieves the intended end-user or developer experience, not just technical correctness
-- **Call-tree walk on touched functions**: if the comment references a function whose body or signature was modified in the resolution commits (`git diff $RESOLUTION_BASE...HEAD -- <file>`), run the deep transitive in-repo caller walk per [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) on that function before declaring the thread resolved. A caller that still depends on the old contract turns a "fixed" thread into Unresolved with a CALL-tagged follow-up.
+- **Verify state before resolving — broad instructions are not authorization.** Before classifying a thread as resolved *this session*, verify the actual code at the referenced location matches the reviewer's request. Do NOT mark it resolved on a blanket instruction ("just resolve everything") or a follow-up commit message that *claims* a fix. If unverifiable against current code, classify `Unresolved` with an explicit "needs verification" recommendation and surface the mismatch — never silently resolve. (Applies `coding-best-practices` "Verify facts before acting on broad instructions". Governs threads resolved this session; does not reopen threads already resolved on GitHub — see above.)
+- Understand what the comment asks for and whether current code satisfies it semantically, not just syntactically.
+- Verify each sub-item independently — resolved only when **all** sub-items are addressed.
+- Verify the fix achieves the intended end-user or developer experience, not just technical correctness.
+- **Call-tree walk on touched functions**: if the comment references a function whose body or signature was modified in the resolution commits (`git diff $RESOLUTION_BASE...HEAD -- <file>`), run the deep transitive in-repo caller walk per [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) before declaring the thread resolved. A caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up.
 
-**Classify each comment's author:**
-- **Bot**: username ends with `[bot]` (e.g. `dependabot[bot]`) or the GitHub API returns `type: "Bot"` for the author
-- **Human**: all other authors
+**Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`) or the API returns `type: "Bot"`; **Human** — all others.
 
 ## 4. Present Summary
 
-Present a concise summary directly to the user:
-- Total comments checked, how many resolved vs unresolved
-- For **each comment**, include Claude's assessment:
-  - **Already resolved** (`isResolved: true` at fetch time): report it as resolved, citing GitHub's own status — do not restate a fix assessment you didn't perform (see step 3).
-  - **Resolved by verification this session** (`isResolved: false` at fetch time, confirmed fixed against current code): confirm the fix is adequate, or flag remaining concerns if the resolution is technically present but semantically incomplete. State whether you agree the original comment was valid.
-  - **Unresolved**: state your recommendation (priority and suggested approach). If you disagree with the reviewer's concern, say so with a brief reason.
-- Lead with unresolved comments, then resolved
-- Include the **author type** (bot/human) and the **planned action** (auto-resolve, reply, etc.) for each comment
+Present concisely to the user:
 
-This is the default end of the workflow. Steps 5-7 (structured report) are only produced when the user explicitly requests it (e.g. "generate report", "produce report", "with report"). Step 8 (resolve threads) applies to both flows.
+- Total comments checked, resolved vs unresolved
+- Per comment, Claude's assessment:
+  - **Already resolved** (`isResolved: true` at fetch): report as resolved citing GitHub's status — do not restate a fix assessment you didn't perform (step 3).
+  - **Resolved by verification this session**: confirm the fix is adequate, or flag concerns when technically present but semantically incomplete. State whether the original comment was valid.
+  - **Unresolved**: your recommendation (priority, suggested approach). If you disagree with the reviewer's concern, say so with a brief reason.
+- Unresolved first, then resolved
+- Author type (bot/human) and planned action (auto-resolve, reply, etc.) per comment
+
+Default end of workflow. Steps 5-7 (structured report) run only on explicit request (e.g. "generate report", "with report"). Step 8 (resolve threads) applies to both flows.
 
 ---
 
@@ -67,7 +63,7 @@ This is the default end of the workflow. Steps 5-7 (structured report) are only 
 
 ## 5. Build Structured Report JSON
 
-Produce a `report.json` file following the unified report schema (`../../schemas/review-report.schema.json` v3.2.0; 3.0.0/3.1.0 still accepted).
+Produce `report.json` per the unified report schema (`../../schemas/review-report.schema.json` v3.2.0; 3.0.0/3.1.0 still accepted).
 
 ### Report structure
 
@@ -103,7 +99,7 @@ Produce a `report.json` file following the unified report schema (`../../schemas
 }
 ```
 
-`metadata.commit` must be the full 40-character SHA when present (omit for non-git directories). Omit `metadata.repository` — no consumer of standalone comment-check reports needs it; permalinks (below) are built from `metadata.project` instead.
+`metadata.commit` must be the full 40-character SHA when present (omit for non-git directories). Omit `metadata.repository` — no consumer of standalone comment-check reports needs it; permalinks (below) are built from `metadata.project`.
 
 ### Finding format
 
@@ -131,12 +127,12 @@ Each review comment becomes one finding:
 
 #### `title` — rules
 
-The `title` is the column users see at a glance in the rendered report. The `reviewer` field is shown separately, so the title must carry only the substance.
+The title is what users see at a glance; `reviewer` is shown separately, so the title carries only substance.
 
-1. **≤ 80 characters.** Hard cap. Do NOT emit a `…` / `...` truncation marker — write a title that fits.
-2. **No reviewer prefix.** Never start with `<username>:` — the renderer already shows the reviewer next to the title.
-3. **No verbatim copy of the comment's first line.** Strip Markdown markers (`**`, leading `>`), emoji, and severity labels (`Suggestion:`, `Issue:`, `Nit:`, `Question:`) that came from the comment body. The title summarises, not quotes.
-4. **Phrase as an imperative or noun phrase describing the change requested**, not a quote of the reviewer's wording.
+1. **≤ 80 characters.** Hard cap. No `…`/`...` truncation markers — write a title that fits.
+2. **No reviewer prefix.** Never start with `<username>:` — the renderer shows the reviewer next to the title.
+3. **No verbatim copy of the comment's first line.** Strip Markdown markers (`**`, leading `>`), emoji, and severity labels (`Suggestion:`, `Issue:`, `Nit:`, `Question:`) from the comment body. Summarise, don't quote.
+4. **Imperative or noun phrase describing the requested change**, not the reviewer's wording.
 
 Good (what the comment *asks for*):
 - `Add fee-headroom guard to transfer_with_change_address`
@@ -148,7 +144,7 @@ Bad (quotes / markup / prefix / truncation):
 
 #### `location_permalink` — rules
 
-**Producers MUST emit `location_permalink` whenever `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present.** This is the field the renderer turns into a clickable link; standalone reports never see the coordinator's derive pass, so the producer is the only place that always knows the commit. Path-only locations (no `:line`) MUST NOT carry a `location_permalink` — the coordinator's `_build_permalink` rejects them too, so emitting one would break producer/coordinator parity.
+**Producers MUST emit `location_permalink` whenever `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present.** The renderer turns it into a clickable link; standalone reports never see the coordinator's derive pass, so the producer is the only place that always knows the commit. Path-only locations (no `:line`) MUST NOT carry one — the coordinator's `_build_permalink` rejects them too; emitting one breaks producer/coordinator parity.
 
 URL template:
 
@@ -156,12 +152,10 @@ URL template:
 https://github.com/{owner}/{repo}/blob/{commit}/{path}{anchor}
 ```
 
-- `{owner}/{repo}`: split `metadata.project` on `/` (it's already in `<owner>/<repo>` form).
-- `{commit}`: full 40-char SHA from `metadata.commit` (derived from `git rev-parse @{u}` with a `git rev-parse HEAD` fallback — use the pushed commit so permalinks resolve on GitHub; fall back to local HEAD only when the branch has no upstream).
-- `{path}`: the file path from `location` — split off the trailing `:line` or `:start-end` suffix; the remainder is the path. (This matches the coordinator's `parse_location` regex, which anchors at end of string. Splitting at the first `:` would break paths that contain `:`.) URL-encode spaces, `#`, `?`, and any non-ASCII characters.
-- `{anchor}`:
-  - `#L{line}` when `location` ends in `:{line}` (single line)
-  - `#L{start}-L{end}` when `location` ends in `:{start}-{end}` (range)
+- `{owner}/{repo}`: split `metadata.project` on `/` (already `<owner>/<repo>`).
+- `{commit}`: full 40-char SHA from `metadata.commit` (`git rev-parse @{u}` with `git rev-parse HEAD` fallback — use the pushed commit so permalinks resolve on GitHub; local HEAD only when the branch has no upstream).
+- `{path}`: `location` minus the trailing `:line`/`:start-end` suffix. (Matches the coordinator's `parse_location` regex, anchored at end of string — splitting at the first `:` would break paths containing `:`.) URL-encode spaces, `#`, `?`, and non-ASCII characters.
+- `{anchor}`: `#L{line}` for a single line; `#L{start}-L{end}` for a range.
 
 Examples:
 
@@ -170,20 +164,20 @@ Examples:
 - `location: "packages/wallet/src/transfer.rs:414-420"` →
   `…/blob/<sha>/packages/wallet/src/transfer.rs#L414-L420`
 
-Omit `location_permalink` (do NOT emit an empty string) when commit or project is missing, when `location` lacks a `:line` or `:start-end` suffix, or when the line suffix isn't a valid integer (or a valid integer-integer range).
+Omit `location_permalink` (never emit an empty string) when commit or project is missing, `location` lacks a `:line`/`:start-end` suffix, or the suffix isn't a valid integer (or integer-integer range).
 
-- **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (the comment is satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted as already-resolved via `isResolved: true` (see step 3), state that it was already resolved on GitHub rather than inventing a fix description you didn't verify. The coordinator will derive `severity = 1` (INFO) from those floats.
-- **Unresolved** comments: assess `risk`, `impact`, AND `scope` per the OWASP recipes in `claudius:severity`. Rate `scope` as the comment's real blast radius (a single call-site / narrow path ≈ `0.2`; a subsystem ≈ `0.5`; repo-wide ≈ `1.0`) — do NOT default to `1.0`. The coordinator derives the integer `severity` band; never hand-type a label. Set `verdict: "UNRESOLVED"` and let `recommendation` describe what still needs doing.
-- `thread_id`: from `pull_request_read` `get_review_comments` response (or `gh-list-review-threads.sh` fallback). Needed for thread resolution in step 8.
-- **Merge class** (coordinator-inline producer exception — see `claudius:report-format`): RESOLVED comments omit `merge_class` (informational carve-out). UNRESOLVED comments get classified per `claudius:severity` § Merge Classification — a reviewer-demanded unresolved thread is a `blocking` candidate (`intent_basis` = the reviewer's request); tangential suggestions are `non_blocking` or `out_of_scope_follow_up`.
+- **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted via `isResolved: true` (step 3), state it was already resolved on GitHub rather than inventing an unverified fix description. The coordinator derives `severity = 1` (INFO) from the floats.
+- **Unresolved** comments: assess `risk`, `impact`, AND `scope` per the OWASP recipes in `claudius:severity`. Rate `scope` as the comment's real blast radius (single call-site / narrow path ≈ `0.2`; subsystem ≈ `0.5`; repo-wide ≈ `1.0`) — do NOT default to `1.0`. The coordinator derives the integer `severity` band; never hand-type a label. Set `verdict: "UNRESOLVED"`; `recommendation` describes what remains.
+- `thread_id`: from `pull_request_read` `get_review_comments` (or `gh-list-review-threads.sh` fallback). Needed for step 8.
+- **Merge class** (coordinator-inline producer exception — see `claudius:report-format`): RESOLVED comments omit `merge_class` (informational carve-out). Classify UNRESOLVED per `claudius:severity` § Merge Classification — a reviewer-demanded unresolved thread is a `blocking` candidate (`intent_basis` = the reviewer's request); tangential suggestions are `non_blocking` or `out_of_scope_follow_up`.
 
 **Do NOT emit** (coordinator/validator-owned): `overall_severity`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `risk`/`impact`/`scope` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 
-**Optional**: `code_snippets` — when the comment quotes specific source you verified, you may attach it as `[{language, caption, content}]`; never invent one.
+**Optional**: `code_snippets` — when the comment quotes source you verified, attach as `[{language, caption, content}]`; never invent one.
 
 ### Numbering
 
-Assign sequential IDs: `CMT-001`, `CMT-002`, etc. Order: unresolved first (by severity descending), then resolved.
+Sequential IDs: `CMT-001`, `CMT-002`, … Order: unresolved first (severity descending), then resolved.
 
 ## 6. Validate Report
 
@@ -199,36 +193,34 @@ If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid d
 python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py report.json --format md
 ```
 
-Present the rendered markdown report to the user. Optionally generate HTML (`--format html`) for richer display.
-
-The user can also invoke `triage-findings report.json` for interactive browser-based triage of unresolved comments.
+Present the rendered markdown to the user. Optionally generate HTML (`--format html`). The user can also invoke `triage-findings report.json` for interactive browser-based triage of unresolved comments.
 
 ## CI Log Retrieval
 
-See `git-and-github` skill § Context Management for the subagent delegation pattern. CI logs via `get_job_logs` are a prime example — always delegate to a subagent that fetches the log and extracts relevant failure information.
+See `git-and-github` skill § Context Management for the subagent delegation pattern. Always delegate `get_job_logs` fetches to a subagent that extracts the relevant failure information.
 
 ## 8. Resolve and Reply to Threads
 
-**Sequencing gate — decide fix/no-fix before acting.** Do not post a reply or attempt to resolve an `Unresolved` (step 3) comment while a fix for it is still pending in this same pass. Settle each comment's disposition first — `Fixed (verified this session)` or `Not fixed` — then apply the matching row of the matrix below. Replying during triage and only later fixing the issue produces a redundant reply on every thread that ends up fixed — a bot thread that gets fixed goes straight to auto-resolve with no intermediate reply.
+**Sequencing gate — decide fix/no-fix before acting.** Do not reply to or resolve an `Unresolved` (step 3) comment while its fix is still pending in this pass. Settle each comment's disposition — `Fixed (verified this session)` or `Not fixed` — then apply the matching matrix row. Replying during triage and fixing later leaves a redundant reply on every fixed thread; a fixed bot thread goes straight to auto-resolve with no intermediate reply.
 
-Apply the following matrix **without asking for confirmation**, except where noted:
+Apply the matrix **without asking for confirmation**, except where noted:
 
 | Author | Status | Action |
 |--------|--------|--------|
-| Any | Already resolved (`isResolved: true`) | No action — already resolved, do not reply or attempt to resolve again |
+| Any | Already resolved (`isResolved: true`) | No action — do not reply or resolve again |
 | Bot | Fixed (verified this session) | Auto-resolve the thread (no confirmation needed) |
 | Bot | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
 | Human | Fixed (verified this session) | Post a reply explaining what was done. Do NOT resolve. |
 | Human | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
 
-**NEVER auto-resolve human-created threads** unless the user gives explicit per-invocation permission (e.g. "resolve all fixed threads" or "resolve human threads too"). Even when fully fixed, the human reviewer should resolve their own threads.
+**NEVER auto-resolve human-created threads** without explicit per-invocation permission (e.g. "resolve all fixed threads", "resolve human threads too"). Even when fully fixed, the human reviewer resolves their own threads.
 
 **Posting replies:**
-- Inline review thread replies: `mcp__plugin_claudius_github__add_reply_to_pull_request_comment` (use `comment_id` from the thread's first comment)
-- PR-level comment replies: `mcp__plugin_claudius_github__add_issue_comment`
-- Keep replies concise: what was done, what remains, reference to relevant commit if applicable
+- Inline thread replies: `mcp__plugin_claudius_github__add_reply_to_pull_request_comment` (`comment_id` = thread's first comment)
+- PR-level replies: `mcp__plugin_claudius_github__add_issue_comment`
+- Keep replies concise: what was done, what remains, relevant commit reference
 
-**Resolving bot threads** (fixed only) using the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
+**Resolving bot threads** (fixed only) via the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
 
 ```bash
 # GraphQL node IDs (PRRT_*) — pass directly:
@@ -238,4 +230,4 @@ ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <PRRT_id> [PRRT_i
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <owner/repo> <pr_number> --id discussion_r123 --id 456 [...]
 ```
 
-Thread resolution has no MCP equivalent — the wrapper script uses a GraphQL mutation directly. The `--id` form auto-converts `discussion_r*` / numeric IDs to thread node IDs; mix freely with `PRRT_*` IDs in one invocation. Never resolve threads that are only partially addressed.
+Thread resolution has no MCP equivalent — the wrapper uses a GraphQL mutation directly. The `--id` form auto-converts `discussion_r*`/numeric IDs to thread node IDs; mix freely with `PRRT_*` in one invocation. Never resolve partially-addressed threads.

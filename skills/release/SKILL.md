@@ -1,6 +1,6 @@
 ---
 name: release
-description: "Bump version (SemVer 2.0), update changelog, commit, push, and create GitHub release. Auto-detects project tech stack (Rust, Python, JS/TS, Claude Code plugins, etc.). Args: major|minor|patch or auto-detect from commits. User-invocable only — agents must not invoke this skill autonomously."
+description: "Bump version (SemVer 2.0), update changelog, commit, push, create GitHub release. Auto-detects tech stack (Rust, Python, JS/TS, Claude Code plugins, etc.). Args: major|minor|patch or auto-detect from commits. User-invocable only — agents must not invoke autonomously."
 user-invocable: true
 disable-model-invocation: true
 ---
