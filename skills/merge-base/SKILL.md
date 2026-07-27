@@ -6,12 +6,9 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git *), Bash(gh pr view *)
 
 # Merge Base Branch
 
-Merge the remote base branch into the current feature branch with pre-merge analysis, intelligent
-conflict resolution, and a behavioral change report.
+Merge the remote base branch into the current feature branch: pre-merge analysis, intelligent conflict resolution, behavioral change report.
 
-**Output philosophy**: Be concise. Show summaries, not diffs or source code. The user will ask
-for details if they want them. Never dump raw diffs, full file contents, or initial state unless
-explicitly requested.
+**Output philosophy**: be concise — summaries, not diffs or source code. Never dump raw diffs, full file contents, or initial state unless explicitly requested; the user will ask for details.
 
 ## Phase 1: Sync with Remote
 
@@ -32,7 +29,7 @@ If the pull produces conflicts, resolve them (see Phase 4) before continuing.
 
 ## Phase 2: Identify the Base Branch
 
-Determine the base branch from PR metadata using the `git-and-github` skill:
+From PR metadata, using the `git-and-github` skill:
 
 ```bash
 BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null)
@@ -46,13 +43,11 @@ BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^re
 
 If neither works, ask the user.
 
-Use `origin/$BASE_BRANCH` (the remote-tracking ref, already updated by fetch) for the merge — not
-the local base branch, which may be stale.
+Merge from `origin/$BASE_BRANCH` (the remote-tracking ref, already updated by fetch) — not the local base branch, which may be stale.
 
 ## Phase 3: Pre-Merge Analysis
 
-Read diffs and logs internally to build context for conflict resolution and behavioral analysis
-(see Output philosophy above — no diff/source output).
+Read diffs and logs internally to build context for conflict resolution and behavioral analysis (per Output philosophy — no diff/source output).
 
 ```bash
 MERGE_BASE=$(git merge-base origin/$BASE_BRANCH HEAD)
@@ -78,8 +73,7 @@ comm -12 \
   <(git diff --name-only $MERGE_BASE..origin/$BASE_BRANCH | sort)
 ```
 
-Also look for **semantic overlaps** — cases where there's no textual conflict but behavior
-changes (e.g., upstream changed a function signature or default value that local code relies on).
+Also find **semantic overlaps** — no textual conflict but behavior changes (e.g., upstream changed a function signature or default value that local code relies on).
 
 Report a brief summary to the user:
 - What each side changed (1-2 sentences per side)
@@ -98,21 +92,18 @@ The merge commits automatically. Proceed to Phase 5.
 
 ### If conflicts occur
 
-Git will list conflicted files. For each one:
+For each conflicted file:
 
 1. **Read the conflict markers** — understand both sides using Phase 3 context
-2. **Resolve intelligently** — preserve intent from both sides. When ambiguous, prefer the
-   version that preserves existing behavior.
+2. **Resolve intelligently** — preserve both sides' intent; when ambiguous, prefer preserving existing behavior
 3. **Stage the resolution** — `git add <file>`
-4. **Present to the user** — use a table summarizing the conflict, not raw source:
+4. **Present to the user** — a table summarizing the conflict, not raw source:
 
 | Area | Ours | Theirs | Resolution |
 |---|---|---|---|
 | `function_name()` | Added X | Changed Y | Combined: X + Y |
 
-Ask for approval before continuing.
-
-After all conflicts are resolved and the user approves:
+Ask for approval before continuing. After all conflicts are resolved and approved:
 
 ```bash
 git commit --no-edit
@@ -122,32 +113,27 @@ If the user rejects a resolution, apply their feedback and re-present.
 
 ## Phase 5: Behavioral Change Report
 
-The most important deliverable. Analyze the merge result for anything that could change runtime
-behavior. Read the merged files internally — no diff dumps.
+The most important deliverable. Analyze the merge result for anything that could change runtime behavior — read merged files internally, no diff dumps.
 
-Assign an overall **Risk Factor (0-100%)** reflecting the likelihood that the merge introduced
-unintended behavioral changes:
-- **0-20%**: Routine merge, disjoint changes, no behavioral overlap
-- **21-50%**: Minor behavioral touches — new defaults, added parameters (backward-compatible)
-- **51-80%**: Significant behavioral changes — modified control flow, changed defaults affecting
-  existing callers, schema changes
-- **81-100%**: Breaking changes — incompatible signatures, algorithm swaps, data format changes
+Assign an overall **Risk Factor (0-100%)** — likelihood the merge introduced unintended behavioral changes:
+- **0-20%**: routine merge, disjoint changes, no behavioral overlap
+- **21-50%**: minor touches — new defaults, added parameters (backward-compatible)
+- **51-80%**: significant — modified control flow, changed defaults affecting existing callers, schema changes
+- **81-100%**: breaking — incompatible signatures, algorithm swaps, data format changes
 
 ### What to look for
 
-- **Function signature changes** — parameters added/removed/reordered upstream affecting local callers
-- **Default value changes** — config defaults, function defaults, env var fallbacks changed upstream
-- **Control flow changes** — conditionals, early returns, error handling paths in overlapping code
-- **Type/schema changes** — struct fields, API shapes, database schemas changed on either side
-- **Dependency version conflicts** — lock files merged with potentially incompatible versions
+- **Function signatures** — parameters added/removed/reordered upstream affecting local callers
+- **Default values** — config defaults, function defaults, env var fallbacks changed upstream
+- **Control flow** — conditionals, early returns, error handling paths in overlapping code
+- **Types/schemas** — struct fields, API shapes, database schemas changed on either side
+- **Dependency versions** — lock files merged with potentially incompatible versions
 - **Import/module resolution** — new upstream imports that shadow or conflict with local ones
 - **Test expectations** — tests that may now fail due to changed behavior from either side
 
 ### Upstream attribution
 
-For conflicted files and files flagged under "Changes Requiring Attention", identify which upstream
-authors introduced the problematic changes. Only include authors whose changes directly caused
-conflicts or semantic issues — not every upstream contributor.
+For conflicted files and files flagged under "Changes Requiring Attention", identify the upstream authors whose changes directly caused conflicts or semantic issues — not every contributor.
 
 ### Report format
 
@@ -169,15 +155,14 @@ conflicts or semantic issues — not every upstream contributor.
 - [ ] <action items, if any>
 ```
 
-Show safe changes first so the user can quickly confirm the routine stuff and focus attention on
-what matters. If the report is clean (risk ~0%), say so in one line and skip the sections.
+Safe changes first, so the user confirms routine items quickly and focuses on what matters. If clean (risk ~0%), say so in one line and skip the sections.
 
 ## Error Recovery
 
-If anything goes wrong mid-merge:
+On any mid-merge failure:
 
 ```bash
 git merge --abort
 ```
 
-Then report what happened and let the user decide how to proceed.
+Report what happened and let the user decide how to proceed.
