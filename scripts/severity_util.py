@@ -82,6 +82,7 @@ _SEVERITY_BANDS: list[tuple[float, int]] = [
     (0.4, 3),
     (0.1, 2),
 ]
+_SEVERITY_EPSILON = 1e-9
 
 
 # NOTE: scope-weighting/capping is a deliberate future consideration; the
@@ -110,7 +111,7 @@ def derive_overall(finding: dict[str, Any]) -> float | None:
 def derive_severity_int(overall: float) -> int:
     """Map an overall_severity float to the 1..5 integer severity band."""
     for threshold, level in _SEVERITY_BANDS:
-        if overall >= threshold:
+        if overall >= threshold - _SEVERITY_EPSILON:
             return level
     return 1
 
