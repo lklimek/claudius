@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-07-27
+
+### Added
+
+- **`triage` skill**: reproduce a reported GitHub issue, root-cause it (via `bug-investigation`), attribute the root cause to its owning component, estimate severity (via `severity`), discuss findings with the user, and post a short (≤200-char) status comment — only after user sign-off on any GitHub write. Resolves the target repo's stable branch, GUI-testing approach, and cross-repo dependency ownership dynamically (from the project's own `CLAUDE.md`/docs and `git`/`gh` state) rather than hardcoding any project's conventions, so it works unmodified across repos. Promoted from a dash-evo-tool-local skill of the same shape.
+
 ## [6.0.0] - 2026-07-27
 
 ### Removed
