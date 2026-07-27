@@ -13,20 +13,18 @@ import severity_util as su
 
 
 # ---------------------------------------------------------------------------
-# derive_finding_severity — band mapping. Boundary exactness is covered by
-# TestPrimitives below against derive_severity_int directly (driving through the
-# float mean would re-introduce IEEE-754 rounding at the band edges, e.g.
-# (0.7+0.7+0.7)/3 = 0.6999…). Here we just confirm the float trio maps to the
-# expected band well inside each range.
+# derive_finding_severity — band mapping through the complete float-trio path.
+# Exact threshold values must remain in their intended bands even when the
+# arithmetic mean lands an IEEE-754 epsilon below the mathematical boundary.
 # ---------------------------------------------------------------------------
 class TestDeriveFindingSeverity:
     @pytest.mark.parametrize(
         "value,expected",
         [
-            (0.95, 5),  # CRITICAL
-            (0.8, 4),  # HIGH
-            (0.5, 3),  # MEDIUM
-            (0.2, 2),  # LOW
+            (0.9, 5),  # CRITICAL boundary
+            (0.7, 4),  # HIGH boundary
+            (0.4, 3),  # MEDIUM boundary
+            (0.1, 2),  # LOW boundary
             (0.05, 1),  # INFO
         ],
     )

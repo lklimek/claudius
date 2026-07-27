@@ -377,6 +377,31 @@ def find_duplicate_groups(
     return _groups_from_adjacency(n, adj, pair_reasons)
 
 
+def _build_agent_stats(
+    agents: list[str],
+    findings: list[dict[str, Any]],
+    duplicate_groups: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Count each agent's findings inside and outside duplicate groups."""
+    duplicate_indices = {
+        index
+        for group in duplicate_groups
+        for index in group.get("finding_indices", [])
+        if isinstance(index, int)
+    }
+    counts = {
+        agent: {"agent": agent, "unique": 0, "redundant": 0}
+        for agent in dict.fromkeys(agents)
+    }
+    for index, finding in enumerate(findings):
+        agent = finding.get("agent")
+        if agent not in counts:
+            continue
+        key = "redundant" if index in duplicate_indices else "unique"
+        counts[agent][key] += 1
+    return list(counts.values())
+
+
 def _normalize_title(title: str) -> str:
     """Lowercase and collapse whitespace for exact-title matching."""
     return " ".join(title.lower().split())
@@ -1034,6 +1059,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         section_positives.extend(pos)
 
     dup_groups = find_duplicate_groups(raw_findings)
+    agent_stats = _build_agent_stats(agents, raw_findings, dup_groups)
 
     intentional: list[dict[str, Any]] = []
     if args.repo_root:
@@ -1062,6 +1088,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     output = {
         "metadata": metadata,
         "agents": agents,
+        "agent_stats": agent_stats,
         "raw_findings": raw_findings,
         "duplicate_groups": dup_groups,
         "intentional_downgrades": intentional,
