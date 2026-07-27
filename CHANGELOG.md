@@ -6,11 +6,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [6.1.0] - 2026-07-27
+## [6.2.0] - 2026-07-27
 
 ### Changed
 
 - **`workflow-simplified` skill, rewritten**: replaced the 4-phase multi-agent pipeline (Requirements/UX → Test Spec → Dev Plan → Implementation → QA trio → Lessons Learned) with a single high-capability agent (Codex Sol, `opus`, or `fable`) running the full mini-lifecycle unattended: plan → TDD tests → implement → self-review → self-fix, looping the review/fix step until a pass finds nothing new (capped at 5 passes). Briefed WHAT (goal + acceptance criteria), never HOW, per `grand-admiral` § Development-Work Delegation. Drops the separate Marvin/Smythe/Adams QA fan-out in favor of the same agent's own general self-review (not `grumpy-review`). Threshold raised from ≤200 lines to ≤1000 LOC. `grand-admiral`'s Skills Reference catalog entry updated to match.
+
+## [6.1.0] - 2026-07-27
+
+### Added
+
+- **`triage` skill**: reproduce a reported GitHub issue, root-cause it (via `bug-investigation`), attribute the root cause to its owning component, estimate severity (via `severity`), discuss findings with the user, and post a short (≤200-char) status comment — only after user sign-off on any GitHub write. Resolves the target repo's stable branch, GUI-testing approach, and cross-repo dependency ownership dynamically (from the project's own `CLAUDE.md`/docs and `git`/`gh` state) rather than hardcoding any project's conventions, so it works unmodified across repos. Promoted from a dash-evo-tool-local skill of the same shape.
 
 ## [6.0.0] - 2026-07-27
 

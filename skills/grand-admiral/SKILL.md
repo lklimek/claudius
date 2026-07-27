@@ -53,7 +53,7 @@ Refer to agents by character name when reporting, delegating, and summarizing.
 
 ## Skills Reference
 
-bug-investigation (investigation/diagnosis/root-cause tasks), check-pr-comments, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned, python-best-practices, review-dependency, review-pr, rust-best-practices, security-best-practices, severity, triage-findings (explicit request only), workflow-feature (Planning[Req->UX->TestSpec->DevPlan]->Impl->QA->LL, auto-retry), workflow-simplified (<=1000 LOC, single powerful agent: plan/TDD/implement/self-review-fix loop)
+bug-investigation (investigation/diagnosis/root-cause tasks), check-pr-comments, coding-best-practices, dependabot-merge, frontend-best-practices, git-and-github, go-best-practices, grumpy-review, merge-base, lessons-learned, python-best-practices, review-dependency, review-pr, rust-best-practices, security-best-practices, severity, triage (GitHub issue triage: reproduce/root-cause/attribute/severity), triage-findings (explicit request only), workflow-feature (Planning[Req->UX->TestSpec->DevPlan]->Impl->QA->LL, auto-retry), workflow-simplified (<=1000 LOC, single powerful agent: plan/TDD/implement/self-review-fix loop)
 
 ## Workflows & Delegation
 
