@@ -7,9 +7,9 @@ allowed-tools: Read, Grep, Glob, Bash(gh pr *), Bash(gh run *), Bash(git log *),
 
 # Dependabot PR Bulk Processor
 
-Audit, comment, and merge open dependabot PRs in a repository. Each PR gets a security review via the `review-dependency` skill, a comment with findings, and — if safe — a squash merge.
+Audit, comment, and merge open dependabot PRs. Each PR gets a security review via the `review-dependency` skill, a comment with findings, and — if safe — a squash merge.
 
-**Argument**: `$ARGUMENTS` — optional filter (e.g., `golang`, `docker`, `npm`). If empty, process all open dependabot PRs.
+**Argument**: `$ARGUMENTS` — optional filter (e.g., `golang`, `docker`, `npm`). Empty = process all open dependabot PRs.
 
 ## Prerequisites
 
@@ -21,16 +21,12 @@ Audit, comment, and merge open dependabot PRs in a repository. Each PR gets a se
 
 ### 1. Discover Open Dependabot PRs
 
-Search for open PRs authored by `app/dependabot`:
-
 ```bash
 gh pr list --repo <owner>/<repo> --author 'app/dependabot' \
   --json number,title,statusCheckRollup,mergeable --limit 50
 ```
 
-Extract for each PR: number, title, CI status (which checks passed/failed), and mergeable state.
-
-If `$ARGUMENTS` is set, filter PRs whose title contains the filter string.
+Extract per PR: number, title, CI status (which checks passed/failed), mergeable state. If `$ARGUMENTS` is set, keep only PRs whose title contains it.
 
 ### 2. Check for Unpushed Commits
 
@@ -40,11 +36,9 @@ Before spawning worktree agents:
 git log @{upstream}..HEAD --oneline
 ```
 
-If unpushed commits exist, **alert the user and stop**. Worktree agents fork from the remote state — unpushed local commits will be missing. If no upstream is configured, use `git log origin/$(git branch --show-current)..HEAD` as fallback.
+If unpushed commits exist, **alert the user and stop** — worktree agents fork from remote state and would miss them. If no upstream is configured, fall back to `git log origin/$(git branch --show-current)..HEAD`.
 
 ### 3. Classify PRs
-
-Sort PRs into three groups:
 
 | Group | Condition | Action |
 |---|---|---|
@@ -75,13 +69,13 @@ Set `model` per spawn: **opus** for every dependency bump — a bump pulls in th
 4. Instruction to invoke `review-dependency` skill with the PR number as argument
 5. Instruction to post a comment with findings via `mcp__plugin_claudius_github__add_issue_comment` (include attribution footer)
 6. **If Green**: merge via `ghsudo gh pr merge <number> --repo <owner>/<repo> --squash`
-7. **If Red or Conflicting**: do NOT merge; post `@dependabot rebase` comment, then enter **Rebase Watch Loop** (step 5a)
+7. **If Red or Conflicting**: do NOT merge; post `@dependabot rebase`, then enter **Rebase Watch Loop** (step 5a)
 
 Spawn **all agents in a single message** for maximum parallelism.
 
 ### 5. Collect Results and Handle Write Blocks
 
-As agents complete, check their results. Agents may be blocked from GitHub write operations by hooks. For blocked agents:
+As agents complete, check results. Agents may be blocked from GitHub write operations by hooks. For blocked agents:
 1. Post the review comment yourself using GitHub MCP
 2. Execute the merge, rebase request, or watch loop yourself
 
@@ -113,8 +107,6 @@ After earlier PRs merge, later PRs may become unmergeable (conflicting `go.sum`,
 
 ### 7. Final Report
 
-Present a summary table:
-
 | PR | Dependency | Audit | Action | Result |
 |---|---|---|---|---|
 | #NNN | `pkg` old->new | Safe/Risk | Merged/Rebase/Skipped | OK/MERGED_AFTER_REBASE/CI_RED/TIMEOUT/MERGE_FAILED/WARN |
@@ -127,7 +119,7 @@ Include:
 
 ### 8. Lessons Learned
 
-After completing all PRs, invoke `claudius:lessons-learned` skill if notable patterns emerged (flaky tests blocking merges, recurring merge conflicts, security concerns).
+After all PRs, invoke `claudius:lessons-learned` skill if notable patterns emerged (flaky tests blocking merges, recurring merge conflicts, security concerns).
 
 ## Attribution Footer
 

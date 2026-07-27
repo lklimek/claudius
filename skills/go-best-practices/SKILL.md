@@ -34,14 +34,13 @@ allowed-tools: Read
 - **Context**: Pass as first parameter
 - **Interfaces**: io.Reader, io.Writer, io.Closer patterns
 - **Middleware**: Handler wrapping for HTTP servers
-- **Worker Pools**: Channel-based task distribution
+- **Worker Pools**: Channel-based task distribution for bounded concurrency
 - **Graceful Shutdown**: Signal handling with context cancellation
 
 ## Concurrency
 - Use sync.WaitGroup to wait for goroutines
 - Use buffered channels carefully — understand blocking
 - Use select for channel multiplexing
-- Implement worker pools for bounded concurrency
 
 ## Error Handling
 - Define custom error types for sentinel errors
