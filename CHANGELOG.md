@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [6.3.0] - 2026-07-27
 
+### Changed
+
+- **All 29 non-conforming skills**: `description` frontmatter reformatted to plugin-dev:skill-development's third-person "This skill should be used when..." convention with quoted verbatim trigger phrases, matching `ci-dance` (the only prior conformer). Coordinator-doctrine skills (`grand-admiral`, `codex-crew`, `coding-best-practices`, `delegate`, `track-minions`, `report-format`, `severity`, `bug-investigation`, `lessons-learned`) get situation-based trigger framing instead of fabricated "user says X" quotes, since they're typically self-loaded by an agent's own workflow logic rather than triggered by literal user words. No change to skill scope, body content, or `name` fields.
+
 ### Fixed
 
 - **`grumpy-review`**: CI-safe `BASE_BRANCH` resolution (falls back to `origin/$BASE_BRANCH` when the bare ref doesn't resolve locally); collision-resistant scratch directories with a check-before-overwrite convention for concurrent reviews of the same PR; producer spawn prompts now forbid metadata-wrapper envelopes and self-invoking `consolidate_reports.py`; `§5b` recommends a script-based merge pattern above ~30 raw findings; spawn prompts list the full deployed roster and support passive cross-domain finding hints; a `TaskStop` cleanup pass after consolidation works around leaked tmux-backend teammate processes.
