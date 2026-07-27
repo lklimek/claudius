@@ -12,6 +12,8 @@ Workflow for checking/triaging/verifying existing PR review comments.
 
 **ALWAYS fetch fresh comments from GitHub on every invocation** — never assume none are new.
 
+**Bare coordinators:** A bare coordinator session typically lacks `mcp__plugin_claudius_github__*` tools. Go directly to the [gh CLI fallback](references/gh-cli-fallback.md); spawned agents whose frontmatter lists the tools still prefer MCP.
+
 Fetch all comment types via GitHub MCP `pull_request_read`:
 
 - **Review threads** (inline, with resolution status): `method: "get_review_comments"` — threads with `isResolved`, `isOutdated`, `isCollapsed` metadata and grouped comments. Carry `isResolved` forward per thread — step 3 uses it to skip re-verification of already-resolved threads.
@@ -231,3 +233,5 @@ ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <owner/repo> <pr_
 ```
 
 Thread resolution has no MCP equivalent — the wrapper uses a GraphQL mutation directly. The `--id` form auto-converts `discussion_r*`/numeric IDs to thread node IDs; mix freely with `PRRT_*` in one invocation. Never resolve partially-addressed threads.
+
+With a triage-role token, wrap the entire script invocation in `ghsudo` per the standing fallback convention; ambient bot auth commonly returns 403 for `ResolveReviewThread`.
