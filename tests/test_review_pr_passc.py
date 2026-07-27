@@ -116,10 +116,12 @@ class TestPassCFloatsDeriveDocumentedBands:
 
     def test_scope_one_lifts_above_documented_bands(self):
         # At scope=1.0 both informational findings rise above the intended INFO/LOW:
-        # {0.1,0.1,1.0} -> LOW(2) — IEEE-754 makes (0.1+0.1+1.0)/3 = 0.39999... land just
-        # under the 0.4 MEDIUM cutoff (the ==2 is intentional, not a typo); {0.2,0.2,1.0}
-        # -> MEDIUM(3). Neither reaches the documented INFO/LOW — hence the scope=0.0 fix.
-        assert derive_finding_severity({"risk": 0.1, "impact": 0.1, "scope": 1.0}) == 2
+        # {0.1,0.1,1.0} -> MEDIUM(3) and {0.2,0.2,1.0} -> MEDIUM(3). Neither reaches the
+        # documented INFO/LOW — hence the scope=0.0 fix in production (see review-pr
+        # SKILL.md's "Pass C scope exception"). Both cases land on the same band now that
+        # derive_severity_int's epsilon tolerance (scripts/severity_util.py) no longer lets
+        # IEEE-754 rounding drop the first case to LOW at the exact 0.4 boundary.
+        assert derive_finding_severity({"risk": 0.1, "impact": 0.1, "scope": 1.0}) == 3
         assert derive_finding_severity({"risk": 0.2, "impact": 0.2, "scope": 1.0}) == 3
 
 
