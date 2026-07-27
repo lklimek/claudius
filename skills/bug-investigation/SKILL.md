@@ -13,12 +13,12 @@ Default discipline for diagnosing a reported bug. The user's reproducible observ
 1. **Observation over theory** — the user's reproducible facts are ground truth to explain; their causal explanation is only a hypothesis. Refuting the theory ≠ explaining the observation. (User imprecision usually lives in the explanation, not the observation.)
 2. **Entry point over name** — statically trace the call graph from the actual UI/CLI entry point (the thing the user clicked/ran) down to the outcome. Never anchor on a function whose name merely matches the feature.
 3. **The exercised path, not a correct path** — when ≥2 plausible code paths exist, verify the one actually hit. Proving a correct path exists is not proving the user's path is correct.
-4. **Reproduce or it's unsolved** — if your analysis cannot reproduce the user's concrete observation, it is INCOMPLETE. Never conclude "not a bug" until the observation is explained. A clash between your analysis and a user-observed fact is a STOP signal, not a footnote. When the repro artifact is a test, it must be RED against the documented contract on the buggy revision, not green mirroring the defect — see `coding-best-practices` § Workflow Discipline TDD "Repro tests go RED first".
+4. **Reproduce or it's unsolved** — analysis that cannot reproduce the user's concrete observation is INCOMPLETE. Never conclude "not a bug" until the observation is explained. A clash between analysis and a user-observed fact is a STOP signal, not a footnote. When the repro artifact is a test, it must be RED against the documented contract on the buggy revision, not green mirroring the defect — see `coding-best-practices` § Workflow Discipline TDD "Repro tests go RED first".
 5. **Brief with the literal reproduction** (coordinator-facing) — investigation spawn prompts MUST quote the user's exact reproduction steps and the literal entry point, and require: "trace from this entry point; if you can't reproduce the observed symptom, you haven't found the cause."
 
 ## Failure Mode (worked example)
 
-A real funds-safety bug (a receive address derived past the SPV gap window → invisible funds) was wrongly cleared as "not a bug"; only a user-supplied on-chain reproduction caught it.
+A real funds-safety bug (receive address derived past the SPV gap window → invisible funds) was wrongly cleared as "not a bug"; only a user-supplied on-chain reproduction caught it.
 
 | Rule violated | What went wrong |
 |---|---|
