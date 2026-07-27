@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [6.3.0] - 2026-07-27
+
+### Fixed
+
+- **`grumpy-review`**: CI-safe `BASE_BRANCH` resolution (falls back to `origin/$BASE_BRANCH` when the bare ref doesn't resolve locally); collision-resistant scratch directories with a check-before-overwrite convention for concurrent reviews of the same PR; producer spawn prompts now forbid metadata-wrapper envelopes and self-invoking `consolidate_reports.py`; `§5b` recommends a script-based merge pattern above ~30 raw findings; spawn prompts list the full deployed roster and support passive cross-domain finding hints; a `TaskStop` cleanup pass after consolidation works around leaked tmux-backend teammate processes.
+- **Report pipeline** (`consolidate_reports.py`, `severity_util.py`, `generate_review_report.py`): `prepare` now emits a correctly-shaped `agent_stats` (was crashing `assemble`'s `compute_statistics` with `AttributeError`); `derive_severity_int` gained an epsilon tolerance so exact-boundary severity trios no longer silently drop a full band; the HTML/triage markdown renderer now guards its `import markdown` the same way the PDF renderer already does; `redundancy_ratio` now ships a per-agent breakdown alongside the top-line ratio so resolved-comment collapse isn't misread as reviewer-overlap waste.
+- **`codex-crew`**: documents cancelling a harness-killed job (`codex-companion.mjs cancel <job-id> --json`, run from the job's own `--cwd`) before `--resume-last`, since a stale broker-level lock otherwise blocks the resume; promotes a `ps -p <pid>` liveness check into the primary "Monitoring a Codex Job" workflow; corrects the overstated claim that `/data/artifacts` is Codex-writable; every dispatch prompt now carries a standing "you are a leaf worker, not a coordinator" line so Codex stops reading orchestration-only skills it'll never use.
+- **`check-pr-comments` / `git-and-github`**: `gh-fetch-reviews.sh` now emits a proper JSON array instead of JSONL; documents the `ghsudo` requirement for `gh-resolve-review-threads.sh` under the triage-role token; fixes a `gh-common.sh` stdin-slurp path that could hang indefinitely on non-TTY stdin that never sends EOF; documents `add_comment_to_pending_review`'s required camelCase `subjectType` + uppercase `LINE`/`FILE` casing (in `pr-review.md`, no longer duplicated in `SKILL.md`); `check-pr-comments`'s `gh-cli-fallback.md` now delegates to `git-and-github`'s copy instead of duplicating it; documents that a bare coordinator session typically lacks GitHub MCP tools and should default to the `gh` CLI fallback.
+- **`grand-admiral`**: clarifies that MemCan tool availability isn't guaranteed for `general-purpose`-type agents despite a `Tools: *` listing; adds a "verify, don't implement on faith" note to Development-Work Delegation; documents native Claude Code task/teammate notifications as the sanctioned watchdog fallback for MCP-tool-less subagents (e.g. `qa-engineer-marvin`); adds a task-notification sanity-check note against cross-session leakage; corrects example agent-brief phrasing that told non-Task-tool agents to invoke `plugin-dev:skill-reviewer` directly.
+- **`hooks/cargo-discipline.sh`**: no longer false-positives on commit-message prose containing literal `cargo test`/`cargo clippy`/`cargo nextest` inside a quoted heredoc body.
+- **`scripts/minion-monitoring.py`**: new opt-in `--worktrees-session-filter` scopes `--worktrees` direct discovery to the invoking session's own workspace prefix, closing cross-session Codex event leakage (default behavior unchanged when omitted).
+- **`scripts/cargo-cached.sh`**: verification ledger records now populate their `session` field from `$CLAUDE_CODE_SESSION_ID`/`$CLAUDE_SESSION_ID` instead of leaving it silently empty, so future duplicate-worker incidents can be traced directly from the ledger.
+- **`SETUP.md` / `README.md`**: Skill Catalog table now lists all 30 skills (was missing several); README's stated skill count matches; new "Host Tools" prerequisites section.
+
 ## [6.2.0] - 2026-07-27
 
 ### Changed

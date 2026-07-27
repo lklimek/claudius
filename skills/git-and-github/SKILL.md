@@ -71,9 +71,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 **Never submit a final review (approve/request-changes). Always create draft/pending reviews** — the user publishes them. With MCP, omit the `event` field in `pull_request_review_write` to create a pending review.
 
-For `add_comment_to_pending_review`, pass camelCase `subjectType` with uppercase `LINE` or `FILE`; `subject_type` and lowercase values are invalid.
-
-See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR context, deduplication, diff-bounds verification, posting inline comments.
+See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR context, deduplication, diff-bounds verification, posting inline comments, and the `add_comment_to_pending_review` parameter-casing requirement.
 
 ### Issues
 
