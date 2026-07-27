@@ -1,6 +1,6 @@
 # PR Review Operations
 
-Prefer GitHub MCP (`mcp__plugin_claudius_github__*`) for all API operations. Use wrapper scripts as CLI fallback when MCP is unavailable. All wrapper scripts are at `<plugin-root>/scripts/`.
+Prefer GitHub MCP (`mcp__plugin_claudius_github__*`) for all API operations; fall back to the wrapper scripts at `<plugin-root>/scripts/` when MCP is unavailable.
 
 ## Get PR Context
 
@@ -9,7 +9,7 @@ Prefer GitHub MCP (`mcp__plugin_claudius_github__*`) for all API operations. Use
 - `pull_request_read` with `method: "get_files"` — changed files with stats
 - `pull_request_read` with `method: "get_diff"` — full diff
 
-**Note**: `get_files` and `get_diff` may return large responses. See the parent skill's § Context Management for the subagent delegation pattern.
+**Note**: `get_files` and `get_diff` may return large responses — see the parent skill's § Context Management for the subagent delegation pattern.
 
 **CLI fallback**:
 ```bash
@@ -29,7 +29,7 @@ gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, 
 
 ## Fetch Existing Reviews and Comments
 
-Fetch before posting to avoid duplicates. Drop any finding already covered by an existing review (match by file:line and substance, not exact wording).
+Fetch before posting to avoid duplicates: drop any finding already covered by an existing review (match by file:line and substance, not exact wording).
 
 **MCP (preferred)**:
 - `pull_request_read` with `method: "get_reviews"` — existing reviews

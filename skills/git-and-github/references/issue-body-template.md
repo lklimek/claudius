@@ -1,16 +1,14 @@
 # Issue Body Template
 
 Canonical issue-body skeleton for `git-and-github` §Issues — same plain-language-first
-shape as [`pr-body-template.md`](pr-body-template.md). Copy only the contents of the fenced
-block below into the issue body — not this page's title or explanatory text. Drop whole
-sections or sub-sections that don't apply, keep the section order. `TL;DR` / `User story` /
-`Scenario` are plain-language and user-facing; `Detailed discussion` is technical, for
-implementors and AI agents.
+shape as [`pr-body-template.md`](pr-body-template.md). Copy only the fenced block below
+into the issue body — not this page's title or prose. Drop sections/sub-sections that
+don't apply; keep the order. `TL;DR` / `User story` / `Scenario` are plain-language and
+user-facing; `Detailed discussion` is technical, for implementors and AI agents.
 
 For a bug report, `Scenario` is the reproduction: `Base flow` gets there, `Actual behavior`
 is the bug, `Expected behavior` is the fix target. For a feature request with nothing to
-reproduce, drop `Scenario` and describe the gap in `User story` / `Detailed discussion`
-instead.
+reproduce, drop `Scenario` and describe the gap in `User story` / `Detailed discussion`.
 
 ```markdown
 **TL;DR:** <one plain-language sentence describing the problem or request>
