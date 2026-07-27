@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-07-27
+
+### Removed
+
+- **`review-loop`, `workflow-trivial` skills**: a 7-week Claude Code session-history audit (1105 transcripts, all projects) found zero invocations of either and no load-bearing references outside a catalog line in `grand-admiral` (now updated) and inventory rows in `SETUP.md` (now updated). `workflow-trivial`'s niche (≤20-line fixes) folds into `workflow-simplified`.
+
+### Changed
+
+- **Prompt compaction sweep**: tightened wording across all 8 agents, the remaining 29 skills, and ~9 hot-path `references/` docs (PR/issue templates, call-tree-walk, sandbox-and-recovery, stall-watchdog, source-of-truth) — same rules, constraints, and cross-references, ~13% fewer words on the touched files (~7.1k words / 49 files). Vendored reference material (`security-best-practices/references/` OWASP cheatsheets, `rust-best-practices/references/` guideline docs) was left untouched by design — those are grep-on-demand, not always-loaded prompt text. Driven by a usage audit correlating session-history invocation/preload counts with file size to prioritize the highest-exposure files first (`coding-best-practices`, `grand-admiral`, `severity`, `security-best-practices`, `report-format`).
+
 ## [5.17.0] - 2026-07-23
 
 ### Changed
