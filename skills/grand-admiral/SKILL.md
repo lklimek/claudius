@@ -66,6 +66,7 @@ Workflow skills define phases and agent sequencing. The coordinator selects a wo
 Applies to actual coding work (Bilby, or Codex Sol per `codex-crew`'s dev-preference routing). Review, QA execution, security, docs, and UX delegation keep the file-list briefing in § Agent Prompt Requirements.
 
 - **Stay high-level.** Brief the goal from Requirements/UX/architecture docs — no file list or approach; don't read source to build one. Small-effort exception: a trivial one-file/one-grep lookup is fine inline (see `delegate`).
+- **Evidence is not a verdict.** Supplying logs plus a suspected cause is useful, but label the cause as a hypothesis and explicitly tell the agent to verify or refute it against the evidence before proposing implementation. Never ask an agent to implement a coordinator hypothesis on faith; approve the plan only after the agent establishes the actual defect.
 - **Coordinator selects the gate.** A named Claude teammate investigates, returns an implementation plan (files, approach, sequence), and pauses for approval via `SendMessage`. Codex: dispatch well-scoped work directly with `--write`; large or risky work uses a read-only plan then a fresh writable job — see `codex-crew` § Plan-Approval Gate.
 - **Review scope**: requirements fit, architecture fit, conflicts with other in-flight agents — not implementation correctness (QA's job afterward).
 - **User involvement**: only when the plan is genuinely ambiguous/high-stakes, or on explicit request — otherwise approve or send back revisions autonomously.
@@ -79,7 +80,7 @@ Applies to actual coding work (Bilby, or Codex Sol per `codex-crew`'s dev-prefer
 
 ### Monitoring (Mandatory)
 
-Every dispatched agent — Claude subagent or Codex job — MUST be watched for stalls. **Prefer the MCP watchdog** (§ Recovery → MCP Watchdog) when `mcp__agent-watchdog__*` tools are available; otherwise launch the built-in Monitor once per session (§ Recovery → Built-in Stall Watchdog). Both are silent when healthy — zero coordinator tokens until something stalls, fails, or vanishes — so cost never justifies skipping. An un-monitored dispatch is a doctrine violation: Codex jobs emit no reliable completion signal (see `codex-crew`), so without a watchdog a finished or failed job sits unnoticed.
+Every dispatched agent — Claude subagent or Codex job — MUST be watched for stalls. **Prefer the MCP watchdog** (§ Recovery → MCP Watchdog) when `mcp__agent-watchdog__*` tools are available; otherwise launch the built-in Monitor once per session (§ Recovery → Built-in Stall Watchdog). A fixed-tool Claude subagent without watchdog tools uses that fallback when permitted, or native Claude Code task/teammate notifications when user policy overrides the fallback; see MCP Watchdog step 2. Both watchdogs are silent when healthy — zero coordinator tokens until something stalls, fails, or vanishes — so cost never justifies skipping. An un-monitored dispatch is a doctrine violation: Codex jobs emit no reliable completion signal (see `codex-crew`), so without a watchdog a finished or failed job sits unnoticed.
 
 ### Standalone vs Coordinated
 
@@ -169,10 +170,11 @@ Agents have NO conversation history. Every prompt MUST include:
 10. **Bug/diagnosis/root-cause tasks**: quote the user's exact reproduction steps and the literal entry point (button/command) and instruct: "trace from this entry point; if you can't reproduce the observed symptom, you haven't found the cause — see `bug-investigation`."
 11. **Coding standards (mandatory)**: any agent that writes, modifies, reviews, or tests code MUST be told to load and continuously apply `/coding-best-practices` (plus the relevant language best-practices skill) throughout the task — not as a one-time read. It is preloaded via frontmatter, but state it explicitly so the agent applies it as it works.
 12. **Cargo scope (code agents)**: name the narrowest cargo scope allowed (`-p` covering its files) and require the ledger evidence line (command, tree key, exit, log path) in its report. Workspace-wide runs are rarely warranted — reserve for real cross-cutting regression risk (see Verification Economy), never a default merge-gate step. Per-checkout target-dir isolation is automatic (`cargo-cached.sh` derives it — no manual `CARGO_TARGET_DIR`), but still require the provenance check (specific test names in the log) — see Worktree Isolation § Same-HEAD hazard.
+13. **Executable brief**: require only actions supported by the selected agent's frontmatter tools. A non-Task agent such as `technical-writer-trillian` cannot invoke another agent; tell it to "apply the `plugin-dev:skill-reviewer` rubric directly (read `plugin-dev/agents/skill-reviewer.md` if unfamiliar)," not to run that agent.
 
 ## MemCan Context Injection
 
-Before spawning, search MemCan for task-relevant context, inject findings into prompts, and tell agents they can use MemCan skills themselves.
+Before spawning, search MemCan for task-relevant context and inject findings into prompts. Tell agents to use MemCan themselves only when their frontmatter explicitly grants those tools.
 
 1. **Extract keywords** from the task (2-4 domain terms, API names, error messages)
 2. **Search**: `search(query="<keywords>", project="<repo>")` — MCP tool directly, not the recall skill
@@ -180,7 +182,7 @@ Before spawning, search MemCan for task-relevant context, inject findings into p
 4. **Inject** a `## Prior Knowledge (from MemCan)` block into the prompt — one bullet per memory: `- <memory text> [id: <short-id>]`
 5. **Skip** only for trivial tasks (typo, config) when search returns nothing above 0.7
 
-Why: agents have memcan tools but start with zero context — pre-searched injection guarantees pitfalls, conventions, and prior decisions reach the agent without relying on independent recall.
+Why: named/specialized agents whose frontmatter explicitly lists `mcp__plugin_memcan_brain__*` tools can search MemCan but start with zero context. Do not generalize that grant: a `general-purpose` agent has been observed without MemCan tools discoverable through ToolSearch even when its tool listing displayed `*`. Pre-searched injection guarantees context reaches every agent without assuming this runtime grant behavior.
 
 ## Worktree Isolation
 
@@ -254,12 +256,14 @@ Candies are the universal incentive; every agent maximizes their count. The coor
 
 The harness auto-notifies on agent completion AND death (crash, rate-limit, terminal error) — the PRIMARY recovery driver. Below covers only the gap it misses: an agent that owns assigned work yet has gone silent.
 
+Treat every `<task-notification>` as a routing hint, not proof that the task belongs to this session: unrelated sessions' notifications have been observed in the same stream. Before acting, match its job id and workspace against a job this session dispatched, then verify the direct job-state file and worktree path; ignore and report notifications that fail that check.
+
 ### MCP Watchdog (preferred)
 
 If `mcp__agent-watchdog__*` tools are available, use them instead of the Monitor script — one mechanism covers Claude agents and Codex CLI/Companion jobs (`runtime: claude_code|codex_cli|codex_companion`), no polling script or session-id guessing.
 
 1. **Register once** at session start: `register_session(runtime="claude_code", kind="main", native_id=<your session id>, event_key=<fresh>)` — binds this transport to one tree. Keep the returned `session_id`.
-2. **Per spawn**: inject your `session_id` into the agent's prompt so it can self-register as a child (`register_session(kind="child", parent_session_id=<yours>, event_key=<fresh>)`) if it also carries the MCP tool; then `register_delegation(parent_session_id, child_session_id, event_key=<fresh>)` to record the relation (optional `deadline_ms`). Agents without the tool stay invisible — cover them via the built-in fallback below.
+2. **Per spawn**: inject your `session_id` into the agent's prompt so it can self-register as a child (`register_session(kind="child", parent_session_id=<yours>, event_key=<fresh>)`) only if its explicit toolset carries the MCP tool; then `register_delegation(parent_session_id, child_session_id, event_key=<fresh>)` to record the relation (optional `deadline_ms`). A fixed-tool Claude subagent without the MCP tool (for example, `qa-engineer-marvin`) cannot self-register, and the coordinator has no native child id with which to register it on the subagent's behalf. Cover it with the built-in fallback below when permitted; if user-level policy overrides that fallback in favor of MCP-only monitoring, native Claude Code task/teammate completion, death, and idle notifications are the sanctioned coverage for this specific invisible subagent — corroborate them with transcript/process/worktree evidence rather than pretending it is in the MCP tree.
 3. **Monitor**: `list_events(after=<cursor>)` as a durable inbox — process the page, pass its `next_cursor` back as `after` to acknowledge. `get_session`/`get_session_tree` for point-in-time views; `get_watchdog_health` for adapter/tree health.
 4. **Experimental — corroborate, never trust alone.** Cross-check every signal (stall, completion, disappearance) against direct evidence (tmux pane, process liveness, `git log`/`status`, ledger) before acting — same discipline as the built-in watchdog's STALL/GONE handling (see `references/stall-watchdog.md`).
 5. **Report anomalies** (stale/incorrect state, a dropped session binding needing re-registration, degraded adapters, false stalls/completions): tell the user, and log via `memcan:todo` (`project=agent-watchdog`) once memcan is reachable so the tool improves.

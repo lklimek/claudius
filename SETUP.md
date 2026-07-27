@@ -4,6 +4,85 @@ The detailed manual for [Claudius the Magnificent](README.md). Everything you ne
 
 ## Prerequisites
 
+### Host Tools
+
+Install the baseline on every host. Install workflow-specific tools only for the skills and project stacks you use. Commands below target Debian/Ubuntu; use the equivalent packages on other systems.
+
+#### Hard Requirements
+
+Core skills and report scripts require Git, Python 3, and the complete Python dependency set:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git python3 python3-pip
+python3 -m pip install -r scripts/requirements.txt
+```
+
+The requirements file installs `markdown`, `beautifulsoup4`, `nh3`, `jinja2`, `markupsafe`, `matplotlib`, `reportlab`, `jsonschema`, and `PyYAML`. Some renderers import format-specific packages lazily and PDF text has a raw-text fallback, but consolidation and schema validation require `jsonschema`; install the full set for supported output.
+
+These tools have no fallback in the workflows that invoke them:
+
+| Workflow | Required tools | Debian/Ubuntu install |
+|----------|----------------|------------------------|
+| Rust projects and the cargo-discipline hook | `cargo`, `rustc` | `sudo apt-get install -y cargo rustc` |
+| `codex-crew` | Node.js, npm, [OpenAI Codex CLI](https://developers.openai.com/codex/cli), and the separate `openai-codex` plugin | `sudo apt-get install -y nodejs npm && sudo npm install --global @openai/codex` |
+| Built-in stall watchdog | `tmux` | `sudo apt-get install -y tmux` |
+| `triage-findings` stuck-port recovery | `fuser` from `psmisc` | `sudo apt-get install -y psmisc` |
+
+Configure the Codex CLI in `~/.codex/config.toml` before using `codex-crew`.
+
+#### Preferred Tools with Fallbacks
+
+Install the common accelerated and fallback paths together:
+
+```bash
+sudo apt-get install -y gh jq coreutils findutils util-linux universal-ctags global ripgrep fonts-dejavu-core fonts-noto-core
+python3 -m pip install ghsudo
+cargo install cargo-nextest --locked
+cargo install sccache --locked
+cargo install tree-sitter-cli --locked
+```
+
+- `gh` is the fallback when the GitHub MCP server is unavailable; optional `ghsudo` handles approved retries after 403/404 failures.
+- `jq` is optional for the cargo/session hooks, which fail open, but `hooks/block-github-writes.sh` fails closed without it and denies subagent GitHub MCP calls.
+- `cargo-nextest` falls back to `cargo test`. The cross-worktree `SCCACHE_BASEDIRS` optimization is skipped when `sccache` is missing or older than 0.14.0.
+- `sha256sum`, `timeout`, and `mktemp` come from `coreutils`; `xargs` from `findutils`; and `flock` from `util-linux`. The cargo cache wrapper uses `sha256sum`, `timeout`, `xargs`, and `flock`; it falls back to plain Cargo when cache helpers are unavailable, except that target-directory isolation fails closed when it cannot be established safely.
+- Caller lookup falls through Universal Ctags, GNU Global, Tree-sitter, then `ripgrep`.
+- PDF output searches DejaVu/Noto fonts or `$CLAUDIUS_PDF_FONT`; without a Unicode font it uses ReportLab's Latin-1 core fonts.
+
+#### Recommended but Optional
+
+The best-practices and security skills recommend these project tools but Claudius does not invoke all of them automatically. Install only the toolchains relevant to your projects:
+
+```bash
+# Python quality and dependency tools
+python3 -m pip install black ruff mypy bandit pylint semgrep pip-audit
+
+# Go formatting, linting, secret scanning, and vulnerability checks
+sudo apt-get install -y golang-go
+go install golang.org/x/tools/cmd/goimports@latest
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+go install github.com/zricethezav/gitleaks/v8@latest
+go install golang.org/x/vuln/cmd/govulncheck@latest
+
+# Frontend formatting, linting, and pnpm audit support
+npm install --global eslint prettier pnpm
+
+# Rust dependency policy and vulnerability checks
+cargo install cargo-audit --locked
+cargo install cargo-deny --locked
+cargo install cargo-vet --locked
+```
+
+`gofmt` ships with Go; `npm audit` ships with npm. For container/image scanning, install [Trivy](https://www.trivy.dev/docs/latest/getting-started/installation/) and [Grype](https://github.com/anchore/grype#installation) with their official installers:
+
+```bash
+curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+curl -sSfL https://get.anchore.io/grype | sudo sh -s -- -b /usr/local/bin
+```
+
+Adjacent integrations are optional: install Docker Compose (`sudo apt-get install -y docker-compose-plugin`) for the separate `memcan` plugin, and Poetry (`python3 -m pip install poetry`) only for Poetry-based projects using the release skill.
+
 ### GH_TOKEN -- GitHub Personal Access Token
 
 All agents connect to the [GitHub MCP server](https://github.com/github/github-mcp-server) for direct GitHub API access (issues, PRs, code search, actions, etc.). This requires a GitHub Personal Access Token set as `GH_TOKEN`.
@@ -165,13 +244,18 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 
 | Name | Description |
 |------|-------------|
+| `bug-investigation` | Investigate reported bugs, reproduce symptoms, and establish root cause |
+| `bye` | End-of-session teardown -- shut down agents, remove worktrees, reconcile work |
 | `check-pr-comments` | Verify that PR review comments have been addressed |
 | `ci-dance` | End-to-end PR pipeline -- push, CI monitoring, parallel reviews, fix, repeat until green |
+| `codex-crew` | Route development work to Codex, monitor jobs, and recover failures |
 | `coding-best-practices` | Universal rules for TDD, self-review, quality timing, review format, security |
+| `delegate` | Choose whether, how, and at what model tier to delegate work |
 | `dependabot-merge` | Bulk-process dependabot PRs -- audit, comment, merge safe ones, rebase failures |
 | `frontend-best-practices` | Frontend best practices -- TypeScript, React/Vue/Svelte, CSS, accessibility, testing |
 | `git-and-github` | All git/gh commands, GitHub interactions, and access-denied issues |
 | `go-best-practices` | Go best practices -- idioms, error handling, concurrency, testing patterns |
+| `grand-admiral` | Multi-agent orchestration -- spawning, isolation, coordination, recovery |
 | `grumpy-review` | Multi-agent code review with consolidated severity-ranked report |
 | `lessons-learned` | Extract and save reusable learnings from the session |
 | `merge-base` | Careful merge of remote base branch into current feature branch |
@@ -184,7 +268,10 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `rust-best-practices` | Rust programming checklists (Microsoft Pragmatic + Rust API Guidelines) |
 | `security-best-practices` | OWASP-based secure programming checklists |
 | `severity` | Consistent severity classification (CRITICAL-INFO) for review findings |
+| `track-minions` | Persist delegated and multi-step task state across context loss |
+| `triage` | Reproduce and root-cause GitHub issues, assess severity, and post status |
 | `triage-findings` | Interactive finding triage -- classify in browser, decisions feed back to Claude |
+| `validate-findings` | LLM validation pass for consolidated review findings |
 | `workflow-feature` | Full workflow for new features or major refactoring |
 | `workflow-simplified` | Single-agent plan/TDD/implement/self-review loop for bug fixes or small-to-medium changes (≤1000 LOC) |
 
