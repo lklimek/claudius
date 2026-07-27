@@ -5,9 +5,7 @@ description: "Use before delegating any task to an agent — a single Agent() sp
 
 # Delegate
 
-Run before every `Agent()` call. Spawning is the dominant token cost — every subagent rebuilds its context cache from scratch, and that cache-creation, not model output, is the bulk of the bill. The cheapest work is the spawn that never happens.
-
-Cheap enough to reload before each delegation. Reload it.
+Run before every `Agent()` call — cheap enough to reload each time. Spawning is the dominant token cost: every subagent rebuilds its context cache from scratch, and cache-creation, not model output, is the bulk of the bill. The cheapest work is the spawn that never happens.
 
 ## Pre-Delegation Checklist
 
@@ -19,16 +17,16 @@ Cheap enough to reload before each delegation. Reload it.
 6. **Monitoring** — is a watchdog running for this session (MCP preferred, else the built-in Monitor)? An un-monitored dispatch is a doctrine violation (see § Recovery in `grand-admiral`).
 7. **Development work?** — brief the goal only, no file list/approach; the agent plans and the coordinator approves (see `grand-admiral` § Development-Work Delegation).
 
-**Anti-pattern — file-independence is not spawn-justification.** A real case: four doc-only fixes, each under 20 lines, each in its own file, got four separate Opus spawns. Independent files justify a separate worktree or commit; they do NOT automatically justify a separate agent. The batch totalled well under 100 lines and belonged to one agent.
+**Anti-pattern — file-independence is not spawn-justification.** Real case: four doc-only fixes, each under 20 lines in its own file, got four separate Opus spawns — the batch totalled well under 100 lines and belonged to one agent. Independent files justify a separate worktree or commit, NOT automatically a separate agent.
 
 ## Token Economy
 
 Four mandatory rules:
 
 1. **Spawn discipline**: default to inline for small/sequential work in the warm parent context. Spawn ONLY for genuinely parallel independent work, large scope (~20k+ output tokens, or many files), or required context isolation.
-2. **Model tiering (mandatory)**: set model on every spawn — the agent's frontmatter `model:` is only the fallback when you don't. **Sonnet 5** (the `sonnet` alias, which auto-resolves to it) is the capable default workhorse: ~91% of Opus on SWE-bench Pro, best-in-class terminal/computer-use, strong self-verification, native 1M context, ~1.67× cheaper than Opus (2.5× cheaper until 2026-08-31). Tier per agent by where quality is load-bearing:
-   - **Opus** — quality-critical reasoning / agentic depth: `developer-bilby` (agentic coding), `project-reviewer-adams` (project consistency + structural/idiom code-quality review — absorbed from `developer-bilby`'s former code-review remit), `architect-nagatha` (system design, dependency/tech trade-offs, plan validation), `ux-designer-diziet` (UX), `security-engineer-smythe` (security / high-risk). These carry `model: opus` as their frontmatter fallback.
-   - **Sonnet 5** — agentic-but-routine: the coordinator, `qa-engineer-marvin` (adversarial correctness/QA execution — tests, lints, edge cases, independent verification against ground truth), `technical-writer-trillian` (docs), `Explore` / `general-purpose` (search), and terminal / GUI / browser-automation verification (Sonnet 5 leads OSWorld / Terminal-bench).
+2. **Model tiering (mandatory)**: set model on every spawn — the agent's frontmatter `model:` is only the fallback when you don't. **Sonnet 5** (`sonnet` alias auto-resolves to it) is the capable default workhorse: ~91% of Opus on SWE-bench Pro, best-in-class terminal/computer-use, strong self-verification, native 1M context, ~1.67× cheaper than Opus (2.5× cheaper until 2026-08-31). Tier per agent by where quality is load-bearing:
+   - **Opus** — quality-critical reasoning / agentic depth: `developer-bilby` (agentic coding), `project-reviewer-adams` (project consistency + structural/idiom code-quality review), `architect-nagatha` (system design, dependency/tech trade-offs, plan validation), `ux-designer-diziet` (UX), `security-engineer-smythe` (security / high-risk). These carry `model: opus` as their frontmatter fallback.
+   - **Sonnet 5** — agentic-but-routine: the coordinator, `qa-engineer-marvin` (adversarial QA execution — tests, lints, edge cases, independent verification against ground truth), `technical-writer-trillian` (docs), `Explore` / `general-purpose` (search), and terminal / GUI / browser-automation verification (Sonnet 5 leads OSWorld / Terminal-bench).
    - **Haiku** — trivial mechanical (bulk search, formatting).
    Override per task, both ways: downgrade a quality-critical agent to Sonnet 5 for a trivial job; upgrade a routine agent to Opus for a genuinely hard one. **Risk-based tiebreaker — security always escalates to Opus**: every security-sensitive task goes to Opus regardless of its generic tier — crypto, auth/key handling, network/transport, deserialization, untrusted input, dependency/version bumps, or a large/opaque diff. A passing vulnerability scan (e.g. govulncheck) is NOT evidence of low risk and never justifies a downgrade; ALWAYS fully investigate a version bump, including verifying the updated dependency's changed code. Cost breaks ties only among non-security work — when unsure, tier up. **Tokenizer caveat**: Sonnet 5 emits 1.0–1.35× more tokens than Sonnet 4.6 — still net cheaper, but watch cache-heavy sessions.
 3. **Read discipline**: prefer Grep/Glob first and Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary — see `git-and-github` § Context Management.

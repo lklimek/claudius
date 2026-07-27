@@ -5,13 +5,13 @@ description: "Use to track delegated and multi-step work in a durable store that
 
 # Track Minions
 
-An in-context checklist is not enough — it dies on compaction, which is exactly how multi-task work silently drops tasks. Track work in a durable store recoverable from scratch after any context loss.
+An in-context checklist dies on compaction — exactly how multi-task work silently drops tasks. Track work in a durable store recoverable from scratch after any context loss.
 
 ## Primary — a plain file, in-session
 
 Track in-flight work (agent dispatches, phases, file groups) in a plain file outside any git tree — not `/tmp` or anything else wipeable. Pick a stable path and simple format yourself; durability and recoverability are the point, not a fixed schema.
 
-1. **Before starting**: write one entry per logical unit (agent dispatch, phase, file group).
+1. **Before starting**: write one entry per logical unit.
 2. **While working**: update entries as they start/complete/block.
 3. **After compaction or any context loss**: re-read the file to recover the in-flight list — never assume the in-context view is complete.
 
