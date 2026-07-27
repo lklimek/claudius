@@ -1,16 +1,16 @@
 # Call-Tree Walk Methodology
 
-Authoritative recipe for deep transitive in-repo caller analysis on a PR. Referenced by `grumpy-review`, `review-pr`, and `check-pr-comments` skills.
+Authoritative recipe for deep transitive in-repo caller analysis on a PR. Referenced by `grumpy-review`, `review-pr`, and `check-pr-comments`.
 
 ## Outcome
 
-For every function modified by the diff, surface every transitive in-repo caller whose assumption-set is invalidated by the new contract. Findings name the caller's `file:line`, the assumption that was broken, and the chain back to the modified function.
+For every function modified by the diff, surface every transitive in-repo caller whose assumption-set is invalidated by the new contract. Findings name the caller's `file:line`, the broken assumption, and the chain back to the modified function.
 
 ## When to Run
 
 Trigger only when `git diff $BASE_BRANCH...HEAD` shows modified or removed function/method declarations. Skip for:
 
-- Pure additions (new functions, no callers exist yet).
+- Pure additions (new functions, no callers yet).
 - Doc-only PRs.
 - Comment-only or whitespace-only diffs.
 - Changes confined to test files (callers are tests; the walk is noise).
@@ -19,19 +19,19 @@ A signature change without a body change still triggers — callers may depend o
 
 ## Step 1 — Inventory Modified Functions
 
-Enumerate every modified/removed function or method declaration from the diff. For each entry record:
+Enumerate every modified/removed function or method declaration from the diff. Per entry record:
 
-- Fully qualified name (`module::path::function` for Rust, `package.Type.method` for Go, `pkg.module.func` for Python, `Class#method` for JS/TS).
+- Fully qualified name (`module::path::function` Rust, `package.Type.method` Go, `pkg.module.func` Python, `Class#method` JS/TS).
 - Language.
 - Visibility: `public` / `private` / `trait-or-interface-impl` / `leaf`.
 - Change shape: `signature-changed` / `body-only`.
 - Source location (`path:line`).
 
-Drop pure additions — they have no in-repo callers yet.
+Drop pure additions — no in-repo callers yet.
 
 ## Step 2 — Rank and Truncate
 
-Score each entry on these dimensions (higher = more risk):
+Score each entry (higher = more risk):
 
 | Dimension | High risk | Low risk |
 |---|---|---|
@@ -39,9 +39,9 @@ Score each entry on these dimensions (higher = more risk):
 | Change shape | signature-changed | body-only |
 | Module reach | widely-imported module, core trait | local utility, test helper |
 
-Order descending by composite risk. Keep the **top 10** and walk those. Defer the rest.
+Order descending by composite risk. Walk the **top 10**; defer the rest.
 
-Emit one INFO finding listing every modified function, marking which were walked vs deferred and why:
+Emit one INFO finding listing every modified function, marking walked vs deferred and why:
 
 ```text
 category: "call_tree"
@@ -58,13 +58,13 @@ description: |
 
 ## Step 3 — Probe Tooling
 
-Discover what the environment offers. Run cheap `which` probes once, cache the answers — `which` is the only detection primitive on every skill's allow-list, so prefer it over `test -f`/`ps -e` (which the sandbox blocks):
+Run cheap `which` probes once and cache the answers — `which` is the only detection primitive on every skill's allow-list, so prefer it over `test -f`/`ps -e` (which the sandbox blocks):
 
 ```bash
 which ctags global gtags rg ripgrep tree-sitter 2>/dev/null
 ```
 
-The probe order is tool-agnostic — pick whatever the environment actually offers. Suggested order:
+Pick whatever the environment offers. Suggested order:
 
 | Tier | Tool | When |
 |---|---|---|
@@ -74,7 +74,7 @@ The probe order is tool-agnostic — pick whatever the environment actually offe
 | OK | `gh search code repo:<owner>/<repo> "<symbol>"` | Cross-repo same-org (limited rate) |
 | Fallback | `rg -n --type <lang> '<caller-regex>'` | Always available |
 
-Record which tool you used; every emitted `CALL-` finding must include `Walked via: <tool>` (e.g. `Walked via: ctags + rg fallback`).
+Record which tool was used; every emitted `CALL-` finding must include `Walked via: <tool>` (e.g. `Walked via: ctags + rg fallback`).
 
 ### Fallback regex hints
 
@@ -87,7 +87,7 @@ Record which tool you used; every emitted `CALL-` finding must include `Walked v
 
 ## Step 4 — Walk
 
-BFS from each modified function. Track the caller chain via parent pointer.
+BFS from each modified function; track the caller chain via parent pointer.
 
 Caps (per function):
 
@@ -95,7 +95,7 @@ Caps (per function):
 - **Caller count**: 200 unique callers.
 - **Wall-clock**: 60 seconds.
 
-Dedupe by `file:line`. When any cap trips, stop that walk and emit one `CALL-` INFO finding noting the truncation point and which cap fired:
+Dedupe by `file:line`. When a cap trips, stop that walk and emit one `CALL-` INFO finding noting the truncation point and which cap fired:
 
 ```text
 title: "Call-tree walk truncated at depth 5 for foo::bar"
@@ -110,7 +110,7 @@ Skip walks that visit only test files — record as deferred in the ranking find
 
 For each terminal caller, re-read the caller's code around `file:line` and check whether the assumption-set still holds. Mismatches become `CALL-` findings.
 
-Assumptions to verify (per the modified function's new contract):
+Assumptions to verify (against the modified function's new contract):
 
 1. **Signature**: argument types, count, defaults, generic bounds.
 2. **Return shape**: type, `Option`/`Result` wrapping, ownership.
@@ -119,25 +119,25 @@ Assumptions to verify (per the modified function's new contract):
 5. **Side effects**: added I/O, lock acquisition, allocation, log emission.
 6. **Performance**: previously O(1) now O(n); previously non-blocking now blocking.
 7. **Concurrency**: thread-safety, `Send`/`Sync`, async-ness change.
-8. **Semantics**: same arguments now produce different output (e.g. retry policy changed, default value changed).
+8. **Semantics**: same arguments now produce different output (e.g. retry policy or default value changed).
 
-For each broken assumption, emit a `CALL-` finding scoped to the caller's `file:line`. The chain back to the modified function goes in `description`.
+Per broken assumption, emit a `CALL-` finding scoped to the caller's `file:line`; the chain back to the modified function goes in `description`.
 
 ### Severity rubric (composes with `claudius:severity`)
 
 | Severity | When |
 |---|---|
-| CRITICAL | Removed/renamed symbol still referenced by callers — especially in dynamic languages where the bug surfaces at runtime, not at compile time |
+| CRITICAL | Removed/renamed symbol still referenced by callers — especially in dynamic languages where the bug surfaces at runtime, not compile time |
 | HIGH | Behaviour-breaking semantic change (panic→Result, sync→async, return-shape change) with multiple unupdated callers |
 | MEDIUM | Behaviour-breaking change with a single isolated caller, or signature change callers must adapt to |
 | LOW | Stylistic drift — callers still work but no longer match the new idiom |
 | INFO | Ranking summary, truncation notes, deferred-walk notes |
 
-Score `risk`/`impact`/`scope` per `claudius:severity`; let the coordinator derive the integer.
+Score `risk`/`impact`/`scope` per `claudius:severity`; the coordinator derives the integer.
 
 ## Step 6 — Emit Findings
 
-Finding shape (one section per modified function whose walk surfaced callers, or one consolidated section for the whole PR — pick whichever is more readable):
+Finding shape (one section per modified function whose walk surfaced callers, or one consolidated section for the whole PR — whichever reads better):
 
 ```json
 {
@@ -161,19 +161,19 @@ Finding shape (one section per modified function whose walk surfaced callers, or
 }
 ```
 
-Required fields on every `call_tree` finding:
+Required on every `call_tree` finding:
 
 - `category: "call_tree"`.
-- `id`: `CALL-NNN` — the producer emits a provisional ID; the coordinator reassigns.
-- `description`: MUST include a line `Walked via: <tool>` and the chain `<caller> → … → <modified-function>`.
+- `id`: `CALL-NNN` — provisional from the producer; the coordinator reassigns.
+- `description`: MUST include a `Walked via: <tool>` line and the chain `<caller> → … → <modified-function>`.
 - `code_snippets`: one snippet per terminal caller with `language` matching the repo.
-- `location`: caller's `file:line` (not the modified function's location — the finding is about the caller).
+- `location`: the caller's `file:line` (not the modified function's — the finding is about the caller).
 
 Optional but encouraged: `tags` such as `signature-change`, `return-shape`, `panic-to-result`.
 
 ## Anti-Patterns
 
-- **Walking every modified function on a 200-file refactor**. Rank, truncate to top 10, surface the rest as deferred.
-- **Treating compile-time-checked callers as automatically safe**. Rust/TS will catch shape mismatches at the type level, but semantic changes (retry policy, default value, panic→Result re-wrap) still slip through — read the caller.
-- **Walking into test files and flagging them as broken**. Tests track the new contract by definition; treat them as expected callers and skip emission.
-- **Skipping the `Walked via:` line**. Without it the reader can't judge how thorough the walk was.
+- **Walking every modified function on a 200-file refactor.** Rank, truncate to top 10, surface the rest as deferred.
+- **Treating compile-time-checked callers as automatically safe.** Rust/TS catch shape mismatches at the type level, but semantic changes (retry policy, default value, panic→Result re-wrap) still slip through — read the caller.
+- **Walking into test files and flagging them as broken.** Tests track the new contract by definition; treat them as expected callers and skip emission.
+- **Skipping the `Walked via:` line.** Without it the reader can't judge how thorough the walk was.
