@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [6.4.0] - 2026-07-28
+
+### Added
+
+- **`scripts/cargo-cached.sh`**: machine-wide build-slot cap — at most `CLAUDIUS_MAX_PARALLEL_BUILDS` (default 2) REAL cargo invocations run at once across every wrapper process sharing a ledger, as `flock`-held counting-semaphore slots under `<ledger>/locks/build-slot-<i>.lock`. Restores a memory ceiling that per-checkout target-dir isolation (6.3.0) removed by accident: while all checkouts shared one target dir, cargo's own lock on it serialized real builds host-wide, so concurrent agents could not each fan out a full parallel rustc/linker build and OOM the machine. Cache replays are never gated (the cap sits after both replay attempts), an invalid, zero or negative value falls back to 2 instead of uncapping, an unusable lock directory or a missing `flock` skips the cap entirely (fail open), and the wait is deliberately unbounded — a cap that expired under load would release every queued build at once. Covered by `tests/test_cargo_cached.sh` K46-K52.
+
 ## [6.3.0] - 2026-07-27
 
 ### Changed
