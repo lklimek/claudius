@@ -16,6 +16,8 @@ Codex CLI supports three sandbox modes:
 
 `~/.codex/config.toml`:
 
+These are host-specific example values; adjust them to match the local filesystem:
+
 ```toml
 sandbox_mode = "workspace-write"
 model = "gpt-5.6-sol"
@@ -28,8 +30,8 @@ network_access = true
 ```
 
 - The first `writable_roots` entry should track `$CLAUDIUS_WORKTREE_ROOT` when the configured worktree root changes.
-- `writable_roots` **adds** to the always-writable workspace root (cwd): `/data` worktrees, scratch, and the shared cargo target dir (`/data/target`).
-- Do not treat the `/data/artifacts` config entry as an effective write guarantee. A dispatched job has observed a narrower or stale ACL and failed there as read-only while otherwise completing normally. Have Codex return report or artifact content through `result.rawOutput`; the coordinator then writes it under `/data/artifacts`.
+- `writable_roots` **adds** to the always-writable workspace root (cwd): the configured worktree root, scratch location, and shared cargo target dir.
+- Do not treat the configured artifacts entry as an effective write guarantee. A dispatched job has observed a narrower or stale ACL and failed there as read-only while otherwise completing normally. Have Codex return report or artifact content through `result.rawOutput`; the coordinator then writes it to the configured artifacts location.
 - `network_access = true` unblocks localhost test sockets — and also enables general outbound network, the tradeoff `workspace-write` disables by default.
 - The `# Self-commit scope ... NOT added yet` comment is misleading as an explanation of commit behavior (see below) — kept verbatim as live config text, but not proof commit is blocked.
 - Validate any change with `codex --strict-config doctor` (hard-errors on unknown fields). Keep a timestamped backup of `config.toml` before editing.
