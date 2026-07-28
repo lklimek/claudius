@@ -218,26 +218,50 @@ Read `intermediate.json` and decide:
 4. **Merge classification**: assign `merge_class` (+ `intent_basis` for `blocking`) to every non-informational finding per `severity` skill § Merge Classification. Use the intent digest when the invoker supplied one (review-pr); with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Severity never determines `merge_class`.
 5. **Merge sections**: combine same-category agent sections into unified sections.
 6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding.
-7. **Agent stats**: record per-agent unique vs redundant counts.
+7. **Agent stats**: copy `intermediate.json`'s `agent_stats` array verbatim into `merged-findings.json` — `prepare` already computes it; do not hand-author or reshape it.
 
-For reviews above roughly 30 raw findings, generate `merged-findings.json` with a small Python helper instead of transcribing the entire document by hand. Shallow-copy every untouched raw finding dict verbatim so all fields survive; hand-author text only for true duplicate clusters, with an inline comment explaining each merge decision. This makes the diff show exactly what was merged and why. For example:
+For reviews above roughly 30 raw findings, use the ready-to-run merge helper instead of transcribing the entire document by hand. Record the review-specific judgment in `"$SCRATCH_DIR"/merge-decisions.json`: each true duplicate cluster names its members by `agent` + `original_id`, selects one member as the base, records a `reason`, and supplies only the hand-authored merged fields in `updates`. Include the step 6 `executive_summary` in the same file. Do not list candidate clusters you decide to keep separate.
 
-```python
-from json import loads
-from pathlib import Path
-raw = [dict(f) for f in loads(Path("intermediate.json").read_text())["raw_findings"]]
-cluster = {("security", "SEC-001"), ("qa", "QA-003")}
-# Merge: both findings describe the same unchecked parser failure.
-base, peer = (next(f for f in raw if (f["agent"], f["original_id"]) == key) for key in cluster)
-merged = dict(base)
-merged.update(description="Hand-authored merged text.", tags=sorted(set(base.get("tags", []) + peer.get("tags", []))), code_snippets=base.get("code_snippets", []) + peer.get("code_snippets", []))
-findings = [f for f in raw if (f["agent"], f["original_id"]) not in cluster]
-findings.append(merged)
+```json
+{
+  "executive_summary": {
+    "overall_assessment": "...",
+    "summary_text": "...",
+    "verdict_text": "...",
+    "verdict_action": "..."
+  },
+  "merges": [
+    {
+      "reason": "Both findings describe the same unchecked parser failure.",
+      "members": [
+        { "agent": "security", "original_id": "SEC-001" },
+        { "agent": "qa", "original_id": "QA-003" }
+      ],
+      "base": { "agent": "security", "original_id": "SEC-001" },
+      "updates": {
+        "description": "Hand-authored merged text.",
+        "tags": ["..."],
+        "code_snippets": [
+          { "language": "...", "content": "..." }
+        ]
+      }
+    }
+  ]
+}
 ```
 
-Wrap the resulting `findings` into the sectioned `merged-findings.json` shape below; keep the helper in the scratch directory so its merge decisions remain auditable.
+For every field combined from peers, put the complete merged value in `updates` (for example, the union of `tags` or `code_snippets`). The helper does not decide which findings overlap. It shallow-copies untouched findings, applies only the declared cluster merges, combines same-category sections, and copies `metadata`, `section_positives`, and `agent_stats` from `intermediate.json`:
 
-Write the result as `merged-findings.json`:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/merge_findings_helper.py \
+    --input "$SCRATCH_DIR"/intermediate.json \
+    --decisions "$SCRATCH_DIR"/merge-decisions.json \
+    --output "$SCRATCH_DIR"/merged-findings.json
+```
+
+Before assembly, finish the per-finding edits required by steps 2–4, verify the combined sections and executive summary from steps 5–6, and keep `merge-decisions.json` in the scratch directory so each merge remains auditable.
+
+Write the result as `"$SCRATCH_DIR"/merged-findings.json`. Its `agent_stats` value is the unchanged array copied from `intermediate.json`:
 
 ```json
 {
@@ -256,7 +280,7 @@ Findings do NOT need `id` fields — phase 2 assigns them. Set `top_findings_ove
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py assemble \
-    --input ${TMPDIR:-/tmp}/merged-findings.json \
+    --input "$SCRATCH_DIR"/merged-findings.json \
     --output ${REPORT_DIR:-.}/report.json
 ```
 
