@@ -29,4 +29,4 @@ if ! [[ "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 gh api "repos/${owner}/${repo}/pulls/${pr_number}/reviews" --paginate --slurp \
-  --jq '[.[][] | {id, state, submitted_at, body, user: .user.login}]'
+  | jq '[.[][] | {id, state, submitted_at, body, user: .user.login}]'
