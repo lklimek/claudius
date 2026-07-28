@@ -6,82 +6,178 @@ The detailed manual for [Claudius the Magnificent](README.md). Everything you ne
 
 ### Host Tools
 
-Install the baseline on every host. Install workflow-specific tools only for the skills and project stacks you use. Commands below target Debian/Ubuntu; use the equivalent packages on other systems.
+Install Base on every host, then install the subsections for the workflows and project stacks you use. Commands below target Debian/Ubuntu; use the equivalent packages on other systems.
 
-#### Hard Requirements
+#### Base
 
-Core skills and report scripts require Git, Python 3, and the complete Python dependency set:
+Every installation needs Git, Python 3, and the complete dependency set imported by the report scripts:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git python3 python3-pip
-python3 -m pip install -r scripts/requirements.txt
+sudo apt-get install -y \
+  git python3 python3-pip \
+  python3-markdown python3-bs4 python3-jinja2 python3-markupsafe \
+  python3-matplotlib python3-reportlab python3-jsonschema python3-yaml
+python3 -m pip install --break-system-packages 'nh3>=0.3.6'
 ```
 
-The requirements file installs `markdown`, `beautifulsoup4`, `nh3`, `jinja2`, `markupsafe`, `matplotlib`, `reportlab`, `jsonschema`, and `PyYAML`. Some renderers import format-specific packages lazily and PDF text has a raw-text fallback, but consolidation and schema validation require `jsonschema`; install the full set for supported output.
+The apt packages provide `markdown`, `beautifulsoup4`, `jinja2`, `markupsafe`, `matplotlib`, `reportlab`, `jsonschema`, and `PyYAML` to the same system Python that runs the scripts. `nh3>=0.3.6` has no sufficiently current package across supported Debian/Ubuntu releases, so its narrowly scoped `--break-system-packages` command is the explicit PEP 668 escape hatch. Some renderers import format-specific packages lazily and PDF text has a raw-text fallback, but consolidation and schema validation require `jsonschema`; install the full set for supported output.
 
-These tools have no fallback in the workflows that invoke them:
+#### GitHub PR and issue workflows
 
-| Workflow | Required tools | Debian/Ubuntu install |
-|----------|----------------|------------------------|
-| Rust projects and the cargo-discipline hook | `cargo`, `rustc` | `sudo apt-get install -y cargo rustc` |
-| `codex-crew` | Node.js, npm, [OpenAI Codex CLI](https://developers.openai.com/codex/cli), and the separate `openai-codex` plugin | `sudo apt-get install -y nodejs npm && sudo npm install --global @openai/codex` |
-| Built-in stall watchdog | `tmux` | `sudo apt-get install -y tmux` |
-| `triage-findings` stuck-port recovery | `fuser` from `psmisc` | `sudo apt-get install -y psmisc` |
-
-Configure the Codex CLI in `~/.codex/config.toml` before using `codex-crew`.
-
-#### Preferred Tools with Fallbacks
-
-Install the common accelerated and fallback paths together:
+Install these for GitHub PR, issue, review, and Actions workflows. If `pipx` is not already present, install it with `sudo apt-get install -y pipx` as shown:
 
 ```bash
-sudo apt-get install -y gh jq coreutils findutils util-linux universal-ctags global ripgrep fonts-dejavu-core fonts-noto-core
-python3 -m pip install ghsudo
+sudo apt-get install -y gh jq pipx
+pipx install ghsudo
+```
+
+- `gh` is the fallback when the GitHub MCP server is unavailable; `ghsudo` handles approved retries after 403/404 failures.
+- `jq` is optional for the cargo/session hooks, which fail open, but `hooks/block-github-writes.sh` fails closed without it and denies subagent GitHub MCP calls.
+
+#### Rust projects
+
+Install these if you work on Rust projects or use the cargo-discipline hook:
+
+```bash
+sudo apt-get install -y cargo rustc
 cargo install cargo-nextest --locked
 cargo install sccache --locked
 cargo install tree-sitter-cli --locked
-```
-
-- `gh` is the fallback when the GitHub MCP server is unavailable; optional `ghsudo` handles approved retries after 403/404 failures.
-- `jq` is optional for the cargo/session hooks, which fail open, but `hooks/block-github-writes.sh` fails closed without it and denies subagent GitHub MCP calls.
-- `cargo-nextest` falls back to `cargo test`. The cross-worktree `SCCACHE_BASEDIRS` optimization is skipped when `sccache` is missing or older than 0.14.0.
-- `sha256sum`, `timeout`, and `mktemp` come from `coreutils`; `xargs` from `findutils`; and `flock` from `util-linux`. The cargo cache wrapper uses `sha256sum`, `timeout`, `xargs`, and `flock`; it falls back to plain Cargo when cache helpers are unavailable, except that target-directory isolation fails closed when it cannot be established safely.
-- Caller lookup falls through Universal Ctags, GNU Global, Tree-sitter, then `ripgrep`.
-- PDF output searches DejaVu/Noto fonts or `$CLAUDIUS_PDF_FONT`; without a Unicode font it uses ReportLab's Latin-1 core fonts.
-
-#### Recommended but Optional
-
-The best-practices and security skills recommend these project tools but Claudius does not invoke all of them automatically. Install only the toolchains relevant to your projects:
-
-```bash
-# Python quality and dependency tools
-python3 -m pip install black ruff mypy bandit pylint semgrep pip-audit
-
-# Go formatting, linting, secret scanning, and vulnerability checks
-sudo apt-get install -y golang-go
-go install golang.org/x/tools/cmd/goimports@latest
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-go install github.com/zricethezav/gitleaks/v8@latest
-go install golang.org/x/vuln/cmd/govulncheck@latest
-
-# Frontend formatting, linting, and pnpm audit support
-npm install --global eslint prettier pnpm
-
-# Rust dependency policy and vulnerability checks
 cargo install cargo-audit --locked
 cargo install cargo-deny --locked
 cargo install cargo-vet --locked
 ```
 
-`gofmt` ships with Go; `npm audit` ships with npm. For container/image scanning, install [Trivy](https://www.trivy.dev/docs/latest/getting-started/installation/) and [Grype](https://github.com/anchore/grype#installation) with their official installers:
+- `cargo` and `rustc` have no fallback for Rust projects or the cargo-discipline hook.
+- `cargo-nextest` falls back to `cargo test`. The cross-worktree `SCCACHE_BASEDIRS` optimization is skipped when `sccache` is missing or older than 0.14.0.
+- Tree-sitter is also the third fallback in caller lookup.
+
+#### Go projects
+
+Install these if you work on Go projects and want formatting, linting, secret scanning, and vulnerability checks:
+
+```bash
+sudo apt-get install -y golang-go
+go install golang.org/x/tools/cmd/goimports@latest
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+go install github.com/zricethezav/gitleaks/v8@latest
+go install golang.org/x/vuln/cmd/govulncheck@latest
+```
+
+`gofmt` ships with Go.
+
+#### Frontend projects
+
+Install these if you work on frontend JavaScript or TypeScript projects:
+
+```bash
+npm install --global eslint prettier pnpm
+```
+
+`npm audit` ships with npm.
+
+#### Python projects
+
+Install these if you use the Python best-practices or security workflows. Each application gets its own isolated `pipx` environment; install `pipx` first if needed:
+
+```bash
+sudo apt-get install -y pipx
+pipx install black
+pipx install ruff
+pipx install mypy
+pipx install bandit
+pipx install pylint
+pipx install semgrep
+pipx install pip-audit
+```
+
+#### Container and image scanning
+
+Install [Trivy](https://www.trivy.dev/docs/latest/getting-started/installation/) and [Grype](https://github.com/anchore/grype#installation) with their official installers if you scan container images:
 
 ```bash
 curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
 curl -sSfL https://get.anchore.io/grype | sudo sh -s -- -b /usr/local/bin
 ```
 
-Adjacent integrations are optional: install Docker Compose (`sudo apt-get install -y docker-compose-plugin`) for the separate `memcan` plugin, and Poetry (`python3 -m pip install poetry`) only for Poetry-based projects using the release skill.
+#### Cargo cache and session hooks
+
+Install these to enable the cargo cache wrapper and its preferred safety paths:
+
+```bash
+sudo apt-get install -y coreutils findutils util-linux
+```
+
+`sha256sum`, `timeout`, and `mktemp` come from `coreutils`; `xargs` from `findutils`; and `flock` from `util-linux`. The cargo cache wrapper uses `sha256sum`, `timeout`, `xargs`, and `flock`; it falls back to plain Cargo when cache helpers are unavailable, except that target-directory isolation fails closed when it cannot be established safely.
+
+#### Caller lookup
+
+Install these for the caller-lookup workflow:
+
+```bash
+sudo apt-get install -y universal-ctags global ripgrep
+```
+
+Caller lookup falls through Universal Ctags, GNU Global, Tree-sitter, then `ripgrep`. Install `tree-sitter-cli` from the Rust projects subsection to enable that fallback.
+
+#### PDF reports
+
+Install these fonts for Unicode PDF output:
+
+```bash
+sudo apt-get install -y fonts-dejavu-core fonts-noto-core
+```
+
+PDF output searches DejaVu/Noto fonts or `$CLAUDIUS_PDF_FONT`; without a Unicode font it uses ReportLab's Latin-1 core fonts.
+
+#### `codex-crew`
+
+Install Node.js, npm, the [OpenAI Codex CLI](https://developers.openai.com/codex/cli), and the separate `openai-codex` plugin before using `codex-crew`:
+
+```bash
+sudo apt-get install -y nodejs npm
+sudo npm install --global @openai/codex
+```
+
+These requirements have no fallback. Configure the Codex CLI in `~/.codex/config.toml` before using `codex-crew`.
+
+#### Built-in stall watchdog
+
+Install `tmux` to use the built-in stall watchdog:
+
+```bash
+sudo apt-get install -y tmux
+```
+
+The watchdog has no fallback when `tmux` is unavailable.
+
+#### `triage-findings`
+
+Install `fuser` from `psmisc` for stuck-port recovery in `triage-findings`:
+
+```bash
+sudo apt-get install -y psmisc
+```
+
+Stuck-port recovery has no fallback when `fuser` is unavailable.
+
+#### `memcan`
+
+Install Docker Compose if you use the separate `memcan` plugin:
+
+```bash
+sudo apt-get install -y docker-compose-plugin
+```
+
+#### Poetry-based releases
+
+Install Poetry if you use the release skill on Poetry-based projects. `pipx` keeps this standalone CLI out of the externally managed system Python:
+
+```bash
+sudo apt-get install -y pipx
+pipx install poetry
+```
 
 ### GH_TOKEN -- GitHub Personal Access Token
 
@@ -183,7 +279,7 @@ Supports **per-organization tokens** -- each GitHub org/owner gets its own encry
 
 **Prerequisites:**
 
-- `pip install ghsudo`
+- `pipx install ghsudo` (`sudo apt-get install -y pipx` first if needed)
 - `gh auth setup-git` -- configures git's credential helper so HTTPS remotes work with `gh`
 - Git remotes must use HTTPS (`https://github.com/...`), not SSH -- update with:
   `git remote set-url origin https://github.com/OWNER/REPO.git`
