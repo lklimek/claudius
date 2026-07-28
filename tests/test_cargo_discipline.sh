@@ -34,8 +34,11 @@
 #                                                 -> ALLOW (data, not an invocation)
 #   D21 real cargo invocation after a heredoc      -> DENY  (Rule 4 still enforced)
 #   D22 unquoted heredoc body with a $(cargo test) command substitution
-#                                                 -> DENY  (body IS expanded/run by bash;
-#                                                    only a QUOTED delimiter body is inert)
+#                                                 -> DENY  (body is expanded by bash before
+#                                                    being passed as data to cat)
+#   D23 backslash-quoted heredoc commit prose      -> ALLOW (data, not an invocation)
+#   D24 tab-stripping backslash-quoted heredoc prose
+#                                                 -> ALLOW (data, not an invocation)
 #
 # Fully isolated: no repo state touched, all input on stdin.
 set -uo pipefail
@@ -164,6 +167,22 @@ assert_deny "D22 unquoted heredoc body command-substitution really invokes cargo
 cat <<EOF
 Test results: $(cargo test -p foo)
 EOF
+COMMAND
+)")"
+assert_allow "D23 backslash-quoted heredoc commit prose mentioning cargo test allowed" \
+  "$(payload "$(cat <<'COMMAND'
+git commit -m "$(cat <<\EOF
+fix: cargo test -p foo now passes
+EOF
+)"
+COMMAND
+)")"
+assert_allow "D24 tab-stripping backslash-quoted heredoc prose mentioning cargo clippy allowed" \
+  "$(payload "$(cat <<'COMMAND'
+git commit -m "$(cat <<-\EOF
+	fix: cargo clippy -p foo now passes
+	EOF
+)"
 COMMAND
 )")"
 echo ""

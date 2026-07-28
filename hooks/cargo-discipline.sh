@@ -75,16 +75,18 @@ CARGO='cargo[[:space:]]+(\+[^[:space:]]+[[:space:]]+)?'
 TRAIL='([[:space:]]|;|&|\||$)'
 
 # Data, not invocation: a commit message, grep pattern, or echoed string can
-# contain literal cargo commands. Blank QUOTED heredoc bodies (<<'EOF'/<<"EOF",
-# where bash disables expansion, so the body can only ever be inert text) and
-# simple quoted spans so Rules 1/2/4 only see text that could plausibly BE a
-# command. An UNQUOTED heredoc (<<EOF) body is left un-blanked: bash still runs
+# contain literal cargo commands. Blank expansion-suppressed heredoc bodies
+# (<<'EOF'/<<"EOF"/<<\EOF) and simple quoted spans so Rules 1/2/4 only see text
+# that could plausibly BE a command. Such bodies can still execute when consumed
+# by an interpreter, but the header's accepted-limitations policy favors avoiding
+# false blocks over heuristically identifying consumers. An UNQUOTED heredoc
+# (<<EOF) body is left un-blanked: bash still runs
 # $(...)/`...`/$var substitution on it before it's ever fed to a command, so a
 # real cargo invocation can hide there (e.g. `cat <<EOF\n$(cargo test)\nEOF`)
 # and must stay visible to the scan.
 strip_heredoc_bodies() {
   local line comparison rest match was_active
-  local marker_re="(^|[^<])<<(-?)[[:space:]]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)"
+  local marker_re="(^|[^<])<<(-?)[[:space:]]*(['\"\\\\]?)([A-Za-z_][A-Za-z0-9_]*)"
   local -a delimiters=() strip_tabs=() blank_body=()
   local active=0
 
