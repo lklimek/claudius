@@ -595,6 +595,16 @@ class TestComputeStatistics:
         stats = cr.compute_statistics([], agent_stats)
         assert stats["redundancy_ratio"] == "60%"
 
+    def test_redundancy_ratio_skips_malformed_entries(self):
+        agent_stats = [
+            "not-an-agent-stat",
+            {"agent": "sec", "unique": 3, "redundant": 1},
+        ]
+
+        stats = cr.compute_statistics([], agent_stats)
+
+        assert stats["redundancy_ratio"] == "25%"
+
     def test_no_redundancy_ratio_without_agent_stats(self, make_section):
         stats = cr.compute_statistics([], [])
         assert "redundancy_ratio" not in stats

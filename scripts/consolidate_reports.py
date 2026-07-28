@@ -634,7 +634,7 @@ def assign_ids(
 # ---------------------------------------------------------------------------
 def compute_statistics(
     sections: list[dict[str, Any]],
-    agent_stats: list[dict[str, Any]],
+    agent_stats: list[Any],
 ) -> dict[str, Any]:
     """Compute summary_statistics from findings and agent_stats."""
     severity_counts: dict[str, int] = {s: 0 for s in SEV_ORDER}
@@ -675,9 +675,12 @@ def compute_statistics(
     if merge_class_counts:
         stats["merge_class_counts"] = merge_class_counts
 
-    if agent_stats:
-        total_all = sum(a.get("unique", 0) + a.get("redundant", 0) for a in agent_stats)
-        total_redundant = sum(a.get("redundant", 0) for a in agent_stats)
+    valid_agent_stats = [a for a in agent_stats if isinstance(a, dict)]
+    if valid_agent_stats:
+        total_all = sum(
+            a.get("unique", 0) + a.get("redundant", 0) for a in valid_agent_stats
+        )
+        total_redundant = sum(a.get("redundant", 0) for a in valid_agent_stats)
         if total_all > 0:
             ratio = round(total_redundant / total_all * 100)
             stats["redundancy_ratio"] = f"{ratio}%"
