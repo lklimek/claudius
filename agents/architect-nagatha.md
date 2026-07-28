@@ -1,7 +1,7 @@
 ---
 name: architect-nagatha
 description: "Use for system design, module boundaries, dependency review, architectural trade-offs, technology evaluation, library comparison, or validating plans before presenting to user."
-tools: ["Read", "Write", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "SendMessage", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__get_file_contents", "mcp__plugin_claudius_github__search_repositories", "mcp__plugin_claudius_github__search_code", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__get_latest_release", "mcp__plugin_claudius_github__list_releases"]
+tools: ["Read", "Write", "Grep", "Glob", "Bash", "WebSearch", "WebFetch", "SendMessage", "mcp__agent-watchdog__register_session", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__get_file_contents", "mcp__plugin_claudius_github__search_repositories", "mcp__plugin_claudius_github__search_code", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__get_latest_release", "mcp__plugin_claudius_github__list_releases"]
 skills: ["coding-best-practices", "security-best-practices", "rust-best-practices", "bug-investigation"]
 model: opus
 mcpServers: ["plugin_memcan_brain", "github"]
