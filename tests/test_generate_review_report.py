@@ -157,6 +157,19 @@ def test_markdown_valid_renders_blocks():
     assert "<b>bold</b>" in body or "bold" in body
 
 
+def test_html_markdown_falls_back_when_markdown_package_is_unavailable(
+    monkeypatch, caplog
+):
+    raw = "<b>raw & text</b>\nnext line"
+    monkeypatch.setitem(sys.modules, "markdown", None)
+
+    with caplog.at_level("WARNING", logger=grr.log.name):
+        rendered = str(grr.render_markdown_to_html(raw))
+
+    assert rendered == "<pre>&lt;b&gt;raw &amp; text&lt;/b&gt;\nnext line</pre>"
+    assert "rendering raw text" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # v3 smoke test — round-trips a minimal report through every renderer to catch
 # accidental regressions in the field-renaming (`impact_description`) and the
@@ -278,6 +291,23 @@ def test_markdown_scoreboard_includes_all_categories():
     md = grr.render_markdown(_mixed_category_report())
     for label in _EXPECTED_SCOREBOARD_LABELS:
         assert label in md, f"Markdown scoreboard missing category label: {label}"
+
+
+def test_markdown_redundancy_ratio_includes_per_agent_breakdown():
+    data = _mixed_category_report()
+    data["summary_statistics"]["redundancy_ratio"] = "54%"
+    data["agent_stats"] = [
+        {"agent": "pr-comment-verification", "unique": 2, "redundant": 77},
+        {"agent": "code-reviewers", "unique": 78, "redundant": 17},
+    ]
+
+    md = grr.render_markdown(data)
+
+    assert (
+        "**Redundancy ratio:** 54% — per agent: "
+        "pr-comment-verification 2 unique / 77 redundant; "
+        "code-reviewers 78 unique / 17 redundant."
+    ) in md
 
 
 def test_html_scoreboard_table_includes_all_categories():

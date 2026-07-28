@@ -1,6 +1,6 @@
 ---
 name: lessons-learned
-description: "Use when extracting learnings, saving lessons, or capturing reusable knowledge from the session. Also appropriate before presenting a plan, after notable events (bugs, wrong approaches corrected), and as final task when work is complete."
+description: "This skill should be used when extracting learnings, saving lessons, or capturing reusable knowledge from a session. It is also appropriate before presenting a plan, after notable events such as bugs or corrected approaches, and as the final task when work is complete."
 ---
 
 # Lessons Learned

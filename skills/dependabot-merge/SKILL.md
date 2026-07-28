@@ -1,6 +1,6 @@
 ---
 name: dependabot-merge
-description: "Bulk-process open dependabot PRs: audit each dependency, comment findings, merge if CI green, request rebase on conflicts or CI failures. Use to merge dependabot PRs, process dependency bumps, auto-merge bot PRs, or handle dependabot backlog."
+description: "This skill should be used when the user asks to \"merge dependabot PRs\", \"process dependency bumps\", \"auto-merge bot PRs\", or \"handle the dependabot backlog\". It audits each dependency, comments findings, merges when CI is green, and requests rebases for conflicts or CI failures."
 user-invocable: true
 allowed-tools: Read, Grep, Glob, Bash(gh pr *), Bash(gh run *), Bash(git log *), Bash(git branch *), Bash(git status *), Bash(ghsudo *), mcp__plugin_claudius_github__search_pull_requests, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_read, Agent, Skill
 ---

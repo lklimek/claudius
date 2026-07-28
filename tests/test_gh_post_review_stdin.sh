@@ -13,6 +13,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="${SCRIPT:-$SCRIPT_DIR/../scripts/gh-post-review.sh}"
+GH_COMMON="$SCRIPT_DIR/../scripts/gh-common.sh"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 pass=0; fail=0
@@ -76,6 +77,25 @@ else bad "event field leaked into the request"; fi
 echo "=== success is reported from the retry ==="
 if [ "$rc" -eq 0 ] && grep -qF "$EXPECTED_URL" "$OUT"; then ok "script exits 0 and prints the html_url"
 else bad "script rc=$rc out=$(cat "$OUT") err=$(cat "$ERR")"; fi
+
+echo "=== delayed stdin is buffered and replayed ==="
+rm -f "$CAPDIR/gh.stdin" "$CAPDIR/ghsudo.stdin"
+SLOW_PAYLOAD='{"body":"delayed producer payload"}'
+(sleep 0.4; printf '%s' "$SLOW_PAYLOAD") |
+  PATH="$BIN:$PATH" bash -c 'source "$1"; run_gh api test --input -' _ "$GH_COMMON" \
+  >"$OUT" 2>"$ERR"
+rc=$?
+
+if [ -f "$CAPDIR/gh.stdin" ] && [ "$(cat "$CAPDIR/gh.stdin")" = "$SLOW_PAYLOAD" ]
+then ok "first attempt receives delayed stdin"
+else bad "first attempt lost delayed stdin (got: $(cat "$CAPDIR/gh.stdin" 2>/dev/null))"; fi
+
+if [ -f "$CAPDIR/ghsudo.stdin" ] && [ "$(cat "$CAPDIR/ghsudo.stdin")" = "$SLOW_PAYLOAD" ]
+then ok "retry receives the same delayed stdin"
+else bad "retry lost delayed stdin (got: $(cat "$CAPDIR/ghsudo.stdin" 2>/dev/null))"; fi
+
+if [ "$rc" -eq 0 ]; then ok "delayed-stdin retry exits 0"
+else bad "delayed-stdin retry rc=$rc err=$(cat "$ERR")"; fi
 
 echo ""
 echo "=== Results: $pass passed, $fail failed ==="

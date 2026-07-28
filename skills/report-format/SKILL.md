@@ -1,6 +1,6 @@
 ---
 name: report-format
-description: "Unified review report format for all finding-producing agents. Load when emitting or consuming review findings."
+description: "This skill should be used when emitting or consuming review findings. It defines the unified review report format for all finding-producing agents."
 allowed-tools: ["Bash(*validate_report.py *)", "Bash(*consolidate_reports.py *)", "Bash(*generate_review_report.py *)"]
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: delegate
-description: "Use before delegating any task to an agent — a single Agent() spawn or a whole wave — and whenever the user says \"spawn an agent\", \"delegate this\", \"parallelize this\", \"split this work\", or \"use a subagent\". Also applies when choosing a model tier, batching small tasks, or deciding inline-vs-spawn. Reload before every delegation, not once per session."
+description: "This skill should be used when preparing to delegate any task to an agent — a single Agent() spawn or a whole wave — or when the user says \"spawn an agent\", \"delegate this\", \"parallelize this\", \"split this work\", or \"use a subagent\". It also applies when choosing a model tier, batching small tasks, or deciding inline-vs-spawn. Reload before every delegation, not once per session."
 ---
 
 # Delegate

@@ -420,11 +420,21 @@ def render_markdown_to_html(s: str) -> Any:
     double-escape. Empty / whitespace-only input returns an empty Markup.
     """
     from markupsafe import Markup
-    import nh3
-    import markdown as _markdown_lib
 
     if not s or not s.strip():
         return Markup("")
+    try:
+        import markdown as _markdown_lib
+    except ImportError as exc:
+        log.warning(
+            "Markdown -> HTML conversion unavailable (%s: %s); rendering raw text",
+            type(exc).__name__,
+            exc,
+        )
+        return Markup(f"<pre>{html_escape(s)}</pre>")
+
+    import nh3
+
     md = _markdown_lib.Markdown(extensions=["fenced_code", "tables"])
     raw_html = md.convert(s)
     safe_html = nh3.clean(
@@ -648,6 +658,22 @@ def render_markdown(data: dict[str, Any]) -> str:
         )
         lines.append(f"**Merge classes:** {summary}")
         lines.append("")
+
+    redundancy_ratio = stats.get("redundancy_ratio")
+    agent_stats = data.get("agent_stats", [])
+    if redundancy_ratio and agent_stats:
+        breakdown = "; ".join(
+            f"{agent.get('agent', 'unknown')} "
+            f"{agent.get('unique', 0)} unique / "
+            f"{agent.get('redundant', 0)} redundant"
+            for agent in agent_stats
+            if isinstance(agent, dict)
+        )
+        if breakdown:
+            lines.append(
+                f"**Redundancy ratio:** {redundancy_ratio} — per agent: {breakdown}."
+            )
+            lines.append("")
 
     # Top findings
     top = data.get("top_findings", [])

@@ -595,6 +595,16 @@ class TestComputeStatistics:
         stats = cr.compute_statistics([], agent_stats)
         assert stats["redundancy_ratio"] == "60%"
 
+    def test_redundancy_ratio_skips_malformed_entries(self):
+        agent_stats = [
+            "not-an-agent-stat",
+            {"agent": "sec", "unique": 3, "redundant": 1},
+        ]
+
+        stats = cr.compute_statistics([], agent_stats)
+
+        assert stats["redundancy_ratio"] == "25%"
+
     def test_no_redundancy_ratio_without_agent_stats(self, make_section):
         stats = cr.compute_statistics([], [])
         assert "redundancy_ratio" not in stats
@@ -1226,6 +1236,64 @@ class TestCmdPrepare:
         data = json.loads(output.read_text())
         assert len(data["raw_findings"]) == 1
         assert data["agents"] == ["sec-agent"]
+        assert data["agent_stats"] == [
+            {"agent": "sec-agent", "unique": 1, "redundant": 0}
+        ]
+
+    def test_agent_stats_derive_unique_and_duplicate_counts(self, tmp_path):
+        shared = {
+            "severity": 4,
+            "title": "Shared finding",
+            "location": "src/shared.py:10",
+            "description": "Reported by multiple agents.",
+            "recommendation": "Fix the shared issue.",
+        }
+        first_sections = [
+            {
+                "category": "security",
+                "title": "Security",
+                "findings": [
+                    {"id": "SEC-001", **shared},
+                    {
+                        "id": "SEC-002",
+                        "severity": 3,
+                        "title": "Unchecked authorization boundary",
+                        "location": "src/unique.py:20",
+                        "description": "Reported only by the first agent.",
+                        "recommendation": "Fix the unique issue.",
+                    },
+                ],
+            }
+        ]
+        second_sections = [
+            {
+                "category": "security",
+                "title": "Security",
+                "findings": [{"id": "SEC-003", **shared}],
+            }
+        ]
+        specs = [
+            self._make_agent_report(tmp_path, "first-agent", first_sections),
+            self._make_agent_report(tmp_path, "second-agent", second_sections),
+        ]
+        output = tmp_path / "intermediate.json"
+        args = argparse.Namespace(
+            agent_reports=specs,
+            repo_root=str(tmp_path),
+            output=str(output),
+            metadata=None,
+        )
+
+        assert cr.cmd_prepare(args) == 0
+
+        data = json.loads(output.read_text())
+        assert data["agent_stats"] == [
+            {"agent": "first-agent", "unique": 1, "redundant": 1},
+            {"agent": "second-agent", "unique": 0, "redundant": 1},
+        ]
+        assert cr.compute_statistics([], data["agent_stats"])["redundancy_ratio"] == (
+            "67%"
+        )
 
     def test_flat_finding_array_is_auto_wrapped_with_warning(self, tmp_path, caplog):
         findings = [

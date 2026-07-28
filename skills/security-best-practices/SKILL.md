@@ -1,6 +1,6 @@
 ---
 name: security-best-practices
-description: "OWASP-based secure programming practices. Use when writing or reviewing code handling auth, crypto, user input, secrets, or API endpoints. Consult proactively during reviews and planning."
+description: "This skill should be used when writing or reviewing code that handles authentication, cryptography, user input, secrets, or API endpoints. It provides OWASP-based secure programming practices and should be consulted proactively during reviews and planning."
 model: inherit
 allowed-tools: Grep, Read, Glob, WebFetch, WebSearch
 ---

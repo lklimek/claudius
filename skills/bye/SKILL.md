@@ -1,6 +1,6 @@
 ---
 name: bye
-description: End-of-session teardown — shut down all spawned teammates/agents, remove their worktrees, and reconcile any uncommitted or unpushed work from the session. Use when the user says "bye", "wrap up", "tear down", "we're done", or ends the session.
+description: "This skill should be used when the user says \"bye\", \"wrap up\", \"tear down\", \"we're done\", or otherwise ends the session. It shuts down spawned teammates and agents, removes their worktrees, and reconciles uncommitted or unpushed session work."
 ---
 
 # bye

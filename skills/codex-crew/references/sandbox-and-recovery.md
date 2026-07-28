@@ -16,6 +16,8 @@ Codex CLI supports three sandbox modes:
 
 `~/.codex/config.toml`:
 
+These are host-specific example values; adjust them to match the local filesystem:
+
 ```toml
 sandbox_mode = "workspace-write"
 model = "gpt-5.6-sol"
@@ -28,7 +30,8 @@ network_access = true
 ```
 
 - The first `writable_roots` entry should track `$CLAUDIUS_WORKTREE_ROOT` when the configured worktree root changes.
-- `writable_roots` **adds** to the always-writable workspace root (cwd): `/data` worktrees, scratch, and the shared cargo target dir (`/data/target`).
+- `writable_roots` **adds** to the always-writable workspace root (cwd): the configured worktree root, scratch location, and shared cargo target dir.
+- Do not treat the configured artifacts entry as an effective write guarantee. A dispatched job has observed a narrower or stale ACL and failed there as read-only while otherwise completing normally. Have Codex return report or artifact content through `result.rawOutput`; the coordinator then writes it to the configured artifacts location.
 - `network_access = true` unblocks localhost test sockets — and also enables general outbound network, the tradeoff `workspace-write` disables by default.
 - The `# Self-commit scope ... NOT added yet` comment is misleading as an explanation of commit behavior (see below) — kept verbatim as live config text, but not proof commit is blocked.
 - Validate any change with `codex --strict-config doctor` (hard-errors on unknown fields). Keep a timestamped backup of `config.toml` before editing.
@@ -84,7 +87,10 @@ A `codex-companion.mjs task --write --background` run launched via a `run_in_bac
 
 - **Detect it coordinator-side.** Periodically read the job's log (`jobs/<job-id>.log`) and inspect the tmux pane. Don't infer health from `status` alone — it can sit at `running` after the process is gone.
 - **On-disk edits survive.** Files Codex already wrote stay written; the work is partial, not lost.
-- **Resume, don't restart.** Redispatch with `--resume-last` to continue from the surviving state.
+- **Cancel before resuming.** A harness-killed job can retain a broker/job-registry lock after its OS process dies, so a direct same-cwd `--resume-last` fails with `Task task-<id> is still running`. From the job's own `--cwd`, run `node "$CODEX_ROOT/scripts/codex-companion.mjs" cancel <job-id> --json`, then confirm `status --all` no longer lists it as running.
+- **Resume, don't restart.** Only after cancellation, redispatch with `--resume-last` and the identical `--cwd` to continue from the surviving state.
+
+`cancel` appears cwd-scoped: observed calls from another cwd returned `No active job found for "<job-id>".`, while calls from the job's own `--cwd` succeeded. Treat this scope as observed but unconfirmed.
 
 ## Broker Recovery
 

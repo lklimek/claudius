@@ -1,6 +1,6 @@
 ---
 name: coding-best-practices
-description: "Use when developing code. Universal rules for TDD, self-review, quality timing, review format, security. MANDATORY for every agent that writes, modifies, reviews, or tests code — load at task start and apply continuously."
+description: "This skill should be used when developing, modifying, reviewing, or testing code. It defines universal rules for TDD, self-review, quality timing, review format, and security. MANDATORY for every agent performing such work — load at task start and apply continuously."
 allowed-tools: Read
 ---
 

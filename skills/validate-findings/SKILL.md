@@ -1,6 +1,6 @@
 ---
 name: validate-findings
-description: Coordinator-only LLM validation pass. Adds ai_assessment / ai_verdict / ai_verdict_confidence and, in the rare partial-producer case, re-estimates absent risk/impact/scope on a consolidated v3 report.
+description: "This skill should be used when a coordinator performs the LLM validation pass on a consolidated v3 findings report. It adds ai_assessment, ai_verdict, and ai_verdict_confidence and, in the rare partial-producer case, re-estimates missing risk, impact, and scope. Coordinator-only."
 allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(*consolidate_reports.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
 model: inherit
 ---

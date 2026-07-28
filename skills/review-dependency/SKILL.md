@@ -1,9 +1,9 @@
 ---
 name: review-dependency
-description: Use for security review of dependency updates — bumps, upgrades, or new dependencies.
+description: "This skill should be used when the user asks to \"review a dependency update\", \"audit this dependency bump\", or assess the security of an upgraded or newly added dependency."
 agent: claudius
 context: fork
-allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Bash(mktemp *), Bash(git diff *), Bash(git clone --depth=* --config core.hooksPath=/dev/null -- *), Bash(gh api /advisories*), Bash(rm -rf /tmp/claude/*), Bash(govulncheck *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *)
+allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Bash(mktemp *), Bash(git diff *), Bash(git log *), Bash(git show *), Bash(git tag *), Bash(git rev-parse *), Bash(git clone --depth=* --config core.hooksPath=/dev/null -- *), Bash(gh api /advisories*), Bash(rm -rf /tmp/claude/*), Bash(govulncheck *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *)
 ---
 
 # Dependency Security Review
@@ -60,6 +60,20 @@ git clone --depth=100 --config core.hooksPath=/dev/null -- <upstream-repo-url> "
 
 Check for commonly confused similarly-named packages that may pollute search results.
 
+### 2d. Reconcile the Documented Change Against the Actual Diff
+
+Run after 2a and 2b complete — this cross-checks 2a's claimed changes against 2b's real commit history and diff, which is the first line of defense against a compromised or tampered release (the update itself may not be trustworthy, independent of whether the resulting code has exploitable bugs).
+
+- **Tag/commit integrity**: confirm the tag or version cloned in 2b resolves to the same commit the changelog/release page/registry metadata references (`git rev-parse <tag>`, compare against the release notes' linked commit or the registry's recorded commit hash where available). A moved tag pointing at a different commit than what was publicly reviewed is a known attack pattern.
+- **Undocumented files/commits**: list every file and commit in the actual diff (`git log`, `git diff --stat` against the prior version's ref) and flag anything not explained by the changelog or commit messages — especially changes with no corresponding entry at all.
+- **Lifecycle/install hooks**: flag any new or modified build/install/publish scripts — npm `preinstall`/`postinstall`/`prepare` in `package.json`, Python `setup.py` custom `cmdclass`/`build_ext` hooks, Makefile install targets, CI/release workflow files. These run with elevated trust and are a common injection point.
+- **New network calls or exfiltration paths**: source changes that add outbound requests, especially to domains not previously referenced, or that read environment variables/credentials they didn't read before.
+- **Obfuscation**: minified, heavily encoded (base64/hex blobs), or otherwise non-human-reviewable content added to *source* (not generated/vendored build output that was already opaque before this update).
+- **Diff shape vs. claimed change type**: a "patch"/bugfix release with an unusually large or broad diff, or changes touching files unrelated to the stated fix, warrants explanation before proceeding.
+- **Contributor provenance**: a security-sensitive change landed by a contributor with no prior history in the project, or a maintainer change/handoff around the time of this release, raises the bar for scrutiny.
+
+Anything found here becomes explicit input to step 3 — surface the specific files/commits flagged so the audit reads them directly rather than re-discovering them independently.
+
 ## 3. Security Audit of the Library
 
 Spawn a `security-engineer-smythe` agent to review the cloned source at `$SESSION_DIR/<package-name>`.
@@ -67,6 +81,7 @@ Spawn a `security-engineer-smythe` agent to review the cloned source at `$SESSIO
 ### Scope
 - **Primary**: all changes between old and new version (the diff)
 - **Secondary**: full audit of security-critical code paths
+- **Any file/commit flagged by step 2d** as undocumented or suspicious — verify it directly, don't take the changelog's silence as evidence of safety
 
 ### Audit Checklist
 
@@ -116,6 +131,9 @@ Present a single report:
 ### Change Summary
 Package, old version, new version, commit count, nature of changes (bug fix / feature / security fix / breaking change).
 
+### Diff Integrity
+Whether the actual diff/commit history matches the documented changes (step 2d): tag/commit integrity result, and every undocumented, hidden, or otherwise suspicious file/commit/hook found — or state plainly that the diff fully matches what's documented. Treat any unresolved finding here as grounds to escalate the overall risk rating regardless of what the code-level audit (step 3) finds, since it calls the trustworthiness of the update itself into question, not just its code quality.
+
 ### Known Vulnerabilities
 Table of CVEs/advisories found (or "None found"), affected versions, whether the new version is impacted. Note any commonly confused packages.
 
@@ -129,6 +147,7 @@ Table: Recommendation | Status | Action Needed? — for each finding, assess whe
 - Overall rating: **Safe / Low Risk / Medium Risk / High Risk / Do Not Upgrade**
 - Key concerns and mitigations
 - Flag poor CVE registration discipline (automated scanning may be blind)
+- Any unresolved Diff Integrity finding floors the rating at High Risk or worse, even with a clean code audit — an untrustworthy update is disqualifying on its own
 
 ### Recommendations
 Numbered actionable items for our codebase, plus long-term considerations (e.g., migration to alternatives).

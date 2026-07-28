@@ -6,9 +6,7 @@
 
 # Run `gh "$@"`, retrying once via `ghsudo gh` on 403/404/permission errors.
 # Buffers piped stdin once so a ghsudo retry replays the SAME payload instead
-# of reading an already-drained pipe (EOF -> silent empty request body). Skips
-# buffering when stdin is a TTY: the caller isn't piping data, so keep the
-# plain invocation.
+# of reading an already-drained pipe (EOF -> silent empty request body).
 run_gh() {
   local buffered="" has_stdin=0
   if [ ! -t 0 ]; then

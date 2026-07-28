@@ -1,6 +1,6 @@
 ---
 name: frontend-best-practices
-description: "Frontend best practices — TypeScript, React/Vue/Svelte, CSS, accessibility, testing. Use when writing, reviewing, or discussing frontend code."
+description: "This skill should be used when writing, reviewing, or discussing frontend code — TypeScript, React/Vue/Svelte, CSS, accessibility, and testing."
 allowed-tools: Read
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: check-pr-comments
-description: Use to verify PR review comments are addressed in code. Optionally produces triage-compatible report.
+description: "This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
 allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(*gh-post-review-reply.sh *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment, mcp__plugin_claudius_github__add_issue_comment
 ---
 
@@ -11,6 +11,8 @@ Workflow for checking/triaging/verifying existing PR review comments.
 ## 1. Fetch All Comments
 
 **ALWAYS fetch fresh comments from GitHub on every invocation** — never assume none are new.
+
+**Bare coordinators:** A bare coordinator session typically lacks `mcp__plugin_claudius_github__*` tools. Go directly to the [gh CLI fallback](references/gh-cli-fallback.md); spawned agents whose frontmatter lists the tools still prefer MCP.
 
 Fetch all comment types via GitHub MCP `pull_request_read`:
 
@@ -231,3 +233,5 @@ ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <owner/repo> <pr_
 ```
 
 Thread resolution has no MCP equivalent — the wrapper uses a GraphQL mutation directly. The `--id` form auto-converts `discussion_r*`/numeric IDs to thread node IDs; mix freely with `PRRT_*` in one invocation. Never resolve partially-addressed threads.
+
+With a triage-role token, wrap the entire script invocation in `ghsudo` per the standing fallback convention; ambient bot auth commonly returns 403 for `ResolveReviewThread`.

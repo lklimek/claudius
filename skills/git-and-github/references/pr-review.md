@@ -38,7 +38,7 @@ Fetch before posting to avoid duplicates: drop any finding already covered by an
 **CLI fallback**:
 ```bash
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-reviews.sh <owner/repo> <pr>
-# -> {id, state, submitted_at, body, user}
+# -> [{id, state, submitted_at, body, user}]
 
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-review-comments.sh <owner/repo> <pr>
 # -> {id, path, line, original_line, body, user, in_reply_to_id, html_url}
@@ -65,6 +65,8 @@ GitHub rejects inline comments on lines outside the diff (HTTP 422). Before post
 
 **MCP (preferred)**: `pull_request_review_write` — omit the `event` field to create a pending (draft) review.
 
+For `add_comment_to_pending_review`, pass camelCase `subjectType` with uppercase `LINE` or `FILE`; `subject_type` and lowercase values are invalid.
+
 **CLI fallback** (`gh-post-review.sh` strips `event` automatically — reviews always post as drafts):
 ```bash
 SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/XXXXXX)
@@ -90,7 +92,7 @@ gh-fetch-review-comments.sh <owner/repo> <pr>
   -> {id, path, line, original_line, body, user, in_reply_to_id, html_url}
 
 gh-fetch-reviews.sh <owner/repo> <pr>
-  -> {id, state, submitted_at, body, user}
+  -> [{id, state, submitted_at, body, user}]
 
 gh-post-review.sh <owner/repo> <pr> <json_file>
   -> Posts draft review. Input: {commit_id, body, comments: [{path, line, side, body}]}

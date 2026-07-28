@@ -30,6 +30,15 @@
 #                                                 -> ALLOW (Rule 3 cleared, Rule 4 satisfied)
 #   D19 CLAUDIUS_ISOLATE_TARGET=1, no override, bare `cargo check`
 #                                                 -> DENY  (scoped hatch does NOT clear Rule 1)
+#   D20 heredoc commit prose mentioning cargo nextest
+#                                                 -> ALLOW (data, not an invocation)
+#   D21 real cargo invocation after a heredoc      -> DENY  (Rule 4 still enforced)
+#   D22 unquoted heredoc body with a $(cargo test) command substitution
+#                                                 -> DENY  (body is expanded by bash before
+#                                                    being passed as data to cat)
+#   D23 backslash-quoted heredoc commit prose      -> ALLOW (data, not an invocation)
+#   D24 tab-stripping backslash-quoted heredoc prose
+#                                                 -> ALLOW (data, not an invocation)
 #
 # Fully isolated: no repo state touched, all input on stdin.
 set -uo pipefail
@@ -137,6 +146,45 @@ assert_allow "D14 echoed string mentioning cargo check allowed" \
   "$(payload 'echo "remember: never run cargo check directly"')"
 assert_allow "D15 quoted CARGO_TARGET_DIR mention allowed (Rule 3 false-positive guard)" \
   "$(payload 'git commit -m "note: cargo ignores ad-hoc CARGO_TARGET_DIR=/tmp/adhoc overrides"')" "$STUB_PATH"
+assert_allow "D20 heredoc commit prose mentioning cargo nextest allowed" \
+  "$(payload "$(cat <<'COMMAND'
+git commit -m "$(cat <<'EOF'
+fix: keep cargo nextest run -p example green
+EOF
+)"
+COMMAND
+)")"
+assert_deny "D21 real cargo invocation after a heredoc still denied" \
+  "$(payload "$(cat <<'COMMAND'
+cat <<'EOF'
+prose mentioning cargo nextest run -p example
+EOF
+cargo test -p example
+COMMAND
+)")"
+assert_deny "D22 unquoted heredoc body command-substitution really invokes cargo" \
+  "$(payload "$(cat <<'COMMAND'
+cat <<EOF
+Test results: $(cargo test -p foo)
+EOF
+COMMAND
+)")"
+assert_allow "D23 backslash-quoted heredoc commit prose mentioning cargo test allowed" \
+  "$(payload "$(cat <<'COMMAND'
+git commit -m "$(cat <<\EOF
+fix: cargo test -p foo now passes
+EOF
+)"
+COMMAND
+)")"
+assert_allow "D24 tab-stripping backslash-quoted heredoc prose mentioning cargo clippy allowed" \
+  "$(payload "$(cat <<'COMMAND'
+git commit -m "$(cat <<-\EOF
+	fix: cargo clippy -p foo now passes
+	EOF
+)"
+COMMAND
+)")"
 echo ""
 
 echo "=== Results: $pass passed, $fail failed ==="

@@ -1,6 +1,6 @@
 ---
 name: triage
-description: "Use when the user says \"triage\" or asks to triage a GitHub issue: reproduce, root-cause, attribute to the owning component, estimate severity, discuss with the user, then post a short status comment."
+description: "This skill should be used when the user says \"triage\" or asks to triage a GitHub issue: reproduce it, identify the root cause and owning component, estimate severity, discuss the findings with the user, and then post a short status comment."
 argument-hint: <issue-number-or-url>
 ---
 

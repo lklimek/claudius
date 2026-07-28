@@ -75,11 +75,60 @@ CARGO='cargo[[:space:]]+(\+[^[:space:]]+[[:space:]]+)?'
 TRAIL='([[:space:]]|;|&|\||$)'
 
 # Data, not invocation: a commit message, grep pattern, or echoed string can
-# contain the literal text "cargo test" without invoking anything — matching
-# raw $cmd would deny e.g. `git commit -m "fix: cargo test now passes"`. Best-
-# effort quote-blanking (not a real shell lexer — doesn't handle nested/escaped
-# quotes) so Rules 1/2/4 only see text that could plausibly BE a command.
-scan=$(sed -E 's/"[^"]*"/""/g; s/'"'"'[^'"'"']*'"'"'/'"''"'/g' <<<"$cmd")
+# contain literal cargo commands. Blank expansion-suppressed heredoc bodies
+# (<<'EOF'/<<"EOF"/<<\EOF) and simple quoted spans so Rules 1/2/4 only see text
+# that could plausibly BE a command. Such bodies can still execute when consumed
+# by an interpreter, but the header's accepted-limitations policy favors avoiding
+# false blocks over heuristically identifying consumers. An UNQUOTED heredoc
+# (<<EOF) body is left un-blanked: bash still runs
+# $(...)/`...`/$var substitution on it before it's ever fed to a command, so a
+# real cargo invocation can hide there (e.g. `cat <<EOF\n$(cargo test)\nEOF`)
+# and must stay visible to the scan.
+strip_heredoc_bodies() {
+  local line comparison rest match was_active
+  local marker_re="(^|[^<])<<(-?)[[:space:]]*(['\"\\\\]?)([A-Za-z_][A-Za-z0-9_]*)"
+  local -a delimiters=() strip_tabs=() blank_body=()
+  local active=0
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if (( active < ${#delimiters[@]} )); then
+      was_active=$active
+      comparison="$line"
+      if (( strip_tabs[active] )); then
+        comparison="${comparison#"${comparison%%[!$'\t']*}"}"
+      fi
+      [[ "$comparison" == "${delimiters[active]}" ]] && active=$((active + 1))
+      if (( blank_body[was_active] )); then
+        printf '\n'
+      else
+        printf '%s\n' "$line"
+      fi
+      continue
+    fi
+
+    printf '%s\n' "$line"
+    rest="$line"
+    while [[ "$rest" =~ $marker_re ]]; do
+      match="${BASH_REMATCH[0]}"
+      delimiters+=("${BASH_REMATCH[4]}")
+      if [[ "${BASH_REMATCH[2]}" == "-" ]]; then
+        strip_tabs+=(1)
+      else
+        strip_tabs+=(0)
+      fi
+      if [[ -n "${BASH_REMATCH[3]}" ]]; then
+        blank_body+=(1)
+      else
+        blank_body+=(0)
+      fi
+      rest="${rest#*"${match}"}"
+    done
+  done
+}
+heredoc_stripped=$(strip_heredoc_bodies <<<"$cmd") || allow
+# Best-effort quote blanking is not a real shell lexer and intentionally does
+# not handle nested or escaped quotes; this remains a fail-open efficiency gate.
+scan=$(sed -E 's/"[^"]*"/""/g; s/'"'"'[^'"'"']*'"'"'/'"''"'/g' <<<"$heredoc_stripped") || allow
 
 # --- Rule 1: cargo check is banned -----------------------------------------
 if grep -qE "${LEAD}${CARGO}check${TRAIL}" <<<"$scan"; then

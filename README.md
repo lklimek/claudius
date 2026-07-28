@@ -18,6 +18,7 @@ A [Claude Code](https://claude.ai/code) plugin for automated development workflo
 
 **Dependencies** -- I'm worth it:
 
+- **Host tools** -- Git and Python are required; Rust, Node.js/Codex CLI, tmux, and other tools are workflow-specific. See [Host Tools](SETUP.md#host-tools) for the consolidated install commands and fallbacks.
 - **`GH_TOKEN`** -- a GitHub [Personal Access Token](https://github.com/settings/personal-access-tokens/new) for PR, issue, and CI access. Set it in `~/.claude/settings.json` or your shell profile.
 - **[memcan](https://github.com/lklimek/memcan)** -- persistent memory across sessions. Requires **Docker Compose** for Qdrant (vector DB).
 - **[ghsudo](https://github.com/lklimek/ghsudo)** *(optional)* -- two-token GitHub model with GUI approval for write operations. `pip install ghsudo`.
@@ -75,7 +76,7 @@ I won't merge anything with security concerns. I have *standards*.
 
 ## But Wait, There's More
 
-I have 25 skills and 8 specialist agents covering security, architecture, testing, documentation, and more. The three above are just my personal favorites. See the [Setup Guide](SETUP.md) for the full catalog -- if you can handle it.
+I have 30 skills and 8 specialist agents covering security, architecture, testing, documentation, and more. The three above are just my personal favorites. See the [Setup Guide](SETUP.md) for the full catalog -- if you can handle it.
 
 ## How We Work
 

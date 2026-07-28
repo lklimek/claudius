@@ -1,11 +1,11 @@
 ---
 name: git-and-github
-description: Invoke for all git and gh commands, GitHub interactions. Solves git and gh access / permission denied issues.
+description: "This skill should be used when running git or gh commands, interacting with GitHub, or resolving git and gh access or permission-denied failures."
 ---
 
 # GitHub Workflow
 
-**Tooling**: `git` for repository operations (clone, fetch, commit, push, branch, merge); GitHub MCP tools (`mcp__plugin_claudius_github__*`) for all GitHub API operations (PRs, issues, reviews, Actions, checks, branches, releases, security alerts). If MCP is unavailable, read [gh-cli-fallback.md](references/gh-cli-fallback.md) for `gh` CLI equivalents.
+**Tooling**: `git` for repository operations (clone, fetch, commit, push, branch, merge); GitHub MCP tools (`mcp__plugin_claudius_github__*`) for all GitHub API operations (PRs, issues, reviews, Actions, checks, branches, releases, security alerts). If MCP is unavailable, read [gh-cli-fallback.md](references/gh-cli-fallback.md) for `gh` CLI equivalents. Bare coordinator sessions typically lack these tools and should default directly to the CLI fallback; spawned agents whose frontmatter lists them still prefer MCP.
 
 **Attribution**: every commit, PR, issue, and comment posted to GitHub **must** include this footer (blank line before it):
 
@@ -71,7 +71,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 **Never submit a final review (approve/request-changes). Always create draft/pending reviews** — the user publishes them. With MCP, omit the `event` field in `pull_request_review_write` to create a pending review.
 
-See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR context, deduplication, diff-bounds verification, posting inline comments.
+See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR context, deduplication, diff-bounds verification, posting inline comments, and the `add_comment_to_pending_review` parameter-casing requirement.
 
 ### Issues
 
