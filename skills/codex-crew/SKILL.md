@@ -29,14 +29,14 @@ Resolve the installed `codex` plugin's script root once per session — version-
 CODEX_ROOT=$(find ~/.claude/plugins/cache/openai-codex/codex -maxdepth 1 -mindepth 1 -type d | sort -V | tail -1)
 ```
 
-Write the prompt to a file — never inline it as a shell argument (long prompts with nested quotes or Rust `Debug` dumps corrupt under shell quoting). `task` accepts `--prompt-file <path>` (also reads piped stdin); a relative path resolves against `--cwd`, so always pass an **absolute** path (e.g. under `/data/tmp`).
+Write the prompt to a file — never inline it as a shell argument (long prompts with nested quotes or Rust `Debug` dumps corrupt under shell quoting). `task` accepts `--prompt-file <path>` (also reads piped stdin); a relative path resolves against `--cwd`, so always pass an **absolute** path under the coordinator's configured scratch location (e.g. `/data/tmp` on this host).
 
 Every dispatch prompt must say near the top: **"You are a leaf worker, not a coordinator — do not load or follow grand-admiral, delegate, track-minions, report-format, or severity; those apply only to sessions that spawn/manage other agents, which you are not."**
 
 ```bash
 node "$CODEX_ROOT/scripts/codex-companion.mjs" task \
   --cwd <worktree-abs-path> \
-  --prompt-file /data/tmp/<descriptive-name>.txt \
+  --prompt-file <scratch-abs-path>/<descriptive-name>.txt \
   --write --background \
   --model gpt-5.6-sol --effort high
 ```
@@ -61,11 +61,11 @@ The fresh job rebuilds context, but is the only safe read-only-to-writable bound
 
 Codex runs under `sandbox_mode = "workspace-write"` (see `~/.codex/config.toml`). Three rules:
 
-1. **Write scope = cwd + the effective `writable_roots`.** On this host, rely on the worktree root (`$CLAUDIUS_WORKTREE_ROOT`; see `grand-admiral` § Worktree Isolation), `/data/tmp`, and `/data/target` (shared cargo target dir), plus `network_access = true`. Do **not** assume `/data/artifacts` is writable even when config lists it; use the coordinator-owned delivery path in `references/sandbox-and-recovery.md` § `workspace-write` Config. Paths outside cwd and the effective roots are read-only. `scripts/cargo-cached.sh` handles its verification ledger itself: when the default `~/.cache/claudius/ledger` root is unreachable in-sandbox it falls back to a workspace-local dir (the script is the source of truth).
+1. **Write scope = cwd + the effective `writable_roots`.** Rely on the configured worktree root (`$CLAUDIUS_WORKTREE_ROOT`; see `grand-admiral` § Worktree Isolation), scratch location, and shared cargo target dir, plus `network_access = true`. Do **not** assume the configured artifacts location is writable even when config lists it; use the coordinator-owned delivery path in `references/sandbox-and-recovery.md` § `workspace-write` Config. Paths outside cwd and the effective roots are read-only. `scripts/cargo-cached.sh` handles its verification ledger itself: when the default `~/.cache/claudius/ledger` root is unreachable in-sandbox it falls back to a workspace-local dir (the script is the source of truth).
 
 2. **Codex `git commit` in a linked worktree is inconsistent — confirmed both ways, same repo, same day.** One dispatch committed cleanly, no approval prompt; a later one hit the "Git metadata is read-only"/`index.lock` error and the coordinator committed instead. `writable_roots` was unchanged across both, so the gate isn't a static config value (suspected `approval_policy = "on-request"` + `trust_level = "trusted"` interaction — unconfirmed). **Coordinator-commit is the reliable default, not a fallback:** fine to instruct Codex to attempt `git add`/`git commit` as its final step (with an explicit commit message — it doesn't know your conventions), but plan for failure: verify via `git log`/`git status` in the worktree — never trust Codex's self-report — and commit yourself (unsandboxed) when it didn't land. See `references/sandbox-and-recovery.md` § Git Commit in a Linked Worktree.
 
-3. **All worktrees live at `<worktree-root>/<slug>`** (`$CLAUDIUS_WORKTREE_ROOT`, default `/data/git-worktrees`; slug derived from the startup `$PWD`), pre-created by the coordinator per `grand-admiral` § Worktree Isolation. **The broker keys off `codex-companion.mjs`'s own resolved cwd, not any path in prompt text** — confirmed: a dispatch told via prompt to `cd` into a pre-created worktree still bound its broker to the coordinator's plain checkout, blocking ALL writes (even under `writable_roots`, even on the FIRST dispatch). Pass the worktree via `--cwd` instead (§ Direct Dispatch). Each dispatch's `--cwd` is self-contained, so N worktrees can be dispatched genuinely concurrently — no `EnterWorktree`/`ExitWorktree` serialization.
+3. **All worktrees live at `<worktree-root>/<slug>`** (`$CLAUDIUS_WORKTREE_ROOT`; built-in default `/data/git-worktrees`, override per host; slug derived from the startup `$PWD`), pre-created by the coordinator per `grand-admiral` § Worktree Isolation. **The broker keys off `codex-companion.mjs`'s own resolved cwd, not any path in prompt text** — confirmed: a dispatch told via prompt to `cd` into a pre-created worktree still bound its broker to the coordinator's plain checkout, blocking ALL writes (even under `writable_roots`, even on the FIRST dispatch). Pass the worktree via `--cwd` instead (§ Direct Dispatch). Each dispatch's `--cwd` is self-contained, so N worktrees can be dispatched genuinely concurrently — no `EnterWorktree`/`ExitWorktree` serialization.
 
 Deep mechanics (exact sandbox modes, on-disk job-state layout, worktree-commit status and fallback) are in `references/sandbox-and-recovery.md`.
 
