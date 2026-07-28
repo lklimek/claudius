@@ -47,17 +47,17 @@ Replace `8741` with the actual port if `--port` was used.
 
 5. For findings marked `fix`: apply the recommended fixes using the finding's `location`, `description`, and `recommendation`. Work through them one at a time, verifying each achieves the desired end-user or developer experience (not just code correctness) before proceeding.
 
-6. For findings marked `defer`: add a `TODO` comment at the finding's location referencing the finding ID and title:
+6. For findings marked `defer`: add a `TODO` comment at the finding's location with a short descriptive slug and the finding's title — never the finding ID itself (`coding-best-practices`' Cross-Cutting Rules ban ephemeral review-finding IDs like `SEC-004` in committed code; they're reassigned on every consolidator run and go dead after merge):
    ```
-   // TODO(SEC-004): BannerHandle is Send+Sync but read-modify-write is not atomic
+   // TODO(banner-atomicity): BannerHandle is Send+Sync but read-modify-write is not atomic
    ```
-   Use the file's native comment syntax (`//`, `#`, `<!-- -->`, etc.).
+   Use the file's native comment syntax (`//`, `#`, `<!-- -->`, etc.). If traceability back to the original finding is wanted, put the ID in the PR/commit description or a coordinator-maintained ID→slug map — never in the committed comment text.
 
-7. For findings marked `accept_risk`: add an `INTENTIONAL` comment at the finding's location documenting the accepted risk and rationale:
+7. For findings marked `accept_risk`: add an `INTENTIONAL` comment at the finding's location documenting the accepted risk and rationale, again with a descriptive slug rather than the finding ID:
    ```
-   // INTENTIONAL(SEC-005): Relaxed ordering adequate for single-threaded UI model
+   // INTENTIONAL(relaxed-ordering): Relaxed ordering adequate for single-threaded UI model
    ```
-   Use the rationale from the triage decision if provided, else summarize from the finding's description. Future reviews encountering an `INTENTIONAL` comment downgrade the finding to INFO severity.
+   Use the rationale from the triage decision if provided, else summarize from the finding's description. Future reviews encountering an `INTENTIONAL` comment downgrade the finding to INFO severity — this match is by proximity to the flagged location, not by the slug text, so the slug is free-form.
 
 ## Comment-Check Reports
 
