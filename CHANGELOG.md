@@ -27,6 +27,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 - **`scripts/minion-monitoring.py`**: new opt-in `--worktrees-session-filter` scopes `--worktrees` direct discovery to the invoking session's own workspace prefix, closing cross-session Codex event leakage (default behavior unchanged when omitted).
 - **`scripts/cargo-cached.sh`**: verification ledger records now populate their `session` field from `$CLAUDE_CODE_SESSION_ID`/`$CLAUDE_SESSION_ID` instead of leaving it silently empty, so future duplicate-worker incidents can be traced directly from the ledger.
 - **`SETUP.md` / `README.md`**: Skill Catalog table now lists all 30 skills (was missing several); README's stated skill count matches; new "Host Tools" prerequisites section, restructured into copy-paste-able per-stack subsections (Base, GitHub workflows, Rust, Go, Frontend, Python, container scanning, etc.) replacing vague "optional" framing; every `pip install` in Prerequisites now avoids Debian/Ubuntu's PEP 668 externally-managed-environment failure (apt packages where current enough, `pipx` for standalone CLI tools, a narrowly-scoped `--break-system-packages` only where no apt package exists).
+- **`triage-findings`**: step 6/7's `TODO`/`INTENTIONAL` worked examples no longer embed an ephemeral consolidator-assigned finding ID (`TODO(SEC-004)`), which directly contradicted `coding-best-practices`' ban on ephemeral review IDs in committed code and was flagged by `scripts/lint_ephemeral_ids.py`; both now use a descriptive slug instead.
 
 ## [6.2.0] - 2026-07-27
 
