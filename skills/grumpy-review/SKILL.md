@@ -218,7 +218,7 @@ Read `intermediate.json` and decide:
 3. **Severity re-evaluation**: load the `severity` skill (`/severity`), then re-assess every finding strictly against its criteria — agents often over-inflate.
 4. **Merge classification**: assign `merge_class` (+ `intent_basis` for `blocking`) to every non-informational finding per `severity` skill § Merge Classification. Use the Context Digest when the invoker supplied one (review-pr § Context Digest); with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Apply the digest here as a coordinator-side backstop too: re-check any finding whose floats ignore an evidenced operational-profile claim a producer plainly didn't have (`severity` skill § `risk`). Severity never determines `merge_class`.
 5. **Merge sections**: combine same-category agent sections into unified sections.
-6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding and list every `out_of_scope_follow_up` finding for the user's attention — the report is where a deferral lives; never file it anywhere.
+6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding.
 7. **Agent stats**: copy `intermediate.json`'s `agent_stats` array verbatim into `merged-findings.json` — `prepare` already computes it; do not hand-author or reshape it.
 
 For reviews above roughly 30 raw findings, use the ready-to-run merge helper instead of transcribing the entire document by hand. Record the review-specific judgment in `"$SCRATCH_DIR"/merge-decisions.json`: each true duplicate cluster names its members by `agent` + `original_id`, selects one member as the base, records a `reason`, and supplies only the hand-authored merged fields in `updates`. Include the step 6 `executive_summary` in the same file. Do not list candidate clusters you decide to keep separate.
@@ -304,6 +304,8 @@ python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR
 ```
 
 Produces `report.md` next to the JSON file.
+
+When presenting results, filter the consolidated findings for `merge_class == "out_of_scope_follow_up"` and name that list to the user as deferral candidates — nothing files them, so an unmentioned deferral is an invisible one (`claudius:severity` § `out_of_scope_follow_up`).
 
 ### 5f. Stop reviewer processes
 

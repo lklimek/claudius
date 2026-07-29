@@ -124,15 +124,15 @@ Branch order matters: intent-required and diff-introduced-and-material findings 
 
 **Pre-existing issues** block only when the PR relies on them, worsens or newly exposes them, or fixing them is necessary for an explicit stated goal. A residual gap after a partial improvement blocks only when the PR claims full closure of that gap.
 
-### `out_of_scope_follow_up` is reported, never filed
+### `out_of_scope_follow_up` — surface it, then let it go
 
-🔴 Deferral is not a plan the review pipeline can make on its own — a deferred finding with nothing carrying it forward has a **low probability of ever being actioned** (realistic outcome: a `TODO` comment that outlives everyone who read the review).
+A deferred finding is unlikely to ever be actioned, and that is usually the **correct** outcome, not a process failure: it says the finding wasn't worth prioritizing a fix for. Deferral needs no compensating machinery — no tracking field, no filing step, no gate demanding proof it was recorded somewhere. The class is a legitimate, low-ceremony disposition on its own terms.
 
-The pipeline's whole job for this class is to **surface it clearly and stop**:
+What it does need is **visibility** — a user cannot decide about a finding they never saw:
 
-- Every `out_of_scope_follow_up` finding appears in the review output for the user's attention (summary-only, never an inline comment — review-pr § Part B).
-- **Never file anything automatically.** Whether a deferral becomes a tracked item — a GitHub issue, a `memcan:todo`, or nothing at all — is the user's decision, made via `claudius:triage-findings` or by hand. No review skill creates issues.
-- The class stays correct where permanent non-fix is acceptable, or where fixing it would grow the PR past its stated intent. If a finding genuinely must be fixed now, classify it for fixing: `blocking` when PR intent requires it, `non_blocking` otherwise.
+- The class is summary-only, never an inline comment (review-pr § Part B), so the coordinator surfaces it explicitly: after consolidation, filter the findings for `merge_class == "out_of_scope_follow_up"` and present that list to the user in your own words when reporting results. Everything needed is already in the report JSON (`summary_statistics.merge_class_counts` carries the tally) — no extra field, no extra render path.
+- **Never file anything automatically.** Whether a deferral becomes a GitHub issue, a `memcan:todo`, or nothing at all is the user's decision, made via `claudius:triage-findings` or by hand. No review skill creates issues.
+- If a finding genuinely must be fixed now, it isn't this class: `blocking` when PR intent requires it, `non_blocking` otherwise.
 
 ### HIGH+ security findings are never silently deferred
 

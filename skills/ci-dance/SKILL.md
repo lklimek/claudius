@@ -238,7 +238,8 @@ On exit (any condition), report:
 
 - **Outcome**: success / timeout / stuck / no-review
 - **CI iterations** and **review iterations** (fix-push cycles)
-- **Findings**: total found, fixed, carried forward, and every `out_of_scope_follow_up` finding surfaced for the user's disposition (severity AND merge-class breakdown)
+- **Findings**: total found, fixed, carried forward (severity AND merge-class breakdown)
+- **Deferral candidates**: every finding classified `out_of_scope_follow_up` — filter the stream reports by `merge_class` and list each with title and location. An unattended run has no PR comment thread pulling the user's eye, so this report is the only place these surface; nothing files them (`claudius:severity` § `out_of_scope_follow_up`)
 - **Unresolved**: remaining issues with severity
 - **PR URL**
 

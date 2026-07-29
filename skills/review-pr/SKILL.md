@@ -151,7 +151,7 @@ The grumpy-review delegation inherits the deep transitive call-tree walk (`categ
 
 ## 4. Post GitHub PR Review
 
-`out_of_scope_follow_up` findings are listed in Part A for the user's attention and nothing more — never file an issue for one. Tracking a deferral (GitHub issue, `memcan:todo`, or neither) is the user's decision, taken via `claudius:triage-findings` or by hand.
+`out_of_scope_follow_up` findings are reported, never filed (`claudius:severity` § `out_of_scope_follow_up`): they go in Part A, and when reporting back to the user, filter the consolidated findings for that class and name them as deferral candidates. Tracking one (GitHub issue, `memcan:todo`, or neither) is the user's decision, taken via `claudius:triage-findings` or by hand.
 
 Ask if findings should be published as a GitHub PR review. Posted in **two parts**:
 
