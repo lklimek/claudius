@@ -6,7 +6,7 @@ allowed-tools: ["Bash(*validate_report.py *)", "Bash(*consolidate_reports.py *)"
 
 # Review Report Format
 
-Unified format for all review findings. Schema: `schemas/review-report.schema.json` (v3.2.0). **Hard cutover**: versions 1.x and 2.x are no longer accepted — use v3.x (declare `3.2.0` for new reports).
+Unified format for all review findings. Schema: `schemas/review-report.schema.json` (v3.3.0). **Hard cutover**: versions 1.x and 2.x are no longer accepted — use v3.x (declare `3.3.0` for new reports).
 
 ## Finding Structure
 
@@ -58,7 +58,7 @@ Producers MUST emit `risk`, `impact`, and `scope` — the schema rejects finding
 
 **Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (only when the producer captured exact source during analysis — never invent one).
 
-**Merge classification** (orthogonal to severity — see `severity` skill § Merge Classification): `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` and `intent_basis` (string|null — the exact requirement/claim justifying a `blocking` class). Coordinator-owned like `overall_severity`; the ONLY producers allowed to emit them are **coordinator-inline producers** (review-pr Pass C `pr_promises`, check-pr-comments) — same exception pattern as `location_permalink` below. `summary_statistics.merge_class_counts` (optional) carries the per-class tally.
+**Merge classification** (orthogonal to severity — see `severity` skill § Merge Classification): `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed`, `intent_basis` (string|null — the exact requirement/claim justifying a `blocking` class), and `deferred_to` (string — the tracking issue URL or `owner/repo#N` a deferral was filed as; required in practice at MEDIUM+ for `out_of_scope_follow_up`, since an unfiled deferral is a mis-classification — `validate_report.py` warns advisorily). Coordinator-owned like `overall_severity`; the ONLY producers allowed to emit them are **coordinator-inline producers** (review-pr Pass C `pr_promises`, check-pr-comments) — same exception pattern as `location_permalink` below. `summary_statistics.merge_class_counts` (optional) carries the per-class tally.
 
 ## Coordinator-derived / validator-owned fields — DO NOT emit
 
@@ -68,7 +68,7 @@ Populated downstream; producers must NOT set:
 - `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL. Coordinator-derived in the standard multi-agent pipeline. **Exception — standalone producers** (a producer rendering its own final report with no coordinator derive-pass, canonically `check-pr-comments`): see `check-pr-comments/SKILL.md` § `location_permalink` for the exact emit condition.
 - `metadata.repository` — coordinator derives from `git remote get-url origin`
 - `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by the `validate-findings` skill
-- `merge_class`, `intent_basis` — coordinator-assigned during consolidation per `severity` skill § Merge Classification. **Exception**: coordinator-inline producers (review-pr Pass C, check-pr-comments) emit them directly.
+- `merge_class`, `intent_basis`, `deferred_to` — coordinator-assigned during consolidation per `severity` skill § Merge Classification; `deferred_to` is written by the filing step (`review-pr` § Filing procedure). **Exception**: coordinator-inline producers (review-pr Pass C, check-pr-comments) emit them directly.
 - Derived integer `severity` when emitting floats — the coordinator overrides
 
 ## Long-Text Field Format
@@ -141,7 +141,7 @@ For complete reports (grumpy-review, check-pr-comments), wrap finding sections i
 
 ```json
 {
-  "schema_version": "3.2.0",
+  "schema_version": "3.3.0",
   "metadata": {
     "project": "claudius",
     "date": "YYYY-MM-DD",

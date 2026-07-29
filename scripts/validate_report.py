@@ -42,6 +42,54 @@ DEFAULT_SCHEMA = (
 _AXIS_MIN_FINDINGS = 5
 _AXIS_SHARE_THRESHOLD = 0.8
 
+# Schema version that first carried each optional field. The gate is a
+# MINIMUM: every later version keeps the field, so equality would nag every
+# report the consolidator emits after the next bump.
+_FINDING_FIELD_MIN_VERSION = {
+    "merge_class": "3.2.0",
+    "intent_basis": "3.2.0",
+    "deferred_to": "3.3.0",
+}
+_REPORT_FIELD_MIN_VERSION = {
+    "top_findings[].merge_class": "3.2.0",
+    "summary_statistics.merge_class_counts": "3.2.0",
+}
+
+# A deferral this severe is only "acceptable to never fix" once it is filed —
+# see skills/severity/SKILL.md § out_of_scope_follow_up.
+_TRACKED_DEFERRAL_MIN_SEVERITY = 3
+
+
+def _version_tuple(version: object) -> tuple[int, ...]:
+    """Parse ``"3.2.0"`` into ``(3, 2, 0)``; unparseable declarations sort last."""
+    if not isinstance(version, str):
+        return ()
+    parts = version.split(".")
+    if not all(part.isdigit() for part in parts):
+        return ()
+    return tuple(int(part) for part in parts)
+
+
+def _version_gate_warnings(
+    present: list[str],
+    min_versions: dict[str, str],
+    schema_version: object,
+    subject: str,
+) -> list[str]:
+    """Group fields used below their introducing schema version into warnings."""
+    by_version: dict[str, list[str]] = {}
+    declared = _version_tuple(schema_version)
+    for field in present:
+        required = min_versions[field]
+        if declared < _version_tuple(required):
+            by_version.setdefault(required, []).append(field)
+    return [
+        f"[consistency] {subject}: {required}-only fields "
+        f"({', '.join(fields)}) require schema_version={required} or later, "
+        f"not {schema_version}"
+        for required, fields in sorted(by_version.items())
+    ]
+
 
 def _iter_findings(report: dict) -> list[dict]:
     """Flatten all per-section findings into one list (empty on odd shapes)."""
@@ -65,8 +113,11 @@ def check_consistency(report: dict) -> list[str]:
     than rated per finding.
     (iii) Dismissed finding with a non-disputed merge classification.
     (iv) Blocking finding without the requirement or claim that makes it blocking.
-    (v) Merge-classification fields — on findings, top_findings, or
-    summary_statistics — used with a pre-3.2.0 schema version.
+    (v) Version-gated fields — merge classification on findings, top_findings,
+    or summary_statistics (3.2.0+), ``deferred_to`` (3.3.0+) — used with an
+    older declared schema version.
+    (vi) MEDIUM+ ``out_of_scope_follow_up`` finding with no ``deferred_to``:
+    deferral is only "acceptable to never fix" once it is actually filed.
 
     Warnings are advisory: callers print them but never fail validation.
     """
@@ -75,15 +126,14 @@ def check_consistency(report: dict) -> list[str]:
     schema_version = report.get("schema_version")
 
     for f in findings:
-        schema_fields = [
-            field for field in ("merge_class", "intent_basis") if field in f
-        ]
-        if schema_fields and schema_version != "3.2.0":
-            warnings.append(
-                f"[consistency] finding {f.get('id', '?')}: 3.2.0-only fields "
-                f"({', '.join(schema_fields)}) require schema_version=3.2.0, "
-                f"not {schema_version}"
+        warnings.extend(
+            _version_gate_warnings(
+                [field for field in _FINDING_FIELD_MIN_VERSION if field in f],
+                _FINDING_FIELD_MIN_VERSION,
+                schema_version,
+                f"finding {f.get('id', '?')}",
             )
+        )
 
         merge_class = f.get("merge_class")
         ai_verdict = f.get("ai_verdict")
@@ -104,6 +154,20 @@ def check_consistency(report: dict) -> list[str]:
                 f"[consistency] finding {f.get('id', '?')}: merge_class=blocking "
                 "requires a non-empty intent_basis"
             )
+
+        deferred_to = f.get("deferred_to")
+        if merge_class == "out_of_scope_follow_up" and (
+            not isinstance(deferred_to, str) or not deferred_to.strip()
+        ):
+            band = f.get("severity")
+            if not isinstance(band, int) or isinstance(band, bool):
+                band = derive_finding_severity(f)
+            if isinstance(band, int) and band >= _TRACKED_DEFERRAL_MIN_SEVERITY:
+                warnings.append(
+                    f"[consistency] finding {f.get('id', '?')}: "
+                    f"merge_class=out_of_scope_follow_up at severity {band} (MEDIUM+) "
+                    "carries no deferred_to reference — file it or reclassify"
+                )
 
         sev = f.get("severity")
         has_sev = isinstance(sev, int) and not isinstance(sev, bool)
@@ -126,7 +190,7 @@ def check_consistency(report: dict) -> list[str]:
                     f"disagrees with overall_severity={float(overall):.3f} (band {overall_band})"
                 )
 
-    # 3.2.0-only additions can also appear outside per-section findings.
+    # Version-gated additions can also appear outside per-section findings.
     report_level_fields: list[str] = []
     top_findings = report.get("top_findings")
     if isinstance(top_findings, list) and any(
@@ -136,12 +200,11 @@ def check_consistency(report: dict) -> list[str]:
     summary_stats = report.get("summary_statistics")
     if isinstance(summary_stats, dict) and "merge_class_counts" in summary_stats:
         report_level_fields.append("summary_statistics.merge_class_counts")
-    if report_level_fields and schema_version != "3.2.0":
-        warnings.append(
-            "[consistency] report: 3.2.0-only fields "
-            f"({', '.join(report_level_fields)}) require schema_version=3.2.0, "
-            f"not {schema_version}"
+    warnings.extend(
+        _version_gate_warnings(
+            report_level_fields, _REPORT_FIELD_MIN_VERSION, schema_version, "report"
         )
+    )
 
     if len(findings) >= _AXIS_MIN_FINDINGS:
         for axis in ("risk", "impact", "scope"):

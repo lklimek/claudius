@@ -322,6 +322,48 @@ class TestV32AdditiveFields:
         assert errors == [], [e.message for e in errors]
 
 
+class TestV33AdditiveFields:
+    """Schema 3.3.0 adds an optional tracked-deferral reference."""
+
+    def _base(self) -> dict:
+        data = json.loads((FIXTURES / "v3-merge-class.json").read_text())
+        data["schema_version"] = "3.3.0"
+        return data
+
+    def test_version_accepted(self):
+        assert "3.3.0" in SCHEMA["properties"]["schema_version"]["enum"]
+        errors = list(VALIDATOR.iter_errors(self._base()))
+        assert errors == [], [e.message for e in errors]
+
+    def test_deferred_to_accepts_issue_reference(self):
+        for value in ("https://github.com/octo/widgets/issues/42", "octo/widgets#42"):
+            data = self._base()
+            data["findings"][0]["findings"][0]["deferred_to"] = value
+            errors = list(VALIDATOR.iter_errors(data))
+            assert errors == [], (value, [e.message for e in errors])
+
+    def test_deferred_to_absent_still_validates(self):
+        data = self._base()
+        assert "deferred_to" not in data["findings"][0]["findings"][0]
+        errors = list(VALIDATOR.iter_errors(data))
+        assert errors == [], [e.message for e in errors]
+
+    def test_non_string_deferred_to_rejected(self):
+        data = self._base()
+        data["findings"][0]["findings"][0]["deferred_to"] = 42
+        assert list(VALIDATOR.iter_errors(data))
+
+    def test_deferred_to_validates_on_older_declared_versions(self):
+        """Additive field: the schema never gates it on the declared version —
+        validate_report.py's advisory consistency gate does that."""
+        data = self._base()
+        data["findings"][0]["findings"][0]["deferred_to"] = "octo/widgets#42"
+        for version in ("3.0.0", "3.1.0", "3.2.0"):
+            data["schema_version"] = version
+            errors = list(VALIDATOR.iter_errors(data))
+            assert errors == [], (version, [e.message for e in errors])
+
+
 class TestV2Legacy:
     def test_rejected(self):
         data = json.loads((LEGACY_FIXTURES / "v2-legacy.json").read_text())

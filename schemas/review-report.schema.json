@@ -9,7 +9,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["3.0.0", "3.1.0", "3.2.0"],
+      "enum": ["3.0.0", "3.1.0", "3.2.0", "3.3.0"],
       "description": "Schema version (SemVer). Renderers check this for compatibility."
     },
     "metadata": {
@@ -248,6 +248,10 @@
         "intent_basis": {
           "type": ["string", "null"],
           "description": "Exact requirement or claim justifying a blocking class; null or absent otherwise."
+        },
+        "deferred_to": {
+          "type": "string",
+          "description": "Tracking reference (issue URL or owner/repo#N) the finding was filed as. Required in practice for MEDIUM+ out_of_scope_follow_up findings — an unfiled deferral is a mis-classification. Coordinator-owned; see skills/severity/SKILL.md."
         },
         "risk": { "$ref": "#/$defs/severity_float", "description": "OWASP Likelihood normalized to [0,1]." },
         "impact": { "$ref": "#/$defs/severity_float", "description": "OWASP Impact normalized to [0,1]." },

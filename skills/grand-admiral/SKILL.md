@@ -162,7 +162,7 @@ Agents have NO conversation history. Every prompt MUST include:
 2. **File list**: explicit paths or globs — except development-work delegation, where the agent locates files itself
 3. **Output format**: structure, severity, where to write
 4. **Constraints**: what NOT to do
-5. **UX/DX context**: desired end-user/developer experience
+5. **Context**: digest — goal, non-goals, operational profile (invocation, concurrency reality, failure cost, each with its evidence), UX/DX priorities; see `review-pr` § Context Digest. Unevidenced fields are stated as `unknown`, never guessed
 6. **Change visibility**: instruct checking `git diff` AND `git status` (or give explicit paths). Haiku agents miss changes with only `git diff HEAD`.
 7. For baseline comparisons: how to see what changed (`git diff`, `git show`)
 8. **Worktree base sync**: see Worktree Isolation — Option A (default; local SHA via `git rev-parse HEAD` + `git merge --ff-only <sha>` as first action) or Option B (fallback; push first, fork from `origin`). Never a branch name or symbolic ref — they resolve differently inside worktrees.

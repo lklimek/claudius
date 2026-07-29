@@ -1,7 +1,7 @@
 ---
 name: grumpy-review
 description: "This skill should be used when the user requests a code review, audit, or quality assessment covering quality, security, dependencies, and documentation. It uses parallel agents and produces a deduplicated, severity-ranked report."
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Bash(mv *), Agent, SendMessage, TaskStop
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(gh issue create *), Bash(gh issue list *), Bash(ghsudo gh issue *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Bash(mv *), Agent, SendMessage, TaskStop
 ---
 
 # Code Review Methodology
@@ -94,6 +94,7 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 7. **File output**: use the Write tool for creating files — never `cat > file` or heredoc redirections
 8. **Full roster**: list every teammate name, role/focus, and file scope in this fan-out, including conditional and scaled reviewers; state that all listed peers are already live so agents do not pause to ask or spawn duplicates
 9. **Cross-domain hints**: passively report any issue noticed in a peer's primary domain rather than hunting outside the assigned scope, silently duplicating it, or omitting it; tag the finding with `cross_domain_hint: "<peer-role>"` so consolidation can weigh the overlap
+10. **Context Digest** (verbatim, when the invoker supplied one — defined in `review-pr` § Context Digest; never restate or reinvent its contents): pass it as its own numbered item with this rule attached — *the digest adjusts scoring (via `claudius:severity`'s non-adversarial `risk` recipe), it never suppresses reporting: report the finding with context-adjusted floats, never drop it; a field marked `unknown` changes nothing.*
 
 ### Finding format (JSON)
 
@@ -130,7 +131,7 @@ Agents MUST write findings to the specified file path as a JSON array of `findin
 
 **Optional**: `tags`, `impact_description` (Markdown impact narrative; the numeric `impact` float is separate), `code_snippets` (only when you captured the exact source during analysis — never invent one), `cross_domain_hint` (a peer role whose primary domain owns an issue noticed incidentally; never actively search that domain).
 
-**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, any `metadata`/`commit`/`repository`/`date`/`branch` field, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, `merge_class`, `intent_basis`, and the derived integer `severity` when emitting floats. `risk`/`impact`/`scope` are required — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
+**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, any `metadata`/`commit`/`repository`/`date`/`branch` field, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, `merge_class`, `intent_basis`, `deferred_to`, and the derived integer `severity` when emitting floats. `risk`/`impact`/`scope` are required — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 
 **Metadata is coordinator-owned**: producers emit only the bare `finding_section[]` array, with no envelope object or metadata fields. The coordinator resolves the full 40-character commit SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` when the branch has no upstream) and supplies commit/date/branch/project through `prepare --metadata`; `prepare` derives repository metadata from `--repo-root`.
 
@@ -215,12 +216,13 @@ Read `intermediate.json` and decide:
 1. **Duplicate resolution**: per `duplicate_groups` entry, merge (keep the most detailed description, union tags) or keep separate. Remove redundant findings.
 2. **INTENTIONAL downgrade**: downgrade each `intentional_downgrades` finding to `INFO` — deliberate engineering decisions from previous triage.
 3. **Severity re-evaluation**: load the `severity` skill (`/severity`), then re-assess every finding strictly against its criteria — agents often over-inflate.
-4. **Merge classification**: assign `merge_class` (+ `intent_basis` for `blocking`) to every non-informational finding per `severity` skill § Merge Classification. Use the intent digest when the invoker supplied one (review-pr); with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Severity never determines `merge_class`.
-5. **Merge sections**: combine same-category agent sections into unified sections.
-6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding.
-7. **Agent stats**: copy `intermediate.json`'s `agent_stats` array verbatim into `merged-findings.json` — `prepare` already computes it; do not hand-author or reshape it.
+4. **Merge classification**: assign `merge_class` (+ `intent_basis` for `blocking`) to every non-informational finding per `severity` skill § Merge Classification. Use the Context Digest when the invoker supplied one (review-pr § Context Digest); with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Apply the digest here as a coordinator-side backstop too: re-check any finding whose floats ignore an evidenced operational-profile claim a producer plainly didn't have (`severity` skill § `risk`). Severity never determines `merge_class`.
+5. **File deferrals**: for every `out_of_scope_follow_up` finding at MEDIUM+, run `review-pr` § Filing procedure (dedup-search → file → record `deferred_to` → `non_blocking` fallback on failure). An unfiled MEDIUM+ deferral is a mis-classification, not a disposition.
+6. **Merge sections**: combine same-category agent sections into unified sections.
+7. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding and list every deferral with its `deferred_to` ref.
+8. **Agent stats**: copy `intermediate.json`'s `agent_stats` array verbatim into `merged-findings.json` — `prepare` already computes it; do not hand-author or reshape it.
 
-For reviews above roughly 30 raw findings, use the ready-to-run merge helper instead of transcribing the entire document by hand. Record the review-specific judgment in `"$SCRATCH_DIR"/merge-decisions.json`: each true duplicate cluster names its members by `agent` + `original_id`, selects one member as the base, records a `reason`, and supplies only the hand-authored merged fields in `updates`. Include the step 6 `executive_summary` in the same file. Do not list candidate clusters you decide to keep separate.
+For reviews above roughly 30 raw findings, use the ready-to-run merge helper instead of transcribing the entire document by hand. Record the review-specific judgment in `"$SCRATCH_DIR"/merge-decisions.json`: each true duplicate cluster names its members by `agent` + `original_id`, selects one member as the base, records a `reason`, and supplies only the hand-authored merged fields in `updates`. Include the step 7 `executive_summary` in the same file. Do not list candidate clusters you decide to keep separate.
 
 ```json
 {

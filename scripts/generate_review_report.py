@@ -263,6 +263,23 @@ def _location_link(finding: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _deferred_ref(finding: dict[str, Any]) -> dict[str, Any] | None:
+    """Return ``{"text": ref, "url": ref or None}`` for a tracked deferral.
+
+    ``None`` when the finding carries no usable ``deferred_to``. Only http(s)
+    refs become links — a bare ``owner/repo#N`` (or any other scheme, e.g.
+    ``javascript:``) renders as plain text.
+    """
+    ref = finding.get("deferred_to")
+    if not isinstance(ref, str) or not ref.strip():
+        return None
+    ref = ref.strip()
+    return {
+        "text": ref,
+        "url": ref if ref.startswith(("https://", "http://")) else None,
+    }
+
+
 def _severity_tooltip(finding: dict[str, Any]) -> str:
     """Return ``"overall=.. risk=.. impact=.. scope=.."`` when all floats
     present, else ``""``. The numeric tooltip surfaces the breakdown for the
@@ -745,6 +762,14 @@ def render_markdown(data: dict[str, Any]) -> str:
             if f.get("impact_description"):
                 lines.append(f"- **Impact**: {f['impact_description']}")
             lines.append(f"- **Recommendation**: {f['recommendation']}")
+            deferred = _deferred_ref(f)
+            if deferred:
+                if deferred["url"]:
+                    lines.append(
+                        f"- **Deferred to**: [{deferred['text']}]({deferred['url']})"
+                    )
+                else:
+                    lines.append(f"- **Deferred to**: `{deferred['text']}`")
             if f.get("verdict"):
                 lines.append(f"- **Verdict**: {f['verdict']}")
             if f.get("ai_verdict"):
@@ -1129,7 +1154,7 @@ details summary:hover{color:{{ ACCENT }}}
     {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of risk/impact/scope)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
     {% if f.risk is number %}<span class="metric-chip metric-risk" title="OWASP Likelihood normalized">R {{ '%.2f' % f.risk }}</span>{% endif %}
     {% if f.impact is number %}<span class="metric-chip metric-impact" title="OWASP Impact normalized">I {{ '%.2f' % f.impact }}</span>{% endif %}
-    {% if f.scope is number %}<span class="metric-chip metric-scope" title="PR relevance (1.0 direct, 0.5 indirect, 0.0 unrelated)">S {{ '%.2f' % f.scope }}</span>{% endif %}
+    {% if f.scope is number %}<span class="metric-chip metric-scope" title="Blast radius (1.0 repo-wide, ~0.5 a subsystem, ~0.2 one call-site, 0.0 none)">S {{ '%.2f' % f.scope }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
@@ -1139,6 +1164,7 @@ details summary:hover{color:{{ ACCENT }}}
     <dt>Description:</dt><dd>{{ f.description | markdown }}</dd>
     {% if f.impact_description %}<dt>Impact:</dt><dd>{{ f.impact_description | markdown }}</dd>{% endif %}
     <dt>Recommendation:</dt><dd>{{ f.recommendation | markdown }}</dd>
+    {% if f.deferred_to %}<dt>Deferred to:</dt><dd>{% if f.deferred_to.startswith(('https://', 'http://')) %}<a href="{{ f.deferred_to }}" target="_blank" rel="noopener">{{ f.deferred_to }}</a>{% else %}<code>{{ f.deferred_to }}</code>{% endif %}</dd>{% endif %}
     {% if f.ai_assessment %}<dt>AI Assessment:</dt><dd>{{ f.ai_assessment | markdown }}</dd>{% endif %}
     {% if f.verdict %}
     <dt>Verdict:</dt><dd><span class="badge" style="background:{{ verdict_colors.get(f.verdict, '#7F8C8D') }}">{{ f.verdict }}</span></dd>
@@ -3041,6 +3067,21 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
         if impact_desc:
             elements.extend(_md_field("Impact", impact_desc))
         elements.extend(_md_field("Recommendation", rec))
+        deferred = _deferred_ref(f)
+        if deferred:
+            if deferred["url"]:
+                url_escaped = xml_escape(deferred["url"], {chr(34): "&quot;"})
+                ref_xml = (
+                    f'<a href="{url_escaped}" color="{ACCENT}">'
+                    f"{xml_escape(deferred['text'])}</a>"
+                )
+            else:
+                ref_xml = (
+                    f'<font color="{ACCENT}">{xml_escape(deferred["text"])}</font>'
+                )
+            elements.append(
+                Paragraph(f"<b>Deferred to:</b> {ref_xml}", s["finding_body"])
+            )
         ai_verdict = f.get("ai_verdict", "")
         if ai_verdict:
             conf = f.get("ai_verdict_confidence")
