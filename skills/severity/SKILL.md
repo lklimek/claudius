@@ -90,7 +90,7 @@ The float trio is the **single source of truth** for severity. Producers MUST NO
 
 `merge_class` answers **does this finding prevent THIS PR from merging?**; severity answers **what is the shipped impact?** The axes are independent. 🔴 **Blocking is a merge class, never a severity**: a LOW can block (violates an explicit acceptance criterion); a HIGH can be follow-up (pre-existing, unchanged, not required by this PR). Severity and `ai_verdict_confidence` never upgrade a finding to blocking.
 
-Coordinator-owned: assigned during consolidation (grumpy-review §5b, using the Context Digest when available, else the coordinator's own knowledge of the work's goal) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments). Fields: `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed`, `intent_basis` (the exact requirement/claim; always cite it for `blocking`), `deferred_to` (tracking ref; required at MEDIUM+ for `out_of_scope_follow_up`). See `report-format` for schema shape.
+Coordinator-owned: assigned during consolidation (grumpy-review §5b, using the Context Digest when available, else the coordinator's own knowledge of the work's goal) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments). Fields: `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` + `intent_basis` (the exact requirement/claim; always cite it for `blocking`). See `report-format` for schema shape.
 
 ### Establish PR intent (priority order)
 
@@ -113,34 +113,30 @@ introduced, worsened, or newly exposed by the diff
 valid and related to the change                    → non_blocking
 must not survive this review — leaving it in the
   codebase indefinitely is unacceptable
-    fixing it grows the PR beyond its stated intent
-      AND it is filed as a tracked issue
-      (deferred_to set)                            → out_of_scope_follow_up
+    fixing it grows the PR beyond its stated intent → out_of_scope_follow_up
     otherwise                                      → non_blocking
 otherwise (acceptable to leave permanently)        → out_of_scope_follow_up
 ```
 
-Branch order matters: intent-required and diff-introduced-and-material findings already resolved to `blocking` above, so only valid, pre-existing, not-intent-required findings ever reach the tracked-deferral branch.
+Branch order matters: intent-required and diff-introduced-and-material findings already resolved to `blocking` above, so only valid, pre-existing, not-intent-required findings ever reach the beyond-stated-intent branch.
 
 **Material** = observable incorrect behavior, security/safety invariant failure, data loss/corruption, crash, invalid persistence/API behavior, or duplicate external operations. Style, speculative hardening, and minor maintainability improvements are NOT material.
 
 **Pre-existing issues** block only when the PR relies on them, worsens or newly exposes them, or fixing them is necessary for an explicit stated goal. A residual gap after a partial improvement blocks only when the PR claims full closure of that gap.
 
-### `out_of_scope_follow_up` requires a filed `deferred_to`
+### `out_of_scope_follow_up` is reported, never filed
 
-🔴 An **untracked** deferral is not a plan — nothing carries it forward; such findings have a **low probability of ever being actioned** (realistic outcome: a `TODO` comment that outlives everyone who read the review). Mechanics reinforce this: `out_of_scope_follow_up` findings are summary-only, never inline comments (review-pr § Part B), so nobody is asked to act on them.
+🔴 Deferral is not a plan the review pipeline can make on its own — a deferred finding with nothing carrying it forward has a **low probability of ever being actioned** (realistic outcome: a `TODO` comment that outlives everyone who read the review).
 
-Read the class as **"acceptable to never fix — only because it is filed"**:
+The pipeline's whole job for this class is to **surface it clearly and stop**:
 
-- `deferred_to` (issue URL or `owner/repo#N`) is what makes the class valid at MEDIUM+. An unfiled MEDIUM+ deferral is a **mis-classification**, not a valid disposition: file it, or classify it for fixing now — `blocking` when PR intent requires it, `non_blocking` otherwise. `validate_report.py` warns (advisorily) on exactly this shape.
-- Deferring *because* someone will presumably pick it up later, with no issue filed, is the failure mode above — that assumption is false without a tracker entry.
-- Filing procedure (search-for-duplicate first, then `gh issue create`, then record the ref): `review-pr` § Filing procedure — the single copy.
-- Without `deferred_to` the class stays correct only where permanent non-fix is genuinely acceptable and nobody needs to be told: unrelated pre-existing nits at LOW/INFO, speculative hardening, taste.
-- The tradeoff is deliberate: requiring a filed ref costs one issue per deferral — accepted in exchange for not laundering real defects into a backlog that does not exist.
+- Every `out_of_scope_follow_up` finding appears in the review output for the user's attention (summary-only, never an inline comment — review-pr § Part B).
+- **Never file anything automatically.** Whether a deferral becomes a tracked item — a GitHub issue, a `memcan:todo`, or nothing at all — is the user's decision, made via `claudius:triage-findings` or by hand. No review skill creates issues.
+- The class stays correct where permanent non-fix is acceptable, or where fixing it would grow the PR past its stated intent. If a finding genuinely must be fixed now, classify it for fixing: `blocking` when PR intent requires it, `non_blocking` otherwise.
 
 ### HIGH+ security findings are never silently deferred
 
-A security-relevant finding at HIGH or CRITICAL must never be auto-deferred without a human seeing it: surface it in the review summary as an explicit disposition question — fix now, or defer with a filed `deferred_to` — and state the residual exposure. `out_of_scope_follow_up` on such a finding is a decision for the human, never a coordinator convenience.
+A security-relevant finding at HIGH or CRITICAL must never be deferred without a human seeing it: surface it in the review summary as an explicit disposition question, and state the residual exposure. `out_of_scope_follow_up` on such a finding is a decision for the human, never a coordinator convenience.
 
 ### External-reviewer compatibility map
 

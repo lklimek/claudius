@@ -1000,7 +1000,6 @@ def _flatten_agent_report(
                     "code_snippets": f.get("code_snippets"),
                     "merge_class": f.get("merge_class"),
                     "intent_basis": f.get("intent_basis"),
-                    "deferred_to": f.get("deferred_to"),
                     "positives": section_positives if section_positives else None,
                 }
             )

@@ -65,13 +65,13 @@ Default end of workflow. Steps 5-7 (structured report) run only on explicit requ
 
 ## 5. Build Structured Report JSON
 
-Produce `report.json` per the unified report schema (`../../schemas/review-report.schema.json` v3.3.0; 3.0.0–3.2.0 still accepted).
+Produce `report.json` per the unified report schema (`../../schemas/review-report.schema.json` v3.2.0; 3.0.0/3.1.0 still accepted).
 
 ### Report structure
 
 ```json
 {
-  "schema_version": "3.3.0",
+  "schema_version": "3.2.0",
   "metadata": {
     "project": "<owner>/<repo>",
     "date": "YYYY-MM-DD",
@@ -171,7 +171,7 @@ Omit `location_permalink` (never emit an empty string) when commit or project is
 - **Resolved** comments: `risk = impact = 0.1`, `scope = 0.0` (satisfied — no remaining work in scope), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted via `isResolved: true` (step 3), state it was already resolved on GitHub rather than inventing an unverified fix description. The coordinator derives `severity = 1` (INFO) from the floats.
 - **Unresolved** comments: assess `risk`, `impact`, AND `scope` per the OWASP recipes in `claudius:severity`. Rate `scope` as the comment's real blast radius (single call-site / narrow path ≈ `0.2`; subsystem ≈ `0.5`; repo-wide ≈ `1.0`) — do NOT default to `1.0`. The coordinator derives the integer `severity` band; never hand-type a label. Set `verdict: "UNRESOLVED"`; `recommendation` describes what remains.
 - `thread_id`: from `pull_request_read` `get_review_comments` (or `gh-list-review-threads.sh` fallback). Needed for step 8.
-- **Merge class** (coordinator-inline producer exception — see `claudius:report-format`): RESOLVED comments omit `merge_class` (informational carve-out). Classify UNRESOLVED per `claudius:severity` § Merge Classification — a reviewer-demanded unresolved thread is a `blocking` candidate (`intent_basis` = the reviewer's request); tangential suggestions are `non_blocking` or `out_of_scope_follow_up`. An `out_of_scope_follow_up` at MEDIUM+ must carry a `deferred_to` ref — file it per `review-pr` § Filing procedure (the single copy), or reclassify.
+- **Merge class** (coordinator-inline producer exception — see `claudius:report-format`): RESOLVED comments omit `merge_class` (informational carve-out). Classify UNRESOLVED per `claudius:severity` § Merge Classification — a reviewer-demanded unresolved thread is a `blocking` candidate (`intent_basis` = the reviewer's request); tangential suggestions are `non_blocking` or `out_of_scope_follow_up` — the latter is reported for the user's attention, never filed anywhere by this skill (`claudius:severity` § `out_of_scope_follow_up` is reported, never filed).
 
 **Do NOT emit** (coordinator/validator-owned): `overall_severity`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `risk`/`impact`/`scope` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 

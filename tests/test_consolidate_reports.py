@@ -1091,46 +1091,6 @@ class TestFlattenAgentReport:
         assert raw[0]["merge_class"] == "blocking"
         assert raw[0]["intent_basis"] == "The requested behavior is absent."
 
-    def test_deferred_to_passes_through(self):
-        sections = [
-            {
-                "category": "code_quality",
-                "title": "CQ",
-                "findings": [
-                    {
-                        "severity": 3,
-                        "merge_class": "out_of_scope_follow_up",
-                        "deferred_to": "https://github.com/octo/widgets/issues/42",
-                        "title": "Pre-existing gap",
-                        "location": "f.py:1",
-                        "description": "Desc",
-                        "recommendation": "Fix",
-                    }
-                ],
-            }
-        ]
-        raw, _ = cr._flatten_agent_report("agent-a", sections)
-        assert raw[0]["deferred_to"] == "https://github.com/octo/widgets/issues/42"
-
-    def test_absent_deferred_to_is_not_synthesized(self):
-        sections = [
-            {
-                "category": "code_quality",
-                "title": "CQ",
-                "findings": [
-                    {
-                        "severity": 3,
-                        "title": "Pre-existing gap",
-                        "location": "f.py:1",
-                        "description": "Desc",
-                        "recommendation": "Fix",
-                    }
-                ],
-            }
-        ]
-        raw, _ = cr._flatten_agent_report("agent-a", sections)
-        assert "deferred_to" not in raw[0]
-
     def test_empty_sections_list(self):
         raw, positives = cr._flatten_agent_report("agent-x", [])
         assert raw == []

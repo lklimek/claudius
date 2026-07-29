@@ -3,7 +3,7 @@ name: ci-dance
 description: "This skill should be used when the user says 'ci-dance', 'make the PR green', 'ship this and fix CI', 'push and handle reviews', or wants end-to-end PR pipeline automation."
 argument-hint: "timeout=300"
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh issue create *), Bash(gh issue list *), Bash(ghsudo gh issue *), Bash(gh run *), Bash(git *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-request-reviewer.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bash(git *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-request-reviewer.sh *), Bash(*gh-resolve-review-threads.sh *), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment
 ---
 
 # CI Dance — Unattended PR Pipeline
@@ -101,7 +101,7 @@ Route by `merge_class`, never by raw severity — a valid pre-existing MEDIUM th
 |---|---|
 | `blocking` (any severity, incl. LOW) | Fix in this PR |
 | `non_blocking` | Fix in this PR |
-| `out_of_scope_follow_up` | **Never fix inline.** Verify `deferred_to` is set; if missing at MEDIUM+, run `review-pr` § Filing procedure and record the ref |
+| `out_of_scope_follow_up` | **Never fix inline, never file anything.** Surface it in the Final Report for the user's disposition |
 | `disputed` | Skip |
 
 Findings arriving without a `merge_class` (raw CI failures, unclassified comments) get one assigned per `claudius:severity` § Merge Classification before routing — a CI failure on this branch is `blocking` by construction.
@@ -157,11 +157,11 @@ After all three streams complete:
 
 **An empty task-notification is not clean completion.** A stream notification with no substantive report or findings is a possible STALL — investigate and resume per `grand-admiral` § Recovery → Built-in Stall Watchdog, never treat it as a zero-finding result.
 
-1. Collect each stream's final report — findings fixed, findings claim-deferred (claimed by another stream, not yet self-verified), findings filed as `out_of_scope_follow_up` with their `deferred_to` refs — from its completion `SendMessage`, plus its worktree commit log (`git -C <worktree> log --oneline`)
+1. Collect each stream's final report — findings fixed, findings claim-deferred (claimed by another stream, not yet self-verified), findings classified `out_of_scope_follow_up` — from its completion `SendMessage`, plus its worktree commit log (`git -C <worktree> log --oneline`)
 2. Enumerate worktree branches — collect commits from each stream's worktree
 3. Cherry-pick each stream's commits into the main working branch
 4. On cherry-pick conflicts (overlapping edits despite claim coordination), resolve — prefer the more comprehensive fix
-5. **Verify every claim-deferred finding.** Check the claiming stream's commits/diff actually address that location. Addressed → drop it. Not addressed → do NOT drop: reassign to a stream for an immediate follow-up fix if time remains this iteration, else carry forward explicitly into the Final Report and next iteration's fix queue. A claim-deferred finding only resolves to confirmed-fixed or carried-forward — never silently dropped. Merge-class deferrals (`out_of_scope_follow_up`) are separate: verify each carries a `deferred_to`, never a fix.
+5. **Verify every claim-deferred finding.** Check the claiming stream's commits/diff actually address that location. Addressed → drop it. Not addressed → do NOT drop: reassign to a stream for an immediate follow-up fix if time remains this iteration, else carry forward explicitly into the Final Report and next iteration's fix queue. A claim-deferred finding only resolves to confirmed-fixed or carried-forward — never silently dropped. Merge-class deferrals (`out_of_scope_follow_up`) are separate: they are reported, never fixed and never filed.
 6. **Sync with the PR's base branch — every iteration, before the next push (Step 1).** Stream commits fork from this branch's own HEAD, never from base, so no cherry-pick can surface what landed on base mid-run. Invoke `claudius:merge-base` to fetch `origin/<baseRefName>`, merge, and resolve conflicts. Also hunt **silent collisions** — changes that merge cleanly yet are wrong together, notably a version bump another PR independently made to the same SemVer field; if the branch's version now duplicates one already on base, re-bump past it. Run unconditionally — never assume base is unchanged.
 7. Shut down each stream via `SendMessage({type: "shutdown_request"})` (see `grand-admiral` § Terminating Teammates)
 8. Clean up worktrees (`git worktree remove` + `prune`)
@@ -177,7 +177,7 @@ Log: `"--- Iteration {iteration}: Step 5 — Exit Check ---"`
 
 Evaluate **exactly one** outcome:
 
-1. **EXIT SUCCESS** — ALL three streams completed with zero fixes applied this iteration AND CI was green AND no `blocking` findings remain from any stream, with every `non_blocking` finding either fixed or explicitly carried into the Final Report (`out_of_scope_follow_up` findings never gate the exit — they gate only on having a `deferred_to`). Log `"=== CI Dance: EXIT SUCCESS after {iteration} iterations ==="`. Proceed to Final Report.
+1. **EXIT SUCCESS** — ALL three streams completed with zero fixes applied this iteration AND CI was green AND no `blocking` findings remain from any stream, with every `non_blocking` finding either fixed or explicitly carried into the Final Report (`out_of_scope_follow_up` findings never gate the exit — they are reported for the user). Log `"=== CI Dance: EXIT SUCCESS after {iteration} iterations ==="`. Proceed to Final Report.
 2. **EXIT TIMEOUT** — elapsed time exceeds timeout. Log `"=== CI Dance: EXIT TIMEOUT after {iteration} iterations ==="`. Proceed to Final Report.
 3. **EXIT STUCK** — same failure persists after 2-3 fix attempts. Log `"=== CI Dance: EXIT STUCK after {iteration} iterations ==="`. Proceed to Final Report.
 4. **CONTINUE** — any stream applied fixes, or CI was not green, or `blocking`/unhandled `non_blocking` findings remain. Log `"=== CI Dance: Iteration {iteration} complete, continuing to iteration {iteration+1} ==="`. **Return to Step 1 now.** Do NOT stop, do NOT generate the Final Report, do NOT consider the task complete.
@@ -238,7 +238,7 @@ On exit (any condition), report:
 
 - **Outcome**: success / timeout / stuck / no-review
 - **CI iterations** and **review iterations** (fix-push cycles)
-- **Findings**: total found, fixed, carried forward, deferred with their `deferred_to` refs (severity AND merge-class breakdown)
+- **Findings**: total found, fixed, carried forward, and every `out_of_scope_follow_up` finding surfaced for the user's disposition (severity AND merge-class breakdown)
 - **Unresolved**: remaining issues with severity
 - **PR URL**
 

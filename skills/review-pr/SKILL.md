@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness."
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh issue create *), Bash(gh issue list *), Bash(ghsudo gh issue *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage, mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__issue_read, mcp__plugin_claudius_github__search_issues, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_review_write, mcp__plugin_claudius_github__add_comment_to_pending_review
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage, mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__issue_read, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_review_write, mcp__plugin_claudius_github__add_comment_to_pending_review
 ---
 
 # PR Audit Workflow
@@ -149,19 +149,9 @@ Pass the PR's scope (changed files, base branch) as context. Feed the Pass C rep
 
 The grumpy-review delegation inherits the deep transitive call-tree walk (`category: "call_tree"`, `CALL-` prefix; see [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md)) and the ephemeral-ID lint. After the review completes, run `git diff $BASE_BRANCH...HEAD | python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --diff` against the PR diff and fold genuine `code_quality` hits into the audit before posting.
 
-## 4. File Deferrals, Then Post the Review
+## 4. Post GitHub PR Review
 
-### Filing procedure (single copy — other skills reference this section)
-
-For every `out_of_scope_follow_up` finding at MEDIUM+ (severity ≥ 3), before posting:
-
-1. **Dedup first**: search the tracker for an existing issue covering it (`search_issues`, or `gh issue list --search "<key terms>" --state all`). Reuse the match rather than filing a twin.
-2. **File it** otherwise, per `claudius:git-and-github` § Issues (template check, body skeleton, attribution, `ghsudo` on 403). Body carries the finding's description, recommendation, `location_permalink`, the `risk`/`impact`/`scope` floats, and provenance — "deferred from PR #N review".
-3. **Record** the issue URL or `owner/repo#N` in the finding's `deferred_to` field.
-4. **Fallback, never silent loss**: filing fails, or the repo has no tracker → the finding stays `non_blocking` (it gets fixed in this PR), exactly today's behavior. Never leave a MEDIUM+ deferral both unfiled and unfixed.
-5. **HIGH+ security findings** are not filed unilaterally — put the disposition question to the human per `claudius:severity` § HIGH+ security findings are never silently deferred.
-
-### Publishing
+`out_of_scope_follow_up` findings are listed in Part A for the user's attention and nothing more — never file an issue for one. Tracking a deferral (GitHub issue, `memcan:todo`, or neither) is the user's decision, taken via `claudius:triage-findings` or by hand.
 
 Ask if findings should be published as a GitHub PR review. Posted in **two parts**:
 
@@ -171,7 +161,7 @@ Post the audit summary as a normal PR issue comment via `gh pr comment` — alwa
 - **Attribution**: "Reviewed by: Claude Code" plus team members with roles
 - Overall assessment (LLM-authored; must not contradict the merge classification — reflect every valid `blocking` finding)
 - Findings table (merge class, severity, OWASP tag, location, description) — `blocking` first
-- Deferred findings, each with its `deferred_to` ref (and any HIGH+ security finding awaiting the human's disposition call)
+- Deferred (`out_of_scope_follow_up`) findings, and any HIGH+ security finding awaiting the user's disposition call
 - Pre-existing / outside-diff issues with details
 - Positive observations
 
