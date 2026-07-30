@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [6.5.0] - 2026-07-29
+
+### Added
+
+- **Context-aware review doctrine** — reviewers and fixers now get the code's operational reality instead of guessing at it:
+  - **`severity`**: second `risk` recipe for **non-adversarial** findings (correctness/concurrency/robustness), scored on execution frequency, precondition probability, and triggering actor instead of threat-agent motive, which is meaningless there and was being improvised high. A low operational score MUST cite evidence (call-tree trace, Context Digest claim, or human statement); with no evidence the finding scores generically, exactly as today. The frozen `(risk+impact+scope)/3` formula is untouched — only this one input's instrument changes.
+  - **`review-pr` § Context Digest**: the existing intent digest grows Goal / Non-goals / Operational profile (with per-claim evidence) / Architecture-UX-DX priorities, and becomes the single definition every other skill references. Unevidenced fields are written `unknown` and never downgrade anything. New `## Operational context` and `## Non-goals` body-extraction headers feed it. Wired into Pass C, `grumpy-review`'s spawn prompts (§3 item 10) and §5b judgment, `ci-dance`'s fix prompts, and `grand-admiral`'s Agent Prompt Requirement #5.
+  - **`coding-best-practices`**: Proportionate remediation — match fix scope to the finding's operational reality; a general-purpose redesign requires evidence the general case is real.
+
+### Changed
+
+- **`severity`**: `scope` is de-conflated to blast radius only — PR-relevance and intent-matching live exclusively in `merge_class` (the HTML `scope` chip tooltip claimed "PR relevance" too — corrected). The decision tree's "must not survive this review" branch now splits: beyond the PR's stated intent → `out_of_scope_follow_up`, otherwise `non_blocking`. An `out_of_scope_follow_up` finding is **surfaced, then let go**: a deferral that never gets actioned is usually the correct outcome (the finding wasn't worth prioritizing), so the class needs no tracking field, filing step, or gate — only visibility. No review skill files a GitHub issue or any other tracking item, since choosing between `claudius:triage-findings`, `memcan:todo`, and doing nothing is the user's call. Visibility is a coordinator post-processing step over data the report already carries — filter the consolidated findings by `merge_class` and name the deferral candidates when reporting results (`grumpy-review`, `review-pr`, and `ci-dance`'s Final Report each say so) — not a new schema field or render path. HIGH/CRITICAL security findings are never silently deferred — they go to the user as an explicit disposition question.
+- **`ci-dance`**: the Grumpy and Review streams route findings by `merge_class`, not raw severity — `blocking`/`non_blocking` get fixed, `out_of_scope_follow_up` is surfaced in the Final Report and never fixed inline, `disputed` is skipped. Exit criterion becomes "no `blocking`, every `non_blocking` fixed or explicitly carried" instead of "no MEDIUM+", so a valid pre-existing MEDIUM this PR neither introduced nor relies on stops being auto-absorbed into it. Claim-deferral is renamed throughout to keep it distinct from merge-class deferral.
+
 ## [6.4.0] - 2026-07-28
 
 ### Added

@@ -1129,7 +1129,7 @@ details summary:hover{color:{{ ACCENT }}}
     {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of risk/impact/scope)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
     {% if f.risk is number %}<span class="metric-chip metric-risk" title="OWASP Likelihood normalized">R {{ '%.2f' % f.risk }}</span>{% endif %}
     {% if f.impact is number %}<span class="metric-chip metric-impact" title="OWASP Impact normalized">I {{ '%.2f' % f.impact }}</span>{% endif %}
-    {% if f.scope is number %}<span class="metric-chip metric-scope" title="PR relevance (1.0 direct, 0.5 indirect, 0.0 unrelated)">S {{ '%.2f' % f.scope }}</span>{% endif %}
+    {% if f.scope is number %}<span class="metric-chip metric-scope" title="Blast radius (1.0 repo-wide, ~0.5 a subsystem, ~0.2 one call-site, 0.0 none)">S {{ '%.2f' % f.scope }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
