@@ -52,9 +52,7 @@ Findings use the v3 report format: `claudius:report-format` for the envelope, `c
 
 Run all three; at most one finding per axis-trigger (per promise on Axis 2). Verification is **functional**: locate the implementing code and confirm it delivers the claimed behavior — a matching hunk is necessary, not sufficient. For large diffs, delegate per-axis (or per-promise) judgment to subagents per `git-and-github` § Context Management.
 
-Trigger hints give `likelihood`/`impact` float ranges (`relevance` is fixed by the exception below, not derived per-trigger). Cross-check the rubric and band table in `claudius:severity`. Never hand-type a severity label.
-
-**Pass C `relevance` exception**: promise *mismatches* on axes 1–3 get `relevance=1.0` — the gap is by definition about THIS PR's own claims, not a lazy default. The two *informational* findings — "PR self-description verified" and "PR body unparseable" — describe no actionable diff work, so they use `relevance=0.0` instead (mirroring `check-pr-comments`' RESOLVED convention), which routes them to "omit `merge_class`" per `claudius:severity`'s decision tree; `relevance` no longer feeds `overall_severity`, so it has no bearing on their severity band.
+Trigger hints give `likelihood`/`impact` float ranges — the coordinator computes `overall_severity` and the integer band from these two alone. Cross-check the rubric and band table in `claudius:severity`. Never hand-type a severity label.
 
 #### Axis 1 — Title ↔ diff
 
@@ -83,7 +81,7 @@ Triggers:
 
 ### Clean-pass shape
 
-When all three axes pass with zero mismatches, the `pr_promises` section is NOT empty: emit `findings: []` PLUS exactly one INFO finding titled "PR self-description verified" (`likelihood=0.05, impact=0.05, relevance=0.0` — mean must clear the < 0.1 INFO band on `likelihood`/`impact` alone; the coordinator/renderer derive the label, never hand-write the integer `severity`). A clean Pass C must be distinguishable from "Pass C did not run".
+When all three axes pass with zero mismatches, the `pr_promises` section is NOT empty: emit `findings: []` PLUS exactly one INFO finding titled "PR self-description verified" (`likelihood=0.0, impact=0.0, relevance=0.0` — the coordinator/renderer derive the INFO band; never hand-write the integer `severity`). A clean Pass C must be distinguishable from "Pass C did not run".
 
 ### Section verdict (optional)
 
@@ -118,7 +116,7 @@ Emit through the same pipeline as the other passes — one section per axis with
 
 Pass C conventions:
 - `location` is synthetic: `PR-title`, `PR-body:summary-bullet-<N>`, `PR-body:out-of-scope-item-<N>` (1-based, body order). Rendered as plain text (no permalink).
-- `relevance`: `1.0` for promise mismatches (axes 1–3); `0.0` for the two informational findings (see the `relevance` exception above).
+- `relevance`: `1.0` for promise mismatches (axes 1–3) — a mismatch is by definition about the PR's own stated goal; `0.0` for the two informational findings (routes them to "omit `merge_class`" per `claudius:severity`'s decision tree).
 - `likelihood` = probability a downstream reviewer is misled. `impact` = reviewer-time cost + risk of approving/missing real changes.
 - `merge_class`: emitted directly (coordinator-inline producer exception). Unfulfilled promises trip `G-INTENT` → `blocking` + `intent_basis: "G-INTENT: <promise, quoted>"`; other mismatches → per the decision tree in `claudius:severity` § Merge Classification; the informational findings omit it.
 - Optional `code_snippets[]`: include the offending diff hunk when the gap is a specific change. `language` must be an allowed tag from `claudius:report-format` §code_snippets (e.g. `diff`) — do not invent one. `caption` like `<path>:hunk`.
