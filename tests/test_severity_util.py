@@ -227,13 +227,49 @@ class TestRejectNonFiniteConstant:
 
     @pytest.mark.parametrize("literal", ["1e400", "-1e400"])
     def test_overflowing_literal_bypasses_the_callback(self, literal):
-        """The guard covers bare NaN/Infinity tokens only. `1e400` is an
-        ordinary JSON number that Python converts to inf without consulting
-        parse_constant, so the docstring must not claim otherwise — the
-        downstream isinf check and the schema's maximum are what catch it."""
+        """The constant guard covers bare NaN/Infinity tokens only. `1e400` is
+        an ordinary JSON number that Python converts to inf without consulting
+        parse_constant, so the docstring must not claim otherwise — that is
+        what the parse_float guard below is for."""
         value = json.loads(
             f'{{"likelihood": {literal}}}',
             parse_constant=su.reject_non_finite_constant,
         )["likelihood"]
         assert math.isinf(value)
         assert su.derive_overall({"likelihood": value, "impact": 0.5}) is None
+
+
+# ---------------------------------------------------------------------------
+# reject_non_finite_number / load_json_strict — the parse_float half
+# ---------------------------------------------------------------------------
+class TestLoadJsonStrict:
+    """The two guards must be applied together, always.
+
+    An overflowing literal is not a hypothetical: it parses to inf, survives
+    every isinstance/range check, and — before this — was re-serialized by
+    ``json.dumps`` as a bare ``Infinity`` token, writing structurally invalid
+    JSON to disk that no downstream reader can load.
+    """
+
+    @pytest.mark.parametrize(
+        "literal", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400", "1E999"]
+    )
+    def test_rejects_every_non_finite_spelling(self, literal):
+        with pytest.raises(ValueError):
+            su.load_json_strict(f'{{"likelihood": {literal}}}')
+
+    @pytest.mark.parametrize("payload", ['{"likelihood": 0.5}', b'{"impact": 1.0}'])
+    def test_finite_values_parse_from_str_and_bytes(self, payload):
+        """POST handlers hand it bytes; file readers hand it str."""
+        assert list(su.load_json_strict(payload).values()) == [
+            0.5 if isinstance(payload, str) else 1.0
+        ]
+
+    def test_large_but_finite_number_is_not_rejected(self):
+        """Only overflow is rejected — a big finite float is still valid JSON."""
+        assert su.load_json_strict('{"n": 1e308}')["n"] == 1e308
+
+    def test_integers_are_untouched(self):
+        """parse_float never sees ints, so integer fields keep their type."""
+        value = su.load_json_strict('{"severity": 4}')["severity"]
+        assert isinstance(value, int) and value == 4

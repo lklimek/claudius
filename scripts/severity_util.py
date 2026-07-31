@@ -11,6 +11,7 @@ exactly one place.
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections.abc import Iterator
@@ -28,10 +29,37 @@ def reject_non_finite_constant(constant: str) -> Any:
 
     Bare literals only: an overflowing numeric such as ``1e400`` is a normal
     JSON number that Python converts to ``inf`` without consulting this
-    callback. ``derive_overall``'s ``isinf`` check and the schema's
-    ``maximum: 1.0`` are what stop that one.
+    callback. ``reject_non_finite_number`` (wired in as ``parse_float``) is
+    what stops that one.
     """
     raise ValueError(f"non-finite JSON constant not allowed: {constant}")
+
+
+def reject_non_finite_number(token: str) -> float:
+    """json ``parse_float`` callback: reject numerics that overflow to inf.
+
+    ``1e400`` is syntactically an ordinary JSON number, so ``parse_constant``
+    never sees it; Python's float conversion silently yields ``inf``. Pair this
+    with ``reject_non_finite_constant`` on every report-loading ``json.loads``
+    so neither spelling of a non-finite float enters the pipeline.
+    """
+    value = float(token)
+    if not math.isfinite(value):
+        raise ValueError(f"non-finite JSON number not allowed: {token}")
+    return value
+
+
+def load_json_strict(text: str | bytes) -> Any:
+    """``json.loads`` with both non-finite guards wired in.
+
+    Single call site for the parse policy so a new loader cannot pick up one
+    guard and miss the other.
+    """
+    return json.loads(
+        text,
+        parse_constant=reject_non_finite_constant,
+        parse_float=reject_non_finite_number,
+    )
 
 
 SEV_LABELS: dict[int, str] = {
@@ -45,9 +73,11 @@ SEV_ORDER: list[str] = list(SEV_LABELS.values())  # CRITICAL, HIGH, ... INFO
 
 # Blocker gates — the must-not-ship conditions that force merge_class=blocking.
 # Source of truth is skills/severity/SKILL.md §2; this tuple mirrors it so the
-# pipeline can enforce what the doctrine only states, and
+# pipeline can check what the doctrine only states, and
 # tests/test_gate_vocabulary.py parses that table to fail loudly when a gate is
-# added to one and not the other.
+# added to one and not the other. Checking, not enforcing: the gate rules run
+# as advisory `[consistency]` warnings that never change validate_report.py's
+# exit code — only the test above is a hard failure.
 GATE_IDS: tuple[str, ...] = (
     "G-INTENT",
     "G-DATA",

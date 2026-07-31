@@ -893,6 +893,24 @@ class TestRegenerateDerived:
         regenerated = json.loads(path.read_text(encoding="utf-8"))
         assert [item["id"] for item in regenerated["top_findings"]] == ["SEC-001"]
 
+    def test_legacy_declaration_is_restamped_to_the_written_form(self, tmp_path):
+        """`regenerate` loads through the migration, so what it writes back is a
+        v4 document. Keeping the v3 declaration would ship a report whose stated
+        version contradicts its own float names — and `--strict-v4` would then
+        certify a file it had already rewritten."""
+        path = tmp_path / "report.json"
+        report = self._report()
+        report["schema_version"] = "3.2.0"
+        path.write_text(json.dumps(report), encoding="utf-8")
+
+        assert cr.cmd_regenerate(cr.parse_args(["regenerate", str(path)])) == 0
+
+        written = json.loads(path.read_text(encoding="utf-8"))
+        assert written["schema_version"] == cr.SCHEMA_VERSION
+        finding = written["findings"][0]["findings"][0]
+        assert {"likelihood", "impact", "relevance"} <= finding.keys()
+        assert not {"risk", "scope"} & finding.keys()
+
 
 # ---------------------------------------------------------------------------
 # scan_intentional
@@ -1642,6 +1660,29 @@ class TestNonFiniteRejection:
         output = tmp_path / "out.json"
         args = argparse.Namespace(input=str(inp), output=str(output))
         assert cr.cmd_assemble(args) == 2
+        assert not output.exists()
+
+    @pytest.mark.parametrize("literal", ["1e400", "-1e400"])
+    def test_prepare_rejects_overflowing_literal(self, tmp_path, literal):
+        """`1e400` is a syntactically ordinary JSON number that Python decodes
+        to inf, so it never reaches parse_constant. Unguarded it survives to
+        the writer, which re-serializes it as a bare `Infinity` token — a file
+        no conforming JSON reader can load. Reject it at the door instead."""
+        agent = tmp_path / "agent.json"
+        agent.write_text(
+            '[{"category": "security", "title": "Sec", "findings": [{"id": "SEC-001",'
+            ' "title": "T", "location": "src/db.rs:1", "description": "D",'
+            ' "recommendation": "R", "likelihood": ' + literal + ","
+            ' "impact": 0.5, "relevance": 0.5}]}]'
+        )
+        output = tmp_path / "out.json"
+        args = argparse.Namespace(
+            agent_reports=[f"sec:{agent}"],
+            repo_root=str(tmp_path),
+            output=str(output),
+            metadata=None,
+        )
+        assert cr.cmd_prepare(args) == 2
         assert not output.exists()
 
 

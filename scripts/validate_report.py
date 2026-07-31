@@ -28,8 +28,8 @@ from severity_util import (  # noqa: E402
     INFORMATIONAL_FLOOR_KEYS,
     derive_finding_severity,
     derive_severity_int,
+    load_json_strict,
     migrate_legacy_floats,
-    reject_non_finite_constant,
     sanitize_log_value,
 )
 
@@ -114,7 +114,7 @@ def check_merge_classification(f: dict) -> list[str]:
     """Gate-citation warnings for one finding's merge_class / intent_basis.
 
     The blocker gates in ``skills/severity/SKILL.md`` §2 are the change's
-    headline control, and prose is all that enforced them: any non-empty
+    headline control, and prose was the only thing checking them: any non-empty
     ``intent_basis`` used to pass, so a bare requirement quote read as a cited
     gate. Both directions are checked, because both are silent failures:
 
@@ -129,6 +129,10 @@ def check_merge_classification(f: dict) -> list[str]:
     three producers permitted to emit ``merge_class`` inline (review-pr Pass C,
     check-pr-comments, review-dependency) are validated with ``--producer``,
     which skips the rest of the gate.
+
+    Advisory only. Every string returned here is printed as a ``[consistency]``
+    warning and never changes the exit code — a miscited gate is surfaced to a
+    reader, not blocked at the CLI.
     """
     warnings: list[str] = []
     merge_class = f.get("merge_class")
@@ -361,9 +365,7 @@ def main() -> int:
         }
 
     try:
-        report = json.loads(
-            Path(args.report).read_text(), parse_constant=reject_non_finite_constant
-        )
+        report = load_json_strict(Path(args.report).read_text())
     except FileNotFoundError:
         print(f"Report not found: {args.report}", file=sys.stderr)
         return 2

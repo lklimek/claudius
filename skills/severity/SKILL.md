@@ -100,7 +100,7 @@ Capped by the backstop zone (§1). Blast radius folds in here — a defect reach
 | `~0.1` | Cosmetic |
 | `0.0` | No defect exists — informational only (see below) |
 
-**Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood 0.0, impact 0.0, relevance 0.0`. That derives to `0.0` → INFO, which is the only band whose meaning is "no action required". Use exact zeros, never a small hedge like `0.05`: there is no defect, so the probability and the damage are genuinely zero, and a hedged value both misstates that and drifts across documents. Producers relying on a low third term to sink an informational finding into INFO is a v3 habit that no longer works — `relevance` is not in the mean.
+**Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood = 0.0, impact = 0.0`, `relevance = 0.0`. That derives to `0.0` → INFO, which is the only band whose meaning is "no action required". Use exact zeros, never a small hedge like `0.05`: there is no defect, so the probability and the damage are genuinely zero, and a hedged value both misstates that and drifts across documents. Producers relying on a low third term to sink an informational finding into INFO is a v3 habit that no longer works — `relevance` is not in the mean.
 
 ### `relevance` — does it fit what this PR set out to do?
 
@@ -148,7 +148,7 @@ In finding JSON, `severity` is the integer, not the label.
 - Anything that may require action is **LOW or higher**; **INFO** is exclusively praise and context — never a suggestion
 - In doubt between two levels, take the higher
 - Severity never reflects effort to fix — a one-line fix can be CRITICAL
-- UX impact is a real severity input: a scary error dialog on the happy path is `likelihood 1.0`, `impact ~0.4` → HIGH, and it trips G-UI-TEXT
+- UX impact is a real severity input: a scary error dialog on the happy path is `likelihood = 1.0, impact ≈ 0.4` → HIGH, and it trips G-UI-TEXT
 
 ## 5. Merge Classification
 

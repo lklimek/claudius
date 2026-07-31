@@ -44,8 +44,8 @@ from severity_util import (
     derive_overall,
     effective_severity,
     derive_severity_int,
+    load_json_strict,
     migrate_legacy_floats,
-    reject_non_finite_constant,
 )
 
 try:
@@ -113,14 +113,11 @@ def _load_json_file(path: Path, max_size: int = MAX_INPUT_SIZE) -> dict | list:
     if size > max_size:
         raise ValueError(f"File too large (>{max_size // (1024 * 1024)} MB): {path}")
     try:
-        data = json.loads(
-            path.read_text(encoding="utf-8"),
-            parse_constant=reject_non_finite_constant,
-        )
+        data = load_json_strict(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in {path}: {e}") from e
     except ValueError as e:
-        raise ValueError(f"Non-finite JSON constant in {path}: {e}") from e
+        raise ValueError(f"Non-finite JSON number in {path}: {e}") from e
     for warning in migrate_legacy_floats(data).warnings(str(path)):
         log.warning("%s", warning)
     return data
@@ -869,9 +866,15 @@ def _write_json_output(
     with a ``UnicodeEncodeError`` pointing at a byte offset, not a finding. On
     that error we name the offending finding(s) and re-encode with a lossy
     replacement so no finding is silently dropped.
+
+    ``allow_nan=False`` is the matching guard for numbers: Python's default
+    emits bare ``NaN``/``Infinity`` tokens, which are not valid JSON, so a
+    non-finite float that reached this far would produce a file no conforming
+    reader can load. Raising here is the intended outcome — the loaders reject
+    non-finite input, so anything arriving is a pipeline bug worth surfacing.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(obj, indent=2, ensure_ascii=False) + "\n"
+    text = json.dumps(obj, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     try:
         out_path.write_text(text, encoding="utf-8")
     except UnicodeEncodeError:
@@ -1097,9 +1100,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     metadata: dict[str, Any] = {}
     if args.metadata:
         try:
-            metadata = json.loads(
-                args.metadata, parse_constant=reject_non_finite_constant
-            )
+            metadata = load_json_strict(args.metadata)
         except ValueError as e:
             log.error("Invalid metadata JSON: %s", e)
             return 2
@@ -1264,6 +1265,19 @@ def cmd_regenerate(args: argparse.Namespace) -> int:
     if not isinstance(report, dict):
         log.error("Expected a report object in %s", report_path)
         return 2
+
+    # _load_json_file migrated any legacy floats to the v4 names, so what gets
+    # written back is a v4 document. Leaving the old declaration in place would
+    # ship a report whose stated version contradicts its own findings — and any
+    # downstream v3 reader would then choke on the renamed floats.
+    declared = report.get("schema_version")
+    if declared != SCHEMA_VERSION:
+        log.info(
+            "Restamping schema_version %s -> %s (report is written in v4 form)",
+            declared,
+            SCHEMA_VERSION,
+        )
+        report["schema_version"] = SCHEMA_VERSION
 
     regenerate_derived(report)
     if not _validate_report(report):

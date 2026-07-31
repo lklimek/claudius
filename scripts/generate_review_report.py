@@ -53,8 +53,8 @@ from severity_util import (
     build_severity_stats,
     derive_overall,
     derive_severity_int,
+    load_json_strict,
     migrate_legacy_floats,
-    reject_non_finite_constant,
     sanitize_log_value,
 )
 
@@ -3357,10 +3357,7 @@ def main() -> None:
     # Load and validate
     log.info("Loading report: %s", report_path)
     try:
-        data = json.loads(
-            report_path.read_text(encoding="utf-8"),
-            parse_constant=reject_non_finite_constant,
-        )
+        data = load_json_strict(report_path.read_text(encoding="utf-8"))
     except ValueError as e:
         log.error("Invalid JSON in %s: %s", report_path, e)
         sys.exit(1)
