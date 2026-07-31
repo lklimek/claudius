@@ -81,7 +81,9 @@ MATRIX_CATEGORIES: list[str] = [
     "dependencies",
 ]
 
-# Band table — CVSS v4.0-aligned thresholds, applied descending.
+# Band table, applied descending. Thresholds were originally derived from CVSS
+# v4.0 bands; they are now specified by skills/severity/SKILL.md, which owns
+# them outright and defers to no external methodology.
 _SEVERITY_BANDS: list[tuple[float, int]] = [
     (0.9, 5),
     (0.7, 4),
@@ -89,6 +91,11 @@ _SEVERITY_BANDS: list[tuple[float, int]] = [
     (0.1, 2),
 ]
 _SEVERITY_EPSILON = 1e-9
+
+
+def _is_number(value: Any) -> bool:
+    """True for a real numeric scalar — bools are ints in Python, exclude them."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 # Dimensions of the severity mean. ``relevance`` is deliberately excluded: it
@@ -143,16 +150,42 @@ def _effective_severity(finding: dict[str, Any]) -> int:
     severity skill's doctrine, the floats are the single source of truth,
     so a derived band wins even over a conflicting explicit integer
     ``severity`` (matching ``cmd_assemble``'s precedence in
-    ``consolidate_reports.py``). Falls back to the explicit integer when the
-    floats are absent or invalid, then to 1 (INFO) when neither is available.
+    ``consolidate_reports.py``). When the floats cannot derive a mean, takes
+    the HIGHEST of the surviving dimension's band and any explicit integer,
+    and only then falls through to 1 (INFO) — INFO means "no action required",
+    so reaching it by accident is the failure this tool must not make.
     """
     derived = derive_finding_severity(finding)
     if derived is not None:
         return derived
+    candidates: list[int] = []
+    partial = _partial_dimension_band(finding)
+    if partial is not None:
+        candidates.append(partial)
     sev = finding.get("severity")
     if isinstance(sev, int) and not isinstance(sev, bool) and 1 <= sev <= 5:
-        return sev
-    return 1
+        candidates.append(sev)
+    return max(candidates) if candidates else 1
+
+
+def _partial_dimension_band(finding: dict[str, Any]) -> int | None:
+    """Band of the highest usable severity dimension, or None if there are none.
+
+    Reached only when the floats are too damaged to derive a mean. Falling
+    straight through to INFO there would resolve a half-rated finding to the
+    one band meaning "no action required" — the wrong direction for a tool
+    whose damaging failure is under-reporting. A `likelihood 1.0` with a
+    missing `impact` is unrated, not harmless, so the surviving dimension sets
+    the floor and a human sees it.
+    """
+    usable = [
+        float(finding[key])
+        for key in _SEVERITY_DIMENSIONS
+        if _is_number(finding.get(key))
+        and not math.isnan(finding[key])
+        and not math.isinf(finding[key])
+    ]
+    return derive_severity_int(max(usable)) if usable else None
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +197,9 @@ def _effective_severity(finding: dict[str, Any]) -> int:
 # value is discarded rather than carried into ``relevance`` (PR-goal fit).
 # Remove this shim once no v3 producer output remains in flight.
 DEFAULT_MIGRATED_RELEVANCE = 0.5
+# Exact zeros on every axis: the Informational floor, the only rating whose
+# meaning is "no defect here" (skills/severity/SKILL.md § Informational floor).
+INFORMATIONAL_FLOOR_KEYS: tuple[str, ...] = ("likelihood", "impact", "relevance")
 _MIGRATION_ID_PREVIEW = 10
 _LOG_VALUE_MAX = 120
 _LOG_UNSAFE_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -193,6 +229,8 @@ class LegacyFloatMigration(NamedTuple):
     migrated: list[str]
     relevance_defaulted: list[str]
     collisions: list[str]
+    floored: list[str]
+    likelihood_missing: list[str]
 
     def __bool__(self) -> bool:
         return bool(self.migrated)
@@ -208,6 +246,22 @@ class LegacyFloatMigration(NamedTuple):
             "dropped, and any severity/overall_severity computed under the v3 "
             "formula recomputed: " + _preview_ids(self.migrated)
         ]
+        if self.floored:
+            lines.append(
+                f"[deprecated] {source}: {len(self.floored)} finding(s) matched the "
+                "v3 informational convention (scope 0.0 with negligible risk and "
+                "impact) and were set to the Informational floor of exact zeros; "
+                "carrying their old floats forward would have promoted settled "
+                "work to LOW and filed it as open: " + _preview_ids(self.floored)
+            )
+        if self.likelihood_missing:
+            lines.append(
+                f"[deprecated] {source}: {len(self.likelihood_missing)} finding(s) "
+                "ended migration with no usable 'likelihood' — a legacy key was "
+                "dropped and nothing replaced it, so their severity cannot be "
+                "derived and is resolved from whatever dimension survives: "
+                + _preview_ids(self.likelihood_missing)
+            )
         if self.collisions:
             lines.append(
                 f"[deprecated] {source}: both v3 and v4 float names present on "
@@ -239,11 +293,6 @@ def _preview_ids(ids: list[str]) -> str:
     head = ", ".join(ids[:_MIGRATION_ID_PREVIEW])
     extra = len(ids) - _MIGRATION_ID_PREVIEW
     return f"{head} (+{extra} more)" if extra > 0 else head
-
-
-def _is_number(value: Any) -> bool:
-    """True for a real numeric scalar — bools are ints in Python, exclude them."""
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _resolve_collision(
@@ -295,6 +344,27 @@ def _iter_migratable_findings(data: Any) -> Iterator[dict[str, Any]]:
             yield section
 
 
+def _is_v3_informational(finding: dict[str, Any]) -> bool:
+    """True for the pre-v4 informational convention: ``risk = impact = 0.1,
+    scope = 0.0``, used for praise, verified-clean passes and RESOLVED comments.
+
+    Those trios derived to 0.067 (INFO) under the three-term mean and derive to
+    0.1 (LOW) under the two-term one, so a straight rename refiles every settled
+    comment in an in-flight report as open LOW work. The band ceiling is what
+    makes the heuristic safe: anything matching already derived to INFO in v3,
+    so it cannot demote a finding that was ever above INFO.
+
+    Only pure-v3 findings qualify; a half-migrated one carrying a v4 name is
+    ambiguous and goes through the ordinary collision path instead.
+    """
+    if "likelihood" in finding or "relevance" in finding:
+        return False
+    values = {key: finding.get(key) for key in ("risk", "impact", "scope")}
+    if not all(_is_number(value) for value in values.values()):
+        return False
+    return values["scope"] == 0.0 and max(values["risk"], values["impact"]) <= 0.1
+
+
 def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
     """Rewrite schema-v3 severity floats onto their v4 names, in place.
 
@@ -310,26 +380,40 @@ def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
     in place is the laundering this migration exists to prevent: renderers and
     ``cmd_regenerate`` trust a present label and would report the stale,
     lower band.
+
+    Findings matching the v3 informational convention take the Informational
+    floor instead — see :func:`_is_v3_informational`.
     """
     migrated: list[str] = []
     relevance_defaulted: list[str] = []
     collisions: list[str] = []
+    floored: list[str] = []
+    likelihood_missing: list[str] = []
     for finding in _iter_migratable_findings(data):
         if "risk" not in finding and "scope" not in finding:
             continue
-        conflict = _resolve_collision(
-            finding, "risk", "likelihood", carry_when_alone=True
-        )
-        conflict |= _resolve_collision(
-            finding, "scope", "relevance", carry_when_alone=False
-        )
         ident = sanitize_log_value(finding.get("id") or finding.get("title"))
         migrated.append(ident)
-        if conflict:
-            collisions.append(ident)
-        if "relevance" not in finding:
-            finding["relevance"] = DEFAULT_MIGRATED_RELEVANCE
-            relevance_defaulted.append(ident)
+
+        if _is_v3_informational(finding):
+            for key in ("risk", "scope"):
+                finding.pop(key, None)
+            finding.update(dict.fromkeys(INFORMATIONAL_FLOOR_KEYS, 0.0))
+            floored.append(ident)
+        else:
+            conflict = _resolve_collision(
+                finding, "risk", "likelihood", carry_when_alone=True
+            )
+            conflict |= _resolve_collision(
+                finding, "scope", "relevance", carry_when_alone=False
+            )
+            if conflict:
+                collisions.append(ident)
+            if "relevance" not in finding:
+                finding["relevance"] = DEFAULT_MIGRATED_RELEVANCE
+                relevance_defaulted.append(ident)
+            if not _is_number(finding.get("likelihood")):
+                likelihood_missing.append(ident)
 
         overall = derive_overall(finding)
         if overall is None:
@@ -338,7 +422,9 @@ def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
         else:
             finding["overall_severity"] = overall
             finding["severity"] = derive_severity_int(overall)
-    return LegacyFloatMigration(migrated, relevance_defaulted, collisions)
+    return LegacyFloatMigration(
+        migrated, relevance_defaulted, collisions, floored, likelihood_missing
+    )
 
 
 def _iter_section_findings(

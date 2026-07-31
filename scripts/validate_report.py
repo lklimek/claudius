@@ -3,11 +3,14 @@
 
 Usage:
     python3 scripts/validate_report.py <report.json> [--schema <schema.json>]
-        [--producer]
+        [--producer] [--strict-v4]
+
+Schema-v3 files are migrated in memory and validated in that form; the verdict
+says so, and --strict-v4 rejects them outright for callers that need v4 on disk.
 
 Exit codes:
     0  Valid
-    1  Validation error (schema mismatch)
+    1  Validation error (schema mismatch, or schema-v3 input under --strict-v4)
     2  File/parse error (missing file, invalid JSON)
 """
 
@@ -19,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from severity_util import (  # noqa: E402
+    INFORMATIONAL_FLOOR_KEYS,
     derive_finding_severity,
     derive_severity_int,
     migrate_legacy_floats,
@@ -48,6 +52,11 @@ _RATED_AXES = ("likelihood", "impact", "relevance")
 # Schema versions that define merge_class / intent_basis.
 _MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0")
 _MERGE_CLASS_VERSIONS_TEXT = " or ".join(_MERGE_CLASS_SCHEMA_VERSIONS)
+
+
+def _is_informational_floor(finding: dict) -> bool:
+    """True when every severity float is exactly 0.0 — the Informational floor."""
+    return all(finding.get(axis) == 0.0 for axis in INFORMATIONAL_FLOOR_KEYS)
 
 
 def _fid(finding: dict) -> str:
@@ -160,18 +169,23 @@ def check_consistency(report: dict) -> list[str]:
             f"{_MERGE_CLASS_VERSIONS_TEXT}, not {schema_version}"
         )
 
-    if len(findings) >= _AXIS_MIN_FINDINGS:
+    # Informational-floor findings are rated, not defaulted — their exact zeros
+    # are mandated for praise, clean passes and RESOLVED comments. Counting them
+    # makes a report that is mostly good news look mostly unrated, so they leave
+    # the sample entirely rather than just the modal value.
+    rated = [f for f in findings if not _is_informational_floor(f)]
+    if len(rated) >= _AXIS_MIN_FINDINGS:
         for axis in _RATED_AXES:
             values = [
                 f[axis]
-                for f in findings
+                for f in rated
                 if isinstance(f.get(axis), (int, float))
                 and not isinstance(f.get(axis), bool)
             ]
             if not values:
                 continue
             top_value, count = Counter(values).most_common(1)[0]
-            if count / len(findings) >= _AXIS_SHARE_THRESHOLD:
+            if count / len(rated) >= _AXIS_SHARE_THRESHOLD:
                 extra = (
                     " (relevance = fit to this PR's stated goal, per"
                     " claudius:severity — it decides merge_class)"
@@ -179,7 +193,7 @@ def check_consistency(report: dict) -> list[str]:
                     else ""
                 )
                 warnings.append(
-                    f"[consistency] {count}/{len(findings)} findings have "
+                    f"[consistency] {count}/{len(rated)} rated findings have "
                     f"{axis}={top_value} — {axis} may be unrated; rate it per finding{extra}"
                 )
 
@@ -199,6 +213,11 @@ def main() -> int:
         "--section-array",
         action="store_true",
         help="Validate a producer-stage array of finding sections",
+    )
+    parser.add_argument(
+        "--strict-v4",
+        action="store_true",
+        help="Fail (exit 1) when the file needs the schema-v3 migration to validate",
     )
     args = parser.parse_args()
 
@@ -246,8 +265,17 @@ def main() -> int:
 
     # Validate the migrated shape: in-flight schema-v3 reports are accepted on
     # read, but only the v4 float names are ever considered valid.
-    for warning in migrate_legacy_floats(report).warnings(args.report):
+    migration = migrate_legacy_floats(report)
+    for warning in migration.warnings(args.report):
         print(warning, file=sys.stderr)
+
+    if migration and args.strict_v4:
+        print(
+            f"Validation failed: {args.report} is schema-v3 on disk and only "
+            "validates after in-memory migration (--strict-v4)",
+            file=sys.stderr,
+        )
+        return 1
 
     validator_cls = jsonschema.validators.validator_for(schema)
     # Enable format validation (e.g., "uri", "date", "date-time") so that
@@ -264,7 +292,14 @@ def main() -> int:
         if not args.producer:
             for warning in check_consistency(report):
                 print(warning, file=sys.stderr)
-        print(f"Valid: {args.report}")
+        # Never certify the on-disk bytes when only the migrated copy passed:
+        # the file itself still carries v3 float names the v4 schema rejects.
+        if migration:
+            print(
+                f"Valid (after schema-v3 migration; on-disk file is v3): {args.report}"
+            )
+        else:
+            print(f"Valid: {args.report}")
         return 0
 
     print(

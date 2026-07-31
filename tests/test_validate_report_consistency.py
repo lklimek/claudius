@@ -220,7 +220,7 @@ class TestUnratedAxis:
         warnings = vr.check_consistency(_report([_section(findings)]))
         relevance_warns = [w for w in warnings if "relevance=1.0" in w]
         assert len(relevance_warns) == 1
-        assert "5/5 findings have relevance=1.0" in relevance_warns[0]
+        assert "5/5 rated findings have relevance=1.0" in relevance_warns[0]
         assert "merge_class" in relevance_warns[0]
         # likelihood/impact vary, so they must NOT be flagged.
         assert not any("likelihood=" in w or "impact=" in w for w in warnings)
@@ -239,7 +239,7 @@ class TestUnratedAxis:
         ]
         findings.append(_finding(5, relevance=0.2, likelihood=0.6, impact=0.7))
         warnings = vr.check_consistency(_report([_section(findings)]))
-        assert any("4/5 findings have relevance=1.0" in w for w in warnings)
+        assert any("4/5 rated findings have relevance=1.0" in w for w in warnings)
 
     def test_below_threshold_is_silent(self):
         # 3 of 5 share relevance=1.0 (60%) -> below 80%; likelihood/impact
@@ -265,6 +265,60 @@ class TestUnratedAxis:
         findings = [_finding(i, relevance=1.0) for i in range(1, 5)]
         warnings = vr.check_consistency(_report([_section(findings)]))
         assert not any("may be unrated" in w for w in warnings)
+
+
+class TestInformationalFloorIsNotAnUnratedAxis:
+    """Exact zeros on all three axes are the mandated rating for praise, clean
+    passes and RESOLVED comments — a finding at the floor is rated, not
+    defaulted. Counting them makes a report that is mostly good news look
+    mostly unrated and sends the coordinator to re-rate correct findings.
+    """
+
+    def _floored(self, idx: int) -> dict:
+        return _finding(idx, likelihood=0.0, impact=0.0, relevance=0.0)
+
+    def test_mostly_floored_report_is_silent(self):
+        # 8 floored + 2 genuinely rated: every axis is >=80% zeros by raw count.
+        findings = [self._floored(i) for i in range(1, 9)]
+        findings += [
+            _finding(9, likelihood=0.9, impact=0.8, relevance=1.0),
+            _finding(10, likelihood=0.4, impact=0.6, relevance=0.5),
+        ]
+        warnings = vr.check_consistency(_report([_section(findings)]))
+        assert not any("may be unrated" in w for w in warnings)
+
+    def test_floored_findings_leave_the_denominator(self):
+        # 5 rated findings all pinned at relevance=1.0, plus floored noise: the
+        # warning must count the 5 rated ones, not all 9.
+        findings = [self._floored(i) for i in range(1, 5)]
+        findings += [
+            _finding(
+                i,
+                likelihood=round(0.1 * i, 2),
+                impact=round(0.12 * i, 2),
+                relevance=1.0,
+            )
+            for i in range(5, 10)
+        ]
+        warnings = vr.check_consistency(_report([_section(findings)]))
+        assert any("5/5 rated findings have relevance=1.0" in w for w in warnings)
+
+    def test_genuine_unrated_axis_still_fires_alongside_floored_findings(self):
+        findings = [self._floored(i) for i in range(1, 4)]
+        findings += [
+            _finding(i, likelihood=0.5, impact=round(0.1 * i, 2), relevance=0.5)
+            for i in range(4, 9)
+        ]
+        warnings = vr.check_consistency(_report([_section(findings)]))
+        assert any("likelihood=0.5" in w for w in warnings)
+
+    def test_partial_zeros_are_not_the_floor(self):
+        # Only a full trio of zeros is the floor; a single zeroed axis is not.
+        findings = [
+            _finding(i, likelihood=0.0, impact=0.3, relevance=0.3) for i in range(1, 6)
+        ]
+        warnings = vr.check_consistency(_report([_section(findings)]))
+        assert any("likelihood=0.0" in w for w in warnings)
 
 
 # ---------------------------------------------------------------------------

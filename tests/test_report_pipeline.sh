@@ -5,7 +5,8 @@
 # Usage: ./tests/test_report_pipeline.sh [fixture.json ...]
 # If no args, runs all v4 happy-path fixtures in tests/fixtures/reports/v4-*.json.
 # Negative/legacy fixtures live under tests/fixtures/legacy/ and are driven by
-# tests/test_schema_v4_strict.py, not this pipeline.
+# tests/test_schema_v4_strict.py and tests/test_legacy_float_migration.py, not
+# this pipeline.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
