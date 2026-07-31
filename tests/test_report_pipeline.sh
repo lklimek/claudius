@@ -3,9 +3,10 @@
 # Checks schema validation, severity integrity, sort order, and rendering.
 #
 # Usage: ./tests/test_report_pipeline.sh [fixture.json ...]
-# If no args, runs all v3 happy-path fixtures in tests/fixtures/reports/v3-*.json.
+# If no args, runs all v4 happy-path fixtures in tests/fixtures/reports/v4-*.json.
 # Negative/legacy fixtures live under tests/fixtures/legacy/ and are driven by
-# tests/test_schema_v3_strict.py, not this pipeline.
+# tests/test_schema_v4_strict.py and tests/test_legacy_float_migration.py, not
+# this pipeline.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -26,7 +27,7 @@ fail() { echo -e "  ${RED}✗${NC} $1"; ((fail++)) || true; }
 if [ $# -gt 0 ]; then
   fixtures=("$@")
 else
-  fixtures=("$FIXTURES_DIR"/v3-*.json)
+  fixtures=("$FIXTURES_DIR"/v4-*.json)
 fi
 
 if [ ${#fixtures[@]} -eq 0 ]; then
@@ -138,7 +139,7 @@ echo "=== producer-shape ==="
 PRODUCER="$TMPDIR/producer.json"
 cat > "$PRODUCER" << 'JSON'
 {
-  "schema_version": "3.1.0",
+  "schema_version": "4.0.0",
   "metadata": {"project": "p", "date": "2026-05-29", "report_type": "comment_check"},
   "executive_summary": {"overall_assessment": "ok"},
   "summary_statistics": {
@@ -152,9 +153,9 @@ cat > "$PRODUCER" << 'JSON'
       "findings": [
         {
           "id": "CMT-001",
-          "risk": 0.8,
+          "likelihood": 0.8,
           "impact": 0.8,
-          "scope": 1.0,
+          "relevance": 1.0,
           "author_type": "bot",
           "title": "Unresolved review comment",
           "location": "src/x.py:1",

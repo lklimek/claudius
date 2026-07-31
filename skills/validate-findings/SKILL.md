@@ -1,19 +1,19 @@
 ---
 name: validate-findings
-description: "This skill should be used when a coordinator performs the LLM validation pass on a consolidated v3 findings report. It adds ai_assessment, ai_verdict, and ai_verdict_confidence and, in the rare partial-producer case, re-estimates missing risk, impact, and scope. Coordinator-only."
+description: "This skill should be used when a coordinator performs the LLM validation pass on a consolidated v4 findings report. It adds ai_assessment, ai_verdict, and ai_verdict_confidence and, in the rare partial-producer case, re-estimates missing likelihood, impact, and relevance. Coordinator-only."
 allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(*consolidate_reports.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
 model: inherit
 ---
 
 # Validate Findings
 
-Opt-in coordinator-only LLM validation pass over a consolidated v3 report: adds AI assessment, verdict, and confidence per finding. Under the v3 contract producers emit `risk`/`impact`/`scope` themselves, so the typical run leaves the floats untouched; re-estimate them only when the consolidator left them absent (partial producer output that still satisfied the schema). NOT part of the automatic review pipeline — invoke after `consolidate_reports.py assemble` when a triage-quality validation pass is wanted.
+Opt-in coordinator-only LLM validation pass over a consolidated v4 report: adds AI assessment, verdict, and confidence per finding. Under the v4 contract producers emit `likelihood`/`impact`/`relevance` themselves, so the typical run leaves the floats untouched; re-estimate them only when the consolidator left them absent (partial producer output that still satisfied the schema). NOT part of the automatic review pipeline — invoke after `consolidate_reports.py assemble` when a triage-quality validation pass is wanted.
 
 **Argument**: `$ARGUMENTS` — path to the consolidated `report.json`. Edited in place.
 
 ## Inputs
 
-- A consolidated v3 report on disk (output of `consolidate_reports.py assemble`).
+- A consolidated v4 report on disk (output of `consolidate_reports.py assemble`).
 - The producer commit (when `metadata.commit` is present) for best-effort source lookup via `git show`.
 
 ## Per-finding loop
@@ -27,20 +27,20 @@ For each finding without `ai_verdict`:
    - `ai_assessment` (Markdown) — rationale: what was checked, what was found, what the verdict turns on.
    - `ai_verdict` — one of `valid`, `false_positive`, `needs_investigation`, `out_of_scope`, `duplicate`.
    - `ai_verdict_confidence` — float 0.0–1.0. Renderers fade the chip background as confidence drops; honest low values are useful.
-3. **Estimate missing floats** — when any of `risk`/`impact`/`scope` is absent, score them per the OWASP recipes in `severity` skill § "OWASP Risk Rating normalization". Fill only what the producer omitted; never overwrite an existing producer value.
-   3a. **Merge-class coherence** — this skill is NOT the primary classifier (no PR/issue access to build a Context Digest); it only enforces coherence on what the coordinator assigned: when the new `ai_verdict` is `false_positive` or `duplicate` and `merge_class` is present and not `disputed`, flip it to `disputed`; when `merge_class` is `blocking` with an absent/empty `intent_basis`, flag it in `ai_assessment` and set `ai_verdict: needs_investigation` unless the basis is evident. Never assign a fresh `blocking`.
+3. **Estimate missing floats** — when any of `likelihood`/`impact`/`relevance` is absent, score them per `severity` skill § 1 (Backstop zone) and § 3 (Severity floats). Fill only what the producer omitted; never overwrite an existing producer value.
+   3a. **Merge-class coherence** — this skill is NOT the primary classifier (no PR/issue access to build a Context Digest); it only enforces coherence on what the coordinator assigned: when the new `ai_verdict` is `false_positive` or `duplicate` and `merge_class` is present and not `disputed`, flip it to `disputed`; when `merge_class` is `blocking` and `intent_basis` is absent/empty or does not name a blocker gate ID (`G-*`, per `severity` skill § 2), flag it in `ai_assessment` and set `ai_verdict: needs_investigation` unless a gate is evident. Never assign a fresh `blocking`.
 4. **Re-derive integer severity** — after writing or accepting floats, recompute `overall_severity` and the integer `severity` band. Arithmetic stays in Python, never in the LLM — reuse the coordinator's helpers:
 
    ```python
    # Import directly — no re-implementation:
-   from consolidate_reports import _derive_overall, _derive_severity_int
-   overall = _derive_overall(finding)
+   from severity_util import derive_overall, derive_severity_int
+   overall = derive_overall(finding)
    if overall is not None:
        finding["overall_severity"] = overall
-       finding["severity"] = _derive_severity_int(overall)
+       finding["severity"] = derive_severity_int(overall)
    ```
 
-   If importing is impractical in the session, shell out to a one-liner invoking the same helpers from `scripts/consolidate_reports.py`. Never recompute the band table inline.
+   If importing is impractical in the session, shell out to a one-liner invoking the same helpers from `scripts/severity_util.py`. Never recompute the band table inline.
 
 Write changes back with the `Edit` tool — single JSON file, in place. No `Write` permission needed.
 

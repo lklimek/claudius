@@ -1,4 +1,4 @@
-"""Tests for OWASP-style severity derivation helpers."""
+"""Tests for the severity derivation helpers re-exported by consolidate_reports."""
 
 from __future__ import annotations
 
@@ -15,25 +15,25 @@ import consolidate_reports as cr
 # ---------------------------------------------------------------------------
 class TestDeriveOverall:
     def test_all_dims_present(self):
-        f = {"risk": 0.6, "impact": 0.9, "scope": 0.3}
-        assert cr._derive_overall(f) == pytest.approx((0.6 + 0.9 + 0.3) / 3.0)
+        f = {"likelihood": 0.6, "impact": 0.9, "relevance": 0.3}
+        assert cr._derive_overall(f) == pytest.approx((0.6 + 0.9) / 2.0)
 
     def test_zero_values(self):
-        f = {"risk": 0.0, "impact": 0.0, "scope": 0.0}
+        f = {"likelihood": 0.0, "impact": 0.0, "relevance": 0.0}
         assert cr._derive_overall(f) == 0.0
 
     def test_max_values(self):
-        f = {"risk": 1.0, "impact": 1.0, "scope": 1.0}
+        f = {"likelihood": 1.0, "impact": 1.0, "relevance": 1.0}
         assert cr._derive_overall(f) == 1.0
 
-    @pytest.mark.parametrize("missing", ["risk", "impact", "scope"])
+    @pytest.mark.parametrize("missing", ["likelihood", "impact"])
     def test_any_missing_returns_none(self, missing):
-        f = {"risk": 0.5, "impact": 0.5, "scope": 0.5}
+        f = {"likelihood": 0.5, "impact": 0.5, "relevance": 0.5}
         del f[missing]
         assert cr._derive_overall(f) is None
 
     def test_non_numeric_returns_none(self):
-        f = {"risk": "high", "impact": 0.5, "scope": 0.5}
+        f = {"likelihood": "high", "impact": 0.5, "relevance": 0.5}
         assert cr._derive_overall(f) is None
 
 

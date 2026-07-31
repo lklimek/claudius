@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.0.0",
+  "schema_version": "4.0.0",
   "metadata": {
     "project": "claudius",
     "date": "2026-05-28"
@@ -24,11 +24,11 @@
       "findings": [
         {
           "id": "CALL-001",
-          "risk": 0.7,
+          "likelihood": 0.7,
           "impact": 0.7,
-          "scope": 1.0,
+          "relevance": 1.0,
           "severity": 4,
-          "overall_severity": 0.8,
+          "overall_severity": 0.7,
           "title": "Unchecked recursion into untrusted path",
           "location": "src/walker.rs:120-145",
           "description": "Following the call chain `walk_dir` -> `descend` -> `descend` shows no depth guard; an attacker-controlled directory tree can blow the stack.",
@@ -36,11 +36,11 @@
         },
         {
           "id": "CALL-002",
-          "risk": 0.5,
+          "likelihood": 0.5,
           "impact": 0.5,
-          "scope": 1.0,
+          "relevance": 1.0,
           "severity": 3,
-          "overall_severity": 0.6666666666666666,
+          "overall_severity": 0.5,
           "title": "Error swallowed two frames deep",
           "location": "src/walker.rs:200-210",
           "description": "Walking `process_entry` -> `try_open` -> `_` discards the underlying `io::Error` and substitutes a generic message.",

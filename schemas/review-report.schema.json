@@ -9,8 +9,8 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["3.0.0", "3.1.0", "3.2.0"],
-      "description": "Schema version (SemVer). Renderers check this for compatibility."
+      "enum": ["3.0.0", "3.1.0", "3.2.0", "4.0.0"],
+      "description": "Schema version (SemVer). Renderers check this for compatibility. 4.0.0 is the only version emitted; 3.x is accepted read-only for in-flight reports, whose findings are migrated to the 4.0.0 float names on load."
     },
     "metadata": {
       "type": "object",
@@ -221,17 +221,17 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 5,
-      "description": "Numeric severity: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO. Coordinator-derived from overall_severity via the OWASP band table. Optional on producer/standalone reports; renderers derive it on-the-fly from risk/impact/scope when absent."
+      "description": "Numeric severity: 5=CRITICAL, 4=HIGH, 3=MEDIUM, 2=LOW, 1=INFO. Coordinator-derived from overall_severity via the band table. Optional on producer/standalone reports; renderers derive it on-the-fly from likelihood/impact when absent."
     },
     "severity_float": {
       "type": "number",
       "minimum": 0.0,
       "maximum": 1.0,
-      "description": "Normalized OWASP-style score in [0.0, 1.0]."
+      "description": "Normalized score in [0.0, 1.0]."
     },
     "finding": {
       "type": "object",
-      "required": ["id", "title", "location", "description", "recommendation", "risk", "impact", "scope"],
+      "required": ["id", "title", "location", "description", "recommendation", "likelihood", "impact", "relevance"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -249,10 +249,10 @@
           "type": ["string", "null"],
           "description": "Exact requirement or claim justifying a blocking class; null or absent otherwise."
         },
-        "risk": { "$ref": "#/$defs/severity_float", "description": "OWASP Likelihood normalized to [0,1]." },
-        "impact": { "$ref": "#/$defs/severity_float", "description": "OWASP Impact normalized to [0,1]." },
-        "scope": { "$ref": "#/$defs/severity_float", "description": "Blast radius normalized to [0,1]: fraction of users/surface/call-sites the finding actually reaches (1.0 repo-wide, ~0.5 a subsystem, ~0.2 a single call-site, 0.0 none). Not a default-1.0 field — rate the real reach. See skills/severity/SKILL.md (source of truth)." },
-        "overall_severity": { "$ref": "#/$defs/severity_float", "description": "Coordinator-computed mean of risk, impact, scope." },
+        "likelihood": { "$ref": "#/$defs/severity_float", "description": "Probability a real user or attacker reaches this defect under zone-realistic usage (1.0 happy path, ~0.7 workflow-plausible, ~0.4 edge case, ~0.1 pathological). See skills/severity/SKILL.md (source of truth)." },
+        "impact": { "$ref": "#/$defs/severity_float", "description": "Worst plausible outcome, capped by the finding's backstop zone; blast radius folds in here (1.0 irreversible loss of funds/keys/data, ~0.7 recoverable loss or unrecoverable-stuck user, ~0.4 failed task or scary UX, ~0.1 cosmetic)." },
+        "relevance": { "$ref": "#/$defs/severity_float", "description": "Fit to what this PR set out to do (1.0 the very thing, ~0.5 adjacent code the PR touched, ~0.1 pre-existing and unrelated, 0.0 informational). Drives merge_class and report ordering; deliberately NOT an input to overall_severity." },
+        "overall_severity": { "$ref": "#/$defs/severity_float", "description": "Coordinator-computed mean of likelihood and impact." },
         "author_type": {
           "type": "string",
           "enum": ["bot", "human"],
@@ -263,6 +263,10 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Classification tags (OWASP, CWE, Rust best-practice IDs, etc.)"
+        },
+        "cross_domain_hint": {
+          "type": "string",
+          "description": "Peer reviewer role whose primary domain owns an issue this producer noticed incidentally (grumpy-review §3), letting consolidation weigh the overlap."
         },
         "location": { "type": "string", "minLength": 1, "description": "file:start_line-end_line" },
         "location_permalink": {

@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.0.0",
+  "schema_version": "4.0.0",
   "metadata": {
     "project": "claudius",
     "date": "2026-05-26",
@@ -48,9 +48,9 @@
         {
           "id": "SEC-001",
           "severity": 5,
-          "risk": 1.0,
+          "likelihood": 1.0,
           "impact": 1.0,
-          "scope": 1.0,
+          "relevance": 1.0,
           "overall_severity": 1.0,
           "title": "Plaintext credential leak",
           "tags": ["A02 Cryptographic Failures", "CWE-256"],
@@ -79,9 +79,9 @@
         {
           "id": "CODE-001",
           "severity": 2,
-          "risk": 0.2,
+          "likelihood": 0.2,
           "impact": 0.2,
-          "scope": 0.2,
+          "relevance": 0.2,
           "overall_severity": 0.2,
           "title": "Magic number in retry loop",
           "tags": ["maintainability"],

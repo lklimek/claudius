@@ -53,7 +53,9 @@ from severity_util import (
     build_severity_stats,
     derive_overall,
     derive_severity_int,
+    migrate_legacy_floats,
     reject_non_finite_constant,
+    sanitize_log_value,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -135,7 +137,7 @@ def sev_label(value: int | str | None) -> str:
 # ===================================================================
 # On-the-fly severity normalization
 # ===================================================================
-# Producer-shape reports (e.g. check-pr-comments) emit risk/impact/scope floats
+# Producer-shape reports (e.g. check-pr-comments) emit the severity floats
 # but never the coordinator-derived integer ``severity`` nor real
 # ``severity_counts``. Without these, findings render INFO and the summary
 # table / charts read all-zero. These helpers derive the missing values from
@@ -145,9 +147,9 @@ def sev_label(value: int | str | None) -> str:
 def _normalize_finding_severities(data: dict[str, Any]) -> None:
     """Fill a finding's overall_severity + integer severity from floats in-place.
 
-    Producer-shape findings carry risk/impact/scope but often lack a valid
-    integer ``severity`` and/or ``overall_severity``. Derive both from the
-    floats (overall = mean; severity = band of overall) so the Markdown overall
+    Producer-shape findings carry the severity floats but often lack a valid
+    integer ``severity`` and/or ``overall_severity``. Derive both from
+    likelihood/impact (overall = mean; severity = band) so the Markdown overall
     suffix and HTML ``data-overall`` sort key are populated. Findings already
     carrying valid values are left untouched.
     """
@@ -179,19 +181,24 @@ def _counts_all_zero(counts: dict[str, Any] | None) -> bool:
     return all(not v for v in counts.values())
 
 
-def _normalize_summary_statistics(data: dict[str, Any]) -> None:
+def _normalize_summary_statistics(data: dict[str, Any], *, force: bool = False) -> None:
     """Recompute severity_counts + severity_category_matrix in-place when absent.
 
-    Triggers only when ``severity_counts`` is missing or all-zero and the report
+    Triggers when ``severity_counts`` is missing or all-zero and the report
     contains at least one finding (a hand-supplied non-zero statistics block is
     never overwritten). Note floatless findings are counted as INFO, so the
     trigger is finding-existence, not severity-derivability. ``total_findings``
     is realigned to the rebuilt count so the HTML KPI never disagrees with it.
+
+    ``force`` overrides the hand-supplied carve-out for a migrated report: its
+    counts were tallied under the v3 formula, so leaving them alone prints a
+    summary table that contradicts the finding bodies below it — and a reader
+    scanning the summary sees the lower band.
     """
     stats = data.get("summary_statistics")
     if not isinstance(stats, dict):
         return
-    if not _counts_all_zero(stats.get("severity_counts")):
+    if not force and not _counts_all_zero(stats.get("severity_counts")):
         return
     sections = data.get("findings", [])
     rebuilt = build_severity_stats(sections)
@@ -203,9 +210,26 @@ def _normalize_summary_statistics(data: dict[str, Any]) -> None:
 
 
 def _normalize_report(data: dict[str, Any]) -> None:
-    """Run both severity-normalization passes; safe to call from every renderer."""
+    """Migrate schema-v3 floats, then run both severity-normalization passes.
+
+    Every renderer entry point funnels through here, so importers calling
+    ``render_markdown``/``render_html``/``render_triage``/``render_pdf``
+    directly get the same migration the CLI does. Without it a v3 finding
+    renders as INFO — its floats invisible under the old names — with no
+    warning and no crash.
+    """
+    migration = migrate_legacy_floats(data)
+    for warning in migration.warnings(_report_source(data)):
+        log.warning("%s", warning)
     _normalize_finding_severities(data)
-    _normalize_summary_statistics(data)
+    _normalize_summary_statistics(data, force=bool(migration))
+
+
+def _report_source(data: dict[str, Any]) -> str:
+    """Best available label for the report in log lines."""
+    meta = data.get("metadata") if isinstance(data, dict) else None
+    project = meta.get("project") if isinstance(meta, dict) else None
+    return sanitize_log_value(project or "report")
 
 
 # ===================================================================
@@ -264,17 +288,17 @@ def _location_link(finding: dict[str, Any]) -> dict[str, Any]:
 
 
 def _severity_tooltip(finding: dict[str, Any]) -> str:
-    """Return ``"overall=.. risk=.. impact=.. scope=.."`` when all floats
-    present, else ``""``. The numeric tooltip surfaces the breakdown for the
-    HTML severity badge (no hover affordance in Markdown/PDF)."""
-    keys = ("overall_severity", "risk", "impact", "scope")
+    """Return ``"overall=.. likelihood=.. impact=.. relevance=.."`` when all
+    floats present, else ``""``. The numeric tooltip surfaces the breakdown for
+    the HTML severity badge (no hover affordance in Markdown/PDF)."""
+    keys = ("overall_severity", "likelihood", "impact", "relevance")
     if not all(isinstance(finding.get(k), (int, float)) for k in keys):
         return ""
     return (
         f"overall={finding['overall_severity']:.2f} "
-        f"risk={finding['risk']:.2f} "
+        f"likelihood={finding['likelihood']:.2f} "
         f"impact={finding['impact']:.2f} "
-        f"scope={finding['scope']:.2f}"
+        f"relevance={finding['relevance']:.2f}"
     )
 
 
@@ -726,9 +750,9 @@ def render_markdown(data: dict[str, Any]) -> str:
             if _severity_tooltip(f):
                 sev_extra = (
                     f" *(overall={f['overall_severity']:.2f}, "
-                    f"risk={f['risk']:.2f}, "
+                    f"likelihood={f['likelihood']:.2f}, "
                     f"impact={f['impact']:.2f}, "
-                    f"scope={f['scope']:.2f})*"
+                    f"relevance={f['relevance']:.2f})*"
                 )
             lines.append(
                 f"### {merge_marker}{f['id']} ({sev_label(f.get('severity'))})"
@@ -890,14 +914,14 @@ tr:nth-child(even) td{background:{{ BG_LIGHT }}}
 /* Tag chips */
 .tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:.7rem;
   background:{{ BG_LIGHT }};border:1px solid {{ BORDER }};color:{{ TEXT_SECONDARY }};margin-left:4px}
-/* Severity-breakdown metric chips (v3 floats: overall/risk/impact/scope) */
+/* Severity-breakdown metric chips (overall/likelihood/impact/relevance) */
 .metric-chip{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;
   font-size:.72rem;font-weight:600;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;vertical-align:middle}
 .metric-overall{background-color:#4f46e5}
-.metric-risk{background-color:#c2410c}
+.metric-likelihood{background-color:#c2410c}
 .metric-impact{background-color:#b91c1c}
-.metric-scope{background-color:#047857}
+.metric-relevance{background-color:#047857}
 /* Sections */
 h2{color:{{ BRAND }};margin-top:2rem;margin-bottom:.5rem;border-bottom:2px solid {{ BRAND }};padding-bottom:.3rem}
 h3{margin-top:1.2rem;margin-bottom:.3rem}
@@ -1126,10 +1150,10 @@ details summary:hover{color:{{ ACCENT }}}
   <h3>
     <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
     {% if f.merge_class %}<span class="merge-class-chip" style="background-color: {{ merge_class_colors[f.merge_class] }}; color: {{ merge_class_text_colors[f.merge_class] }}">{{ merge_class_labels[f.merge_class] }}</span>{% endif %}
-    {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of risk/impact/scope)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
-    {% if f.risk is number %}<span class="metric-chip metric-risk" title="OWASP Likelihood normalized">R {{ '%.2f' % f.risk }}</span>{% endif %}
-    {% if f.impact is number %}<span class="metric-chip metric-impact" title="OWASP Impact normalized">I {{ '%.2f' % f.impact }}</span>{% endif %}
-    {% if f.scope is number %}<span class="metric-chip metric-scope" title="Blast radius (1.0 repo-wide, ~0.5 a subsystem, ~0.2 one call-site, 0.0 none)">S {{ '%.2f' % f.scope }}</span>{% endif %}
+    {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of likelihood and impact)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
+    {% if f.likelihood is number %}<span class="metric-chip metric-likelihood" title="Likelihood a real user or attacker reaches this defect">L {{ '%.2f' % f.likelihood }}</span>{% endif %}
+    {% if f.impact is number %}<span class="metric-chip metric-impact" title="Worst plausible outcome, blast radius included">I {{ '%.2f' % f.impact }}</span>{% endif %}
+    {% if f.relevance is number %}<span class="metric-chip metric-relevance" title="Fit to this PR's stated goal (1.0 the very thing, ~0.5 adjacent, ~0.1 pre-existing) — not part of the severity math">R {{ '%.2f' % f.relevance }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
@@ -3321,6 +3345,10 @@ def main() -> None:
     except ValueError as e:
         log.error("Invalid JSON in %s: %s", report_path, e)
         sys.exit(1)
+
+    # In-flight schema-v3 reports render, but only under the v4 float names.
+    for warning in migrate_legacy_floats(data).warnings(str(report_path)):
+        log.warning("%s", warning)
 
     if not SCHEMA_PATH.is_file():
         log.warning("Schema file not found at %s, skipping validation", SCHEMA_PATH)

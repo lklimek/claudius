@@ -46,9 +46,9 @@ Emit one INFO finding listing every modified function, marking walked vs deferre
 ```text
 category: "call_tree"
 id: CALL-NNN (coordinator-assigned)
-risk: 0.1
-impact: 0.1
-scope: 0.3
+likelihood: 0.0
+impact: 0.0
+relevance: 0.0
 title: "Call-tree walk scoped to top 10 of N modified functions"
 description: |
   Walked via: <tool>
@@ -133,7 +133,7 @@ Per broken assumption, emit a `CALL-` finding scoped to the caller's `file:line`
 | LOW | Stylistic drift — callers still work but no longer match the new idiom |
 | INFO | Ranking summary, truncation notes, deferred-walk notes |
 
-Score `risk`/`impact`/`scope` per `claudius:severity`; the coordinator derives the integer.
+Score `likelihood`/`impact`/`relevance` per `claudius:severity`; the coordinator derives the integer.
 
 ## Step 6 — Emit Findings
 
@@ -146,9 +146,9 @@ Finding shape (one section per modified function whose walk surfaced callers, or
   "findings": [
     {
       "id": "CALL-001",
-      "risk": 0.6,
+      "likelihood": 0.6,
       "impact": 0.5,
-      "scope": 0.5,
+      "relevance": 1.0,
       "title": "Caller foo::bar still treats baz() as infallible",
       "location": "src/foo/bar.rs:142",
       "description": "Walked via: ctags + rg fallback\nChain: src/foo/bar.rs:142 → baz() (modified at src/baz.rs:88)\nbaz() now returns Result<T, E>; caller uses the value directly without `?` or matching on Err.",
@@ -168,6 +168,8 @@ Required on every `call_tree` finding:
 - `description`: MUST include a `Walked via: <tool>` line and the chain `<caller> → … → <modified-function>`.
 - `code_snippets`: one snippet per terminal caller with `language` matching the repo.
 - `location`: the caller's `file:line` (not the modified function's — the finding is about the caller).
+
+`relevance`: rate honestly, usually `1.0` — a broken caller exists only because this PR modified the function it calls, so the finding is squarely about this PR's own change, not an adjacent or pre-existing concern.
 
 Optional but encouraged: `tags` such as `signature-change`, `return-shape`, `panic-to-result`.
 

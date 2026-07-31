@@ -5,74 +5,115 @@ description: "This skill should be used when rating findings in reviews, audits,
 
 # Severity Classification
 
-Levels for rating findings in reviews, audits, and assessments. Based on [CVSS v4.0](https://www.first.org/cvss/v4.0/specification-document) qualitative ratings and [OWASP Risk Rating](https://owasp.org/www-community/OWASP_Risk_Rating_Methodology), adapted for general code review beyond pure security.
+Two independent axes per finding:
 
-## Levels
+- **severity** — how bad is the shipped defect? Derived from the `likelihood`/`impact` floats.
+- **merge_class** — does this stop THIS PR? Decided by the **blocker gates** below.
 
-In finding JSON, `severity` is the integer, not the label.
+Never encode one in the other. A LOW can block (it trips a gate); a CRITICAL can be `out_of_scope_follow_up` (pre-existing, untouched, no gate reachable through this PR).
 
-| Int | Label | Meaning | CVSS | Examples |
-|---|---|---|---|---|
-| 5 | CRITICAL | Exploitable vulnerability, data loss, correctness bug causing wrong results, or system breakage — production incident if deployed | 9.0–10.0 | RCE, SQL injection, data breach, silent data corruption |
-| 4 | HIGH | Significant risk or correctness issue that will likely cause problems; workaround may exist but is not acceptable long-term | 7.0–8.9 | Privilege escalation, race condition causing data loss, broken authentication, missing input validation on untrusted data |
-| 3 | MEDIUM | Real issue requiring additional factors to manifest, or design flaw increasing future risk; typically fixed before production | 4.0–6.9 | Information disclosure, missing rate limiting, code duplication creating maintenance risk, error handling that swallows context |
-| 2 | LOW | Improvement recommended: minor issue, defense in depth, code hygiene, or best-practice deviation; no immediate risk but worth addressing | 0.1–3.9 | Non-idiomatic code, missing documentation, inconsistent naming, suboptimal algorithm for current scale |
-| 1 | INFO | Positive observation: something done well, a good pattern, or context that helps readers understand the codebase; no action required | none (0.0) | Well-structured error handling, good test coverage, clean separation of concerns, effective use of type system |
+## 1. Backstop zone (judge this first)
 
-## Rules
+Before rating anything, answer: **what stands between this defect and irreversible harm?** The answer sets the scope of G-INTENT and the ceiling on `impact`.
 
-- Anything that may require action is **LOW or higher**; **INFO** is exclusively praise and context — never suggestions or improvements
-- When in doubt between two levels, choose the higher
-- Severity reflects **impact and likelihood**, never effort to fix — a trivial one-line fix can still be CRITICAL
-- Severity states shipped impact only — whether a finding blocks THIS PR is the orthogonal `merge_class` axis (see Merge Classification below); never encode merge-worthiness in the severity floats or label
-- UX/DX impact is a severity factor — a broken user journey or confusing developer experience can be HIGH even if the code compiles and passes tests
+| Zone | What backstops the code | Worst realistic outcome | `impact` ceiling |
+|---|---|---|---|
+| **Backstopped** | A server, consensus, or independent validator rejects bad output before it counts | Scary error, confusion, stuck or wedged client, wasted user time | ~0.7 |
+| **Sovereign** | Nothing. This code is the last line — key material, signing, entropy, local persistence, offline/standalone tools | Irreversible loss of funds, keys, or data | 1.0 |
+| **Boundary** | This code decides *what crosses into* sovereign territory — assembling the tx to be signed, choosing the destination, composing what the user is asked to approve | Same as Sovereign — the backstop validates the *signature*, not the *intent* | 1.0 |
 
-## OWASP Risk Rating normalization
+For **server-side code**, the code owns the data — read it as Sovereign over its own persistence, with the operator's monitoring as the only backstop against silent breakage (hence G-SILENT).
 
-Schema v3 decomposes severity into three 0.0–1.0 dimensions per the [OWASP Risk Rating Methodology](https://owasp.org/www-community/OWASP_Risk_Rating_Methodology). The coordinator computes `overall_severity = (risk + impact + scope) / 3` and derives integer `severity` from the band table below — never ask the LLM to do the arithmetic.
+**Zone is per finding, never per repo or per app.** One PR routinely spans all three: a wallet's balance-refresh path is Backstopped, its seed-phrase handling is Sovereign, its send-confirmation screen is Boundary. Judge each finding on the code path it actually sits on, from the PR's own context. Do not assign a project a standing zone.
 
-### `risk` (OWASP Likelihood, normalized)
+Unsure between two zones → take the more sovereign one.
 
-Score each factor 0–9, then `risk = average(factor_scores) / 9.0`. Two recipes — pick by whether an adversary is required to trigger the finding.
+## 2. Blocker gates
 
-**Adversarial findings** (security: an attacker must act) — the OWASP Likelihood factors:
+A gate is a **must-not-ship** condition. Tripping any gate ⇒ `merge_class: blocking`, with `intent_basis` set to the gate ID plus one line of evidence (`"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`). Severity does not override a gate, and a gate does not raise severity.
 
-- **Threat agent**: Skill level, Motive, Opportunity, Size
-- **Vulnerability**: Ease of discovery, Ease of exploit, Awareness, Intrusion detection
+| ID | Trips when | Zone |
+|---|---|---|
+| **G-INTENT** | The PR's stated intent is not met | Backstopped: **happy path only**. Sovereign/Boundary: happy path **plus** edge, error, and adversarial paths |
+| **G-DATA** | Data loss or corruption, including silent corruption | all |
+| **G-FUNDS** | Loss, theft, or misdirection of funds; wrong amounts; double-spends | all |
+| **G-CRYPTO** | Insecure cryptography — home-rolled primitives, weak parameters, bad RNG, nonce/IV reuse | all |
+| **G-SECRET** | Keys, seeds, or tokens reach logs, files, telemetry, URLs, or the clipboard | all |
+| **G-UI-BROKEN** | Dead controls, unreachable flows, destroyed layout, freeze, or crash | all |
+| **G-UI-TEXT** | User-visible text that is scary or confusing — raw exceptions, stack traces, internal jargon, alarming wording for a benign condition | all |
+| **G-WYSIWYS** | The confirmation screen does not match what is actually signed or sent | Boundary, Sovereign |
+| **G-AMOUNT** | Monetary values are displayed wrongly (unit, precision, rounding, fee omission) | all |
+| **G-DOUBLE** | Retry or auto-recovery duplicates a spend, broadcast, or other external side effect | all |
+| **G-PHISH** | Untrusted data rendered unescaped or clickable, or able to imitate trusted UI | all |
+| **G-BRICK** | Upgrade or migration failure prevents startup or destroys the user profile | all |
+| **G-SILENT** | Failures are swallowed — operators cannot detect that it broke | Operated services |
+| **G-PRIVACY** | Leaks short of secrets — address linkage, identifying telemetry, financial data in logs | all |
+| **G-GROWTH** | Unbounded resource growth under normal load | all |
+| **G-DEFAULTS** | Ships an insecure default configuration | all |
 
-**Non-adversarial findings** (correctness, concurrency, robustness, maintainability — no attacker in the story) — the operational factors, since threat-agent motive is meaningless there and improvising it inflates every such finding:
+### Races and concurrency
 
-- **Execution frequency** of the affected path: one-time admin-triggered migration ≈ 0–2; occasional background job ≈ 4–6; per-request hot path ≈ 7–9
-- **Precondition probability**: requires concurrent callers that structurally cannot exist in the deployment ≈ 0–1; needs an unusual config or rare input ≈ 3–5; triggered by ordinary input ≈ 7–9
-- **Triggering actor**: deliberate action by a trusted operator ≈ 0–2; internal automation ≈ 4–6; any user or untrusted automation ≈ 7–9
+One rule, zone-dependent likelihood:
 
-🔴 **Evidence rule** — a low operational score MUST cite its evidence: the reviewer's own call-tree/entry-point trace (already mandatory, see `grumpy-review`), a Context Digest claim carrying evidence (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence for the operational reality, score the factors generically — the same rating the finding would get without any context. This axis lowers a score only on evidence, never on assumption, and it never suppresses a finding — it adjusts the floats, the finding is still reported.
+- **GUI**: would a real human plausibly do this? Double-clicking submit is plausible → gate trips. A 3-ms window needing scripted timing is not.
+- **Server**: concurrency under normal load is near-certain → trips by default; argue your way out with evidence, not the reverse.
+- **Sovereign/Boundary**: GUI likelihood, multiplied by permanence — a rare race that permanently destroys keys still trips.
 
-### `impact` (OWASP Impact, normalized)
+### Explicitly NOT gates
 
-Same recipe over the Impact factors:
+Getting stuck, one-way migrations, protocol drift, compatibility breaks, agent autonomy limits, accessibility, and update mechanics are **ordinary findings**. Rate them with the floats, classify them normally — they never auto-block. Promote one only when it independently trips a gate above.
 
-- **Technical**: Loss of confidentiality, integrity, availability, accountability
-- **Business**: Financial damage, Reputation damage, Non-compliance, Privacy violation
+## 3. Severity floats
 
-For pure code-quality findings without a security angle, score technical factors only and treat business factors as 0.
+Three 0.0–1.0 numbers per finding. No external methodology; these definitions are the whole specification.
 
-### `scope` (blast radius)
+### `likelihood` — how likely is this hit?
 
-The **actual blast radius** — fraction of users / surface / call-sites the finding reaches. Rate per finding from evidence — **never** a default `1.0` unless the issue genuinely affects the whole surface; a lazy `1.0` floors the mean at MEDIUM and inflates every report.
+Probability that a real user or attacker reaches this defect under zone-realistic usage. Include attacker pressure where an attacker exists; include plausible human error.
 
-| Value | Blast radius |
-|-------|---------|
-| `1.0` | Repo-wide — all users / the entire public surface / every call-site |
-| `~0.5` | A module or subsystem — one bounded component |
-| `~0.2` | A single call-site, rare path, or narrow edge case |
-| `0.0` | None remaining — resolved, informational, or no remaining surface (derives to INFO) |
+| Value | Meaning |
+|---|---|
+| `1.0` | On the happy path — anyone doing the normal thing hits it |
+| `~0.7` | Common, workflow-plausible behavior (impatient re-click, back button, offline moment) |
+| `~0.4` | Edge case, unusual sequence, unlucky timing |
+| `~0.1` | Pathological only — requires deliberate, unrealistic effort |
 
-Blast radius ONLY — PR-relevance and intent-matching live exclusively in `merge_class`, never here. A pre-existing repo-wide issue still rates `~1.0`; a diff-introduced single-call-site issue still rates `~0.2`. Rate the radius — never paste `1.0`.
+**Non-adversarial findings** (correctness, concurrency, robustness — no attacker in the story) have no threat agent, and improvising one inflates every such finding. Place them on the ladder using the operational reality instead:
 
-### Band table (`overall_severity` → integer `severity`)
+- **Execution frequency** of the affected path — per-request hot path is near `1.0`; occasional background job mid-ladder; one-time admin-triggered migration near the bottom
+- **Precondition probability** — triggered by ordinary input is high; needs unusual config or rare input is mid; requires concurrent callers that structurally cannot exist in the deployment is bottom
+- **Triggering actor** — any user or untrusted automation is high; internal automation mid; deliberate action by a trusted operator low
 
-CVSS v4.0-aligned bands, applied by the coordinator:
+🔴 **Evidence rule** — a low operational score MUST cite its evidence: the reviewer's own call-tree/entry-point trace (already mandatory, see `grumpy-review`), a Context Digest claim carrying evidence (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence for the operational reality, score generically — the same rating the finding would get with no context at all. This axis lowers a score only on evidence, never on assumption, and it never suppresses a finding; it adjusts the floats, and the finding is still reported.
+
+### `impact` — how bad is the worst plausible outcome?
+
+Capped by the backstop zone (§1). Blast radius folds in here — a defect reaching every user is worse than one reaching a rare code path.
+
+| Value | Meaning |
+|---|---|
+| `1.0` | Irreversible loss of funds, keys, or data |
+| `~0.7` | Recoverable loss, security degradation, or an unrecoverable-stuck user |
+| `~0.4` | Task fails, scary or confusing UX, restart fixes it |
+| `~0.1` | Cosmetic |
+| `0.0` | No defect exists — informational only (see below) |
+
+**Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood 0.0, impact 0.0, relevance 0.0`. That derives to `0.0` → INFO, which is the only band whose meaning is "no action required". Use exact zeros, never a small hedge like `0.05`: there is no defect, so the probability and the damage are genuinely zero, and a hedged value both misstates that and drifts across documents. Producers relying on a low third term to sink an informational finding into INFO is a v3 habit that no longer works — `relevance` is not in the mean.
+
+### `relevance` — does it fit what this PR set out to do?
+
+Drives `merge_class` and report ordering. **Not** part of the severity math.
+
+| Value | Meaning |
+|---|---|
+| `1.0` | The very thing this PR set out to do |
+| `~0.5` | Adjacent — in the code this PR touched |
+| `~0.1` | Pre-existing, unrelated to the change |
+| `0.0` | Informational / resolved / praise |
+
+### Derivation
+
+`overall_severity = (likelihood + impact) / 2`, banded below. Computed in Python by the coordinator — never ask an LLM to do the arithmetic.
 
 | `overall_severity` | int | label |
 |---|---|---|
@@ -82,19 +123,40 @@ CVSS v4.0-aligned bands, applied by the coordinator:
 | ≥ 0.1 | 2 | LOW |
 | < 0.1 | 1 | INFO |
 
-Producers emit `risk`/`impact`/`scope` floats; the coordinator (or `validate-findings` when a producer omits them) writes `overall_severity` and integer `severity`.
+`relevance` is deliberately excluded: a pre-existing catastrophe is still a catastrophe, and averaging it with PR-fit used to launder it down to MEDIUM.
 
-The float trio is the **single source of truth** for severity. Producers MUST NOT hand-type a severity label (CRITICAL/HIGH/…) in a companion document or alongside the floats — every human-readable label is *derived* from the floats by the pipeline; a label authored in parallel drifts and is wrong by construction.
+Producers emit `likelihood`/`impact`/`relevance`; the coordinator (or `validate-findings` when a producer omits them) writes `overall_severity` and integer `severity`.
 
-## Merge Classification (orthogonal axis)
+The floats are the **single source of truth** for severity. Producers MUST NOT hand-type a severity label anywhere — every human-readable label is derived by the pipeline, and a parallel label drifts and is wrong by construction.
 
-`merge_class` answers **does this finding prevent THIS PR from merging?**; severity answers **what is the shipped impact?** The axes are independent. 🔴 **Blocking is a merge class, never a severity**: a LOW can block (violates an explicit acceptance criterion); a HIGH can be follow-up (pre-existing, unchanged, not required by this PR). Severity and `ai_verdict_confidence` never upgrade a finding to blocking.
+## 4. Levels
 
-Coordinator-owned: assigned during consolidation (grumpy-review §5b, using the Context Digest when available, else the coordinator's own knowledge of the work's goal) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments). Fields: `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` + `intent_basis` (the exact requirement/claim; always cite it for `blocking`). See `report-format` for schema shape.
+In finding JSON, `severity` is the integer, not the label.
 
-### Establish PR intent (priority order)
+| Int | Label | Meaning |
+|---|---|---|
+| 5 | CRITICAL | Production incident if deployed — exploitable vulnerability, data/funds loss, wrong results |
+| 4 | HIGH | Will likely cause real problems; a workaround may exist but is not acceptable long-term |
+| 3 | MEDIUM | Real issue needing additional factors to manifest, or a design flaw raising future risk |
+| 2 | LOW | Minor issue, defense in depth, hygiene, best-practice deviation |
+| 1 | INFO | Positive observation or context. No action required |
 
-1. Explicit human requirements and acceptance criteria (incl. session knowledge the coordinator holds)
+### Rules
+
+- Anything that may require action is **LOW or higher**; **INFO** is exclusively praise and context — never a suggestion
+- In doubt between two levels, take the higher
+- Severity never reflects effort to fix — a one-line fix can be CRITICAL
+- UX impact is a real severity input: a scary error dialog on the happy path is `likelihood 1.0`, `impact ~0.4` → HIGH, and it trips G-UI-TEXT
+
+## 5. Merge Classification
+
+`merge_class` enum: `blocking | non_blocking | out_of_scope_follow_up | disputed`, plus `intent_basis` (the gate ID and evidence, or the exact requirement; always present for `blocking`).
+
+Coordinator-owned: assigned during consolidation (grumpy-review §5b) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments, review-dependency — each runs as the coordinator with no separate consolidation pass). See `report-format` for schema shape.
+
+### Establishing PR intent (for G-INTENT)
+
+1. Explicit human requirements and acceptance criteria, including session knowledge the coordinator holds
 2. Linked issue / spec requirements
 3. PR title and behavioral claims in its description
 4. Invariants necessarily implied by the requested behavior
@@ -104,13 +166,12 @@ Incidental implementation details are NOT requirements unless presented as a beh
 ### Decision tree (apply in order)
 
 ```
-informational/praise (INFO-intended: praise, INTENTIONAL downgrade,
-  RESOLVED comment, scope=0.0 convention)          → omit merge_class
+informational/praise (praise, INTENTIONAL downgrade,
+  RESOLVED comment, relevance 0.0)                 → omit merge_class
 invalid (ai_verdict false_positive | duplicate)    → disputed
-required to satisfy explicit PR intent             → blocking
-introduced, worsened, or newly exposed by the diff
-  AND material                                     → blocking
-valid and related to the change                    → non_blocking
+trips any blocker gate (§2), reachable through
+  this PR's code paths                             → blocking
+relevance ≥ ~0.5 (in or adjacent to the change)    → non_blocking
 must not survive this review — leaving it in the
   codebase indefinitely is unacceptable
     fixing it grows the PR beyond its stated intent → out_of_scope_follow_up
@@ -118,27 +179,24 @@ must not survive this review — leaving it in the
 otherwise (acceptable to leave permanently)        → out_of_scope_follow_up
 ```
 
-Branch order matters: intent-required and diff-introduced-and-material findings already resolved to `blocking` above, so only valid, pre-existing, not-intent-required findings ever reach the beyond-stated-intent branch.
+### Pre-existing findings
 
-**Material** = observable incorrect behavior, security/safety invariant failure, data loss/corruption, crash, invalid persistence/API behavior, or duplicate external operations. Style, speculative hardening, and minor maintainability improvements are NOT material.
+A gate tripped by code the PR did not touch does not automatically block — but 🔴 **a pre-existing finding tripping G-FUNDS, G-SECRET, G-CRYPTO, or G-DATA is never silently deferred.** Surface it to the human explicitly and let them decide; classifying it `out_of_scope_follow_up` without saying so out loud is a doctrine violation.
 
-**Pre-existing issues** block only when the PR relies on them, worsens or newly exposes them, or fixing them is necessary for an explicit stated goal. A residual gap after a partial improvement blocks only when the PR claims full closure of that gap.
+Other pre-existing issues block only when the PR relies on them, worsens them, or newly exposes them, or when fixing them is necessary for an explicit stated goal. A residual gap after a partial improvement blocks only when the PR claims full closure of that gap.
 
-### `out_of_scope_follow_up` — surface it, then let it go
+### `out_of_scope_follow_up` means "probably never fixed"
 
-A deferred finding is unlikely to ever be actioned, and that is usually the **correct** outcome, not a process failure: it says the finding wasn't worth prioritizing a fix for. Deferral needs no compensating machinery — no tracking field, no filing step, no gate demanding proof it was recorded somewhere. The class is a legitimate, low-ceremony disposition on its own terms.
+🔴 Deferral is not a plan — no follow-up strategy exists; deferred findings have a **low probability of ever being actioned** (realistic outcome: a `TODO` comment that outlives everyone who read the review). Mechanics reinforce this: `out_of_scope_follow_up` findings are summary-only, never inline comments (review-pr § Part B), so nobody is asked to act on them.
 
-What it does need is **visibility** — a user cannot decide about a finding they never saw:
+Read the class as **"acceptable to never fix"**, not "fix later":
 
-- The class is summary-only, never an inline comment (review-pr § Part B), so the coordinator surfaces it explicitly: after consolidation, filter the findings for `merge_class == "out_of_scope_follow_up"` and present that list to the user in your own words when reporting results. Everything needed is already in the report JSON (`summary_statistics.merge_class_counts` carries the tally) — no extra field, no extra render path.
-- **Never file anything automatically.** Whether a deferral becomes a GitHub issue, a `memcan:todo`, or nothing at all is the user's decision, made via `claudius:triage-findings` or by hand. No review skill creates issues.
-- If a finding genuinely must be fixed now, it isn't this class: `blocking` when PR intent requires it, `non_blocking` otherwise.
+- Because nothing files them, deferrals MUST be surfaced: name the deferred list to the user when presenting results (grumpy-review §5e). An unmentioned deferral is an invisible one, and a user cannot accept a risk they never saw.
+- Deferring a finding *because* someone will presumably pick it up later is a mis-classification — that assumption is false. If a finding genuinely must be fixed, classify it for fixing now: `blocking` when a gate trips, `non_blocking` otherwise.
+- It stays correct only where permanent non-fix is acceptable: unrelated pre-existing nits, speculative hardening, taste.
+- The tradeoff is deliberate: this bias grows PRs and puts more work in front of authors — accepted in exchange for not laundering real defects into a backlog that does not exist.
 
-### HIGH+ security findings are never silently deferred
-
-A security-relevant finding at HIGH or CRITICAL must never be deferred without a human seeing it: surface it in the review summary as an explicit disposition question, and state the residual exposure. `out_of_scope_follow_up` on such a finding is a decision for the human, never a coordinator convenience.
-
-### External-reviewer compatibility map
+## External-reviewer compatibility map
 
 | External field | Claudius equivalent |
 |---|---|
@@ -148,3 +206,5 @@ A security-relevant finding at HIGH or CRITICAL must never be deferred without a
 | `confidence` | `ai_verdict_confidence` |
 | `intent_basis` | `intent_basis` |
 | `material_impact` | `impact_description` |
+| OWASP `risk` (schema v3) | `likelihood` — near-equivalent, migrates by rename |
+| OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which now folds into `impact`. It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or `validate-findings`. |

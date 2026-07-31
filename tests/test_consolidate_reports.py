@@ -864,7 +864,7 @@ class TestRegenerateDerived:
             Path(__file__).resolve().parent
             / "fixtures"
             / "reports"
-            / "v3-merge-class.json"
+            / "v4-merge-class.json"
         )
         return json.loads(path.read_text(encoding="utf-8"))
 
@@ -1300,9 +1300,9 @@ class TestCmdPrepare:
             {
                 "id": "PY-001",
                 "severity": 3,
-                "risk": 0.4,
+                "likelihood": 0.4,
                 "impact": 0.5,
-                "scope": 0.2,
+                "relevance": 0.2,
                 "title": "Bare finding",
                 "location": "scripts/example.py:1",
                 "description": "A finding without a section wrapper.",
@@ -1467,9 +1467,9 @@ class TestCmdAssemble:
                             "description": "Bad query",
                             "recommendation": "Parameterize",
                             "tags": [],
-                            "risk": 0.7,
+                            "likelihood": 0.7,
                             "impact": 0.7,
-                            "scope": 1.0,
+                            "relevance": 1.0,
                         }
                     ],
                 }
@@ -1593,9 +1593,9 @@ class TestNonFiniteRejection:
             "location": "src/db.rs:1",
             "description": "D",
             "recommendation": "R",
-            "risk": 0.95,
+            "likelihood": 0.95,
             "impact": 0.95,
-            "scope": 0.95,
+            "relevance": 0.95,
         }
         f.update(over)
         return f
@@ -1608,7 +1608,7 @@ class TestNonFiniteRejection:
             {
                 "category": "security",
                 "title": "Sec",
-                "findings": [self._finding(scope=bad)],
+                "findings": [self._finding(relevance=bad)],
             }
         ]
         agent = tmp_path / "agent.json"
@@ -1632,7 +1632,7 @@ class TestNonFiniteRejection:
                 {
                     "title": "Sec",
                     "category": "security",
-                    "findings": [self._finding(risk=bad)],
+                    "findings": [self._finding(likelihood=bad)],
                 }
             ],
             "agent_stats": [],
@@ -1691,9 +1691,9 @@ class TestAssembleRequiredFieldGuard:
             "location": "src/db.rs:1",
             "description": "D",
             "recommendation": "R",
-            "risk": 0.9,
+            "likelihood": 0.9,
             "impact": 0.9,
-            "scope": 0.9,
+            "relevance": 0.9,
         }
         data = {
             "metadata": {"project": "x", "date": "2026-01-01"},
@@ -1774,9 +1774,9 @@ class TestSurrogateSafeWrite:
                             "location": "src/db.rs:1",
                             "description": "D",
                             "recommendation": "R",
-                            "risk": 0.9,
+                            "likelihood": 0.9,
                             "impact": 0.9,
-                            "scope": 0.9,
+                            "relevance": 0.9,
                         }
                     ],
                 }
