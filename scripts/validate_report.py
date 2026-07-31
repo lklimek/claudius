@@ -72,14 +72,25 @@ def _fid(finding: dict) -> str:
 
 
 def _iter_findings(report: dict) -> list[dict]:
-    """Flatten all per-section findings into one list (empty on odd shapes)."""
+    """Flatten all per-section findings into one list (empty on odd shapes).
+
+    Mirrors ``severity_util._iter_migratable_findings``: a producer array may
+    hold bare findings that were never wrapped in a section, so an entry with
+    no nested ``findings`` list is treated as a finding itself. Dropping those
+    silently would exempt them from the merge-class gate checks below — the one
+    shape a producer is most likely to get wrong is then the one shape that
+    skips validation.
+    """
     sections = report.get("findings", []) if isinstance(report, dict) else report
     out: list[dict] = []
     for section in sections or []:
-        if isinstance(section, dict):
-            out.extend(
-                f for f in section.get("findings", []) or [] if isinstance(f, dict)
-            )
+        if not isinstance(section, dict):
+            continue
+        nested = section.get("findings")
+        if isinstance(nested, list):
+            out.extend(f for f in nested if isinstance(f, dict))
+        elif nested is None:
+            out.append(section)
     return out
 
 

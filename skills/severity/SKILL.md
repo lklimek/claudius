@@ -173,9 +173,7 @@ trips any blocker gate (§2), reachable through
   this PR's code paths                             → blocking
 relevance ≥ ~0.5 (in or adjacent to the change)    → non_blocking
 must not survive this review — leaving it in the
-  codebase indefinitely is unacceptable
-    fixing it grows the PR beyond its stated intent → out_of_scope_follow_up
-    otherwise                                      → non_blocking
+  codebase indefinitely is unacceptable            → non_blocking
 otherwise (acceptable to leave permanently)        → out_of_scope_follow_up
 ```
 
