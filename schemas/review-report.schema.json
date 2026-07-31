@@ -264,6 +264,10 @@
           "items": { "type": "string" },
           "description": "Classification tags (OWASP, CWE, Rust best-practice IDs, etc.)"
         },
+        "cross_domain_hint": {
+          "type": "string",
+          "description": "Peer reviewer role whose primary domain owns an issue this producer noticed incidentally (grumpy-review §3), letting consolidation weigh the overlap."
+        },
         "location": { "type": "string", "minLength": 1, "description": "file:start_line-end_line" },
         "location_permalink": {
           "type": "string",

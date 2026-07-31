@@ -55,6 +55,7 @@ from severity_util import (
     derive_severity_int,
     migrate_legacy_floats,
     reject_non_finite_constant,
+    sanitize_log_value,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -180,19 +181,24 @@ def _counts_all_zero(counts: dict[str, Any] | None) -> bool:
     return all(not v for v in counts.values())
 
 
-def _normalize_summary_statistics(data: dict[str, Any]) -> None:
+def _normalize_summary_statistics(data: dict[str, Any], *, force: bool = False) -> None:
     """Recompute severity_counts + severity_category_matrix in-place when absent.
 
-    Triggers only when ``severity_counts`` is missing or all-zero and the report
+    Triggers when ``severity_counts`` is missing or all-zero and the report
     contains at least one finding (a hand-supplied non-zero statistics block is
     never overwritten). Note floatless findings are counted as INFO, so the
     trigger is finding-existence, not severity-derivability. ``total_findings``
     is realigned to the rebuilt count so the HTML KPI never disagrees with it.
+
+    ``force`` overrides the hand-supplied carve-out for a migrated report: its
+    counts were tallied under the v3 formula, so leaving them alone prints a
+    summary table that contradicts the finding bodies below it — and a reader
+    scanning the summary sees the lower band.
     """
     stats = data.get("summary_statistics")
     if not isinstance(stats, dict):
         return
-    if not _counts_all_zero(stats.get("severity_counts")):
+    if not force and not _counts_all_zero(stats.get("severity_counts")):
         return
     sections = data.get("findings", [])
     rebuilt = build_severity_stats(sections)
@@ -204,9 +210,26 @@ def _normalize_summary_statistics(data: dict[str, Any]) -> None:
 
 
 def _normalize_report(data: dict[str, Any]) -> None:
-    """Run both severity-normalization passes; safe to call from every renderer."""
+    """Migrate schema-v3 floats, then run both severity-normalization passes.
+
+    Every renderer entry point funnels through here, so importers calling
+    ``render_markdown``/``render_html``/``render_triage``/``render_pdf``
+    directly get the same migration the CLI does. Without it a v3 finding
+    renders as INFO — its floats invisible under the old names — with no
+    warning and no crash.
+    """
+    migration = migrate_legacy_floats(data)
+    for warning in migration.warnings(_report_source(data)):
+        log.warning("%s", warning)
     _normalize_finding_severities(data)
-    _normalize_summary_statistics(data)
+    _normalize_summary_statistics(data, force=bool(migration))
+
+
+def _report_source(data: dict[str, Any]) -> str:
+    """Best available label for the report in log lines."""
+    meta = data.get("metadata") if isinstance(data, dict) else None
+    project = meta.get("project") if isinstance(meta, dict) else None
+    return sanitize_log_value(project or "report")
 
 
 # ===================================================================

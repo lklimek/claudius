@@ -176,14 +176,24 @@ def _read_schema_versions() -> list[str]:
             return list(versions)
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
         pass
-    return ["3.0.0"]
+    return [SCHEMA_VERSION]
 
+
+# The version every report is written as. Stated outright rather than taken as
+# the enum's last entry: enum order is not a contract, so a future read-only
+# entry appended for compatibility would silently become the output format.
+SCHEMA_VERSION = "4.0.0"
 
 _SCHEMA_VERSIONS = _read_schema_versions()
-SCHEMA_VERSION = _SCHEMA_VERSIONS[-1]
+if SCHEMA_VERSION not in _SCHEMA_VERSIONS:
+    raise RuntimeError(
+        f"SCHEMA_VERSION {SCHEMA_VERSION!r} is absent from the schema_version "
+        f"enum {_SCHEMA_VERSIONS} in {SCHEMA_PATH}"
+    )
 
-# Every enum entry validates (additive 3.0 -> 3.1), derived from the schema so
-# the accepted set never drifts from the source on the next version bump.
+# Accepted on input: the emitted version plus the read-only legacy entries the
+# schema still lists, whose findings severity_util migrates on load. Derived
+# from the schema so the accepted set never drifts from the source.
 ACCEPTED_SCHEMA_VERSIONS = set(_SCHEMA_VERSIONS)
 
 

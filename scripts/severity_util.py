@@ -12,6 +12,7 @@ exactly one place.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Iterator
 from typing import Any, NamedTuple
 
@@ -24,6 +25,11 @@ def reject_non_finite_constant(constant: str) -> Any:
     False; ``jsonschema`` min/max treats NaN as valid), silently corrupting
     severity math. Wiring this into every report-loading ``json.loads`` rejects
     them at parse time with a clear error instead.
+
+    Bare literals only: an overflowing numeric such as ``1e400`` is a normal
+    JSON number that Python converts to ``inf`` without consulting this
+    callback. ``derive_overall``'s ``isinf`` check and the schema's
+    ``maximum: 1.0`` are what stop that one.
     """
     raise ValueError(f"non-finite JSON constant not allowed: {constant}")
 
@@ -154,11 +160,31 @@ def _effective_severity(finding: dict[str, Any]) -> int:
 # ---------------------------------------------------------------------------
 # v3 findings carried ``risk``/``impact``/``scope``. v4 carries
 # ``likelihood``/``impact``/``relevance``. Only ``risk`` survives as a rename;
-# v3 ``scope`` was blast radius, which v4 folds into ``impact``, so its value is
-# discarded rather than carried into ``relevance`` (PR-goal fit). Remove this
-# shim once no v3 producer output remains in flight.
+# v3 ``scope`` was blast radius, which v4 expects folded into ``impact``, so its
+# value is discarded rather than carried into ``relevance`` (PR-goal fit).
+# Remove this shim once no v3 producer output remains in flight.
 DEFAULT_MIGRATED_RELEVANCE = 0.5
 _MIGRATION_ID_PREVIEW = 10
+_LOG_VALUE_MAX = 120
+_LOG_UNSAFE_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def sanitize_log_value(value: Any, limit: int = _LOG_VALUE_MAX) -> str:
+    """Flatten producer-controlled text to one bounded, single-line token.
+
+    Finding ``id``/``title`` reach log lines that a coordinator parses, and
+    migration runs before schema validation, so the values are unconstrained at
+    this point. Control characters — newlines above all — let a hostile finding
+    forge whole log records (``Valid: report.json``); strip them and cap the
+    length so one finding cannot flood or spoof the stream.
+    """
+    text = "" if value is None else value if isinstance(value, str) else str(value)
+    # Space, not deletion: removing the separator runs neighbouring words
+    # together and mangles the very text an operator is trying to read.
+    text = " ".join(_LOG_UNSAFE_RE.sub(" ", text).split())
+    if not text:
+        return "<unidentified>"
+    return text if len(text) <= limit else text[:limit] + "…"
 
 
 class LegacyFloatMigration(NamedTuple):
@@ -166,6 +192,7 @@ class LegacyFloatMigration(NamedTuple):
 
     migrated: list[str]
     relevance_defaulted: list[str]
+    collisions: list[str]
 
     def __bool__(self) -> bool:
         return bool(self.migrated)
@@ -174,21 +201,36 @@ class LegacyFloatMigration(NamedTuple):
         """Deprecation lines to log, most severe last."""
         if not self.migrated:
             return []
+        source = sanitize_log_value(source)
         lines = [
             f"[deprecated] {source}: {len(self.migrated)} finding(s) carry "
-            "schema-v3 severity floats; 'risk' renamed to 'likelihood' and "
-            "'scope' dropped (blast radius now belongs in 'impact'): "
-            + _preview_ids(self.migrated)
+            "schema-v3 severity floats; 'risk' renamed to 'likelihood', 'scope' "
+            "dropped, and any severity/overall_severity computed under the v3 "
+            "formula recomputed: " + _preview_ids(self.migrated)
         ]
-        if self.relevance_defaulted:
+        if self.collisions:
             lines.append(
-                f"[deprecated] {source}: RE-RATE REQUIRED — 'relevance' defaulted "
-                f"to {DEFAULT_MIGRATED_RELEVANCE} on "
-                f"{len(self.relevance_defaulted)} finding(s). v3 'scope' was blast "
-                "radius, not PR-goal fit, so it cannot be migrated; relevance "
-                "drives merge_class, so an unrated value can defer a real defect: "
-                + _preview_ids(self.relevance_defaulted)
+                f"[deprecated] {source}: both v3 and v4 float names present on "
+                f"{len(self.collisions)} finding(s) — kept the HIGHER value of "
+                "each pair, since a half-migrated producer disagreeing with "
+                "itself must not silently downgrade a finding: "
+                + _preview_ids(self.collisions)
             )
+        defaulted = (
+            f" 'relevance' was defaulted to {DEFAULT_MIGRATED_RELEVANCE} on "
+            f"{len(self.relevance_defaulted)} of them (v3 'scope' is blast radius, "
+            "not PR-goal fit, so it cannot be migrated) and drives merge_class."
+            if self.relevance_defaulted
+            else ""
+        )
+        lines.append(
+            f"[deprecated] {source}: RE-RATE REQUIRED on {len(self.migrated)} "
+            "finding(s). 'impact' is left exactly as the v3 producer rated it, and "
+            "v3 rated impact EXCLUDING blast radius (which it carried separately "
+            "in 'scope'), so wide-reaching findings are under-rated until a human "
+            f"or validate-findings re-rates them.{defaulted} "
+            + _preview_ids(self.migrated)
+        )
         return lines
 
 
@@ -197,6 +239,40 @@ def _preview_ids(ids: list[str]) -> str:
     head = ", ".join(ids[:_MIGRATION_ID_PREVIEW])
     extra = len(ids) - _MIGRATION_ID_PREVIEW
     return f"{head} (+{extra} more)" if extra > 0 else head
+
+
+def _is_number(value: Any) -> bool:
+    """True for a real numeric scalar — bools are ints in Python, exclude them."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _resolve_collision(
+    finding: dict[str, Any], legacy: str, current: str, *, carry_when_alone: bool
+) -> bool:
+    """Collapse a legacy/v4 float pair onto *current*. Returns True on conflict.
+
+    When both names are present with differing numeric values the HIGHER wins:
+    the producer is half-migrated and disagreeing with itself, so preferring
+    either name unconditionally can downgrade a CRITICAL to MEDIUM. Erring
+    upward matches the band epsilon and keeps the finding in front of a human.
+
+    ``carry_when_alone`` is False for ``scope``, whose value is blast radius —
+    a different axis from ``relevance``, never a substitute for it.
+    """
+    if legacy not in finding:
+        return False
+    legacy_value = finding.pop(legacy)
+    if current not in finding:
+        if carry_when_alone and legacy_value is not None:
+            finding[current] = legacy_value
+        return False
+    current_value = finding[current]
+    if not (_is_number(legacy_value) and _is_number(current_value)):
+        return False
+    if legacy_value == current_value:
+        return False
+    finding[current] = max(legacy_value, current_value)
+    return True
 
 
 def _iter_migratable_findings(data: Any) -> Iterator[dict[str, Any]]:
@@ -222,28 +298,47 @@ def _iter_migratable_findings(data: Any) -> Iterator[dict[str, Any]]:
 def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
     """Rewrite schema-v3 severity floats onto their v4 names, in place.
 
-    ``risk`` becomes ``likelihood`` unless the finding already carries one (the
-    v4 name wins, so a half-migrated producer cannot smuggle a stale value
-    past the schema's ``additionalProperties: false``). ``scope`` is discarded.
-    A migrated finding with no ``relevance`` gets ``DEFAULT_MIGRATED_RELEVANCE``
-    — "adjacent to the change", which classifies ``non_blocking`` and puts the
-    finding in front of a human instead of auto-deferring it.
+    ``risk`` becomes ``likelihood``; ``scope`` is dropped, never carried into
+    ``relevance``, which instead defaults to ``DEFAULT_MIGRATED_RELEVANCE``
+    ("adjacent to the change") so the finding classifies ``non_blocking`` and
+    reaches a human rather than being auto-deferred. Where both names of a pair
+    are present the higher value wins (see :func:`_resolve_collision`).
+
+    Any ``severity``/``overall_severity`` on a migrated finding was computed
+    under the v3 three-term mean, so it is recomputed from the v4 floats —
+    dropped outright when they no longer support a band. Leaving the old label
+    in place is the laundering this migration exists to prevent: renderers and
+    ``cmd_regenerate`` trust a present label and would report the stale,
+    lower band.
     """
     migrated: list[str] = []
     relevance_defaulted: list[str] = []
+    collisions: list[str] = []
     for finding in _iter_migratable_findings(data):
         if "risk" not in finding and "scope" not in finding:
             continue
-        legacy_risk = finding.pop("risk", None)
-        finding.pop("scope", None)
-        if "likelihood" not in finding and legacy_risk is not None:
-            finding["likelihood"] = legacy_risk
-        ident = str(finding.get("id") or finding.get("title") or "<unidentified>")
+        conflict = _resolve_collision(
+            finding, "risk", "likelihood", carry_when_alone=True
+        )
+        conflict |= _resolve_collision(
+            finding, "scope", "relevance", carry_when_alone=False
+        )
+        ident = sanitize_log_value(finding.get("id") or finding.get("title"))
         migrated.append(ident)
+        if conflict:
+            collisions.append(ident)
         if "relevance" not in finding:
             finding["relevance"] = DEFAULT_MIGRATED_RELEVANCE
             relevance_defaulted.append(ident)
-    return LegacyFloatMigration(migrated, relevance_defaulted)
+
+        overall = derive_overall(finding)
+        if overall is None:
+            finding.pop("overall_severity", None)
+            finding.pop("severity", None)
+        else:
+            finding["overall_severity"] = overall
+            finding["severity"] = derive_severity_int(overall)
+    return LegacyFloatMigration(migrated, relevance_defaulted, collisions)
 
 
 def _iter_section_findings(
@@ -259,8 +354,9 @@ def _iter_section_findings(
 def build_severity_stats(sections: list[dict[str, Any]]) -> dict[str, Any]:
     """Build severity_counts + severity_category_matrix from finding sections.
 
-    Counts each finding by its effective severity (explicit integer, else
-    derived from likelihood/impact, else INFO) and tallies a
+    Counts each finding by its effective severity — the band derived from
+    likelihood/impact, else an explicit integer ``severity``, else INFO; see
+    ``_effective_severity`` for why the derived band wins — and tallies a
     severity x category matrix. Mirrors ``consolidate_reports.compute_statistics``
     but operates purely on findings — no agent_stats / redundancy.
     """

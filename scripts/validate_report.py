@@ -23,6 +23,7 @@ from severity_util import (  # noqa: E402
     derive_severity_int,
     migrate_legacy_floats,
     reject_non_finite_constant,
+    sanitize_log_value,
 )
 
 try:
@@ -47,6 +48,16 @@ _RATED_AXES = ("likelihood", "impact", "relevance")
 # Schema versions that define merge_class / intent_basis.
 _MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0")
 _MERGE_CLASS_VERSIONS_TEXT = " or ".join(_MERGE_CLASS_SCHEMA_VERSIONS)
+
+
+def _fid(finding: dict) -> str:
+    """Finding ID as a log-safe token.
+
+    These warnings share a stream a coordinator parses, and they are emitted
+    before any schema check has constrained ``id`` — an unsanitized newline
+    lets a finding forge additional report lines.
+    """
+    return sanitize_log_value(finding.get("id") or "?")
 
 
 def _iter_findings(report: dict) -> list[dict]:
@@ -86,7 +97,7 @@ def check_consistency(report: dict) -> list[str]:
         ]
         if schema_fields and schema_version not in _MERGE_CLASS_SCHEMA_VERSIONS:
             warnings.append(
-                f"[consistency] finding {f.get('id', '?')}: merge-classification "
+                f"[consistency] finding {_fid(f)}: merge-classification "
                 f"fields ({', '.join(schema_fields)}) require schema_version "
                 f"{_MERGE_CLASS_VERSIONS_TEXT}, not {schema_version}"
             )
@@ -99,7 +110,7 @@ def check_consistency(report: dict) -> list[str]:
             and merge_class != "disputed"
         ):
             warnings.append(
-                f"[consistency] finding {f.get('id', '?')}: ai_verdict={ai_verdict} "
+                f"[consistency] finding {_fid(f)}: ai_verdict={ai_verdict} "
                 f"should use merge_class=disputed, not {merge_class}"
             )
         intent_basis = f.get("intent_basis")
@@ -107,7 +118,7 @@ def check_consistency(report: dict) -> list[str]:
             not isinstance(intent_basis, str) or not intent_basis.strip()
         ):
             warnings.append(
-                f"[consistency] finding {f.get('id', '?')}: merge_class=blocking "
+                f"[consistency] finding {_fid(f)}: merge_class=blocking "
                 "requires a non-empty intent_basis"
             )
 
@@ -118,7 +129,7 @@ def check_consistency(report: dict) -> list[str]:
         derived = derive_finding_severity(f)
         if derived is not None and sev != derived:
             warnings.append(
-                f"[consistency] finding {f.get('id', '?')}: explicit severity={sev} "
+                f"[consistency] finding {_fid(f)}: explicit severity={sev} "
                 f"disagrees with band {derived} computed from its floats "
                 f"(likelihood={f.get('likelihood')}, impact={f.get('impact')}); "
                 "labels are derived — re-rate the floats, do not hand-set severity"
@@ -128,7 +139,7 @@ def check_consistency(report: dict) -> list[str]:
             overall_band = derive_severity_int(float(overall))
             if sev != overall_band:
                 warnings.append(
-                    f"[consistency] finding {f.get('id', '?')}: explicit severity={sev} "
+                    f"[consistency] finding {_fid(f)}: explicit severity={sev} "
                     f"disagrees with overall_severity={float(overall):.3f} (band {overall_band})"
                 )
 
