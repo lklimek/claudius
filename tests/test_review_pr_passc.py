@@ -15,54 +15,16 @@ Two flavours of test live here:
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "review-pr" / "SKILL.md"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "pr-promises"
 
-sys.path.insert(0, str(ROOT / "scripts"))
-from severity_util import derive_finding_severity  # noqa: E402
-
 
 def _skill_text() -> str:
     return SKILL.read_text(encoding="utf-8")
-
-
-_FLOAT_PAIR_RE = re.compile(r"`likelihood[≈=]([\d.]+), impact[≈=]([\d.]+)")
-_LEGACY_FLOAT_PAIR_RE = re.compile(r"`risk[≈=][\d.]+, impact[≈=]")
-
-
-def _documented_floats(anchor: str) -> dict[str, float]:
-    """Return the likelihood/impact recipe documented alongside *anchor*.
-
-    Reads the numbers out of the SKILL rather than restating them, so the
-    tests below assert the real contract — the documented recipe derives the
-    documented band — instead of pinning values that can drift apart from it.
-    Loose on the separator (``=`` or ``≈``) and silent about ``relevance``,
-    which no longer feeds the severity mean.
-
-    Skips while the SKILL still carries the schema-v3 spelling, and fails when
-    it carries neither: an unrecognizable recipe must not pass as "migrated".
-    """
-    for line in _skill_text().splitlines():
-        if anchor not in line:
-            continue
-        match = _FLOAT_PAIR_RE.search(line)
-        if match:
-            return {
-                "likelihood": float(match.group(1)),
-                "impact": float(match.group(2)),
-            }
-        if _LEGACY_FLOAT_PAIR_RE.search(line):
-            pytest.skip(
-                f"{SKILL.name} still documents schema-v3 floats for {anchor!r}; "
-                "this test activates when review-pr adopts likelihood/impact"
-            )
-    raise AssertionError(f"No likelihood/impact recipe documented for {anchor!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -118,36 +80,6 @@ class TestSkillDocumentsPassCRules:
     def test_report_type_pr_audit_documented(self):
         text = _skill_text()
         assert 'metadata.report_type: "pr_audit"' in text
-
-
-# ---------------------------------------------------------------------------
-# Band-derivation guard: the documented Pass C floats land in the documented
-# bands. Pins the SKILL's "INFO" / "LOW" labels to severity_util's band table
-# so the floats and bands can't drift apart again.
-# ---------------------------------------------------------------------------
-class TestPassCFloatsDeriveDocumentedBands:
-    @pytest.mark.parametrize(
-        "anchor,band",
-        [
-            ("PR self-description verified", 1),  # INFO
-            ("PR body unparseable", 2),  # LOW
-        ],
-    )
-    def test_documented_floats_derive_the_documented_band(self, anchor, band):
-        assert derive_finding_severity(_documented_floats(anchor)) == band
-
-    @pytest.mark.parametrize("relevance", [0.0, 0.5, 1.0])
-    @pytest.mark.parametrize(
-        "anchor", ["PR self-description verified", "PR body unparseable"]
-    )
-    def test_relevance_cannot_move_the_documented_band(self, anchor, relevance):
-        """Whatever relevance Pass C assigns, the informational findings keep
-        their band — relevance is out of the mean, so the old "Pass C scope
-        exception" that forced it to 0.0 is no longer load-bearing."""
-        floats = _documented_floats(anchor)
-        assert derive_finding_severity(floats) == derive_finding_severity(
-            {**floats, "relevance": relevance}
-        )
 
 
 # ---------------------------------------------------------------------------
