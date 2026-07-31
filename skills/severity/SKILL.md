@@ -144,7 +144,7 @@ In finding JSON, `severity` is the integer, not the label.
 
 `merge_class` enum: `blocking | non_blocking | out_of_scope_follow_up | disputed`, plus `intent_basis` (the gate ID and evidence, or the exact requirement; always present for `blocking`).
 
-Coordinator-owned: assigned during consolidation (grumpy-review §5b) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments). See `report-format` for schema shape.
+Coordinator-owned: assigned during consolidation (grumpy-review §5b) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments, review-dependency — each runs as the coordinator with no separate consolidation pass). See `report-format` for schema shape.
 
 ### Establishing PR intent (for G-INTENT)
 
