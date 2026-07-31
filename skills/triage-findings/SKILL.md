@@ -20,7 +20,7 @@ Start an interactive triage session: the user classifies each finding in a brows
    ```
    Requires `python3-jsonschema` (`apt install python3-jsonschema`).
    If validation fails, fix the JSON and re-validate. Do NOT start the triage server with invalid data.
-   The validator also prints non-blocking `[consistency]` warnings to stderr (label/band drift, or an un-rated axis such as `scope` pinned at `1.0`). These don't fail validation, but surface them to the user — severity labels are *derived* from `risk`/`impact`/`scope` per `claudius:severity`, never hand-typed, so a warning means the floats need rerating, not a label edit.
+   The validator also prints non-blocking `[consistency]` warnings to stderr (label/band drift, or an un-rated axis such as `relevance` pinned at `1.0`). These don't fail validation, but surface them to the user — severity labels are *derived* from `likelihood`/`impact` per `claudius:severity` (`relevance` drives `merge_class`/ordering only), never hand-typed, so a warning means the floats need rerating, not a label edit.
 
 2. Start the triage server (default port 8741):
    ```bash
