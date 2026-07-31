@@ -265,10 +265,11 @@ class LegacyFloatMigration(NamedTuple):
         if self.collisions:
             lines.append(
                 f"[deprecated] {source}: both v3 and v4 float names present on "
-                f"{len(self.collisions)} finding(s) — kept the HIGHER value of "
-                "each pair, since a half-migrated producer disagreeing with "
-                "itself must not silently downgrade a finding: "
-                + _preview_ids(self.collisions)
+                f"{len(self.collisions)} finding(s) — kept the HIGHER of "
+                "'risk'/'likelihood' (one quantity, so a half-migrated producer "
+                "must not silently downgrade itself) and the producer's own "
+                "'relevance' over 'scope' (different quantities: a blast radius "
+                "must not decide merge_class): " + _preview_ids(self.collisions)
             )
         defaulted = (
             f" 'relevance' was defaulted to {DEFAULT_MIGRATED_RELEVANCE} on "
@@ -295,24 +296,25 @@ def _preview_ids(ids: list[str]) -> str:
     return f"{head} (+{extra} more)" if extra > 0 else head
 
 
-def _resolve_collision(
-    finding: dict[str, Any], legacy: str, current: str, *, carry_when_alone: bool
-) -> bool:
-    """Collapse a legacy/v4 float pair onto *current*. Returns True on conflict.
+# The two float pairs collide for different reasons and resolve by different
+# rules — they are separate functions so the distinction cannot be flattened
+# back into one policy by a later edit.
 
-    When both names are present with differing numeric values the HIGHER wins:
-    the producer is half-migrated and disagreeing with itself, so preferring
-    either name unconditionally can downgrade a CRITICAL to MEDIUM. Erring
-    upward matches the band epsilon and keeps the finding in front of a human.
 
-    ``carry_when_alone`` is False for ``scope``, whose value is blast radius —
-    a different axis from ``relevance``, never a substitute for it.
+def _merge_same_quantity(finding: dict[str, Any], legacy: str, current: str) -> bool:
+    """Collapse ``risk``/``likelihood`` onto *current*, keeping the HIGHER value.
+
+    Both names measure the same quantity, so a producer carrying both is
+    half-migrated and disagreeing with itself. Preferring either name
+    unconditionally can downgrade — ``risk 1.0`` with ``likelihood 0.1`` reads
+    as MEDIUM from a CRITICAL — and this pair does feed the severity mean, so
+    erring upward is the fail-safe direction. Returns True on a real conflict.
     """
     if legacy not in finding:
         return False
     legacy_value = finding.pop(legacy)
     if current not in finding:
-        if carry_when_alone and legacy_value is not None:
+        if legacy_value is not None:
             finding[current] = legacy_value
         return False
     current_value = finding[current]
@@ -322,6 +324,27 @@ def _resolve_collision(
         return False
     finding[current] = max(legacy_value, current_value)
     return True
+
+
+def _discard_legacy_axis(finding: dict[str, Any], legacy: str, current: str) -> bool:
+    """Drop ``scope`` outright; the producer's ``relevance`` is authoritative.
+
+    These names measure different things — ``scope`` was blast radius, which v4
+    folds into ``impact``, while ``relevance`` is fit to the PR's goal. Taking
+    the higher would import a blast radius into the field that decides
+    ``merge_class``, which is the defect this migration exists to avoid. A
+    producer that supplied ``relevance`` has actually rated PR-fit, so its
+    value wins however low it is.
+
+    Keeping the lower value cannot under-report: ``relevance`` is not in the
+    severity mean, so it cannot sink a band — the fail-safe argument for
+    :func:`_merge_same_quantity` does not transfer. Returns True when a
+    ``scope`` value was overridden rather than merely dropped.
+    """
+    if legacy not in finding:
+        return False
+    legacy_value = finding.pop(legacy)
+    return current in finding and _is_number(legacy_value)
 
 
 def _iter_migratable_findings(data: Any) -> Iterator[dict[str, Any]]:
@@ -371,8 +394,9 @@ def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
     ``risk`` becomes ``likelihood``; ``scope`` is dropped, never carried into
     ``relevance``, which instead defaults to ``DEFAULT_MIGRATED_RELEVANCE``
     ("adjacent to the change") so the finding classifies ``non_blocking`` and
-    reaches a human rather than being auto-deferred. Where both names of a pair
-    are present the higher value wins (see :func:`_resolve_collision`).
+    reaches a human rather than being auto-deferred. Each pair resolves by its
+    own rule when both names are present — see :func:`_merge_same_quantity` and
+    :func:`_discard_legacy_axis`.
 
     Any ``severity``/``overall_severity`` on a migrated finding was computed
     under the v3 three-term mean, so it is recomputed from the v4 floats —
@@ -401,12 +425,8 @@ def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
             finding.update(dict.fromkeys(INFORMATIONAL_FLOOR_KEYS, 0.0))
             floored.append(ident)
         else:
-            conflict = _resolve_collision(
-                finding, "risk", "likelihood", carry_when_alone=True
-            )
-            conflict |= _resolve_collision(
-                finding, "scope", "relevance", carry_when_alone=False
-            )
+            conflict = _merge_same_quantity(finding, "risk", "likelihood")
+            conflict |= _discard_legacy_axis(finding, "scope", "relevance")
             if conflict:
                 collisions.append(ident)
             if "relevance" not in finding:

@@ -98,11 +98,13 @@ class TestFieldMigration:
         assert report.relevance_defaulted == []
 
 
-class TestCollisionsKeepTheHigherValue:
-    """A finding carrying both names is a half-migrated producer disagreeing
-    with itself. Preferring either name unconditionally can downgrade — v4-wins
-    turns `risk 1.0, likelihood 0.1` into MEDIUM from a CRITICAL — so the higher
-    value survives, erring toward attention like the band epsilon does.
+class TestCollisionsResolveBySemantics:
+    """The two pairs collide for different reasons and resolve by different
+    rules. `risk`/`likelihood` are one quantity, so the higher wins — v4-wins
+    would turn `risk 1.0, likelihood 0.1` into MEDIUM from a CRITICAL, and this
+    pair feeds the severity mean. `scope`/`relevance` are different quantities,
+    so the producer's `relevance` wins and `scope` is discarded: taking the
+    higher would import a blast radius into the field deciding `merge_class`.
     """
 
     def test_likelihood_collision_takes_the_higher(self):
@@ -113,11 +115,29 @@ class TestCollisionsKeepTheHigherValue:
         assert su.derive_finding_severity(f) == 5
         assert report.collisions == ["CODE-001"]
 
-    def test_relevance_collision_takes_the_higher(self):
+    def test_relevance_collision_keeps_the_producers_rating(self):
+        """A producer that supplied `relevance` has actually rated PR-fit, so
+        its value is authoritative however low. `max` here would put a blast
+        radius of 1.0 into the field that decides merge_class."""
         f = _v3_finding(scope=1.0, relevance=0.1)
         report = su.migrate_legacy_floats(_envelope([f]))
-        assert f["relevance"] == 1.0
+        assert f["relevance"] == 0.1
+        assert "scope" not in f
         assert report.collisions == ["CODE-001"]
+
+    def test_keeping_the_lower_relevance_cannot_sink_a_band(self):
+        """Why `max` is not needed here: relevance is not in the severity mean,
+        so the producer's lower value cannot under-report severity."""
+        f = _v3_finding(risk=1.0, impact=1.0, scope=1.0, relevance=0.1)
+        su.migrate_legacy_floats(_envelope([f]))
+        assert f["relevance"] == 0.1
+        assert f["severity"] == 5
+
+    def test_scope_alone_is_still_discarded_not_carried(self):
+        f = _v3_finding(scope=1.0)
+        report = su.migrate_legacy_floats(_envelope([f]))
+        assert f["relevance"] == su.DEFAULT_MIGRATED_RELEVANCE
+        assert report.collisions == []
 
     def test_agreeing_values_are_not_a_collision(self):
         f = _v3_finding(risk=0.8, likelihood=0.8)
