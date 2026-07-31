@@ -110,7 +110,7 @@ Agents MUST write findings to the specified file path as a JSON array of `findin
         "id": "PREFIX-001",
         "likelihood": 0.6,
         "impact": 0.7,
-        "relevance": 1.0,
+        "relevance": 0.5,
         "title": "Short finding title",
         "tags": ["A03 Injection", "CWE-79"],
         "location": "src/auth.rs:42-56",

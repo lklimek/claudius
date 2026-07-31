@@ -100,7 +100,7 @@ Apply the categories relevant to the library's purpose:
 **All libraries** — Input validation and sanitization, memory safety and resource limits, error handling and information disclosure, concurrency safety (races, deadlocks), file system operations (path traversal, symlink attacks), transitive dependency risk, debug/logging modes that may leak sensitive data
 
 ### Output Format
-Rate findings: **CRITICAL / HIGH / MEDIUM / LOW / INFO** (see `severity` skill). When emitting v3 report JSON, the coordinator running this skill also assigns `merge_class`/`intent_basis` per `severity` skill § Merge Classification (coordinator-inline classification — DEP- findings have no separate consolidation pass).
+Rate findings: **CRITICAL / HIGH / MEDIUM / LOW / INFO** (see `severity` skill). This skill runs coordinator-inline (`agent: claudius`, `context: fork`) with no separate consolidation pass, so — like review-pr Pass C and check-pr-comments — it is the exception allowed to assign `merge_class`/`intent_basis` directly per `severity` skill § Merge Classification, in the v4 report JSON it emits (see `claudius:report-format`).
 Include: file:line references, CWE IDs where applicable, impact, and remediation.
 
 ## 4. Vulnerability Research
