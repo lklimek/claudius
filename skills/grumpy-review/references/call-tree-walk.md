@@ -46,9 +46,9 @@ Emit one INFO finding listing every modified function, marking walked vs deferre
 ```text
 category: "call_tree"
 id: CALL-NNN (coordinator-assigned)
-risk: 0.1
-impact: 0.1
-scope: 0.3
+likelihood: 0.0
+impact: 0.0
+relevance: 0.0
 title: "Call-tree walk scoped to top 10 of N modified functions"
 description: |
   Walked via: <tool>
