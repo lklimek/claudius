@@ -98,11 +98,20 @@ class TestFieldMigration:
         assert report.relevance_defaulted == []
 
 
-class TestCollisionsKeepTheHigherValue:
+class TestCollisionsResolvePerAxisSemantics:
     """A finding carrying both names is a half-migrated producer disagreeing
-    with itself. Preferring either name unconditionally can downgrade — v4-wins
-    turns `risk 1.0, likelihood 0.1` into MEDIUM from a CRITICAL — so the higher
-    value survives, erring toward attention like the band epsilon does.
+    with itself, and the right resolution differs by axis.
+
+    `risk`/`likelihood` measure the same quantity, so the HIGHER survives:
+    v4-wins would turn `risk 1.0, likelihood 0.1` into MEDIUM from a CRITICAL,
+    and erring upward matches the band epsilon.
+
+    `scope`/`relevance` do NOT measure the same quantity — blast radius versus
+    fit to the PR's goal — so the higher value is not a safer value, it is a
+    wrong one. The producer's `relevance` is authoritative and `scope` is
+    discarded. Keeping the lower number cannot under-report: `relevance` is
+    excluded from the severity mean and can never sink a band; it only feeds
+    `merge_class`, where the producer's own PR-fit rating is the right input.
     """
 
     def test_likelihood_collision_takes_the_higher(self):
@@ -113,11 +122,19 @@ class TestCollisionsKeepTheHigherValue:
         assert su.derive_finding_severity(f) == 5
         assert report.collisions == ["CODE-001"]
 
-    def test_relevance_collision_takes_the_higher(self):
+    def test_scope_never_overwrites_a_supplied_relevance(self):
         f = _v3_finding(scope=1.0, relevance=0.1)
         report = su.migrate_legacy_floats(_envelope([f]))
-        assert f["relevance"] == 1.0
+        assert f["relevance"] == 0.1
+        assert "scope" not in f
         assert report.collisions == ["CODE-001"]
+
+    def test_scope_alone_defaults_rather_than_carrying_its_value(self):
+        f = _v3_finding(scope=1.0)
+        f.pop("relevance", None)
+        su.migrate_legacy_floats(_envelope([f]))
+        assert f["relevance"] == su.DEFAULT_MIGRATED_RELEVANCE
+        assert "scope" not in f
 
     def test_agreeing_values_are_not_a_collision(self):
         f = _v3_finding(risk=0.8, likelihood=0.8)

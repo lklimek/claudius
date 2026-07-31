@@ -296,17 +296,32 @@ def _preview_ids(ids: list[str]) -> str:
 
 
 def _resolve_collision(
-    finding: dict[str, Any], legacy: str, current: str, *, carry_when_alone: bool
+    finding: dict[str, Any],
+    legacy: str,
+    current: str,
+    *,
+    carry_when_alone: bool,
+    prefer_higher: bool,
 ) -> bool:
     """Collapse a legacy/v4 float pair onto *current*. Returns True on conflict.
 
-    When both names are present with differing numeric values the HIGHER wins:
-    the producer is half-migrated and disagreeing with itself, so preferring
-    either name unconditionally can downgrade a CRITICAL to MEDIUM. Erring
-    upward matches the band epsilon and keeps the finding in front of a human.
+    ``prefer_higher`` is True for ``risk``/``likelihood``: both names measure the
+    same quantity, so a half-migrated producer disagreeing with itself is resolved
+    upward. Preferring either name unconditionally could downgrade a CRITICAL to
+    MEDIUM; erring upward matches the band epsilon and keeps the finding in front
+    of a human.
 
-    ``carry_when_alone`` is False for ``scope``, whose value is blast radius —
-    a different axis from ``relevance``, never a substitute for it.
+    ``prefer_higher`` is False for ``scope``/``relevance``. Those are different
+    quantities — blast radius versus fit to the PR's goal — so the higher value is
+    not a safer value, it is a wrong one. A producer that supplied ``relevance``
+    has rated PR-fit, and that rating is authoritative; ``scope`` is discarded.
+    Nothing is under-reported by keeping the lower number, because ``relevance``
+    is excluded from the severity mean and can never sink a band. It only feeds
+    ``merge_class``, where the producer's own rating is exactly the right input.
+
+    ``carry_when_alone`` is False for ``scope`` for the same reason: its value is
+    blast radius, which v4 folds into ``impact``, never a substitute for
+    ``relevance``.
     """
     if legacy not in finding:
         return False
@@ -320,7 +335,8 @@ def _resolve_collision(
         return False
     if legacy_value == current_value:
         return False
-    finding[current] = max(legacy_value, current_value)
+    if prefer_higher:
+        finding[current] = max(legacy_value, current_value)
     return True
 
 
@@ -402,10 +418,14 @@ def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
             floored.append(ident)
         else:
             conflict = _resolve_collision(
-                finding, "risk", "likelihood", carry_when_alone=True
+                finding, "risk", "likelihood", carry_when_alone=True, prefer_higher=True
             )
             conflict |= _resolve_collision(
-                finding, "scope", "relevance", carry_when_alone=False
+                finding,
+                "scope",
+                "relevance",
+                carry_when_alone=False,
+                prefer_higher=False,
             )
             if conflict:
                 collisions.append(ident)
