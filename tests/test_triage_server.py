@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import triage_server as ts
 
 
-def _report(scope: Any) -> dict:
+def _report(relevance: Any) -> dict:
     return {
         "metadata": {"project": "x", "date": "2026-01-01"},
         "findings": [
@@ -38,9 +38,9 @@ def _report(scope: Any) -> dict:
                         "location": "src/db.rs:1",
                         "description": "D",
                         "recommendation": "R",
-                        "risk": 0.9,
+                        "likelihood": 0.9,
                         "impact": 0.9,
-                        "scope": scope,
+                        "relevance": relevance,
                     }
                 ],
             }
@@ -52,7 +52,7 @@ class TestLoadReportRejectsNonFinite:
     @pytest.mark.parametrize(
         "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
     )
-    def test_load_report_rejects_non_finite_scope(self, tmp_path, monkeypatch, bad):
+    def test_load_report_rejects_non_finite_float(self, tmp_path, monkeypatch, bad):
         report_path = tmp_path / "report.json"
         report_path.write_text(
             json.dumps(_report(bad))
@@ -66,7 +66,7 @@ class TestLoadReportRejectsNonFinite:
         report_path.write_text(json.dumps(_report(0.5)))
         monkeypatch.setattr(ts, "REPORT_PATH", report_path)
         report = ts._load_report()
-        assert report["findings"][0]["findings"][0]["scope"] == 0.5
+        assert report["findings"][0]["findings"][0]["relevance"] == 0.5
 
 
 class TestDoPostHandlesNonFiniteReport:

@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.0.0",
+  "schema_version": "4.0.0",
   "metadata": {
     "project": "claudius",
     "date": "2026-05-26"
@@ -25,9 +25,9 @@
         {
           "id": "CODE-001",
           "severity": 3,
-          "risk": 0.5,
+          "likelihood": 0.5,
           "impact": 0.5,
-          "scope": 0.5,
+          "relevance": 0.5,
           "overall_severity": 0.5,
           "title": "Example finding without optional fields",
           "location": "src/example.rs:10-20",

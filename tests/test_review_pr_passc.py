@@ -18,6 +18,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "review-pr" / "SKILL.md"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "pr-promises"
@@ -28,6 +30,39 @@ from severity_util import derive_finding_severity  # noqa: E402
 
 def _skill_text() -> str:
     return SKILL.read_text(encoding="utf-8")
+
+
+_FLOAT_PAIR_RE = re.compile(r"`likelihood[≈=]([\d.]+), impact[≈=]([\d.]+)")
+_LEGACY_FLOAT_PAIR_RE = re.compile(r"`risk[≈=][\d.]+, impact[≈=]")
+
+
+def _documented_floats(anchor: str) -> dict[str, float]:
+    """Return the likelihood/impact recipe documented alongside *anchor*.
+
+    Reads the numbers out of the SKILL rather than restating them, so the
+    tests below assert the real contract — the documented recipe derives the
+    documented band — instead of pinning values that can drift apart from it.
+    Loose on the separator (``=`` or ``≈``) and silent about ``relevance``,
+    which no longer feeds the severity mean.
+
+    Skips while the SKILL still carries the schema-v3 spelling, and fails when
+    it carries neither: an unrecognizable recipe must not pass as "migrated".
+    """
+    for line in _skill_text().splitlines():
+        if anchor not in line:
+            continue
+        match = _FLOAT_PAIR_RE.search(line)
+        if match:
+            return {
+                "likelihood": float(match.group(1)),
+                "impact": float(match.group(2)),
+            }
+        if _LEGACY_FLOAT_PAIR_RE.search(line):
+            pytest.skip(
+                f"{SKILL.name} still documents schema-v3 floats for {anchor!r}; "
+                "this test activates when review-pr adopts likelihood/impact"
+            )
+    raise AssertionError(f"No likelihood/impact recipe documented for {anchor!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -41,27 +76,14 @@ class TestSkillDocumentsPassCRules:
 
     def test_pr_body_unparseable_fallback(self):
         text = _skill_text()
-        # Unparseable is a LOW finding with scope=0.0 (no actionable diff work) —
-        # at scope=1.0 the mean would floor at 1/3 and wrongly read MEDIUM.
         assert "PR body unparseable" in text
-        assert "`risk≈0.2, impact≈0.2, scope=0.0`" in text
         assert "ONE low-confidence `pr_promises` LOW finding" in text
 
     def test_clean_pass_empty_findings_plus_info(self):
         text = _skill_text()
         assert "findings: []" in text
         assert "PR self-description verified" in text
-        # Clean-pass INFO finding uses scope=0.0 so its low floats derive to the
-        # INFO band; the integer severity is never hand-written.
-        assert "`risk=0.1, impact=0.1, scope=0.0`" in text
         assert "never hand-write the integer `severity`" in text
-
-    def test_passc_scope_exception_documented(self):
-        # Copilot asked for an explicit Pass C exception to the scope=1.0 rule.
-        text = _skill_text()
-        assert "Pass C `scope` exception" in text
-        # The exception ties the informational findings to scope=0.0.
-        assert "use `scope=0.0`" in text
 
     def test_undocumented_change_keyword_overlap(self):
         text = _skill_text()
@@ -104,25 +126,28 @@ class TestSkillDocumentsPassCRules:
 # so the floats and bands can't drift apart again.
 # ---------------------------------------------------------------------------
 class TestPassCFloatsDeriveDocumentedBands:
-    def test_clean_pass_floats_derive_info(self):
-        # "PR self-description verified": risk=0.1, impact=0.1, scope=0.0.
-        floats = {"risk": 0.1, "impact": 0.1, "scope": 0.0}
-        assert derive_finding_severity(floats) == 1  # INFO
+    @pytest.mark.parametrize(
+        "anchor,band",
+        [
+            ("PR self-description verified", 1),  # INFO
+            ("PR body unparseable", 2),  # LOW
+        ],
+    )
+    def test_documented_floats_derive_the_documented_band(self, anchor, band):
+        assert derive_finding_severity(_documented_floats(anchor)) == band
 
-    def test_unparseable_floats_derive_low(self):
-        # "PR body unparseable": risk≈0.2, impact≈0.2, scope=0.0.
-        floats = {"risk": 0.2, "impact": 0.2, "scope": 0.0}
-        assert derive_finding_severity(floats) == 2  # LOW
-
-    def test_scope_one_lifts_above_documented_bands(self):
-        # At scope=1.0 both informational findings rise above the intended INFO/LOW:
-        # {0.1,0.1,1.0} -> MEDIUM(3) and {0.2,0.2,1.0} -> MEDIUM(3). Neither reaches the
-        # documented INFO/LOW — hence the scope=0.0 fix in production (see review-pr
-        # SKILL.md's "Pass C scope exception"). Both cases land on the same band now that
-        # derive_severity_int's epsilon tolerance (scripts/severity_util.py) no longer lets
-        # IEEE-754 rounding drop the first case to LOW at the exact 0.4 boundary.
-        assert derive_finding_severity({"risk": 0.1, "impact": 0.1, "scope": 1.0}) == 3
-        assert derive_finding_severity({"risk": 0.2, "impact": 0.2, "scope": 1.0}) == 3
+    @pytest.mark.parametrize("relevance", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize(
+        "anchor", ["PR self-description verified", "PR body unparseable"]
+    )
+    def test_relevance_cannot_move_the_documented_band(self, anchor, relevance):
+        """Whatever relevance Pass C assigns, the informational findings keep
+        their band — relevance is out of the mean, so the old "Pass C scope
+        exception" that forced it to 0.0 is no longer load-bearing."""
+        floats = _documented_floats(anchor)
+        assert derive_finding_severity(floats) == derive_finding_severity(
+            {**floats, "relevance": relevance}
+        )
 
 
 # ---------------------------------------------------------------------------

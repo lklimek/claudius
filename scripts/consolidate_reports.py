@@ -43,6 +43,7 @@ from severity_util import (
     build_merge_class_stats,
     derive_overall,
     derive_severity_int,
+    migrate_legacy_floats,
     reject_non_finite_constant,
 )
 
@@ -93,7 +94,12 @@ DUP_DETECTION_MAX_FINDINGS = 500
 # Shared helpers
 # ---------------------------------------------------------------------------
 def _load_json_file(path: Path, max_size: int = MAX_INPUT_SIZE) -> dict | list:
-    """Load and parse a JSON file with size validation.
+    """Load a JSON file with size validation, migrating schema-v3 floats.
+
+    Every consolidation input passes through here, so this is where in-flight
+    v3 reports get their ``risk``/``scope`` floats rewritten (see
+    ``severity_util.migrate_legacy_floats``); nothing downstream ever sees the
+    legacy names.
 
     Raises:
         FileNotFoundError: if the file does not exist.
@@ -106,7 +112,7 @@ def _load_json_file(path: Path, max_size: int = MAX_INPUT_SIZE) -> dict | list:
     if size > max_size:
         raise ValueError(f"File too large (>{max_size // (1024 * 1024)} MB): {path}")
     try:
-        return json.loads(
+        data = json.loads(
             path.read_text(encoding="utf-8"),
             parse_constant=reject_non_finite_constant,
         )
@@ -114,6 +120,9 @@ def _load_json_file(path: Path, max_size: int = MAX_INPUT_SIZE) -> dict | list:
         raise ValueError(f"Invalid JSON in {path}: {e}") from e
     except ValueError as e:
         raise ValueError(f"Non-finite JSON constant in {path}: {e}") from e
+    for warning in migrate_legacy_floats(data).warnings(str(path)):
+        log.warning("%s", warning)
+    return data
 
 
 def _iter_findings(
@@ -285,7 +294,7 @@ def _build_permalink(
 
 
 # ---------------------------------------------------------------------------
-# OWASP severity derivation (shared with the renderer via severity_util)
+# Severity derivation (shared with the renderer via severity_util)
 # ---------------------------------------------------------------------------
 # Re-exported under the legacy private names the test-suite imports.
 _derive_overall = derive_overall
@@ -896,9 +905,9 @@ def _flatten_agent_report(
     """Flatten agent sections into raw findings and section positives."""
     finding_markers = {
         "id",
-        "risk",
+        "likelihood",
         "impact",
-        "scope",
+        "relevance",
         "location",
         "description",
         "recommendation",
@@ -988,9 +997,9 @@ def _flatten_agent_report(
                     "category": cat,
                     "section_title": section_title,
                     "severity": severity,
-                    "risk": f.get("risk"),
+                    "likelihood": f.get("likelihood"),
                     "impact": f.get("impact"),
-                    "scope": f.get("scope"),
+                    "relevance": f.get("relevance"),
                     "title": title,
                     "tags": tags,
                     "location": location,
