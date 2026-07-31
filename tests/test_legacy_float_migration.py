@@ -259,18 +259,18 @@ class TestUnusableFloatsFailHigh:
     """
 
     def test_surviving_dimension_sets_the_band(self):
-        assert su._effective_severity({"likelihood": 1.0}) == 5
-        assert su._effective_severity({"impact": 1.0}) == 5
+        assert su.effective_severity({"likelihood": 1.0}) == 5
+        assert su.effective_severity({"impact": 1.0}) == 5
 
     def test_highest_of_dimension_and_explicit_severity_wins(self):
-        assert su._effective_severity({"likelihood": 1.0, "severity": 2}) == 5
-        assert su._effective_severity({"likelihood": 0.0, "severity": 4}) == 4
+        assert su.effective_severity({"likelihood": 1.0, "severity": 2}) == 5
+        assert su.effective_severity({"likelihood": 0.0, "severity": 4}) == 4
 
     def test_no_usable_signal_still_falls_to_info(self):
-        assert su._effective_severity({"title": "x"}) == 1
+        assert su.effective_severity({"title": "x"}) == 1
 
     def test_non_finite_dimension_is_not_usable(self):
-        assert su._effective_severity({"likelihood": float("inf")}) == 1
+        assert su.effective_severity({"likelihood": float("inf")}) == 1
 
     def test_scope_only_v3_finding_is_reported_not_silently_info(self):
         """The shim triggers on `risk` OR `scope`; a scope-only finding leaves
@@ -279,7 +279,7 @@ class TestUnusableFloatsFailHigh:
         del f["risk"]
         report = su.migrate_legacy_floats(_envelope([f]))
         assert report.likelihood_missing == ["CODE-001"]
-        assert su._effective_severity(f) == 5
+        assert su.effective_severity(f) == 5
         assert any("no usable 'likelihood'" in ln for ln in report.warnings("r.json"))
 
 
@@ -571,3 +571,34 @@ class TestLegacyFixtureThroughValidateReport:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+class TestNonFiniteFloatsCannotHideAsNumbers:
+    """QA-001/QA-004 regression.
+
+    ``_is_number`` accepted NaN, so a ``risk: NaN`` migrated to
+    ``likelihood: NaN`` while the shim's "no usable likelihood" list stayed
+    empty — the re-rate warning failed on exactly the input it exists to catch.
+    Downstream, ``_flatten_agent_report`` defaulted a float-only finding's
+    severity to 1, and ``cmd_assemble`` only overwrites a severity it can
+    derive, so the finding shipped as INFO despite ``impact: 1.0``.
+    """
+
+    def test_nan_is_not_a_number(self):
+        assert not su._is_number(float("nan"))
+        assert not su._is_number(float("inf"))
+        assert not su._is_number(float("-inf"))
+        assert su._is_number(0.0) and su._is_number(1)
+
+    def test_nan_likelihood_is_reported_as_missing(self):
+        f = _v3_finding(risk=float("nan"), impact=1.0)
+        report = su.migrate_legacy_floats(_envelope([f]))
+        assert report.likelihood_missing == ["CODE-001"]
+
+    def test_unusable_likelihood_fails_high_not_to_info(self):
+        """impact 1.0 with an unusable likelihood is CRITICAL, never INFO —
+        INFO means "no action required", and reaching it by accident is the
+        under-report this tool must not make."""
+        f = _v3_finding(risk=float("nan"), impact=1.0)
+        su.migrate_legacy_floats(_envelope([f]))
+        assert su.effective_severity(f) == 5

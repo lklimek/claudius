@@ -121,8 +121,21 @@ _SEVERITY_EPSILON = 1e-9
 
 
 def _is_number(value: Any) -> bool:
-    """True for a real numeric scalar — bools are ints in Python, exclude them."""
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """True for a real, FINITE numeric scalar.
+
+    Bools are ints in Python, so exclude them. Non-finite values are excluded
+    too: ``NaN`` and ``±Infinity`` are floats that pass every isinstance check
+    while being unusable in every context this predicate guards. Admitting them
+    made the migration shim's own re-rate warning fail on exactly the input it
+    exists to catch — a ``risk: NaN`` migrated to ``likelihood: NaN``, and the
+    "ended migration with no usable likelihood" list stayed empty because the
+    value looked like a number.
+    """
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
 
 
 # Dimensions of the severity mean. ``relevance`` is deliberately excluded: it
@@ -162,7 +175,7 @@ def derive_finding_severity(finding: dict[str, Any]) -> int | None:
     """Return the integer band for a finding carrying likelihood and impact.
 
     Returns None when either float is absent or non-numeric, signalling the
-    caller to resolve severity some other way — see :func:`_effective_severity`,
+    caller to resolve severity some other way — see :func:`effective_severity`,
     which then prefers the highest surviving dimension or an explicit
     ``severity`` over falling through to INFO.
     """
@@ -172,7 +185,7 @@ def derive_finding_severity(finding: dict[str, Any]) -> int | None:
     return derive_severity_int(overall)
 
 
-def _effective_severity(finding: dict[str, Any]) -> int:
+def effective_severity(finding: dict[str, Any]) -> int:
     """Resolve a finding's integer severity for counting.
 
     Prefers the band derived from the likelihood/impact floats — per the
@@ -497,7 +510,7 @@ def build_severity_stats(sections: list[dict[str, Any]]) -> dict[str, Any]:
 
     Counts each finding by its effective severity — the band derived from
     likelihood/impact, else an explicit integer ``severity``, else INFO; see
-    ``_effective_severity`` for why the derived band wins — and tallies a
+    ``effective_severity`` for why the derived band wins — and tallies a
     severity x category matrix. Mirrors ``consolidate_reports.compute_statistics``
     but operates purely on findings — no agent_stats / redundancy.
     """
@@ -508,7 +521,7 @@ def build_severity_stats(sections: list[dict[str, Any]]) -> dict[str, Any]:
 
     total = 0
     for cat, finding in _iter_section_findings(sections):
-        sev_int = _effective_severity(finding)
+        sev_int = effective_severity(finding)
         label = SEV_LABELS.get(sev_int, "INFO")
         severity_counts[label] = severity_counts.get(label, 0) + 1
         if label in matrix_data and cat in matrix_data[label]:

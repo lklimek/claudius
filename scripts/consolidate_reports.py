@@ -42,6 +42,7 @@ from severity_util import (
     SEV_ORDER,
     build_merge_class_stats,
     derive_overall,
+    effective_severity,
     derive_severity_int,
     migrate_legacy_floats,
     reject_non_finite_constant,
@@ -966,7 +967,13 @@ def _flatten_agent_report(
             )
 
         for f in section.get("findings", []):
-            severity = f.get("severity", 1)
+            # effective_severity, not a bare default of 1: producers normally
+            # emit floats and no integer, and cmd_assemble only overwrites a
+            # severity it can derive. Defaulting to 1 therefore parked any
+            # finding whose floats are unusable -- including a NaN injected by
+            # the v3 migration -- at INFO, the one band meaning "no action
+            # required", regardless of its impact. Fail high, never quiet.
+            severity = f.get("severity") or effective_severity(f)
             if not isinstance(severity, int) or not 1 <= severity <= 5:
                 log.warning(
                     "Skipping finding with invalid severity '%s' from agent '%s'",
