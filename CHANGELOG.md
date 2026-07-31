@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-07-31
+
+### Changed
+
+- **BREAKING — `severity` skill's blocking doctrine replaced**: the old "introduced by this diff AND material" blocking test is gone, replaced by per-finding **backstop zones** (Backstopped/Sovereign/Boundary, judged from PR context, never a standing repo profile) that cap `impact`, plus 16 named **blocker gates** (`G-INTENT`, `G-DATA`, `G-FUNDS`, `G-CRYPTO`, `G-SECRET`, `G-UI-BROKEN`, `G-UI-TEXT`, `G-WYSIWYS`, `G-AMOUNT`, `G-DOUBLE`, `G-PHISH`, `G-BRICK`, `G-SILENT`, `G-PRIVACY`, `G-GROWTH`, `G-DEFAULTS`) that decide `merge_class: blocking`. A `blocking` finding's `intent_basis` must now name the tripped gate ID plus one line of evidence (e.g. `"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`) — a bare requirement quote no longer qualifies. Pre-existing findings tripping `G-FUNDS`/`G-SECRET`/`G-CRYPTO`/`G-DATA` must be escalated to the human explicitly, never silently deferred.
+- **BREAKING — severity float fields renamed and de-OWASP'd**: schema/report field `risk` → `likelihood`; `scope` → `relevance` (blast radius folds into `impact` instead). `overall_severity` is now `(likelihood + impact) / 2` — `relevance` is excluded from the severity mean entirely (previously the 3-term average laundered a pre-existing catastrophe down to MEDIUM); `relevance` now drives only `merge_class` and report ordering. All producer skills (`review-pr`, `grumpy-review`, `check-pr-comments`), `report-format`, `validate-findings`, and `triage-findings` updated to the new field names, the 2-term derivation, and gate-cited `intent_basis`. `report-format`'s external-reviewer compatibility map documents the `risk`/`scope` (schema v3) ↔ `likelihood`/`relevance` semantic mapping for consumers of older reports.
+- **Added a `G-UI-TEXT` producer pass**: `grumpy-review` §3 (every spawned reviewer prompt) and `review-pr` §3 (inherited via the `grumpy-review` delegation) now scan the diff's user-visible strings for raw exceptions, stack traces, internal jargon, or alarming wording on a benign condition.
+
 ## [6.3.0] - 2026-07-27
 
 ### Changed

@@ -94,6 +94,7 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 7. **File output**: use the Write tool for creating files — never `cat > file` or heredoc redirections
 8. **Full roster**: list every teammate name, role/focus, and file scope in this fan-out, including conditional and scaled reviewers; state that all listed peers are already live so agents do not pause to ask or spawn duplicates
 9. **Cross-domain hints**: passively report any issue noticed in a peer's primary domain rather than hunting outside the assigned scope, silently duplicating it, or omitting it; tag the finding with `cross_domain_hint: "<peer-role>"` so consolidation can weigh the overlap
+10. **UI-text scan**: scan the diff's user-visible strings — labels, buttons, toasts, dialogs, error messages — for raw exception text, stack traces, error codes, internal jargon, or alarming wording on a benign condition; these trip `G-UI-TEXT` (`claudius:severity`)
 
 ### Finding format (JSON)
 
@@ -107,9 +108,9 @@ Agents MUST write findings to the specified file path as a JSON array of `findin
     "findings": [
       {
         "id": "PREFIX-001",
-        "risk": 0.6,
+        "likelihood": 0.6,
         "impact": 0.7,
-        "scope": 1.0,
+        "relevance": 1.0,
         "title": "Short finding title",
         "tags": ["A03 Injection", "CWE-79"],
         "location": "src/auth.rs:42-56",
@@ -126,11 +127,11 @@ Agents MUST write findings to the specified file path as a JSON array of `findin
 ]
 ```
 
-**Required finding fields**: `id`, `risk`/`impact`/`scope` (floats 0.0–1.0), `title`, `location`, `description`, `recommendation`. See `claudius:severity` for the OWASP-normalized recipes producing the float trio and the band table the coordinator uses to derive integer `severity`. Rate `scope` as real blast radius per `claudius:severity` — never default it to `1.0`. The float trio is the single source of truth; never hand-type a severity label.
+**Required finding fields**: `id`, `likelihood`/`impact`/`relevance` (floats 0.0–1.0), `title`, `location`, `description`, `recommendation`. See `claudius:severity` for the float definitions, the backstop-zone `impact` cap, and the band table the coordinator uses to derive integer `severity`. Rate `relevance` as real PR-goal fit per `claudius:severity` — never default it to `1.0`. The floats are the single source of truth; never hand-type a severity label.
 
 **Optional**: `tags`, `impact_description` (Markdown impact narrative; the numeric `impact` float is separate), `code_snippets` (only when you captured the exact source during analysis — never invent one), `cross_domain_hint` (a peer role whose primary domain owns an issue noticed incidentally; never actively search that domain).
 
-**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, any `metadata`/`commit`/`repository`/`date`/`branch` field, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, `merge_class`, `intent_basis`, and the derived integer `severity` when emitting floats. `risk`/`impact`/`scope` are required — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
+**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, any `metadata`/`commit`/`repository`/`date`/`branch` field, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, `merge_class`, `intent_basis`, and the derived integer `severity` when emitting floats. `likelihood`/`impact`/`relevance` are required — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
 
 **Metadata is coordinator-owned**: producers emit only the bare `finding_section[]` array, with no envelope object or metadata fields. The coordinator resolves the full 40-character commit SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` when the branch has no upstream) and supplies commit/date/branch/project through `prepare --metadata`; `prepare` derives repository metadata from `--repo-root`.
 
@@ -215,7 +216,7 @@ Read `intermediate.json` and decide:
 1. **Duplicate resolution**: per `duplicate_groups` entry, merge (keep the most detailed description, union tags) or keep separate. Remove redundant findings.
 2. **INTENTIONAL downgrade**: downgrade each `intentional_downgrades` finding to `INFO` — deliberate engineering decisions from previous triage.
 3. **Severity re-evaluation**: load the `severity` skill (`/severity`), then re-assess every finding strictly against its criteria — agents often over-inflate.
-4. **Merge classification**: assign `merge_class` (+ `intent_basis` for `blocking`) to every non-informational finding per `severity` skill § Merge Classification. Use the intent digest when the invoker supplied one (review-pr); with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Severity never determines `merge_class`.
+4. **Merge classification**: assign `merge_class` per `severity` skill § Merge Classification — `blocking` only when a blocker gate trips, with `intent_basis` naming the gate ID plus one line of evidence. Use the intent digest when the invoker supplied one (review-pr) for `G-INTENT` judgment; with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Severity never determines `merge_class`. Escalate to the human explicitly (never silently defer) any pre-existing finding tripping `G-FUNDS`/`G-SECRET`/`G-CRYPTO`/`G-DATA`.
 5. **Merge sections**: combine same-category agent sections into unified sections.
 6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding.
 7. **Agent stats**: copy `intermediate.json`'s `agent_stats` array verbatim into `merged-findings.json` — `prepare` already computes it; do not hand-author or reshape it.
