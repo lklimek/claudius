@@ -4,46 +4,22 @@
   "title": "Claudius Review Report",
   "description": "Intermediate format for code review and PR comment verification reports. Produced by grumpy-review and check-pr-comments, consumed by all renderers.",
   "type": "object",
-  "required": [
-    "schema_version",
-    "metadata",
-    "executive_summary",
-    "summary_statistics",
-    "findings"
-  ],
+  "required": ["schema_version", "metadata", "executive_summary", "summary_statistics", "findings"],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": [
-        "3.0.0",
-        "3.1.0",
-        "3.2.0",
-        "4.0.0"
-      ],
+      "enum": ["3.0.0", "3.1.0", "3.2.0", "4.0.0"],
       "description": "Schema version (SemVer). Renderers check this for compatibility. 4.0.0 is the only version emitted; 3.x is accepted read-only for in-flight reports, whose findings are migrated to the 4.0.0 float names on load."
     },
     "metadata": {
       "type": "object",
-      "required": [
-        "project",
-        "date"
-      ],
+      "required": ["project", "date"],
       "additionalProperties": false,
       "properties": {
-        "project": {
-          "type": "string",
-          "description": "Project name or repository URL"
-        },
-        "date": {
-          "type": "string",
-          "format": "date",
-          "description": "Review date (YYYY-MM-DD)"
-        },
-        "branch": {
-          "type": "string",
-          "description": "Branch reviewed"
-        },
+        "project": { "type": "string", "description": "Project name or repository URL" },
+        "date": { "type": "string", "format": "date", "description": "Review date (YYYY-MM-DD)" },
+        "branch": { "type": "string", "description": "Branch reviewed" },
         "commit": {
           "type": "string",
           "pattern": "^[0-9a-f]{40}$",
@@ -51,41 +27,23 @@
         },
         "repository": {
           "type": "object",
-          "required": [
-            "owner",
-            "repo"
-          ],
+          "required": ["owner", "repo"],
           "additionalProperties": false,
           "description": "GitHub owner/repo for permalink construction. Coordinator-derived from git remote; absent for non-GitHub or non-git directories.",
           "properties": {
-            "owner": {
-              "type": "string",
-              "minLength": 1
-            },
-            "repo": {
-              "type": "string",
-              "minLength": 1
-            }
+            "owner": { "type": "string", "minLength": 1 },
+            "repo": { "type": "string", "minLength": 1 }
           }
         },
-        "scope": {
-          "type": "string",
-          "description": "What was reviewed (paths, commit range, etc.)"
-        },
+        "scope": { "type": "string", "description": "What was reviewed (paths, commit range, etc.)" },
         "reviewers": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "description": "Agent types used (e.g., 'security-engineer', 'rust-developer')"
         },
         "report_type": {
           "type": "string",
-          "enum": [
-            "code_review",
-            "comment_check",
-            "pr_audit"
-          ],
+          "enum": ["code_review", "comment_check", "pr_audit"],
           "description": "Type of report. Defaults to code_review if omitted."
         },
         "pr_number": {
@@ -97,78 +55,32 @@
     },
     "executive_summary": {
       "type": "object",
-      "required": [
-        "overall_assessment"
-      ],
+      "required": ["overall_assessment"],
       "additionalProperties": false,
       "properties": {
-        "overall_assessment": {
-          "type": "string",
-          "description": "1-2 sentence overall assessment (plain text)"
-        },
-        "summary_text": {
-          "type": "string",
-          "description": "Expanded summary paragraph. Markdown-formatted: may contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py."
-        },
-        "verdict_text": {
-          "type": "string",
-          "description": "Final verdict. Markdown-formatted: may contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py."
-        },
-        "verdict_action": {
-          "type": "string",
-          "description": "Recommended action, e.g., 'Approve with conditions' (plain text)"
-        }
+        "overall_assessment": { "type": "string", "description": "1-2 sentence overall assessment (plain text)" },
+        "summary_text": { "type": "string", "description": "Expanded summary paragraph. Markdown-formatted: may contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
+        "verdict_text": { "type": "string", "description": "Final verdict. Markdown-formatted: may contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
+        "verdict_action": { "type": "string", "description": "Recommended action, e.g., 'Approve with conditions' (plain text)" }
       }
     },
     "summary_statistics": {
       "type": "object",
-      "required": [
-        "total_findings",
-        "severity_counts"
-      ],
+      "required": ["total_findings", "severity_counts"],
       "additionalProperties": false,
       "properties": {
-        "total_findings": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "redundancy_ratio": {
-          "type": "string",
-          "description": "e.g., '51%'"
-        },
-        "critical_count": {
-          "type": "integer",
-          "minimum": 0
-        },
+        "total_findings": { "type": "integer", "minimum": 0 },
+        "redundancy_ratio": { "type": "string", "description": "e.g., '51%'" },
+        "critical_count": { "type": "integer", "minimum": 0 },
         "severity_counts": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "CRITICAL": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            },
-            "HIGH": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            },
-            "MEDIUM": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            },
-            "LOW": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            },
-            "INFO": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
+            "CRITICAL": { "type": "integer", "minimum": 0, "default": 0 },
+            "HIGH": { "type": "integer", "minimum": 0, "default": 0 },
+            "MEDIUM": { "type": "integer", "minimum": 0, "default": 0 },
+            "LOW": { "type": "integer", "minimum": 0, "default": 0 },
+            "INFO": { "type": "integer", "minimum": 0, "default": 0 }
           }
         },
         "severity_category_matrix": {
@@ -176,62 +88,19 @@
           "description": "Severity x category matrix rows.",
           "items": {
             "type": "object",
-            "required": [
-              "severity",
-              "security",
-              "project",
-              "code_quality",
-              "total"
-            ],
+            "required": ["severity", "security", "project", "code_quality", "total"],
             "additionalProperties": false,
             "properties": {
-              "severity": {
-                "type": "string",
-                "enum": [
-                  "CRITICAL",
-                  "HIGH",
-                  "MEDIUM",
-                  "LOW",
-                  "INFO"
-                ],
-                "description": "Label for display (string key, not numeric)"
-              },
-              "security": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "project": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "code_quality": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "call_tree": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "dependencies": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "documentation": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "pr_comments": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "pr_promises": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "total": {
-                "type": "integer",
-                "minimum": 0
-              }
+              "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"], "description": "Label for display (string key, not numeric)" },
+              "security": { "type": "integer", "minimum": 0 },
+              "project": { "type": "integer", "minimum": 0 },
+              "code_quality": { "type": "integer", "minimum": 0 },
+              "call_tree": { "type": "integer", "minimum": 0 },
+              "dependencies": { "type": "integer", "minimum": 0 },
+              "documentation": { "type": "integer", "minimum": 0 },
+              "pr_comments": { "type": "integer", "minimum": 0 },
+              "pr_promises": { "type": "integer", "minimum": 0 },
+              "total": { "type": "integer", "minimum": 0 }
             }
           }
         },
@@ -240,25 +109,14 @@
           "additionalProperties": false,
           "description": "Verdict breakdown for comment-check reports.",
           "properties": {
-            "RESOLVED": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            },
-            "UNRESOLVED": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
+            "RESOLVED": { "type": "integer", "minimum": 0, "default": 0 },
+            "UNRESOLVED": { "type": "integer", "minimum": 0, "default": 0 }
           }
         },
         "merge_class_counts": {
           "type": "object",
           "description": "Merge classification breakdown for classified findings.",
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 0
-          }
+          "additionalProperties": { "type": "integer", "minimum": 0 }
         }
       }
     },
@@ -267,35 +125,17 @@
       "description": "Top findings requiring immediate action.",
       "items": {
         "type": "object",
-        "required": [
-          "id",
-          "severity",
-          "title",
-          "location"
-        ],
+        "required": ["id", "severity", "title", "location"],
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "severity": {
-            "$ref": "#/$defs/severity"
-          },
+          "id": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" },
           "merge_class": {
             "type": "string",
-            "enum": [
-              "blocking",
-              "non_blocking",
-              "out_of_scope_follow_up",
-              "disputed"
-            ]
+            "enum": ["blocking", "non_blocking", "out_of_scope_follow_up", "disputed"]
           },
-          "title": {
-            "type": "string"
-          },
-          "location": {
-            "type": "string"
-          },
+          "title": { "type": "string" },
+          "location": { "type": "string" },
           "location_permalink": {
             "type": "string",
             "format": "uri",
@@ -308,39 +148,21 @@
     "findings": {
       "type": "array",
       "description": "All findings grouped by section.",
-      "items": {
-        "$ref": "#/$defs/finding_section"
-      }
+      "items": { "$ref": "#/$defs/finding_section" }
     },
     "dependencies": {
       "type": "array",
       "description": "Dependency audit results.",
       "items": {
         "type": "object",
-        "required": [
-          "package",
-          "version"
-        ],
+        "required": ["package", "version"],
         "additionalProperties": false,
         "properties": {
-          "package": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          },
-          "advisories": {
-            "type": "string",
-            "description": "Known advisories (CVE, GHSA, RustSec, etc.) or 'None'"
-          },
-          "applicable": {
-            "type": "string",
-            "description": "Applicability assessment"
-          },
-          "ok": {
-            "type": "boolean",
-            "description": "true if no action needed"
-          }
+          "package": { "type": "string" },
+          "version": { "type": "string" },
+          "advisories": { "type": "string", "description": "Known advisories (CVE, GHSA, RustSec, etc.) or 'None'" },
+          "applicable": { "type": "string", "description": "Applicability assessment" },
+          "ok": { "type": "boolean", "description": "true if no action needed" }
         }
       }
     },
@@ -349,24 +171,12 @@
       "description": "Per-agent unique vs redundant finding counts.",
       "items": {
         "type": "object",
-        "required": [
-          "agent",
-          "unique",
-          "redundant"
-        ],
+        "required": ["agent", "unique", "redundant"],
         "additionalProperties": false,
         "properties": {
-          "agent": {
-            "type": "string"
-          },
-          "unique": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "redundant": {
-            "type": "integer",
-            "minimum": 0
-          }
+          "agent": { "type": "string" },
+          "unique": { "type": "integer", "minimum": 0 },
+          "redundant": { "type": "integer", "minimum": 0 }
         }
       }
     },
@@ -375,34 +185,18 @@
       "description": "Remediation priority buckets.",
       "items": {
         "type": "object",
-        "required": [
-          "label",
-          "count",
-          "priority"
-        ],
+        "required": ["label", "count", "priority"],
         "additionalProperties": false,
         "properties": {
-          "label": {
-            "type": "string",
-            "description": "e.g., 'Before Merge'"
-          },
-          "count": {
-            "type": "integer",
-            "minimum": 0
-          },
+          "label": { "type": "string", "description": "e.g., 'Before Merge'" },
+          "count": { "type": "integer", "minimum": 0 },
           "priority": {
             "type": "string",
-            "enum": [
-              "before_merge",
-              "before_production",
-              "post_deployment"
-            ]
+            "enum": ["before_merge", "before_production", "post_deployment"]
           },
           "finding_ids": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "description": "IDs of findings in this bucket"
           }
         }
@@ -413,18 +207,11 @@
       "description": "Triage decisions overlay. Added by triage-findings, absent in raw review output.",
       "additionalProperties": false,
       "properties": {
-        "triaged_by": {
-          "type": "string"
-        },
-        "triaged_at": {
-          "type": "string",
-          "format": "date-time"
-        },
+        "triaged_by": { "type": "string" },
+        "triaged_at": { "type": "string", "format": "date-time" },
         "decisions": {
           "type": "array",
-          "items": {
-            "$ref": "#/$defs/triage_decision"
-          }
+          "items": { "$ref": "#/$defs/triage_decision" }
         }
       }
     }
@@ -444,226 +231,105 @@
     },
     "finding": {
       "type": "object",
-      "required": [
-        "id",
-        "title",
-        "location",
-        "description",
-        "recommendation",
-        "likelihood",
-        "impact",
-        "relevance"
-      ],
+      "required": ["id", "title", "location", "description", "recommendation", "likelihood", "impact", "relevance"],
       "additionalProperties": false,
       "properties": {
         "id": {
           "type": "string",
           "pattern": "^(SEC|QA|PROJ|CODE|RUST|PY|GO|FE|DOC|CMT|DEP|PPM|CALL)-\\d{3}$",
-          "description": "Finding ID with category prefix (SEC\u2192security, PROJ\u2192project, CODE/RUST/PY/GO/FE/QA\u2192code_quality, DOC\u2192documentation, CMT\u2192pr_comments, DEP\u2192dependencies, PPM\u2192pr_promises, CALL\u2192call_tree)"
+          "description": "Finding ID with category prefix (SEC→security, PROJ→project, CODE/RUST/PY/GO/FE/QA→code_quality, DOC→documentation, CMT→pr_comments, DEP→dependencies, PPM→pr_promises, CALL→call_tree)"
         },
-        "severity": {
-          "$ref": "#/$defs/severity"
-        },
+        "severity": { "$ref": "#/$defs/severity" },
         "merge_class": {
           "type": "string",
-          "enum": [
-            "blocking",
-            "non_blocking",
-            "out_of_scope_follow_up",
-            "disputed"
-          ],
-          "description": "Merge classification \u2014 whether this finding prevents this PR from merging; orthogonal to severity."
+          "enum": ["blocking", "non_blocking", "out_of_scope_follow_up", "disputed"],
+          "description": "Merge classification — whether this finding prevents this PR from merging; orthogonal to severity."
         },
         "intent_basis": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "description": "Justification for a blocking class; null or absent otherwise. For merge_class=blocking this MUST cite the tripped blocker gate as 'G-ID: evidence' (e.g. 'G-SECRET: seed phrase written to debug log at wallet/import.rs:88') using a gate ID from severity_util.GATE_IDS \u2014 see skills/severity/SKILL.md \u00a72. A bare requirement quote is flagged by validate_report.py's consistency gate."
         },
-        "likelihood": {
-          "$ref": "#/$defs/severity_float",
-          "description": "Probability a real user or attacker reaches this defect under zone-realistic usage (1.0 happy path, ~0.7 workflow-plausible, ~0.4 edge case, ~0.1 pathological). See skills/severity/SKILL.md (source of truth)."
-        },
-        "impact": {
-          "$ref": "#/$defs/severity_float",
-          "description": "Worst plausible outcome, capped by the finding's backstop zone; blast radius folds in here (1.0 irreversible loss of funds/keys/data, ~0.7 recoverable loss or unrecoverable-stuck user, ~0.4 failed task or scary UX, ~0.1 cosmetic)."
-        },
-        "relevance": {
-          "$ref": "#/$defs/severity_float",
-          "description": "Fit to what this PR set out to do (1.0 the very thing, ~0.5 adjacent code the PR touched, ~0.1 pre-existing and unrelated, 0.0 informational). Drives merge_class and report ordering; deliberately NOT an input to overall_severity."
-        },
-        "overall_severity": {
-          "$ref": "#/$defs/severity_float",
-          "description": "Coordinator-computed mean of likelihood and impact."
-        },
+        "likelihood": { "$ref": "#/$defs/severity_float", "description": "Probability a real user or attacker reaches this defect under zone-realistic usage (1.0 happy path, ~0.7 workflow-plausible, ~0.4 edge case, ~0.1 pathological). See skills/severity/SKILL.md (source of truth)." },
+        "impact": { "$ref": "#/$defs/severity_float", "description": "Worst plausible outcome, capped by the finding's backstop zone; blast radius folds in here (1.0 irreversible loss of funds/keys/data, ~0.7 recoverable loss or unrecoverable-stuck user, ~0.4 failed task or scary UX, ~0.1 cosmetic)." },
+        "relevance": { "$ref": "#/$defs/severity_float", "description": "Fit to what this PR set out to do (1.0 the very thing, ~0.5 adjacent code the PR touched, ~0.1 pre-existing and unrelated, 0.0 informational). Drives merge_class and report ordering; deliberately NOT an input to overall_severity." },
+        "overall_severity": { "$ref": "#/$defs/severity_float", "description": "Coordinator-computed mean of likelihood and impact." },
         "author_type": {
           "type": "string",
-          "enum": [
-            "bot",
-            "human"
-          ],
+          "enum": ["bot", "human"],
           "description": "Comment author classification (check-pr-comments)."
         },
-        "title": {
-          "type": "string",
-          "minLength": 1
-        },
+        "title": { "type": "string", "minLength": 1 },
         "tags": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "description": "Classification tags (OWASP, CWE, Rust best-practice IDs, etc.)"
         },
         "cross_domain_hint": {
           "type": "string",
-          "description": "Peer reviewer role whose primary domain owns an issue this producer noticed incidentally (grumpy-review \u00a73), letting consolidation weigh the overlap."
+          "description": "Peer reviewer role whose primary domain owns an issue this producer noticed incidentally (grumpy-review §3), letting consolidation weigh the overlap."
         },
-        "location": {
-          "type": "string",
-          "minLength": 1,
-          "description": "file:start_line-end_line"
-        },
+        "location": { "type": "string", "minLength": 1, "description": "file:start_line-end_line" },
         "location_permalink": {
           "type": "string",
           "format": "uri",
           "pattern": "^https?://",
           "description": "Coordinator-constructed GitHub blob URL at metadata.commit (http/https only). Absent when commit/repository/parseable location is missing."
         },
-        "description": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Markdown-formatted description of the finding. May contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py."
-        },
-        "impact_description": {
-          "type": "string",
-          "description": "Markdown-formatted impact narrative. Same Markdown subset as description. Optional; the numeric impact field is separate."
-        },
-        "recommendation": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Markdown-formatted remediation guidance. Same Markdown subset as description."
-        },
+        "description": { "type": "string", "minLength": 1, "description": "Markdown-formatted description of the finding. May contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
+        "impact_description": { "type": "string", "description": "Markdown-formatted impact narrative. Same Markdown subset as description. Optional; the numeric impact field is separate." },
+        "recommendation": { "type": "string", "minLength": 1, "description": "Markdown-formatted remediation guidance. Same Markdown subset as description." },
         "code_snippets": {
           "type": "array",
           "minItems": 1,
           "description": "Producer-captured code excerpts illustrating the finding. Optional; absent when the producer captured none.",
           "items": {
             "type": "object",
-            "required": [
-              "content"
-            ],
+            "required": ["content"],
             "additionalProperties": false,
             "properties": {
-              "language": {
-                "type": "string",
-                "description": "Syntax-highlight hint, e.g., 'rust', 'python'."
-              },
-              "caption": {
-                "type": "string",
-                "description": "Short label, e.g., 'auth.rs:42-58'."
-              },
-              "content": {
-                "type": "string",
-                "description": "Verbatim code text. Renderers HTML-escape it; never treated as Markdown."
-              }
+              "language": { "type": "string", "description": "Syntax-highlight hint, e.g., 'rust', 'python'." },
+              "caption": { "type": "string", "description": "Short label, e.g., 'auth.rs:42-58'." },
+              "content": { "type": "string", "description": "Verbatim code text. Renderers HTML-escape it; never treated as Markdown." }
             }
           }
         },
-        "ai_assessment": {
-          "type": "string",
-          "description": "Validate-findings LLM rationale (Markdown)."
-        },
+        "ai_assessment": { "type": "string", "description": "Validate-findings LLM rationale (Markdown)." },
         "ai_verdict": {
           "type": "string",
-          "enum": [
-            "valid",
-            "false_positive",
-            "needs_investigation",
-            "out_of_scope",
-            "duplicate"
-          ],
+          "enum": ["valid", "false_positive", "needs_investigation", "out_of_scope", "duplicate"],
           "description": "Validate-findings LLM verdict."
         },
-        "ai_verdict_confidence": {
-          "$ref": "#/$defs/severity_float",
-          "description": "Validate-findings confidence in [0,1]. Renderers fade the verdict chip toward the page background as confidence drops."
-        },
-        "reviewer": {
-          "type": "string",
-          "description": "GitHub username of the comment author"
-        },
-        "comment_id": {
-          "type": "integer",
-          "description": "GitHub REST API comment database ID"
-        },
-        "comment_url": {
-          "type": "string",
-          "format": "uri",
-          "pattern": "^https?://",
-          "description": "Direct URL to the review comment on GitHub (https/http only)"
-        },
-        "thread_id": {
-          "type": "string",
-          "description": "GraphQL node ID for the review thread (used for resolving)"
-        },
+        "ai_verdict_confidence": { "$ref": "#/$defs/severity_float", "description": "Validate-findings confidence in [0,1]. Renderers fade the verdict chip toward the page background as confidence drops." },
+        "reviewer": { "type": "string", "description": "GitHub username of the comment author" },
+        "comment_id": { "type": "integer", "description": "GitHub REST API comment database ID" },
+        "comment_url": { "type": "string", "format": "uri", "pattern": "^https?://", "description": "Direct URL to the review comment on GitHub (https/http only)" },
+        "thread_id": { "type": "string", "description": "GraphQL node ID for the review thread (used for resolving)" },
         "verdict": {
           "type": "string",
-          "enum": [
-            "RESOLVED",
-            "UNRESOLVED"
-          ],
+          "enum": ["RESOLVED", "UNRESOLVED"],
           "description": "Whether the PR review comment has been addressed in code"
         }
       }
     },
     "finding_section": {
       "type": "object",
-      "required": [
-        "title",
-        "category",
-        "findings"
-      ],
+      "required": ["title", "category", "findings"],
       "additionalProperties": false,
       "properties": {
-        "title": {
-          "type": "string",
-          "description": "Section heading"
-        },
-        "subtitle": {
-          "type": "string"
-        },
+        "title": { "type": "string", "description": "Section heading" },
+        "subtitle": { "type": "string" },
         "category": {
           "type": "string",
-          "enum": [
-            "security",
-            "project",
-            "code_quality",
-            "call_tree",
-            "dependencies",
-            "documentation",
-            "pr_comments",
-            "pr_promises"
-          ]
+          "enum": ["security", "project", "code_quality", "call_tree", "dependencies", "documentation", "pr_comments", "pr_promises"]
         },
         "findings": {
           "type": "array",
-          "items": {
-            "$ref": "#/$defs/finding"
-          }
+          "items": { "$ref": "#/$defs/finding" }
         },
-        "positives": {
-          "type": "string",
-          "description": "Positive observations for this section"
-        },
+        "positives": { "type": "string", "description": "Positive observations for this section" },
         "verdict": {
           "type": "string",
-          "enum": [
-            "PASS",
-            "FAIL",
-            "NEEDS_REVIEW"
-          ],
+          "enum": ["PASS", "FAIL", "NEEDS_REVIEW"],
           "description": "Section-level audit verdict (review-pr Pass C)."
         }
       }
@@ -671,46 +337,22 @@
     "finding_section_array": {
       "type": "array",
       "description": "Producer-stage output containing finding sections before consolidation.",
-      "items": {
-        "$ref": "#/$defs/finding_section"
-      }
+      "items": { "$ref": "#/$defs/finding_section" }
     },
     "triage_decision": {
       "type": "object",
-      "required": [
-        "finding_id",
-        "action"
-      ],
+      "required": ["finding_id", "action"],
       "additionalProperties": false,
       "properties": {
-        "finding_id": {
-          "type": "string",
-          "description": "References a finding ID"
-        },
+        "finding_id": { "type": "string", "description": "References a finding ID" },
         "action": {
           "type": "string",
-          "enum": [
-            "fix",
-            "accept_risk",
-            "defer",
-            "false_positive",
-            "duplicate"
-          ]
+          "enum": ["fix", "accept_risk", "defer", "false_positive", "duplicate"]
         },
-        "rationale": {
-          "type": "string"
-        },
-        "assignee": {
-          "type": "string"
-        },
-        "due_date": {
-          "type": "string",
-          "format": "date"
-        },
-        "ticket": {
-          "type": "string",
-          "description": "Issue tracker reference"
-        },
+        "rationale": { "type": "string" },
+        "assignee": { "type": "string" },
+        "due_date": { "type": "string", "format": "date" },
+        "ticket": { "type": "string", "description": "Issue tracker reference" },
         "resolve_thread": {
           "type": "boolean",
           "default": false,
