@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.2.0",
+  "schema_version": "4.0.0",
   "metadata": {
     "project": "claudius",
     "date": "2026-07-15"
@@ -47,9 +47,9 @@
         {
           "id": "CODE-001",
           "severity": 2,
-          "risk": 0.2,
+          "likelihood": 0.2,
           "impact": 0.2,
-          "scope": 0.2,
+          "relevance": 0.2,
           "overall_severity": 0.2,
           "merge_class": "blocking",
           "intent_basis": "The PR acceptance criteria require this behavior.",
@@ -61,9 +61,9 @@
         {
           "id": "CODE-002",
           "severity": 1,
-          "risk": 0.0,
+          "likelihood": 0.0,
           "impact": 0.0,
-          "scope": 0.0,
+          "relevance": 0.0,
           "overall_severity": 0.0,
           "merge_class": "disputed",
           "intent_basis": null,
@@ -81,9 +81,9 @@
         {
           "id": "SEC-001",
           "severity": 4,
-          "risk": 0.8,
+          "likelihood": 0.8,
           "impact": 0.8,
-          "scope": 0.8,
+          "relevance": 0.8,
           "overall_severity": 0.8,
           "merge_class": "non_blocking",
           "title": "Hardening opportunity",

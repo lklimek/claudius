@@ -171,14 +171,14 @@ def test_html_markdown_falls_back_when_markdown_package_is_unavailable(
 
 
 # ---------------------------------------------------------------------------
-# v3 smoke test — round-trips a minimal report through every renderer to catch
+# Smoke test — round-trips a minimal report through every renderer to catch
 # accidental regressions in the field-renaming (`impact_description`) and the
-# new optional fields (`location_permalink`, `code_snippets`, AI fields).
+# optional fields (`location_permalink`, `code_snippets`, AI fields).
 # ---------------------------------------------------------------------------
-def test_v3_minimal_round_trips_through_all_renderers(tmp_path):
+def test_minimal_round_trips_through_all_renderers(tmp_path):
     import json as _json
 
-    fx = Path(__file__).resolve().parent / "fixtures" / "reports" / "v3-minimal.json"
+    fx = Path(__file__).resolve().parent / "fixtures" / "reports" / "v4-minimal.json"
     data = _json.loads(fx.read_text(encoding="utf-8"))
     md = grr.render_markdown(data)
     html = grr.render_html(data)
@@ -196,7 +196,7 @@ def test_v32_merge_class_round_trips_through_pdf(tmp_path):
 
     pypdf = pytest.importorskip("pypdf")
     fixture = (
-        Path(__file__).resolve().parent / "fixtures" / "reports" / "v3-merge-class.json"
+        Path(__file__).resolve().parent / "fixtures" / "reports" / "v4-merge-class.json"
     )
     data = _json.loads(fixture.read_text(encoding="utf-8"))
     out = tmp_path / "merge-class.pdf"

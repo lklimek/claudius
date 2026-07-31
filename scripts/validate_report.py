@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from severity_util import (  # noqa: E402
     derive_finding_severity,
     derive_severity_int,
+    migrate_legacy_floats,
     reject_non_finite_constant,
 )
 
@@ -41,6 +42,11 @@ DEFAULT_SCHEMA = (
 # meaningful, and only when a dimension is near-uniform — see check_consistency.
 _AXIS_MIN_FINDINGS = 5
 _AXIS_SHARE_THRESHOLD = 0.8
+_RATED_AXES = ("likelihood", "impact", "relevance")
+
+# Schema versions that define merge_class / intent_basis.
+_MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0")
+_MERGE_CLASS_VERSIONS_TEXT = " or ".join(_MERGE_CLASS_SCHEMA_VERSIONS)
 
 
 def _iter_findings(report: dict) -> list[dict]:
@@ -58,15 +64,15 @@ def check_consistency(report: dict) -> list[str]:
     """Return non-blocking ``[consistency]`` warnings for a schema-valid report.
 
     (i) Label/band mismatch — an explicit integer ``severity`` that disagrees
-    with the band recomputed from the finding's risk/impact/scope floats (and,
+    with the band recomputed from the finding's likelihood/impact floats (and,
     separately, from an explicit ``overall_severity`` when present).
-    (ii) Un-rated-axis smell — when one dimension (risk, impact, or scope) holds
-    an identical value across most findings, signalling it was defaulted rather
-    than rated per finding.
+    (ii) Un-rated-axis smell — when one dimension (likelihood, impact, or
+    relevance) holds an identical value across most findings, signalling it was
+    defaulted rather than rated per finding.
     (iii) Dismissed finding with a non-disputed merge classification.
     (iv) Blocking finding without the requirement or claim that makes it blocking.
     (v) Merge-classification fields — on findings, top_findings, or
-    summary_statistics — used with a pre-3.2.0 schema version.
+    summary_statistics — used with a schema version predating them.
 
     Warnings are advisory: callers print them but never fail validation.
     """
@@ -78,11 +84,11 @@ def check_consistency(report: dict) -> list[str]:
         schema_fields = [
             field for field in ("merge_class", "intent_basis") if field in f
         ]
-        if schema_fields and schema_version != "3.2.0":
+        if schema_fields and schema_version not in _MERGE_CLASS_SCHEMA_VERSIONS:
             warnings.append(
-                f"[consistency] finding {f.get('id', '?')}: 3.2.0-only fields "
-                f"({', '.join(schema_fields)}) require schema_version=3.2.0, "
-                f"not {schema_version}"
+                f"[consistency] finding {f.get('id', '?')}: merge-classification "
+                f"fields ({', '.join(schema_fields)}) require schema_version "
+                f"{_MERGE_CLASS_VERSIONS_TEXT}, not {schema_version}"
             )
 
         merge_class = f.get("merge_class")
@@ -114,7 +120,7 @@ def check_consistency(report: dict) -> list[str]:
             warnings.append(
                 f"[consistency] finding {f.get('id', '?')}: explicit severity={sev} "
                 f"disagrees with band {derived} computed from its floats "
-                f"(risk={f.get('risk')}, impact={f.get('impact')}, scope={f.get('scope')}); "
+                f"(likelihood={f.get('likelihood')}, impact={f.get('impact')}); "
                 "labels are derived — re-rate the floats, do not hand-set severity"
             )
         overall = f.get("overall_severity")
@@ -126,7 +132,7 @@ def check_consistency(report: dict) -> list[str]:
                     f"disagrees with overall_severity={float(overall):.3f} (band {overall_band})"
                 )
 
-    # 3.2.0-only additions can also appear outside per-section findings.
+    # Merge-classification fields also appear outside per-section findings.
     report_level_fields: list[str] = []
     top_findings = report.get("top_findings")
     if isinstance(top_findings, list) and any(
@@ -136,15 +142,15 @@ def check_consistency(report: dict) -> list[str]:
     summary_stats = report.get("summary_statistics")
     if isinstance(summary_stats, dict) and "merge_class_counts" in summary_stats:
         report_level_fields.append("summary_statistics.merge_class_counts")
-    if report_level_fields and schema_version != "3.2.0":
+    if report_level_fields and schema_version not in _MERGE_CLASS_SCHEMA_VERSIONS:
         warnings.append(
-            "[consistency] report: 3.2.0-only fields "
-            f"({', '.join(report_level_fields)}) require schema_version=3.2.0, "
-            f"not {schema_version}"
+            "[consistency] report: merge-classification fields "
+            f"({', '.join(report_level_fields)}) require schema_version "
+            f"{_MERGE_CLASS_VERSIONS_TEXT}, not {schema_version}"
         )
 
     if len(findings) >= _AXIS_MIN_FINDINGS:
-        for axis in ("risk", "impact", "scope"):
+        for axis in _RATED_AXES:
             values = [
                 f[axis]
                 for f in findings
@@ -156,8 +162,9 @@ def check_consistency(report: dict) -> list[str]:
             top_value, count = Counter(values).most_common(1)[0]
             if count / len(findings) >= _AXIS_SHARE_THRESHOLD:
                 extra = (
-                    " (scope = real blast radius, per claudius:severity)"
-                    if axis == "scope"
+                    " (relevance = fit to this PR's stated goal, per"
+                    " claudius:severity — it decides merge_class)"
+                    if axis == "relevance"
                     else ""
                 )
                 warnings.append(
@@ -225,6 +232,11 @@ def main() -> int:
     except ValueError as e:
         print(f"Invalid JSON in {args.report}: {e}", file=sys.stderr)
         return 2
+
+    # Validate the migrated shape: in-flight schema-v3 reports are accepted on
+    # read, but only the v4 float names are ever considered valid.
+    for warning in migrate_legacy_floats(report).warnings(args.report):
+        print(warning, file=sys.stderr)
 
     validator_cls = jsonschema.validators.validator_for(schema)
     # Enable format validation (e.g., "uri", "date", "date-time") so that

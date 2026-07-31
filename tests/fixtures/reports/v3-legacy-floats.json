@@ -1,0 +1,38 @@
+{
+  "schema_version": "3.2.0",
+  "metadata": {
+    "project": "claudius",
+    "date": "2026-05-26"
+  },
+  "executive_summary": {
+    "overall_assessment": "In-flight schema-v3 report: findings still carry risk/impact/scope. Accepted on read via severity_util.migrate_legacy_floats, never re-emitted in this shape."
+  },
+  "summary_statistics": {
+    "total_findings": 1,
+    "severity_counts": {
+      "CRITICAL": 0,
+      "HIGH": 1,
+      "MEDIUM": 0,
+      "LOW": 0,
+      "INFO": 0
+    }
+  },
+  "findings": [
+    {
+      "title": "Security Findings",
+      "category": "security",
+      "findings": [
+        {
+          "id": "SEC-001",
+          "risk": 0.8,
+          "impact": 0.8,
+          "scope": 1.0,
+          "title": "Legacy-float finding",
+          "location": "src/auth.rs:42-56",
+          "description": "A v3-shaped finding used to pin the deprecated read path.",
+          "recommendation": "Nothing to do — this is a fixture."
+        }
+      ]
+    }
+  ]
+}

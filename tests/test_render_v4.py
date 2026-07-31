@@ -64,12 +64,12 @@ def test_location_link_without_permalink():
 
 
 def test_severity_tooltip_with_floats():
-    f = {"overall_severity": 0.9, "risk": 0.8, "impact": 1.0, "scope": 1.0}
+    f = {"overall_severity": 0.9, "likelihood": 0.8, "impact": 1.0, "relevance": 1.0}
     tip = grr._severity_tooltip(f)
     assert "overall=0.90" in tip
-    assert "risk=0.80" in tip
+    assert "likelihood=0.80" in tip
     assert "impact=1.00" in tip
-    assert "scope=1.00" in tip
+    assert "relevance=1.00" in tip
 
 
 def test_severity_tooltip_absent_floats():
@@ -80,21 +80,21 @@ def test_severity_tooltip_absent_floats():
 # Markdown
 # ---------------------------------------------------------------------------
 def test_markdown_permalink_renders_as_link():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     md = grr.render_markdown(data)
     # SEC-001 has a permalink — location should appear inside a Markdown link.
     assert "[`src/auth.rs:42-56`](https://github.com/" in md
 
 
 def test_markdown_severity_breakdown_appended():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     md = grr.render_markdown(data)
-    # SEC-001 has overall=1.0 risk=1.0 impact=1.0 scope=1.0.
-    assert "overall=1.00" in md and "risk=1.00" in md
+    # SEC-001 has overall=1.0 likelihood=1.0 impact=1.0 relevance=1.0.
+    assert "overall=1.00" in md and "likelihood=1.00" in md
 
 
 def test_markdown_ai_block_present():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     md = grr.render_markdown(data)
     assert "AI Assessment" in md
     assert "verdict: valid" in md
@@ -102,7 +102,7 @@ def test_markdown_ai_block_present():
 
 
 def test_markdown_code_snippet_has_blank_lines_around_details_and_fence():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     md = grr.render_markdown(data)
     # Required for GitHub's renderer: blank line before `<details>`,
     # blank line after `<summary>`, blank line around fenced code, blank
@@ -115,7 +115,7 @@ def test_markdown_code_snippet_has_blank_lines_around_details_and_fence():
 
 
 def test_markdown_minimal_fixture_renders_cleanly():
-    data = _load("v3-minimal.json")
+    data = _load("v4-minimal.json")
     md = grr.render_markdown(data)
     # No `<details>` because no snippets; no AI Assessment block; no permalink.
     assert "<details>" not in md
@@ -125,7 +125,7 @@ def test_markdown_minimal_fixture_renders_cleanly():
 
 
 def test_markdown_merge_class_markers_and_summary_render():
-    md = grr.render_markdown(_load("v3-merge-class.json"))
+    md = grr.render_markdown(_load("v4-merge-class.json"))
     assert "🔴 BLOCKING" in md
     assert "[disputed]" in md
     assert "Merge classes:" in md
@@ -349,20 +349,20 @@ def test_markdown_snippet_description_passthrough_markdown():
 # HTML
 # ---------------------------------------------------------------------------
 def test_html_permalink_anchor():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     assert 'href="https://github.com/lklimek/claudius/blob/' in html
     assert 'target="_blank"' in html
 
 
 def test_html_severity_badge_tooltip():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
-    assert "overall=1.00 risk=1.00 impact=1.00 scope=1.00" in html
+    assert "overall=1.00 likelihood=1.00 impact=1.00 relevance=1.00" in html
 
 
 def test_html_ai_verdict_chip_present():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     assert "ai-verdict-chip" in html
     assert ">valid<" in html
@@ -373,7 +373,7 @@ def test_html_code_snippet_content_is_escaped():
     not Markdown-rendered. A `<script>` in the content must NOT survive as a
     live tag in the output.
     """
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     # Inject a script tag into a snippet content and confirm it's escaped.
     data["findings"][0]["findings"][0]["code_snippets"][0]["content"] = (
         "<script>alert('xss')</script>\nlet x = 1;"
@@ -383,14 +383,14 @@ def test_html_code_snippet_content_is_escaped():
     assert "<script>alert('xss')</script>" not in html
 
 
-def test_html_renders_visible_float_chips_for_v3_findings():
-    """Each finding with risk/impact/scope/overall_severity must surface
-    them as visible chips in HTML, not just hover-tooltip."""
+def test_html_renders_visible_float_chips():
+    """Each finding with likelihood/impact/relevance/overall_severity must
+    surface them as visible chips in HTML, not just hover-tooltip."""
     finding = {
         "id": "X-001",
-        "risk": 0.6,
+        "likelihood": 0.6,
         "impact": 0.7,
-        "scope": 1.0,
+        "relevance": 1.0,
         "overall_severity": 0.77,
         "severity": 4,
         "title": "T",
@@ -401,17 +401,17 @@ def test_html_renders_visible_float_chips_for_v3_findings():
     html = grr.render_html(_wrap_section(finding))
     # Chip text — visible, not just tooltip-attribute.
     assert "Overall 0.77" in html
-    assert "R 0.60" in html
+    assert "L 0.60" in html
     assert "I 0.70" in html
-    assert "S 1.00" in html
+    assert "R 1.00" in html
     # Tooltip-as-belt-and-braces still present.
-    assert 'title="overall=0.77 risk=0.60 impact=0.70 scope=1.00"' in html
+    assert 'title="overall=0.77 likelihood=0.60 impact=0.70 relevance=1.00"' in html
 
 
 def test_html_omits_chips_when_floats_absent():
     """A minimal finding with the float dimensions absent (legacy / relaxed
-    shape, NOT the v3 producer-shape contract which still requires
-    ``risk``/``impact``/``scope``) must NOT render empty chips or crash."""
+    shape, NOT the producer-shape contract, which still requires
+    ``likelihood``/``impact``/``relevance``) must NOT render empty chips."""
     finding = {
         "id": "X-001",
         "severity": 2,
@@ -427,19 +427,18 @@ def test_html_omits_chips_when_floats_absent():
 
 
 def test_html_chips_omit_when_floats_are_non_numeric():
-    """Defensive guard, NOT the v3 producer-shape contract: a legacy report
-    may carry a narrative string in ``impact`` (or any other float dimension)
+    """Defensive guard, NOT the producer-shape contract: a legacy report may
+    carry a narrative string in ``impact`` (or any other float dimension)
     instead of a number. The renderer must not crash and must omit the chip
-    for that non-numeric field while still rendering numeric peers. The
-    producer-shape contract under v3 still requires the floats to be numeric."""
+    for that non-numeric field while still rendering numeric peers."""
     finding = {
         "id": "X-001",
         # All four float dimensions as non-numeric. ``%.2f`` would raise
         # TypeError if the chip template tried to format these.
         "overall_severity": "high",
-        "risk": "likely",
+        "likelihood": "likely",
         "impact": "Allows remote code execution.",
-        "scope": None,  # already covered by ``is not none`` — sanity peer.
+        "relevance": None,  # already covered by ``is not none`` — sanity peer.
         "severity": 3,
         "title": "T",
         "location": "src/x.rs:1",
@@ -451,9 +450,9 @@ def test_html_chips_omit_when_floats_are_non_numeric():
     # None of the four chips should appear when their underlying value is
     # non-numeric.
     assert 'class="metric-chip metric-overall"' not in html
-    assert 'class="metric-chip metric-risk"' not in html
+    assert 'class="metric-chip metric-likelihood"' not in html
     assert 'class="metric-chip metric-impact"' not in html
-    assert 'class="metric-chip metric-scope"' not in html
+    assert 'class="metric-chip metric-relevance"' not in html
 
 
 def test_html_chips_partial_numeric_renders_only_numeric_dimensions():
@@ -462,9 +461,9 @@ def test_html_chips_partial_numeric_renders_only_numeric_dimensions():
     finding = {
         "id": "X-001",
         "overall_severity": 0.55,  # numeric — chip expected
-        "risk": "high",  # non-numeric — chip omitted
+        "likelihood": "high",  # non-numeric — chip omitted
         "impact": 0.8,  # numeric — chip expected
-        "scope": "broad",  # non-numeric — chip omitted
+        "relevance": "broad",  # non-numeric — chip omitted
         "severity": 3,
         "title": "T",
         "location": "src/x.rs:1",
@@ -474,8 +473,8 @@ def test_html_chips_partial_numeric_renders_only_numeric_dimensions():
     html = grr.render_html(_wrap_section(finding))
     assert "Overall 0.55" in html
     assert "I 0.80" in html
-    assert 'class="metric-chip metric-risk"' not in html
-    assert 'class="metric-chip metric-scope"' not in html
+    assert 'class="metric-chip metric-likelihood"' not in html
+    assert 'class="metric-chip metric-relevance"' not in html
 
 
 def test_triage_chips_omit_when_floats_are_non_numeric():
@@ -484,9 +483,9 @@ def test_triage_chips_omit_when_floats_are_non_numeric():
     finding = {
         "id": "X-001",
         "overall_severity": "high",
-        "risk": "likely",
+        "likelihood": "likely",
         "impact": "narrative",
-        "scope": "broad",
+        "relevance": "broad",
         "severity": 3,
         "title": "T",
         "location": "src/x.rs:1",
@@ -497,13 +496,13 @@ def test_triage_chips_omit_when_floats_are_non_numeric():
     assert 'class="metric-chip' not in triage
 
 
-def test_triage_renders_visible_float_chips_for_v3_findings():
+def test_triage_renders_visible_float_chips():
     """Triage view inherits from HTML template — chips must surface there too."""
     finding = {
         "id": "X-001",
-        "risk": 0.6,
+        "likelihood": 0.6,
         "impact": 0.7,
-        "scope": 1.0,
+        "relevance": 1.0,
         "overall_severity": 0.77,
         "severity": 4,
         "title": "T",
@@ -513,16 +512,16 @@ def test_triage_renders_visible_float_chips_for_v3_findings():
     }
     triage = grr.render_triage(_wrap_section(finding))
     assert "Overall 0.77" in triage
-    assert "R 0.60" in triage
+    assert "L 0.60" in triage
     assert "I 0.70" in triage
-    assert "S 1.00" in triage
+    assert "R 1.00" in triage
 
 
 def test_html_data_overall_and_data_ai_verdict_present():
     """The non-triage HTML carries `data-overall` (float, for sort) and
     `data-ai-verdict` (AI verdict, for filter). The comment-check
     `data-verdict` lives only on triage pages."""
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     assert 'data-overall="1.0"' in html
     assert 'data-ai-verdict="valid"' in html
@@ -531,13 +530,13 @@ def test_html_data_overall_and_data_ai_verdict_present():
 def test_html_ai_verdict_filter_uses_distinct_id():
     """The AI verdict filter must use `filterAiVerdict`, distinct from the
     comment-check `verdictFilter` id, so both can coexist."""
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     assert 'id="filterAiVerdict"' in html
 
 
 def test_html_sort_by_overall_option_and_default():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     # Option present.
     assert '<option value="overall"' in html
@@ -547,7 +546,7 @@ def test_html_sort_by_overall_option_and_default():
 
 def test_html_minimal_fixture_renders_cleanly():
     """Graceful degradation: no permalinks, no snippets, no AI fields."""
-    data = _load("v3-minimal.json")
+    data = _load("v4-minimal.json")
     html = grr.render_html(data)
     assert "ai-verdict-chip" not in html  # no AI fields
     assert "<details><summary>" not in html  # no snippets
@@ -604,7 +603,7 @@ def test_html_verdict_chip_gradient_differs_between_high_and_low_confidence():
     """A confidence=0.95 chip and a confidence=0.3 chip must render with
     distinct background colors — proves the gradient logic flows through
     to the rendered markup."""
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     # SEC-001 has valid @ 0.95; CODE-001 has valid @ 0.3. The chip background
     # for the latter is heavily faded toward BG_LIGHT.
@@ -619,13 +618,13 @@ def test_html_verdict_chip_gradient_differs_between_high_and_low_confidence():
 # Triage
 # ---------------------------------------------------------------------------
 def test_triage_has_ai_verdict_filter():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_triage(data)
     assert 'id="filterAiVerdict"' in html
 
 
 def test_triage_minimal_renders():
-    data = _load("v3-minimal.json")
+    data = _load("v4-minimal.json")
     html = grr.render_triage(data)
     assert "<html" in html
     assert "ai-verdict-chip" not in html
@@ -701,7 +700,7 @@ def test_triage_finding_data_category_preserves_origin_category():
 def test_markdown_matrix_includes_call_tree_column():
     """Stream A: the Markdown scoreboard table must surface the new
     call_tree category column (driven by CATEGORY_LABELS)."""
-    data = _load("v3-call-tree.json")
+    data = _load("v4-call-tree.json")
     # The fixture has no pre-computed matrix; compute one to drive the renderer.
     import sys as _sys
     from pathlib import Path as _Path
@@ -731,7 +730,7 @@ def test_html_includes_call_tree_in_filter_chip_and_js_labels():
     filter dropdown, the Chart.js category-label list, and the JS catLabels
     lookup — otherwise findings in that category render but can never be
     filtered or scored against."""
-    data = _load("v3-call-tree.json")
+    data = _load("v4-call-tree.json")
     html = grr.render_html(data)
     # Filter <option> for category dropdown.
     assert '<option value="call_tree">Call-Tree Inspection</option>' in html
@@ -746,14 +745,14 @@ def test_html_includes_call_tree_in_filter_chip_and_js_labels():
 def test_triage_includes_call_tree_in_filter_and_data_attribute():
     """The triage renderer shares the template; the filter chip and
     per-finding data-category must carry call_tree there too."""
-    data = _load("v3-call-tree.json")
+    data = _load("v4-call-tree.json")
     html = grr.render_triage(data)
     assert '<option value="call_tree">Call-Tree Inspection</option>' in html
     assert 'data-category="call_tree"' in html
 
 
 def test_pdf_full_renders(tmp_path):
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     out = tmp_path / "out.pdf"
     grr.render_pdf(data, out)
     assert out.is_file()
@@ -761,7 +760,7 @@ def test_pdf_full_renders(tmp_path):
 
 
 def test_pdf_minimal_renders(tmp_path):
-    data = _load("v3-minimal.json")
+    data = _load("v4-minimal.json")
     out = tmp_path / "min.pdf"
     grr.render_pdf(data, out)
     assert out.is_file()
@@ -789,7 +788,7 @@ def test_pdf_short_snippet_not_truncated():
 # Pre-computed verdict chip background on context
 # ---------------------------------------------------------------------------
 def test_build_html_context_precomputes_chip_bg():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     ctx = grr._build_html_context(data)
     # The first section's first finding has ai_verdict + confidence.
     sec = ctx["findings"][0]
@@ -799,7 +798,7 @@ def test_build_html_context_precomputes_chip_bg():
 
 
 def test_build_html_context_omits_chip_bg_when_no_verdict():
-    data = _load("v3-minimal.json")
+    data = _load("v4-minimal.json")
     ctx = grr._build_html_context(data)
     f = ctx["findings"][0]["findings"][0]
     assert f.get("_verdict_chip_bg") is None or "_verdict_chip_bg" not in f
@@ -834,9 +833,9 @@ def _producer_shape_report() -> dict:
                 "findings": [
                     {
                         "id": "CODE-001",
-                        "risk": 0.4,
+                        "likelihood": 0.4,
                         "impact": 0.4,
-                        "scope": 1.0,
+                        "relevance": 1.0,
                         "title": "Producer-shape finding",
                         "location": "src/example.rs:10-20",
                         "description": "Producer emitted no coordinator-derived fields.",
@@ -902,7 +901,7 @@ def test_normalize_realigns_total_findings_with_rebuilt_counts():
 def test_normalize_fills_overall_severity_and_band_from_floats():
     """Regression: a producer-shape finding (floats only, no `severity`, no
     `overall_severity`) must come out of `_normalize_report` with BOTH
-    `overall_severity == mean(risk, impact, scope)` AND the correct integer
+    `overall_severity == mean(likelihood, impact)` AND the correct integer
     band — otherwise the Markdown overall suffix and HTML `data-overall` sort
     key stay empty."""
     report = _producer_shape_report()
@@ -912,9 +911,10 @@ def test_normalize_fills_overall_severity_and_band_from_floats():
 
     grr._normalize_report(report)
 
-    expected_overall = (f["risk"] + f["impact"] + f["scope"]) / 3.0
+    expected_overall = (f["likelihood"] + f["impact"]) / 2.0
     assert f["overall_severity"] == pytest.approx(expected_overall)
-    # risk=0.4, impact=0.4, scope=1.0 -> overall=0.6 -> MEDIUM band (3).
+    # likelihood=0.4, impact=0.4 -> overall=0.4 -> MEDIUM band (3); relevance
+    # 1.0 is deliberately excluded from the mean.
     assert f["severity"] == 3
 
 
@@ -929,7 +929,7 @@ def test_normalize_fills_overall_severity_when_only_int_severity_present():
 
     grr._normalize_report(report)
 
-    expected_overall = (f["risk"] + f["impact"] + f["scope"]) / 3.0
+    expected_overall = (f["likelihood"] + f["impact"]) / 2.0
     assert f["overall_severity"] == pytest.approx(expected_overall)
     assert f["severity"] == 4  # pre-existing valid int severity preserved
 
@@ -939,7 +939,7 @@ def test_normalize_fills_overall_severity_when_only_int_severity_present():
 # float; `impact_description` carries the narrative.
 # ---------------------------------------------------------------------------
 def test_markdown_uses_impact_description_not_impact_float():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     md = grr.render_markdown(data)
     # SEC-001's narrative lives in impact_description.
     assert "Anyone with disk access can recover production credentials." in md
@@ -948,7 +948,7 @@ def test_markdown_uses_impact_description_not_impact_float():
 
 
 def test_html_uses_impact_description_not_impact_float():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     assert "Anyone with disk access can recover production credentials." in html
     # If we accidentally rendered the float, we'd see ">1.0<" inside the Impact dd.
@@ -969,7 +969,7 @@ def test_html_uses_impact_description_not_impact_float():
 def test_triage_renders_decision_ui_for_every_finding():
     """Every finding card in --format triage must carry an action dropdown,
     a rationale input, and a decision-hint span."""
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     finding_count = sum(len(sec["findings"]) for sec in data["findings"])
     assert finding_count > 0, "fixture must contain at least one finding"
     html = grr.render_triage(data)
@@ -982,7 +982,7 @@ def test_triage_renders_data_verdict_attribute_on_findings():
     """The triage filter for comment-check verdicts depends on each finding
     div carrying `data-verdict=...`. This used to be patched in by a separate
     `.replace()`; it now lives in the template behind `{% if triage %}`."""
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     finding_count = sum(len(sec["findings"]) for sec in data["findings"])
     html = grr.render_triage(data)
     assert html.count("data-verdict=") == finding_count
@@ -991,7 +991,7 @@ def test_triage_renders_data_verdict_attribute_on_findings():
 def test_html_does_not_render_triage_decision_ui():
     """Inverse: the plain `--format html` view must NOT contain the per-finding
     decision dropdown or rationale input — those belong only to triage."""
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     assert 'class="triage-action"' not in html
     assert 'class="triage-rationale"' not in html
@@ -1077,9 +1077,9 @@ def test_render_markdown_empty_returns_empty_markup():
 
 
 def test_html_merge_class_chip_attribute_and_filter_in_base_and_triage():
-    data = _load("v3-merge-class.json")
+    data = _load("v4-merge-class.json")
     html = grr.render_html(data)
-    triage = grr.render_triage(_load("v3-merge-class.json"))
+    triage = grr.render_triage(_load("v4-merge-class.json"))
 
     for output in (html, triage):
         assert 'id="filterMergeClass"' in output
@@ -1123,10 +1123,10 @@ def test_html_merge_class_chips_use_shared_foreground_and_background(merge_class
 
 
 def test_absent_merge_class_has_no_chip_marker_or_data_attribute():
-    data = _load("v3-minimal.json")
+    data = _load("v4-minimal.json")
     md = grr.render_markdown(data)
-    html = grr.render_html(_load("v3-minimal.json"))
-    triage = grr.render_triage(_load("v3-minimal.json"))
+    html = grr.render_html(_load("v4-minimal.json"))
+    triage = grr.render_triage(_load("v4-minimal.json"))
     assert "🔴 BLOCKING" not in md
     assert 'class="merge-class-chip"' not in html
     assert "data-merge-class" not in html
@@ -1156,7 +1156,7 @@ def test_html_end_to_end_strips_script_in_description():
 # malicious `latest` publish would run arbitrary JS in the report's origin).
 # ---------------------------------------------------------------------------
 def test_html_does_not_load_chartjs_from_unpinned_cdn():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     assert 'src="https://cdn.jsdelivr.net/npm/chart.js"' not in html
     assert "cdn.jsdelivr.net/npm/chart.js<" not in html
@@ -1166,7 +1166,7 @@ def test_html_does_not_load_chartjs_from_unpinned_cdn():
 
 def test_html_inlines_vendored_chartjs():
     """Chart.js must be embedded inline (self-contained) and drives real charts."""
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_html(data)
     assert "Chart.js v4.5.1" in html  # vendored UMD banner proves inline embed
     assert "new Chart(" in html  # chart-drawing code still present
@@ -1188,7 +1188,7 @@ def test_vendored_chartjs_matches_pinned_sha256():
 
 
 def test_triage_does_not_load_chartjs_from_unpinned_cdn():
-    data = _load("v3-full.json")
+    data = _load("v4-full.json")
     html = grr.render_triage(data)
     assert 'src="https://cdn.jsdelivr.net/npm/chart.js"' not in html
     assert "Chart.js v4.5.1" in html

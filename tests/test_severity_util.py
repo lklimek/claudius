@@ -13,7 +13,7 @@ import severity_util as su
 
 
 # ---------------------------------------------------------------------------
-# derive_finding_severity — band mapping through the complete float-trio path.
+# derive_finding_severity — band mapping through the likelihood/impact path.
 # Exact threshold values must remain in their intended bands even when the
 # arithmetic mean lands an IEEE-754 epsilon below the mathematical boundary.
 # ---------------------------------------------------------------------------
@@ -29,40 +29,63 @@ class TestDeriveFindingSeverity:
         ],
     )
     def test_band_mapping(self, value, expected):
-        f = {"risk": value, "impact": value, "scope": value}
+        f = {"likelihood": value, "impact": value, "relevance": value}
         assert su.derive_finding_severity(f) == expected
 
     def test_mixed_dimensions_use_mean(self):
-        # mean of 1.0/0.7/1.0 = 0.9 -> CRITICAL band.
-        assert (
-            su.derive_finding_severity({"risk": 1.0, "impact": 0.7, "scope": 1.0}) == 5
-        )
+        # mean of 1.0/0.8 = 0.9 -> CRITICAL band.
+        assert su.derive_finding_severity({"likelihood": 1.0, "impact": 0.8}) == 5
 
-    @pytest.mark.parametrize("missing", ["risk", "impact", "scope"])
+    @pytest.mark.parametrize("missing", ["likelihood", "impact"])
     def test_any_missing_returns_none(self, missing):
-        f = {"risk": 0.5, "impact": 0.5, "scope": 0.5}
+        f = {"likelihood": 0.5, "impact": 0.5, "relevance": 0.5}
         del f[missing]
         assert su.derive_finding_severity(f) is None
 
     def test_non_numeric_returns_none(self):
-        f = {"risk": "high", "impact": 0.5, "scope": 0.5}
+        f = {"likelihood": "high", "impact": 0.5, "relevance": 0.5}
         assert su.derive_finding_severity(f) is None
 
     def test_bool_is_not_numeric(self):
-        f = {"risk": True, "impact": 0.5, "scope": 0.5}
+        f = {"likelihood": True, "impact": 0.5, "relevance": 0.5}
         assert su.derive_finding_severity(f) is None
 
-    @pytest.mark.parametrize("axis", ["risk", "impact", "scope"])
+    @pytest.mark.parametrize("axis", ["likelihood", "impact"])
     @pytest.mark.parametrize(
         "bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
     )
     def test_non_finite_dimension_returns_none(self, axis, bad):
-        """A NaN scope must NOT silently sink a CRITICAL finding to INFO, nor may
-        +Infinity force it to CRITICAL — non-finite floats yield None (can't derive)."""
-        f = {"risk": 0.95, "impact": 0.95, "scope": 0.95}
+        """A NaN dimension must NOT silently sink a CRITICAL finding to INFO, nor
+        may +Infinity force it to CRITICAL — non-finite floats yield None."""
+        f = {"likelihood": 0.95, "impact": 0.95, "relevance": 0.95}
         f[axis] = bad
         assert su.derive_overall(f) is None
         assert su.derive_finding_severity(f) is None
+
+
+# ---------------------------------------------------------------------------
+# relevance is excluded from the severity math (severity skill § Derivation):
+# it rates fit to the PR's goal, not how bad the defect is.
+# ---------------------------------------------------------------------------
+class TestRelevanceExcludedFromMath:
+    @pytest.mark.parametrize("relevance", [0.0, 0.1, 0.5, 1.0, "unrated", None])
+    def test_relevance_never_moves_the_band(self, relevance):
+        f = {"likelihood": 1.0, "impact": 1.0, "relevance": relevance}
+        assert su.derive_overall(f) == 1.0
+        assert su.derive_finding_severity(f) == 5
+
+    def test_absent_relevance_still_derives(self):
+        assert su.derive_finding_severity({"likelihood": 0.8, "impact": 0.8}) == 4
+
+    def test_preexisting_catastrophe_is_not_laundered_to_medium(self):
+        """A CRITICAL defect the PR did not introduce stays CRITICAL. Under the
+        old 3-term mean, relevance 0.1 dragged 1.0/1.0 down to 0.7."""
+        f = {"likelihood": 1.0, "impact": 1.0, "relevance": 0.1}
+        assert su.derive_finding_severity(f) == 5
+
+    def test_non_finite_relevance_does_not_block_derivation(self):
+        f = {"likelihood": 0.5, "impact": 0.5, "relevance": float("nan")}
+        assert su.derive_overall(f) == 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -71,8 +94,8 @@ class TestDeriveFindingSeverity:
 class TestPrimitives:
     def test_derive_overall_mean(self):
         assert su.derive_overall(
-            {"risk": 0.6, "impact": 0.9, "scope": 0.3}
-        ) == pytest.approx((0.6 + 0.9 + 0.3) / 3.0)
+            {"likelihood": 0.6, "impact": 0.9, "relevance": 0.3}
+        ) == pytest.approx((0.6 + 0.9) / 2.0)
 
     @pytest.mark.parametrize(
         "overall,expected",
@@ -102,8 +125,8 @@ class TestBuildSeverityStats:
             {
                 "category": "pr_comments",
                 "findings": [
-                    {"risk": 0.8, "impact": 0.8, "scope": 1.0},  # HIGH
-                    {"risk": 0.4, "impact": 0.4, "scope": 0.4},  # MEDIUM
+                    {"likelihood": 0.8, "impact": 0.8, "relevance": 1.0},  # HIGH
+                    {"likelihood": 0.4, "impact": 0.4, "relevance": 0.4},  # MEDIUM
                 ],
             }
         ]
@@ -113,13 +136,15 @@ class TestBuildSeverityStats:
         assert stats["severity_counts"]["MEDIUM"] == 1
 
     def test_derived_floats_preferred_over_conflicting_explicit_severity(self):
-        # The float trio is the single source of truth (severity skill
-        # doctrine): a derived band wins even over a conflicting explicit
-        # integer, matching cmd_assemble's precedence in consolidate_reports.py.
+        # The floats are the single source of truth (severity skill doctrine):
+        # a derived band wins even over a conflicting explicit integer,
+        # matching cmd_assemble's precedence in consolidate_reports.py.
         sections = [
             {
                 "category": "security",
-                "findings": [{"severity": 5, "risk": 0.0, "impact": 0.0, "scope": 0.0}],
+                "findings": [
+                    {"severity": 5, "likelihood": 0.0, "impact": 0.0, "relevance": 0.0}
+                ],
             }
         ]
         stats = su.build_severity_stats(sections)
@@ -145,11 +170,15 @@ class TestBuildSeverityStats:
         sections = [
             {
                 "category": "pr_comments",
-                "findings": [{"risk": 0.8, "impact": 0.8, "scope": 1.0}],  # HIGH
+                "findings": [
+                    {"likelihood": 0.8, "impact": 0.8, "relevance": 1.0}
+                ],  # HIGH
             },
             {
                 "category": "security",
-                "findings": [{"risk": 0.95, "impact": 0.95, "scope": 1.0}],  # CRITICAL
+                "findings": [
+                    {"likelihood": 0.95, "impact": 0.95, "relevance": 1.0}
+                ],  # CRITICAL
             },
         ]
         stats = su.build_severity_stats(sections)
@@ -182,16 +211,16 @@ class TestRejectNonFiniteConstant:
         """Wired as parse_constant, bare non-finite literals raise ValueError."""
         with pytest.raises(ValueError):
             json.loads(
-                f'{{"scope": {literal}}}',
+                f'{{"relevance": {literal}}}',
                 parse_constant=su.reject_non_finite_constant,
             )
 
     def test_default_json_loads_would_accept_nan(self):
         """Guard rationale: without the callback, json silently decodes NaN."""
-        assert math.isnan(json.loads('{"scope": NaN}')["scope"])
+        assert math.isnan(json.loads('{"relevance": NaN}')["relevance"])
 
     def test_finite_json_still_parses(self):
         data = json.loads(
-            '{"scope": 0.5}', parse_constant=su.reject_non_finite_constant
+            '{"relevance": 0.5}', parse_constant=su.reject_non_finite_constant
         )
-        assert data == {"scope": 0.5}
+        assert data == {"relevance": 0.5}

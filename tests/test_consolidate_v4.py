@@ -149,9 +149,9 @@ class TestAssembleDerivations:
                         "location": "src/a.rs:1-5",
                         "description": "D",
                         "recommendation": "R",
-                        "risk": 1.0,
+                        "likelihood": 1.0,
                         "impact": 1.0,
-                        "scope": 1.0,
+                        "relevance": 1.0,
                     },
                     {
                         "severity": 5,
@@ -159,9 +159,9 @@ class TestAssembleDerivations:
                         "location": "src/b.rs:1-5",
                         "description": "D",
                         "recommendation": "R",
-                        "risk": 0.0,
+                        "likelihood": 0.0,
                         "impact": 0.0,
-                        "scope": 0.0,
+                        "relevance": 0.0,
                     },
                 ],
             }
@@ -202,9 +202,9 @@ class TestAssembleDerivations:
                         "location": "src/a.rs:10-20",
                         "description": "D",
                         "recommendation": "R",
-                        "risk": 0.5,
+                        "likelihood": 0.5,
                         "impact": 0.5,
-                        "scope": 0.5,
+                        "relevance": 0.5,
                     }
                 ],
             }
@@ -239,9 +239,9 @@ class TestAssembleDerivations:
                         "location": "src/a.rs:10-20",
                         "description": "D",
                         "recommendation": "R",
-                        "risk": 0.5,
+                        "likelihood": 0.5,
                         "impact": 0.5,
-                        "scope": 0.5,
+                        "relevance": 0.5,
                     }
                 ],
             }
@@ -273,9 +273,9 @@ class TestAssembleDerivations:
                         "location": "src/m.rs:1",
                         "description": "D",
                         "recommendation": "R",
-                        "risk": 0.5,
+                        "likelihood": 0.5,
                         "impact": 0.5,
-                        "scope": 0.5,
+                        "relevance": 0.5,
                     },
                     {
                         "severity": 1,
@@ -283,9 +283,9 @@ class TestAssembleDerivations:
                         "location": "src/t.rs:1",
                         "description": "D",
                         "recommendation": "R",
-                        "risk": 1.0,
+                        "likelihood": 1.0,
                         "impact": 1.0,
-                        "scope": 1.0,
+                        "relevance": 1.0,
                     },
                     {
                         "severity": 1,
@@ -293,9 +293,9 @@ class TestAssembleDerivations:
                         "location": "src/b.rs:1",
                         "description": "D",
                         "recommendation": "R",
-                        "risk": 0.0,
+                        "likelihood": 0.0,
                         "impact": 0.0,
-                        "scope": 0.0,
+                        "relevance": 0.0,
                     },
                 ],
             }
