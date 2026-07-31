@@ -21,8 +21,9 @@ import generate_review_report as grr  # noqa: E402
 import severity_util as su  # noqa: E402
 import validate_report as vr  # noqa: E402
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures" / "reports"
-LEGACY_FIXTURE = FIXTURES / "v3-legacy-floats.json"
+LEGACY_FIXTURE = (
+    Path(__file__).resolve().parent / "fixtures" / "legacy" / "v3-legacy-floats.json"
+)
 
 
 def _v3_finding(**over: object) -> dict:
@@ -147,6 +148,98 @@ class TestCollisionsKeepTheHigherValue:
         f = _v3_finding(risk=1.0, impact=1.0, scope=0.1)
         su.migrate_legacy_floats(_envelope([f]))
         assert su.derive_finding_severity(f) == 5
+
+
+class TestV3InformationalFindingsTakeTheFloor:
+    """The pre-v4 informational convention was `risk = impact = 0.1, scope = 0.0`
+    for praise, verified-clean passes and RESOLVED comments. It derived to 0.067
+    (INFO) under the three-term mean and derives to 0.1 (LOW) under the two-term
+    one, so a straight rename refiles every settled comment in an in-flight
+    report as open LOW work.
+    """
+
+    def _informational(self, **over: object) -> dict:
+        return _v3_finding(**{"risk": 0.1, "impact": 0.1, "scope": 0.0, **over})
+
+    def test_v3_informational_lands_on_the_floor(self):
+        f = self._informational()
+        report = su.migrate_legacy_floats(_envelope([f]))
+        assert f["likelihood"] == 0.0
+        assert f["impact"] == 0.0
+        assert f["relevance"] == 0.0
+        assert f["severity"] == 1
+        assert report.floored == ["CODE-001"]
+
+    def test_without_the_floor_it_would_have_become_low(self):
+        """Pins the defect: renaming alone gives 0.1 -> LOW."""
+        assert su.derive_finding_severity({"likelihood": 0.1, "impact": 0.1}) == 2
+
+    def test_floored_finding_is_not_counted_as_relevance_defaulted(self):
+        report = su.migrate_legacy_floats(_envelope([self._informational()]))
+        assert report.relevance_defaulted == []
+
+    def test_floor_is_reported_in_its_own_warning(self):
+        lines = su.migrate_legacy_floats(_envelope([self._informational()])).warnings(
+            "r.json"
+        )
+        floor_lines = [ln for ln in lines if "Informational floor" in ln]
+        assert len(floor_lines) == 1
+        assert "CODE-001" in floor_lines[0]
+
+    @pytest.mark.parametrize(
+        "over",
+        [
+            {"scope": 0.2},  # a real, if narrow, blast radius
+            {"risk": 0.2},  # above the informational ceiling
+            {"impact": 0.4},
+            {"likelihood": 0.1},  # half-migrated: ambiguous, use the normal path
+            {"relevance": 0.1},
+            {"risk": "low"},
+        ],
+    )
+    def test_non_informational_trios_are_untouched_by_the_heuristic(self, over):
+        f = self._informational(**over)
+        report = su.migrate_legacy_floats(_envelope([f]))
+        assert report.floored == []
+
+    def test_heuristic_cannot_demote_anything_above_info(self):
+        """Safety argument, executed: every trio the heuristic matches already
+        derived to INFO under the v3 three-term mean, so flooring it cannot
+        lower a band that was ever above INFO."""
+        for risk in (0.0, 0.05, 0.1):
+            for impact in (0.0, 0.05, 0.1):
+                assert su.derive_severity_int((risk + impact + 0.0) / 3.0) == 1
+
+
+class TestUnusableFloatsFailHigh:
+    """`derive_overall` returning None used to resolve to INFO — the one band
+    meaning "no action required" — in a tool whose damaging failure is
+    under-reporting.
+    """
+
+    def test_surviving_dimension_sets_the_band(self):
+        assert su._effective_severity({"likelihood": 1.0}) == 5
+        assert su._effective_severity({"impact": 1.0}) == 5
+
+    def test_highest_of_dimension_and_explicit_severity_wins(self):
+        assert su._effective_severity({"likelihood": 1.0, "severity": 2}) == 5
+        assert su._effective_severity({"likelihood": 0.0, "severity": 4}) == 4
+
+    def test_no_usable_signal_still_falls_to_info(self):
+        assert su._effective_severity({"title": "x"}) == 1
+
+    def test_non_finite_dimension_is_not_usable(self):
+        assert su._effective_severity({"likelihood": float("inf")}) == 1
+
+    def test_scope_only_v3_finding_is_reported_not_silently_info(self):
+        """The shim triggers on `risk` OR `scope`; a scope-only finding leaves
+        migration with no likelihood, which must be announced."""
+        f = _v3_finding(impact=1.0)
+        del f["risk"]
+        report = su.migrate_legacy_floats(_envelope([f]))
+        assert report.likelihood_missing == ["CODE-001"]
+        assert su._effective_severity(f) == 5
+        assert any("no usable 'likelihood'" in ln for ln in report.warnings("r.json"))
 
 
 class TestStaleLabelsAreRecomputed:
@@ -351,9 +444,42 @@ class TestLegacyFixtureThroughValidateReport:
         captured = capsys.readouterr()
 
         assert code == 0
-        assert "Valid:" in captured.out
+        assert captured.out.startswith("Valid (after schema-v3 migration;")
         assert "[deprecated]" in captured.err
         assert "RE-RATE REQUIRED" in captured.err
+
+    def test_verdict_does_not_certify_the_on_disk_file(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A bare `Valid: <path>` claims the bytes on disk passed. They did not
+        — the file is still v3 and the v4 schema rejects it outright."""
+        path = tmp_path / "legacy.json"
+        path.write_text(LEGACY_FIXTURE.read_text(encoding="utf-8"))
+        monkeypatch.setattr(sys, "argv", ["validate_report.py", str(path)])
+
+        assert vr.main() == 0
+        out = capsys.readouterr().out
+        assert "on-disk file is v3" in out
+        assert not out.startswith("Valid: ")
+
+    def test_strict_v4_rejects_a_migrated_file(self, tmp_path, monkeypatch, capsys):
+        path = tmp_path / "legacy.json"
+        path.write_text(LEGACY_FIXTURE.read_text(encoding="utf-8"))
+        monkeypatch.setattr(
+            sys, "argv", ["validate_report.py", str(path), "--strict-v4"]
+        )
+
+        assert vr.main() == 1
+        captured = capsys.readouterr()
+        assert "--strict-v4" in captured.err
+        assert "Valid" not in captured.out
+
+    def test_strict_v4_accepts_a_clean_v4_report(self, tmp_path, monkeypatch, capsys):
+        v4 = ROOT / "tests" / "fixtures" / "reports" / "v4-full.json"
+        monkeypatch.setattr(sys, "argv", ["validate_report.py", str(v4), "--strict-v4"])
+
+        assert vr.main() == 0
+        assert capsys.readouterr().out.startswith("Valid: ")
 
     def test_unmigrated_fixture_fails_the_schema(self, tmp_path, monkeypatch, capsys):
         """Proves the shim is what saves it: bypass the migration and the v3
@@ -364,7 +490,7 @@ class TestLegacyFixtureThroughValidateReport:
         monkeypatch.setattr(
             vr,
             "migrate_legacy_floats",
-            lambda data: su.LegacyFloatMigration([], [], []),
+            lambda data: su.LegacyFloatMigration([], [], [], [], []),
         )
 
         assert vr.main() == 1
