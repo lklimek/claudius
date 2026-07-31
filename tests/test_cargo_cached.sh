@@ -50,6 +50,13 @@
 #   K43 Claude Code session env     -> preferred ledger session identity
 #   K44 Claude session env fallback -> ledger session identity remains attributable
 #   K45 no session env              -> ledger records "unknown", never empty
+#   K46 cap 1, 2 concurrent builds  -> intervals never overlap
+#   K47 cap 2, 3 concurrent builds  -> at most 2 inside cargo at once
+#   K48 cap unset, 3 concurrent     -> default cap of 2 applies
+#   K49 invalid cap (abc/0/-3)      -> falls back to 2, never uncapped
+#   K50 replay while slots saturated-> returns at once, never queues for a slot
+#   K51 flock absent                -> cap skipped, both builds run concurrently
+#   K52 unopenable slot files       -> warns once per process and runs uncapped
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -65,6 +72,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 export CLAUDIUS_CACHE_DIR="$WORK/cache"   # ledger lives here, outside the repo
 unset CLAUDIUS_TARGET_PREFIX
+unset CLAUDIUS_MAX_PARALLEL_BUILDS   # K48 asserts the built-in default cap
 COUNTER="$WORK/counter"; echo 0 > "$COUNTER"; export COUNTER
 # Fixed "canonical" target dir the stub reports for `cargo metadata` — the wrapper
 # derives each checkout's isolated dir UNDER this (see K19-K24).
@@ -76,7 +84,8 @@ export STUB_TARGET_DIR="$WORK/canonical-target"
 # subcommand is a real run: count it, echo an identifiable line, and echo the
 # effective CARGO_TARGET_DIR so the isolation tests can see what got derived.
 # STUB_SLEEP fakes a real compile's wall clock, STUB_RC its verdict — both default
-# to the fast/green stub the key-logic cases (K1-K6) rely on.
+# to the fast/green stub the key-logic cases (K1-K6) rely on. STUB_MARKER records
+# this run's wall-clock interval for the build-slot cap cases (K46-K51).
 STUBDIR="$WORK/bin"; mkdir -p "$STUBDIR"
 cat > "$STUBDIR/cargo" <<'EOF'
 #!/usr/bin/env bash
@@ -90,11 +99,30 @@ if [ "${1:-}" = metadata ]; then
   echo "{\"target_directory\":\"${STUB_TARGET_DIR:-$HOME/target}\"}"
   exit 0
 fi
+# "<START|END> <label> <epoch-ms>" into the shared marker file. flock keeps
+# concurrent writers apart where it exists; K51 deliberately runs without it and
+# relies on O_APPEND atomicity for these short lines.
+mark() {
+  [ -n "${STUB_MARKER:-}" ] || return 0
+  local line ms
+  # Milliseconds, trimmed by hand: `%3N` is a GNU width modifier that uutils
+  # coreutils `date` ignores, and raw nanoseconds (19 digits) exceed the integer
+  # precision `sort -n`/awk carry when the reader reconstructs the timeline.
+  ms=$(date +%s%N); ms=${ms%??????}
+  line=$(printf '%s %s %s' "$1" "${STUB_LABEL:-?}" "$ms")
+  if command -v flock >/dev/null 2>&1; then
+    printf '%s\n' "$line" | flock "$STUB_MARKER" tee -a "$STUB_MARKER" >/dev/null
+  else
+    printf '%s\n' "$line" >> "$STUB_MARKER"
+  fi
+}
 n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"
 echo "STUB CARGO INVOCATION $n: $*"
 echo "STUB_TGT=${CARGO_TARGET_DIR:-}"           # what the wrapper auto-derived/kept
 echo "STUB_SCC_BASEDIRS=${SCCACHE_BASEDIRS:-}"  # what the wrapper set for sccache
+mark START
 [ "${STUB_SLEEP:-0}" != 0 ] && sleep "${STUB_SLEEP}"
+mark END
 exit "${STUB_RC:-0}"
 EOF
 chmod +x "$STUBDIR/cargo"
@@ -879,6 +907,150 @@ if [ "$RC" = 0 ] && [ "$session45" = "unknown" ]; then
   ok "K45 missing session identity recorded as unknown"
 else
   bad "K45 (rc=$RC session='$session45' out='${OUT//$'\n'/ }')"
+fi
+
+# --- Machine-wide build-slot cap (K46-K51) ----------------------------------
+# Each probe launches N concurrent REAL runs that share one ledger (= one slot
+# namespace) but carry DISTINCT commands, so none can replay or dedup another and
+# every one of them reaches the slot gate. Distinct commands rather than distinct
+# untracked files: a file created while a sibling run is hashing the tree would
+# race the key computation itself, whereas the command tail is per-process.
+slot_probe() {  # $1=cache dir $2=runs $3=stub sleep $4..=extra env; echoes marker file
+  local cache="$1" count="$2" nap="$3"; shift 3
+  local marker="$cache.markers" i
+  local pids=()
+  : > "$marker"
+  for (( i = 0; i < count; i++ )); do
+    ( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$cache" \
+        CLAUDIUS_FORCE=0 STUB_SLEEP="$nap" STUB_MARKER="$marker" STUB_LABEL="p$i" \
+        "$@" "$BASHBIN" "$WRAPPER" test "--probe-$i" ) >"$cache.out-$i" 2>&1 &
+    pids+=($!)
+  done
+  wait "${pids[@]}"
+  printf '%s' "$marker"
+}
+
+# Peak number of stub runs simultaneously inside cargo. END sorts before START at
+# an identical millisecond (the -k1,1 tiebreak), so a clean hand-off from one
+# slot holder to the next never reads as an overlap.
+peak_concurrency() {  # $1=marker file
+  sort -k3,3n -k1,1 "$1" | awk '$1=="START"{if (++c > m) m = c} $1=="END"{c--} END{print m + 0}'
+}
+
+echo "=== K46: CLAUDIUS_MAX_PARALLEL_BUILDS=1 keeps two concurrent real builds apart ==="
+marker=$(slot_probe "$WORK/cache-k46" 2 3 CLAUDIUS_MAX_PARALLEL_BUILDS=1)
+starts=$(grep -c '^START' "$marker"); ends=$(grep -c '^END' "$marker")
+peak=$(peak_concurrency "$marker")
+# Exactly one notice in total: the waiter says it on its first missed sweep and
+# never again, so a human tailing the output sees "waiting", not a retry loop.
+notices=$(cat "$WORK/cache-k46.out-"* | grep -c "build slots busy")
+if [ "$starts" = 2 ] && [ "$ends" = 2 ] && [ "$peak" = 1 ] && [ "$notices" = 1 ]; then
+  ok "K46 cap 1: both builds ran, intervals never overlapped, one wait notice"
+else
+  bad "K46 (starts=$starts ends=$ends peak=$peak notices=$notices marker='$(tr '\n' ' ' < "$marker")')"
+fi
+
+echo "=== K47: cap 2 admits exactly two of three concurrent real builds at a time ==="
+marker=$(slot_probe "$WORK/cache-k47" 3 4 CLAUDIUS_MAX_PARALLEL_BUILDS=2)
+starts=$(grep -c '^START' "$marker")
+peak=$(peak_concurrency "$marker")
+if [ "$starts" = 3 ] && [ "$peak" = 2 ]; then
+  ok "K47 cap 2: all three builds ran, never more than two at once"
+else
+  bad "K47 (starts=$starts peak=$peak marker='$(tr '\n' ' ' < "$marker")')"
+fi
+
+echo "=== K48: with the cap unset the built-in default of 2 applies ==="
+marker=$(slot_probe "$WORK/cache-k48" 3 4)
+starts=$(grep -c '^START' "$marker")
+peak=$(peak_concurrency "$marker")
+if [ "$starts" = 3 ] && [ "$peak" = 2 ]; then
+  ok "K48 default cap: three concurrent builds ran two at a time"
+else
+  bad "K48 (starts=$starts peak=$peak marker='$(tr '\n' ' ' < "$marker")')"
+fi
+
+echo "=== K49: an invalid cap falls back to the default, it never uncaps the host ==="
+# Non-numeric, zero and negative are all "the user meant nothing usable" — the
+# host must stay protected rather than accept 0/-3 as "unlimited" or abort.
+k49_detail=""
+for v in abc 0 -3; do
+  marker=$(slot_probe "$WORK/cache-k49-$v" 3 3 CLAUDIUS_MAX_PARALLEL_BUILDS="$v")
+  starts=$(grep -c '^START' "$marker")
+  peak=$(peak_concurrency "$marker")
+  [ "$starts" = 3 ] && [ "$peak" = 2 ] || k49_detail+=" [$v: starts=$starts peak=$peak]"
+done
+if [ -z "$k49_detail" ]; then
+  ok "K49 caps 'abc', '0' and '-3' each behaved like the default of 2"
+else
+  bad "K49 ($k49_detail)"
+fi
+
+echo "=== K50: a cache replay is never gated on a build slot ==="
+# Seed a verdict, then hold the only slot with a long real build on a DIFFERENT
+# key. The replay must answer immediately instead of queueing behind the build.
+K50CACHE="$WORK/cache-k50"
+( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K50CACHE" \
+    CLAUDIUS_FORCE=0 "$BASHBIN" "$WRAPPER" test --k50-cached ) >/dev/null 2>&1
+( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K50CACHE" \
+    CLAUDIUS_FORCE=0 CLAUDIUS_MAX_PARALLEL_BUILDS=1 STUB_SLEEP=8 \
+    "$BASHBIN" "$WRAPPER" test --k50-blocker ) >/dev/null 2>&1 &
+p50=$!
+sleep 2   # let the blocker take the only slot before the replay starts
+start=$(date +%s)
+OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K50CACHE" \
+       CLAUDIUS_FORCE=0 CLAUDIUS_MAX_PARALLEL_BUILDS=1 \
+       "$BASHBIN" "$WRAPPER" test --k50-cached 2>&1 ); RC=$?
+elapsed=$(( $(date +%s) - start ))
+wait "$p50"
+if [ "$RC" = 0 ] && [ "$elapsed" -lt 4 ] && grep -q "CACHED verification" <<<"$OUT"; then
+  ok "K50 replay answered in ${elapsed}s while the only slot was held by a live build"
+else
+  bad "K50 (rc=$RC elapsed=${elapsed}s out='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K51: without flock the cap is skipped entirely (fail open) ==="
+NOFLOCKBIN="$WORK/no-flock-bin"; mkdir -p "$NOFLOCKBIN"
+for t in bash cat cut date env find git grep jq mkdir mv rm sha256sum sleep sort stat tail tee timeout tr xargs; do
+  src=$(command -v "$t" 2>/dev/null) && ln -sf "$src" "$NOFLOCKBIN/$t"
+done
+ln -sf "$STUBDIR/cargo" "$NOFLOCKBIN/cargo"   # deliberately no flock in $NOFLOCKBIN
+K51MARKER="$WORK/markers-k51"; : > "$K51MARKER"
+k51_pids=()
+for label in a b; do
+  ( cd "$REPO" && env -i PATH="$NOFLOCKBIN" HOME="$WORK" \
+      CLAUDIUS_CACHE_DIR="$WORK/cache-k51" COUNTER="$COUNTER" \
+      STUB_TARGET_DIR="$STUB_TARGET_DIR" CLAUDIUS_MAX_PARALLEL_BUILDS=1 \
+      CLAUDIUS_FORCE=0 STUB_SLEEP=3 STUB_MARKER="$K51MARKER" STUB_LABEL="$label" \
+      "$BASHBIN" "$WRAPPER" test "--k51-$label" ) >/dev/null 2>&1 &
+  k51_pids+=($!)
+done
+wait "${k51_pids[@]}"
+starts=$(grep -c '^START' "$K51MARKER")
+peak=$(peak_concurrency "$K51MARKER")
+if [ "$starts" = 2 ] && [ "$peak" = 2 ]; then
+  ok "K51 flock absent: both real builds ran concurrently (cap skipped, fail open)"
+else
+  bad "K51 (starts=$starts peak=$peak marker='$(tr '\n' ' ' < "$K51MARKER")')"
+fi
+
+echo "=== K52: unopenable slot files fail open instead of queueing forever ==="
+# A slot file owned by someone else in a shared ledger is unopenable (mode 000
+# denies its owner too). Waiting on a slot this process can never take would hang
+# every build on the host, so the cap must stand aside and say so.
+K52CACHE="$WORK/cache-k52"
+mkdir -p "$K52CACHE/ledger/locks"
+: > "$K52CACHE/ledger/locks/build-slot-0.lock"
+chmod 000 "$K52CACHE/ledger/locks/build-slot-0.lock"
+marker=$(slot_probe "$K52CACHE" 2 3 CLAUDIUS_MAX_PARALLEL_BUILDS=1)
+chmod 600 "$K52CACHE/ledger/locks/build-slot-0.lock"
+starts=$(grep -c '^START' "$marker")
+peak=$(peak_concurrency "$marker")
+notices=$(cat "$K52CACHE.out-"* | grep -c "no usable build slot")
+if [ "$starts" = 2 ] && [ "$peak" = 2 ] && [ "$notices" = 2 ]; then
+  ok "K52 unusable slot files: both builds ran uncapped, each warning once"
+else
+  bad "K52 (starts=$starts peak=$peak notices=$notices marker='$(tr '\n' ' ' < "$marker")')"
 fi
 
 echo ""

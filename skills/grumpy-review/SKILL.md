@@ -95,6 +95,7 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 8. **Full roster**: list every teammate name, role/focus, and file scope in this fan-out, including conditional and scaled reviewers; state that all listed peers are already live so agents do not pause to ask or spawn duplicates
 9. **Cross-domain hints**: passively report any issue noticed in a peer's primary domain rather than hunting outside the assigned scope, silently duplicating it, or omitting it; tag the finding with `cross_domain_hint: "<peer-role>"` so consolidation can weigh the overlap
 10. **UI-text scan**: scan the diff's user-visible strings — labels, buttons, toasts, dialogs, error messages — for raw exception text, stack traces, error codes, internal jargon, or alarming wording on a benign condition; these trip `G-UI-TEXT` (`claudius:severity`)
+11. **Context Digest** (verbatim, when the invoker supplied one — defined in `review-pr` § Context Digest; never restate or reinvent its contents): pass it as its own numbered item with this rule attached — *the digest adjusts scoring (via `claudius:severity`'s non-adversarial `likelihood` recipe), it never suppresses reporting: report the finding with context-adjusted floats, never drop it; a field marked `unknown` changes nothing.*
 
 ### Finding format (JSON)
 
@@ -216,7 +217,7 @@ Read `intermediate.json` and decide:
 1. **Duplicate resolution**: per `duplicate_groups` entry, merge (keep the most detailed description, union tags) or keep separate. Remove redundant findings.
 2. **INTENTIONAL downgrade**: downgrade each `intentional_downgrades` finding to `INFO` — deliberate engineering decisions from previous triage.
 3. **Severity re-evaluation**: load the `severity` skill (`/severity`), then re-assess every finding strictly against its criteria — agents often over-inflate.
-4. **Merge classification**: assign `merge_class` per `severity` skill § Merge Classification — `blocking` only when a blocker gate trips, with `intent_basis` naming the gate ID plus one line of evidence. Use the intent digest when the invoker supplied one (review-pr) for `G-INTENT` judgment; with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Severity never determines `merge_class`. Escalate to the human explicitly (never silently defer) any pre-existing finding tripping `G-FUNDS`/`G-SECRET`/`G-CRYPTO`/`G-DATA`.
+4. **Merge classification**: assign `merge_class` per `severity` skill § Merge Classification — `blocking` only when a blocker gate trips, with `intent_basis` naming the gate ID plus one line of evidence. Use the intent digest when the invoker supplied one (review-pr) for `G-INTENT` judgment; with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Apply the digest as a coordinator-side backstop too: re-check any finding whose floats ignore an evidenced operational-profile claim a producer plainly didn't have (`severity` skill § `likelihood`). Severity never determines `merge_class`. Escalate to the human explicitly (never silently defer) any pre-existing finding tripping `G-FUNDS`/`G-SECRET`/`G-CRYPTO`/`G-DATA`.
 5. **Merge sections**: combine same-category agent sections into unified sections.
 6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding.
 7. **Agent stats**: copy `intermediate.json`'s `agent_stats` array verbatim into `merged-findings.json` — `prepare` already computes it; do not hand-author or reshape it.
@@ -304,6 +305,8 @@ python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR
 ```
 
 Produces `report.md` next to the JSON file.
+
+When presenting results, filter the consolidated findings for `merge_class == "out_of_scope_follow_up"` and name that list to the user as deferral candidates — nothing files them, so an unmentioned deferral is an invisible one (`claudius:severity` § `out_of_scope_follow_up`).
 
 ### 5f. Stop reviewer processes
 

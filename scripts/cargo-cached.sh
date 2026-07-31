@@ -12,6 +12,8 @@
 #
 # Ledger location is portable — NEVER hardcoded. A user who wants it elsewhere
 # (e.g. a big disk) sets CLAUDIUS_CACHE_DIR; otherwise it follows the XDG cache.
+# CLAUDIUS_FORCE=1 skips replay; CLAUDIUS_MAX_PARALLEL_BUILDS (default 2) caps how
+# many REAL cargo runs execute at once across every wrapper sharing that ledger.
 set -uo pipefail
 
 CACHE_ROOT="${CLAUDIUS_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claudius}"
@@ -334,6 +336,72 @@ if [[ -f "$RECORDS" ]] && (( RANDOM % 20 == 0 )); then
   done < "$RECORDS"
   mv "$tmp_records" "$RECORDS" 2>/dev/null || rm -f "$tmp_records" 2>/dev/null
 fi
+
+# --- Machine-wide build-slot cap -------------------------------------------
+# Per-checkout target dirs (top of script) cost the machine an accidental safety
+# net: while every checkout shared ONE target dir, cargo's own lock on it let a
+# single real build run at a time host-wide, incidentally bounding memory. With a
+# dir per checkout, N concurrent agents each fan out a full parallel rustc/linker
+# build and peak memory scales with N until the host OOMs. So bound it on purpose
+# here: at most CLAUDIUS_MAX_PARALLEL_BUILDS real cargo runs at once across every
+# wrapper process sharing this ledger. Anyone re-tightening the isolation feature
+# later must keep this — the two together are what make concurrency survivable.
+# Deliberately placed AFTER both replay attempts (a cache hit costs nothing and
+# must never queue) and BEFORE the `start=` stopwatch below, so time spent queued
+# never inflates the duration the fake-green guard judges. Lock order is one-way
+# (per-key lock, then slot), so a slot
+# holder never waits on a per-key lock and the two namespaces cannot deadlock.
+# The wait is unbounded, unlike the dedup lock's `-w 100`: real builds hold a slot
+# for minutes, and a cap that expires under load is not a cap — it hands every
+# queued agent a build at once, which is the OOM this exists to prevent. A waiter
+# killed by its caller's tool timeout simply retries; it holds no slot meanwhile.
+#
+# Slot count. Same base-10 care as fake_green_min(): a leading zero (=08) would
+# otherwise be an arithmetic error, and 0/negative/garbage must degrade to the
+# default rather than silently uncapping the host. The regex rejects signs and
+# non-digits; the >0 test catches the zero the regex accepts.
+max_parallel_builds() {
+  local max="${CLAUDIUS_MAX_PARALLEL_BUILDS:-2}"
+  [[ "$max" =~ ^[0-9]+$ ]] || max=2
+  max=$(( 10#$max ))
+  (( max > 0 )) || max=2
+  printf '%s' "$max"
+}
+
+# Take a slot and HOLD it for the rest of this process's life: the open fd IS the
+# lock, so the kernel releases it on exit and no path can leak one. `{fd}` lets
+# bash allocate the descriptor, which cannot collide with the dedup lock's fd 9.
+# A bare `exec {fd}>f 2>/dev/null` would mute stderr PERMANENTLY, hence the brace
+# group; a failed open returns 1 there (it does not abort the shell), so the sweep
+# can simply move on to the next slot.
+acquire_build_slot() {
+  local max fd i opened notified=0
+  max=$(max_parallel_builds)
+  while :; do
+    opened=0
+    for (( i = 0; i < max; i++ )); do
+      { exec {fd}>"$LEDGER_DIR/locks/build-slot-$i.lock"; } 2>/dev/null || continue
+      opened=1
+      flock -n "$fd" 2>/dev/null && return 0
+      exec {fd}>&-
+    done
+    # Not one slot file was even openable (e.g. another user owns them in a shared
+    # ledger): fail open like every other infrastructure failure here, rather than
+    # spinning forever on a slot this process can never take.
+    if (( ! opened )); then
+      echo "claudius: WARNING: no usable build slot in $LEDGER_DIR/locks; running uncapped" >&2
+      return 0
+    fi
+    if (( ! notified )); then   # once, not per retry: a tail should read as waiting, not looping
+      echo "=== all $max build slots busy; waiting for one (raise CLAUDIUS_MAX_PARALLEL_BUILDS to widen) ==="
+      notified=1
+    fi
+    sleep 2
+  done
+}
+# flock is Linux/util-linux; without it the cap is skipped (fail open, exactly as
+# the dedup lock above degrades).
+if command -v flock >/dev/null 2>&1; then acquire_build_slot; fi
 
 # --- Miss: run for real, capture full log, record the outcome --------------
 # PID suffix avoids two concurrent identical runs in the same second colliding

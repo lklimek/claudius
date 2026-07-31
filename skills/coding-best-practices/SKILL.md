@@ -38,6 +38,7 @@ Use the `report-format` skill for output structure. IDs are provisional (consoli
 ## Cross-Cutting Rules
 
 - **Minimize code**: prefer the shortest correct solution — fewer lines, less to maintain.
+- **Proportionate remediation**: match fix scope to the finding's operational reality (Context Digest — `review-pr` § Context Digest — or the finding's own evidence) — the smallest change that closes the actual manifestation; a general-purpose redesign requires evidence the general case is real.
 - **Verify facts before acting on broad instructions**: broad directives ("ship it", "resolve all", "fix everything", "clean up the comments") express intent, not authorization to override observed reality. Verify actual state before resolving, deferring, or declaring done. If facts contradict the instruction's premise (unfixed thread, incomplete task, failing test), surface the mismatch and ask — never silently postpone or fabricate completion.
 - **No tombstone comments**: never add comments explaining removed code — git history is the record.
 - **Comment only when meaningful**: only comments providing context not obvious from the code. When one *is* needed: 1 line is great, 2 good, 3 mediocre — needing more means the code should be clearer.

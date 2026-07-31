@@ -78,6 +78,14 @@ Probability that a real user or attacker reaches this defect under zone-realisti
 | `~0.4` | Edge case, unusual sequence, unlucky timing |
 | `~0.1` | Pathological only — requires deliberate, unrealistic effort |
 
+**Non-adversarial findings** (correctness, concurrency, robustness — no attacker in the story) have no threat agent, and improvising one inflates every such finding. Place them on the ladder using the operational reality instead:
+
+- **Execution frequency** of the affected path — per-request hot path is near `1.0`; occasional background job mid-ladder; one-time admin-triggered migration near the bottom
+- **Precondition probability** — triggered by ordinary input is high; needs unusual config or rare input is mid; requires concurrent callers that structurally cannot exist in the deployment is bottom
+- **Triggering actor** — any user or untrusted automation is high; internal automation mid; deliberate action by a trusted operator low
+
+🔴 **Evidence rule** — a low operational score MUST cite its evidence: the reviewer's own call-tree/entry-point trace (already mandatory, see `grumpy-review`), a Context Digest claim carrying evidence (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence for the operational reality, score generically — the same rating the finding would get with no context at all. This axis lowers a score only on evidence, never on assumption, and it never suppresses a finding; it adjusts the floats, and the finding is still reported.
+
 ### `impact` — how bad is the worst plausible outcome?
 
 Capped by the backstop zone (§1). Blast radius folds in here — a defect reaching every user is worse than one reaching a rare code path.
@@ -165,7 +173,9 @@ trips any blocker gate (§2), reachable through
   this PR's code paths                             → blocking
 relevance ≥ ~0.5 (in or adjacent to the change)    → non_blocking
 must not survive this review — leaving it in the
-  codebase indefinitely is unacceptable            → non_blocking
+  codebase indefinitely is unacceptable
+    fixing it grows the PR beyond its stated intent → out_of_scope_follow_up
+    otherwise                                      → non_blocking
 otherwise (acceptable to leave permanently)        → out_of_scope_follow_up
 ```
 
@@ -181,6 +191,7 @@ Other pre-existing issues block only when the PR relies on them, worsens them, o
 
 Read the class as **"acceptable to never fix"**, not "fix later":
 
+- Because nothing files them, deferrals MUST be surfaced: name the deferred list to the user when presenting results (grumpy-review §5e). An unmentioned deferral is an invisible one, and a user cannot accept a risk they never saw.
 - Deferring a finding *because* someone will presumably pick it up later is a mis-classification — that assumption is false. If a finding genuinely must be fixed, classify it for fixing now: `blocking` when a gate trips, `non_blocking` otherwise.
 - It stays correct only where permanent non-fix is acceptable: unrelated pre-existing nits, speculative hardening, taste.
 - The tradeoff is deliberate: this bias grows PRs and puts more work in front of authors — accepted in exchange for not laundering real defects into a backlog that does not exist.
