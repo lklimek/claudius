@@ -135,7 +135,9 @@ def derive_finding_severity(finding: dict[str, Any]) -> int | None:
     """Return the integer band for a finding carrying likelihood and impact.
 
     Returns None when either float is absent or non-numeric, signalling the
-    caller to fall back to an explicit ``severity`` (or INFO).
+    caller to resolve severity some other way — see :func:`_effective_severity`,
+    which then prefers the highest surviving dimension or an explicit
+    ``severity`` over falling through to INFO.
     """
     overall = derive_overall(finding)
     if overall is None:
@@ -211,8 +213,9 @@ def sanitize_log_value(value: Any, limit: int = _LOG_VALUE_MAX) -> str:
     Finding ``id``/``title`` reach log lines that a coordinator parses, and
     migration runs before schema validation, so the values are unconstrained at
     this point. Control characters — newlines above all — let a hostile finding
-    forge whole log records (``Valid: report.json``); strip them and cap the
-    length so one finding cannot flood or spoof the stream.
+    forge whole log records (``Valid: report.json``); they collapse to spaces
+    and the result is length-capped, so one finding can neither spoof a record
+    nor flood the stream.
     """
     text = "" if value is None else value if isinstance(value, str) else str(value)
     # Space, not deletion: removing the separator runs neighbouring words
@@ -391,12 +394,17 @@ def _is_v3_informational(finding: dict[str, Any]) -> bool:
 def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
     """Rewrite schema-v3 severity floats onto their v4 names, in place.
 
-    ``risk`` becomes ``likelihood``; ``scope`` is dropped, never carried into
-    ``relevance``, which instead defaults to ``DEFAULT_MIGRATED_RELEVANCE``
-    ("adjacent to the change") so the finding classifies ``non_blocking`` and
-    reaches a human rather than being auto-deferred. Each pair resolves by its
-    own rule when both names are present — see :func:`_merge_same_quantity` and
-    :func:`_discard_legacy_axis`.
+    ``risk`` becomes ``likelihood``, taking the higher value when both names
+    are present (:func:`_merge_same_quantity`).
+
+    ``scope`` is always dropped and never contributes its value to
+    ``relevance``, which resolves by exactly three cases: a producer-supplied
+    ``relevance`` is kept unchanged however low; a finding matching the v3
+    informational convention takes the Informational floor of exact zeros
+    (:func:`_is_v3_informational`); anything else gets
+    ``DEFAULT_MIGRATED_RELEVANCE`` ("adjacent to the change"), which classifies
+    ``non_blocking`` so the finding reaches a human rather than being
+    auto-deferred.
 
     Any ``severity``/``overall_severity`` on a migrated finding was computed
     under the v3 three-term mean, so it is recomputed from the v4 floats —

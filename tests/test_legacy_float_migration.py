@@ -25,6 +25,9 @@ LEGACY_FIXTURE = (
     Path(__file__).resolve().parent / "fixtures" / "legacy" / "v3-legacy-floats.json"
 )
 
+# Distinguishes "key omitted" from "key present and None" in parametrized cases.
+_ABSENT = object()
+
 
 def _v3_finding(**over: object) -> dict:
     f = {
@@ -138,6 +141,24 @@ class TestCollisionsResolveBySemantics:
         report = su.migrate_legacy_floats(_envelope([f]))
         assert f["relevance"] == su.DEFAULT_MIGRATED_RELEVANCE
         assert report.collisions == []
+
+    @pytest.mark.parametrize("scope", [0.0, 0.1, 0.5, 1.0, None, "wide"])
+    @pytest.mark.parametrize("relevance", [_ABSENT, 0.0, 0.1, 0.5, 1.0])
+    def test_scope_never_contributes_a_value_to_relevance(self, scope, relevance):
+        """The invariant over every combination rather than one example: no
+        input makes a v3 blast radius become PR-fit. A supplied `relevance` is
+        kept exactly; an absent one defaults. This is the defect that started
+        the thread, so it is pinned exhaustively rather than by sample."""
+        over: dict = {"scope": scope}
+        if relevance is not _ABSENT:
+            over["relevance"] = relevance
+        f = _v3_finding(**over)
+
+        su.migrate_legacy_floats(_envelope([f]))
+
+        expected = su.DEFAULT_MIGRATED_RELEVANCE if relevance is _ABSENT else relevance
+        assert f["relevance"] == expected
+        assert "scope" not in f
 
     def test_agreeing_values_are_not_a_collision(self):
         f = _v3_finding(risk=0.8, likelihood=0.8)

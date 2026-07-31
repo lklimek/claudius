@@ -88,7 +88,9 @@ def check_consistency(report: dict) -> list[str]:
     separately, from an explicit ``overall_severity`` when present).
     (ii) Un-rated-axis smell — when one dimension (likelihood, impact, or
     relevance) holds an identical value across most findings, signalling it was
-    defaulted rather than rated per finding.
+    defaulted rather than rated per finding. Informational-floor findings are
+    excluded from the sample: their exact zeros are a mandated rating, not a
+    default.
     (iii) Dismissed finding with a non-disputed merge classification.
     (iv) Blocking finding without the requirement or claim that makes it blocking.
     (v) Merge-classification fields — on findings, top_findings, or
