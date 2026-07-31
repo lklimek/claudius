@@ -1,19 +1,19 @@
 ---
 name: validate-findings
-description: "This skill should be used when a coordinator performs the LLM validation pass on a consolidated v3 findings report. It adds ai_assessment, ai_verdict, and ai_verdict_confidence and, in the rare partial-producer case, re-estimates missing likelihood, impact, and relevance. Coordinator-only."
+description: "This skill should be used when a coordinator performs the LLM validation pass on a consolidated v4 findings report. It adds ai_assessment, ai_verdict, and ai_verdict_confidence and, in the rare partial-producer case, re-estimates missing likelihood, impact, and relevance. Coordinator-only."
 allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(*consolidate_reports.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
 model: inherit
 ---
 
 # Validate Findings
 
-Opt-in coordinator-only LLM validation pass over a consolidated v3 report: adds AI assessment, verdict, and confidence per finding. Under the v3 contract producers emit `likelihood`/`impact`/`relevance` themselves, so the typical run leaves the floats untouched; re-estimate them only when the consolidator left them absent (partial producer output that still satisfied the schema). NOT part of the automatic review pipeline — invoke after `consolidate_reports.py assemble` when a triage-quality validation pass is wanted.
+Opt-in coordinator-only LLM validation pass over a consolidated v4 report: adds AI assessment, verdict, and confidence per finding. Under the v4 contract producers emit `likelihood`/`impact`/`relevance` themselves, so the typical run leaves the floats untouched; re-estimate them only when the consolidator left them absent (partial producer output that still satisfied the schema). NOT part of the automatic review pipeline — invoke after `consolidate_reports.py assemble` when a triage-quality validation pass is wanted.
 
 **Argument**: `$ARGUMENTS` — path to the consolidated `report.json`. Edited in place.
 
 ## Inputs
 
-- A consolidated v3 report on disk (output of `consolidate_reports.py assemble`).
+- A consolidated v4 report on disk (output of `consolidate_reports.py assemble`).
 - The producer commit (when `metadata.commit` is present) for best-effort source lookup via `git show`.
 
 ## Per-finding loop
@@ -33,14 +33,14 @@ For each finding without `ai_verdict`:
 
    ```python
    # Import directly — no re-implementation:
-   from consolidate_reports import _derive_overall, _derive_severity_int
-   overall = _derive_overall(finding)
+   from severity_util import derive_overall, derive_severity_int
+   overall = derive_overall(finding)
    if overall is not None:
        finding["overall_severity"] = overall
-       finding["severity"] = _derive_severity_int(overall)
+       finding["severity"] = derive_severity_int(overall)
    ```
 
-   If importing is impractical in the session, shell out to a one-liner invoking the same helpers from `scripts/consolidate_reports.py`. Never recompute the band table inline.
+   If importing is impractical in the session, shell out to a one-liner invoking the same helpers from `scripts/severity_util.py`. Never recompute the band table inline.
 
 Write changes back with the `Edit` tool — single JSON file, in place. No `Write` permission needed.
 

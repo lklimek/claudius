@@ -65,13 +65,13 @@ Default end of workflow. Steps 5-7 (structured report) run only on explicit requ
 
 ## 5. Build Structured Report JSON
 
-Produce `report.json` per the unified report schema (`../../schemas/review-report.schema.json` v3.2.0; 3.0.0/3.1.0 still accepted).
+Produce `report.json` per the unified report schema (`../../schemas/review-report.schema.json` v4.0.0; `3.x` accepted read-only for legacy reports, never for new output — this skill has no coordinator derive-pass to correct a stale version).
 
 ### Report structure
 
 ```json
 {
-  "schema_version": "3.2.0",
+  "schema_version": "4.0.0",
   "metadata": {
     "project": "<owner>/<repo>",
     "date": "YYYY-MM-DD",
@@ -112,7 +112,7 @@ Each review comment becomes one finding:
   "id": "CMT-001",
   "likelihood": 0.1,
   "impact": 0.1,
-  "relevance": 1.0,
+  "relevance": 0.5,
   "title": "Add fee-headroom guard to transfer_with_change_address",
   "location": "path/to/file.rs:42-56",
   "location_permalink": "https://github.com/<owner>/<repo>/blob/<commit>/path/to/file.rs#L42-L56",

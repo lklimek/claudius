@@ -6,7 +6,7 @@ allowed-tools: ["Bash(*validate_report.py *)", "Bash(*consolidate_reports.py *)"
 
 # Review Report Format
 
-Unified format for all review findings. Schema: `schemas/review-report.schema.json` (v3.2.0). **Hard cutover**: versions 1.x and 2.x are no longer accepted — use v3.x (declare `3.2.0` for new reports).
+Unified format for all review findings. Schema: `schemas/review-report.schema.json` (v4.0.0). **Hard cutover**: versions 1.x and 2.x are no longer accepted. `3.x` is accepted read-only for in-flight reports — legacy floats migrate to the v4.0.0 field names on load, defaulting `relevance` and requiring a re-rate (see `severity` skill). New reports MUST declare `4.0.0`.
 
 ## Finding Structure
 
@@ -22,7 +22,7 @@ Agents emit a JSON array of `finding_section` objects:
         "id": "PREFIX-001",
         "likelihood": 0.6,
         "impact": 0.7,
-        "relevance": 1.0,
+        "relevance": 0.5,
         "title": "Short finding title",
         "tags": ["A03 Injection", "CWE-79"],
         "location": "src/auth.rs:42-56",
@@ -39,7 +39,7 @@ Agents emit a JSON array of `finding_section` objects:
 ]
 ```
 
-This is the producer-emitted shape: integer `severity` and float `overall_severity` are absent — the coordinator's derive pass adds them from `likelihood`/`impact` (see below). The example validates against the v3 schema as-is (derived fields are optional); producer skills can run `validate_report.py` on their own output before consolidation.
+This is the producer-emitted shape: integer `severity` and float `overall_severity` are absent — the coordinator's derive pass adds them from `likelihood`/`impact` (see below). The example validates against the v4 schema as-is (derived fields are optional); producer skills can run `validate_report.py` on their own output before consolidation.
 
 ## Required Fields
 
@@ -58,7 +58,7 @@ Producers MUST emit `likelihood`, `impact`, and `relevance` — the schema rejec
 
 **Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (only when the producer captured exact source during analysis — never invent one).
 
-**Merge classification** (orthogonal to severity — see `severity` skill § Merge Classification): `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` and `intent_basis` (string|null — for `blocking`, the gate ID plus one line of evidence, e.g. `"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`). Coordinator-owned like `overall_severity`; the ONLY producers allowed to emit them are **coordinator-inline producers** (review-pr Pass C `pr_promises`, check-pr-comments) — same exception pattern as `location_permalink` below. `summary_statistics.merge_class_counts` (optional) carries the per-class tally.
+**Merge classification** (orthogonal to severity — see `severity` skill § Merge Classification): `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` and `intent_basis` (string|null — for `blocking`, the gate ID plus one line of evidence, e.g. `"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`). Coordinator-owned like `overall_severity`; the ONLY producers allowed to emit them are **coordinator-inline producers** (review-pr Pass C `pr_promises`, check-pr-comments, review-dependency) — same exception pattern as `location_permalink` below. `summary_statistics.merge_class_counts` (optional) carries the per-class tally.
 
 ## Coordinator-derived / validator-owned fields — DO NOT emit
 
@@ -68,7 +68,7 @@ Populated downstream; producers must NOT set:
 - `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL. Coordinator-derived in the standard multi-agent pipeline. **Exception — standalone producers** (a producer rendering its own final report with no coordinator derive-pass, canonically `check-pr-comments`): see `check-pr-comments/SKILL.md` § `location_permalink` for the exact emit condition.
 - `metadata.repository` — coordinator derives from `git remote get-url origin`
 - `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by the `validate-findings` skill
-- `merge_class`, `intent_basis` — coordinator-assigned during consolidation per `severity` skill § Merge Classification. **Exception**: coordinator-inline producers (review-pr Pass C, check-pr-comments) emit them directly.
+- `merge_class`, `intent_basis` — coordinator-assigned during consolidation per `severity` skill § Merge Classification. **Exception**: coordinator-inline producers (review-pr Pass C, check-pr-comments, review-dependency) emit them directly.
 - Derived integer `severity` when emitting floats — the coordinator overrides
 
 ## Long-Text Field Format
@@ -141,7 +141,7 @@ For complete reports (grumpy-review, check-pr-comments), wrap finding sections i
 
 ```json
 {
-  "schema_version": "3.2.0",
+  "schema_version": "4.0.0",
   "metadata": {
     "project": "claudius",
     "date": "YYYY-MM-DD",

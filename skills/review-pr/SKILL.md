@@ -36,7 +36,7 @@ Audit whether the diff **functionally delivers** what the PR's self-description 
 
 Pass C runs BEFORE consolidation (§3) and writes its findings to a report **file** like any producer, so they flow through prepare/§5b with everything else. As a coordinator-inline producer, Pass C is the exception allowed to emit `merge_class`/`intent_basis` directly (see `claudius:report-format`).
 
-Findings use the v3 report format: `claudius:report-format` for the envelope, `claudius:severity` for `likelihood`/`impact`/`relevance` float scoring and § Merge Classification.
+Findings use the v4 report format: `claudius:report-format` for the envelope, `claudius:severity` for `likelihood`/`impact`/`relevance` float scoring and § Merge Classification.
 
 ### Body extraction heuristics
 
