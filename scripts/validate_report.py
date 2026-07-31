@@ -14,6 +14,7 @@ Exit codes:
     2  File/parse error (missing file, invalid JSON)
 """
 
+import re
 import argparse
 import json
 import sys
@@ -171,14 +172,36 @@ def check_merge_classification(f: dict) -> list[str]:
                 f"[consistency] finding {_fid(f)}: intent_basis cites {gate} "
                 "with no evidence after the colon — name what trips the gate"
             )
-    elif gate in GATE_IDS:
-        warnings.append(
-            f"[consistency] finding {_fid(f)}: intent_basis cites {gate} but "
-            f"merge_class={merge_class or 'absent'} — a tripped gate is "
-            "merge_class=blocking; deferring one is a doctrine violation the "
-            "human must be told about explicitly"
-        )
+    else:
+        # The reverse rule asks a different question from the forward one, so it
+        # must not reuse the anchored citation match. Forward asks "is this in
+        # canonical 'G-ID: evidence' form?" and is rightly strict. Reverse asks
+        # "does a gate appear here at all?" — and a deferral reading
+        # "Trips G-SECRET: seed in log" escaped the anchor entirely, which is
+        # precisely the silent deferral this check exists to catch. Scan.
+        mentioned = gate if gate in GATE_IDS else _mentioned_gate(text)
+        if mentioned:
+            warnings.append(
+                f"[consistency] finding {_fid(f)}: intent_basis cites "
+                f"{mentioned} but merge_class={merge_class or 'absent'} — a "
+                "tripped gate is merge_class=blocking; deferring one is a "
+                "doctrine violation the human must be told about explicitly"
+            )
     return warnings
+
+
+def _mentioned_gate(text: str) -> str | None:
+    """First known gate ID appearing anywhere in *text*, else None.
+
+    Deliberately laxer than ``GATE_CITATION_RE``: this feeds the reverse rule,
+    where a missed detection silently licenses the exact deferral the doctrine
+    forbids, while a false positive merely asks a human to look. Word-bounded so
+    ``G-DATA`` does not match inside a longer token.
+    """
+    for gate in GATE_IDS:
+        if re.search(rf"\b{re.escape(gate)}\b", text):
+            return gate
+    return None
 
 
 def check_consistency(report: dict) -> list[str]:

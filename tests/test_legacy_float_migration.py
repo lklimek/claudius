@@ -454,14 +454,45 @@ class TestRendererApiPathMigrates:
         assert counts["HIGH"] == 0
 
     def test_v4_report_keeps_its_hand_supplied_counts(self):
-        """The carve-out still holds when nothing was migrated."""
+        """The carve-out still holds when nothing was migrated.
+
+        The envelope must declare 4.0.0: a report declaring 3.x had its counts
+        computed under the 3-term mean, so they are recomputed regardless of
+        who migrated it. Declaring 3.x while carrying v4 floats is a provenance
+        lie, not a v4 report, and must not be what pins the carve-out.
+        """
         finding = _v3_finding()
         del finding["risk"], finding["scope"]
         finding.update(likelihood=0.1, relevance=0.1)
         report = _envelope([finding])
+        report["schema_version"] = "4.0.0"
         report["summary_statistics"]["severity_counts"]["HIGH"] = 7
         grr.render_markdown(report)
         assert report["summary_statistics"]["severity_counts"]["HIGH"] == 7
+
+    def test_v3_counts_recomputed_whichever_order_migration_ran(self):
+        """SEC-001 regression: ``main()`` migrates up front to emit warnings, so
+        the renderer's own migration is a no-op and cannot be what triggers the
+        stats rebuild. A v3 report must reband identically both ways, or the
+        executive summary contradicts the finding bodies beneath it.
+        """
+        import copy
+
+        base = _envelope([_v3_finding(risk=1.0, impact=1.0, scope=0.2)])
+        base["summary_statistics"]["severity_counts"]["MEDIUM"] = 1
+
+        cli_order = copy.deepcopy(base)
+        su.migrate_legacy_floats(cli_order)  # what main() does first
+        grr.render_markdown(cli_order)
+
+        import_order = copy.deepcopy(base)
+        grr.render_markdown(import_order)
+
+        for report in (cli_order, import_order):
+            counts = report["summary_statistics"]["severity_counts"]
+            assert counts["CRITICAL"] == 1, counts
+            assert counts["MEDIUM"] == 0, counts
+            assert report["findings"][0]["findings"][0]["severity"] == 5
 
 
 class TestLegacyFixtureThroughValidateReport:

@@ -84,7 +84,9 @@ Probability that a real user or attacker reaches this defect under zone-realisti
 - **Precondition probability** — triggered by ordinary input is high; needs unusual config or rare input is mid; requires concurrent callers that structurally cannot exist in the deployment is bottom
 - **Triggering actor** — any user or untrusted automation is high; internal automation mid; deliberate action by a trusted operator low
 
-🔴 **Evidence rule** — a low operational score MUST cite its evidence: the reviewer's own call-tree/entry-point trace (already mandatory, see `grumpy-review`), a Context Digest claim carrying evidence (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence for the operational reality, score generically — the same rating the finding would get with no context at all. This axis lowers a score only on evidence, never on assumption, and it never suppresses a finding; it adjusts the floats, and the finding is still reported.
+The three are **conjunctive**: the defect is reached only when all three line up, so the most limiting one sets the ceiling. Place the finding at that factor's rung — a bug on a per-request hot path that also needs a precondition which structurally cannot occur is rare, not frequent.
+
+🔴 **Evidence rule** — a low rung on any of these MUST cite its evidence: the reviewer's own call-tree/entry-point trace (already mandatory, see `grumpy-review`), a Context Digest claim carrying evidence (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence for the operational reality, score generically — the same rating the finding would get with no context at all. This axis lowers a score only on evidence, never on assumption, and it never suppresses a finding; it adjusts the floats, and the finding is still reported.
 
 ### `impact` — how bad is the worst plausible outcome?
 
