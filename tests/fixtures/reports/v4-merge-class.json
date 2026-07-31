@@ -52,7 +52,7 @@
           "relevance": 0.2,
           "overall_severity": 0.2,
           "merge_class": "blocking",
-          "intent_basis": "The PR acceptance criteria require this behavior.",
+          "intent_basis": "G-INTENT: the PR claims the importer validates checksums, but validate() returns early for empty input at src/import.rs:88",
           "title": "Required behavior is missing",
           "location": "src/example.py:10",
           "description": "The requested behavior is not implemented.",

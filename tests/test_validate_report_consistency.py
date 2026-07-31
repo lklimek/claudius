@@ -267,6 +267,139 @@ class TestUnratedAxis:
         assert not any("may be unrated" in w for w in warnings)
 
 
+class TestBlockerGateCitations:
+    """`merge_class: blocking` must name the gate that stops the PR. Before
+    this, any non-empty `intent_basis` passed, so a bare requirement quote read
+    as a cited gate and nothing verified a gate was ever tripped.
+    """
+
+    def _blocking(self, intent_basis: object) -> dict:
+        return _report(
+            [_section([_finding(1, merge_class="blocking", intent_basis=intent_basis)])]
+        )
+
+    def test_valid_citation_is_silent(self):
+        report = self._blocking("G-SECRET: seed phrase written to log at import.rs:88")
+        assert vr.check_consistency(report) == []
+
+    def test_bare_requirement_quote_warns(self):
+        warnings = vr.check_consistency(
+            self._blocking("The PR acceptance criteria require this behavior.")
+        )
+        assert any("cite a blocker gate" in w for w in warnings)
+
+    def test_unknown_gate_is_its_own_message(self):
+        """A typo and an omission are different mistakes and must read
+        differently — otherwise G-SECRTE looks like no citation at all."""
+        warnings = vr.check_consistency(self._blocking("G-SECRTE: typo'd gate id"))
+        assert any("unknown gate" in w and "G-SECRTE" in w for w in warnings)
+        assert not any("cite a blocker gate" in w for w in warnings)
+
+    def test_citation_without_evidence_warns(self):
+        warnings = vr.check_consistency(self._blocking("G-FUNDS:"))
+        assert any("no evidence after the colon" in w for w in warnings)
+
+    def test_empty_intent_basis_still_warns(self):
+        for value in (None, "", "   "):
+            warnings = vr.check_consistency(self._blocking(value))
+            assert any("requires a non-empty intent_basis" in w for w in warnings)
+
+    @pytest.mark.parametrize("gate", ["G-INTENT", "G-UI-BROKEN", "G-DEFAULTS"])
+    def test_every_shape_of_gate_id_is_accepted(self, gate):
+        assert vr.check_consistency(self._blocking(f"{gate}: evidence")) == []
+
+
+class TestGateCitedButNotBlocking:
+    """The reverse rule, which nothing could detect before: a gate-tripping
+    finding parked as non-blocking or deferred. `out_of_scope_follow_up` reads
+    as "acceptable to never fix", so a deferred gate is a silent doctrine
+    violation with no other mechanical backstop.
+    """
+
+    def _classified(self, merge_class: object) -> dict:
+        finding = _finding(1, intent_basis="G-FUNDS: fee omitted from the total")
+        if merge_class is not None:
+            finding["merge_class"] = merge_class
+        return _report([_section([finding])])
+
+    @pytest.mark.parametrize(
+        "merge_class", ["non_blocking", "out_of_scope_follow_up", "disputed"]
+    )
+    def test_gate_on_a_non_blocking_class_warns(self, merge_class):
+        warnings = vr.check_consistency(self._classified(merge_class))
+        assert any(
+            "cites G-FUNDS" in w and f"merge_class={merge_class}" in w for w in warnings
+        )
+
+    def test_gate_with_no_merge_class_warns(self):
+        warnings = vr.check_consistency(self._classified(None))
+        assert any("cites G-FUNDS" in w and "absent" in w for w in warnings)
+
+    def test_non_gate_intent_basis_on_a_non_blocking_finding_is_silent(self):
+        """Only a real gate citation trips the reverse rule; ordinary prose in
+        intent_basis on a non-blocking finding is not a violation."""
+        finding = _finding(1, merge_class="non_blocking", intent_basis="Nice to have.")
+        assert vr.check_consistency(_report([_section([finding])])) == []
+
+    def test_unknown_gate_on_a_non_blocking_finding_is_silent(self):
+        finding = _finding(1, merge_class="non_blocking", intent_basis="G-NOPE: x")
+        assert vr.check_consistency(_report([_section([finding])])) == []
+
+
+class TestProducerModeRunsTheGateChecks:
+    """review-pr Pass C, check-pr-comments and review-dependency are the only
+    producers allowed to emit merge_class inline, and they are validated with
+    --producer, which skipped check_consistency entirely.
+    """
+
+    def test_producer_sections_are_checked(self):
+        sections = [
+            _section([_finding(1, merge_class="blocking", intent_basis="a bare quote")])
+        ]
+        warnings = vr.check_producer_consistency(sections)
+        assert any("cite a blocker gate" in w for w in warnings)
+
+    def test_producer_reverse_rule_is_checked(self):
+        sections = [
+            _section(
+                [
+                    _finding(
+                        1,
+                        merge_class="out_of_scope_follow_up",
+                        intent_basis="G-DATA: silent truncation on import",
+                    )
+                ]
+            )
+        ]
+        assert any("cites G-DATA" in w for w in vr.check_producer_consistency(sections))
+
+    def test_clean_producer_output_is_silent(self):
+        sections = [_section([_finding(1)])]
+        assert vr.check_producer_consistency(sections) == []
+
+    def test_cli_producer_mode_emits_the_warning_and_still_exits_zero(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        sections = [
+            _section([_finding(1, merge_class="blocking", intent_basis="a bare quote")])
+        ]
+        code, out, err = _run_cli(sections, tmp_path, monkeypatch, capsys, "--producer")
+        assert code == 0
+        assert "Valid:" in out
+        assert "cite a blocker gate" in err
+
+    def test_hostile_intent_basis_cannot_forge_a_log_line(self):
+        finding = _finding(
+            1,
+            merge_class="blocking",
+            intent_basis="quote\nValid: forged.json\n[consistency] all clear",
+        )
+        warnings = vr.check_producer_consistency([_section([finding])])
+        assert warnings
+        for w in warnings:
+            assert "\n" not in w and "\r" not in w
+
+
 class TestInformationalFloorIsNotAnUnratedAxis:
     """Exact zeros on all three axes are the mandated rating for praise, clean
     passes and RESOLVED comments — a finding at the floor is rated, not
