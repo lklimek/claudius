@@ -43,6 +43,33 @@ SEV_LABELS: dict[int, str] = {
 }
 SEV_ORDER: list[str] = list(SEV_LABELS.values())  # CRITICAL, HIGH, ... INFO
 
+# Blocker gates — the must-not-ship conditions that force merge_class=blocking.
+# Source of truth is skills/severity/SKILL.md §2; this tuple mirrors it so the
+# pipeline can enforce what the doctrine only states, and
+# tests/test_gate_vocabulary.py parses that table to fail loudly when a gate is
+# added to one and not the other.
+GATE_IDS: tuple[str, ...] = (
+    "G-INTENT",
+    "G-DATA",
+    "G-FUNDS",
+    "G-CRYPTO",
+    "G-SECRET",
+    "G-UI-BROKEN",
+    "G-UI-TEXT",
+    "G-WYSIWYS",
+    "G-AMOUNT",
+    "G-DOUBLE",
+    "G-PHISH",
+    "G-BRICK",
+    "G-SILENT",
+    "G-PRIVACY",
+    "G-GROWTH",
+    "G-DEFAULTS",
+)
+
+# An intent_basis citing a gate: the ID, a colon, then the evidence for it.
+GATE_CITATION_RE = re.compile(r"^\s*(G-[A-Z-]+)\s*:(.*)$", re.DOTALL)
+
 MERGE_CLASS_LABELS: dict[str, str] = {
     "blocking": "BLOCKING",
     "non_blocking": "NON-BLOCKING",

@@ -22,6 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from severity_util import (  # noqa: E402
+    GATE_CITATION_RE,
+    GATE_IDS,
     INFORMATIONAL_FLOOR_KEYS,
     derive_finding_severity,
     derive_severity_int,
@@ -71,13 +73,101 @@ def _fid(finding: dict) -> str:
 
 def _iter_findings(report: dict) -> list[dict]:
     """Flatten all per-section findings into one list (empty on odd shapes)."""
+    sections = report.get("findings", []) if isinstance(report, dict) else report
     out: list[dict] = []
-    for section in report.get("findings", []) or []:
+    for section in sections or []:
         if isinstance(section, dict):
             out.extend(
                 f for f in section.get("findings", []) or [] if isinstance(f, dict)
             )
     return out
+
+
+def check_producer_consistency(sections: list) -> list[str]:
+    """Merge-classification warnings for a producer-stage section array.
+
+    Producer mode skips the rest of ``check_consistency`` — most of it needs
+    report-level context a producer has not built yet — but the gate rules do
+    not, and the only producers allowed to author a ``blocking`` finding are
+    validated exclusively in this mode. Skipping them here left every
+    inline-authored gate citation unchecked.
+    """
+    warnings: list[str] = []
+    for f in _iter_findings(sections):
+        warnings.extend(check_merge_classification(f))
+    return warnings
+
+
+def check_merge_classification(f: dict) -> list[str]:
+    """Gate-citation warnings for one finding's merge_class / intent_basis.
+
+    The blocker gates in ``skills/severity/SKILL.md`` §2 are the change's
+    headline control, and prose is all that enforced them: any non-empty
+    ``intent_basis`` used to pass, so a bare requirement quote read as a cited
+    gate. Both directions are checked, because both are silent failures:
+
+    - ``blocking`` without a valid ``G-*:`` citation — the gate that stops the
+      PR was never named, so nobody can check whether one was really tripped.
+    - a valid citation on anything other than ``blocking`` — a gate-tripping
+      finding parked as ``non_blocking`` or, worse, ``out_of_scope_follow_up``,
+      which the doctrine reads as "acceptable to never fix". Nothing else in
+      the pipeline can catch that one.
+
+    Split out of :func:`check_consistency` so producer mode can run it: the
+    three producers permitted to emit ``merge_class`` inline (review-pr Pass C,
+    check-pr-comments, review-dependency) are validated with ``--producer``,
+    which skips the rest of the gate.
+    """
+    warnings: list[str] = []
+    merge_class = f.get("merge_class")
+    ai_verdict = f.get("ai_verdict")
+    if (
+        ai_verdict in {"false_positive", "duplicate"}
+        and merge_class is not None
+        and merge_class != "disputed"
+    ):
+        warnings.append(
+            f"[consistency] finding {_fid(f)}: ai_verdict={ai_verdict} "
+            f"should use merge_class=disputed, not {merge_class}"
+        )
+
+    intent_basis = f.get("intent_basis")
+    text = intent_basis.strip() if isinstance(intent_basis, str) else ""
+    citation = GATE_CITATION_RE.match(text) if text else None
+    gate = citation.group(1) if citation else None
+    evidence = citation.group(2).strip() if citation else ""
+
+    if merge_class == "blocking":
+        if not text:
+            warnings.append(
+                f"[consistency] finding {_fid(f)}: merge_class=blocking "
+                "requires a non-empty intent_basis"
+            )
+        elif gate is None:
+            warnings.append(
+                f"[consistency] finding {_fid(f)}: merge_class=blocking requires "
+                "intent_basis to cite a blocker gate as 'G-ID: evidence' "
+                f"(per claudius:severity §2), got {sanitize_log_value(text)!r}"
+            )
+        elif gate not in GATE_IDS:
+            warnings.append(
+                f"[consistency] finding {_fid(f)}: intent_basis cites unknown "
+                f"gate {sanitize_log_value(gate)!r}; valid gates are "
+                f"{', '.join(GATE_IDS)}"
+            )
+        elif not evidence:
+            warnings.append(
+                f"[consistency] finding {_fid(f)}: intent_basis cites {gate} "
+                "with no evidence after the colon — name what trips the gate"
+            )
+    elif gate in GATE_IDS:
+        warnings.append(
+            f"[consistency] finding {_fid(f)}: intent_basis cites {gate} but "
+            f"merge_class={merge_class or 'absent'} — a tripped gate is "
+            "merge_class=blocking; deferring one is a doctrine violation the "
+            "human must be told about explicitly"
+        )
+    return warnings
 
 
 def check_consistency(report: dict) -> list[str]:
@@ -113,25 +203,7 @@ def check_consistency(report: dict) -> list[str]:
                 f"{_MERGE_CLASS_VERSIONS_TEXT}, not {schema_version}"
             )
 
-        merge_class = f.get("merge_class")
-        ai_verdict = f.get("ai_verdict")
-        if (
-            ai_verdict in {"false_positive", "duplicate"}
-            and merge_class is not None
-            and merge_class != "disputed"
-        ):
-            warnings.append(
-                f"[consistency] finding {_fid(f)}: ai_verdict={ai_verdict} "
-                f"should use merge_class=disputed, not {merge_class}"
-            )
-        intent_basis = f.get("intent_basis")
-        if merge_class == "blocking" and (
-            not isinstance(intent_basis, str) or not intent_basis.strip()
-        ):
-            warnings.append(
-                f"[consistency] finding {_fid(f)}: merge_class=blocking "
-                "requires a non-empty intent_basis"
-            )
+        warnings.extend(check_merge_classification(f))
 
         sev = f.get("severity")
         has_sev = isinstance(sev, int) and not isinstance(sev, bool)
@@ -291,9 +363,13 @@ def main() -> int:
 
     if not errors:
         # Consistency gate: advisory only — never changes the exit code.
-        if not args.producer:
-            for warning in check_consistency(report):
-                print(warning, file=sys.stderr)
+        checks = (
+            check_producer_consistency(report)
+            if args.producer
+            else check_consistency(report)
+        )
+        for warning in checks:
+            print(warning, file=sys.stderr)
         # Never certify the on-disk bytes when only the migrated copy passed:
         # the file itself still carries v3 float names the v4 schema rejects.
         if migration:
