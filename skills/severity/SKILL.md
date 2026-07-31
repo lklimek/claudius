@@ -22,6 +22,8 @@ Before rating anything, answer: **what stands between this defect and irreversib
 | **Sovereign** | Nothing. This code is the last line — key material, signing, entropy, local persistence, offline/standalone tools | Irreversible loss of funds, keys, or data | 1.0 |
 | **Boundary** | This code decides *what crosses into* sovereign territory — assembling the tx to be signed, choosing the destination, composing what the user is asked to approve | Same as Sovereign — the backstop validates the *signature*, not the *intent* | 1.0 |
 
+For **server-side code**, the code owns the data — read it as Sovereign over its own persistence, with the operator's monitoring as the only backstop against silent breakage (hence G-SILENT).
+
 **Zone is per finding, never per repo or per app.** One PR routinely spans all three: a wallet's balance-refresh path is Backstopped, its seed-phrase handling is Sovereign, its send-confirmation screen is Boundary. Judge each finding on the code path it actually sits on, from the PR's own context. Do not assign a project a standing zone.
 
 Unsure between two zones → take the more sovereign one.
@@ -44,7 +46,7 @@ A gate is a **must-not-ship** condition. Tripping any gate ⇒ `merge_class: blo
 | **G-DOUBLE** | Retry or auto-recovery duplicates a spend, broadcast, or other external side effect | all |
 | **G-PHISH** | Untrusted data rendered unescaped or clickable, or able to imitate trusted UI | all |
 | **G-BRICK** | Upgrade or migration failure prevents startup or destroys the user profile | all |
-| **G-SILENT** | Server-side failures are swallowed — operators cannot detect that it broke | Backstopped (server) |
+| **G-SILENT** | Failures are swallowed — operators cannot detect that it broke | Operated services |
 | **G-PRIVACY** | Leaks short of secrets — address linkage, identifying telemetry, financial data in logs | all |
 | **G-GROWTH** | Unbounded resource growth under normal load | all |
 | **G-DEFAULTS** | Ships an insecure default configuration | all |
@@ -86,6 +88,9 @@ Capped by the backstop zone (§1). Blast radius folds in here — a defect reach
 | `~0.7` | Recoverable loss, security degradation, or an unrecoverable-stuck user |
 | `~0.4` | Task fails, scary or confusing UX, restart fixes it |
 | `~0.1` | Cosmetic |
+| `0.0` | No defect exists — informational only (see below) |
+
+**Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood 0.0, impact 0.0, relevance 0.0`. That derives to `0.0` → INFO, which is the only band whose meaning is "no action required". Use exact zeros, never a small hedge like `0.05`: there is no defect, so the probability and the damage are genuinely zero, and a hedged value both misstates that and drifts across documents. Producers relying on a low third term to sink an informational finding into INFO is a v3 habit that no longer works — `relevance` is not in the mean.
 
 ### `relevance` — does it fit what this PR set out to do?
 
@@ -190,4 +195,5 @@ Read the class as **"acceptable to never fix"**, not "fix later":
 | `confidence` | `ai_verdict_confidence` |
 | `intent_basis` | `intent_basis` |
 | `material_impact` | `impact_description` |
-| OWASP `risk` / `scope` (schema v3) | `likelihood` / `relevance` — **semantics differ**: v3 `scope` was blast radius (now folded into `impact`), `relevance` is PR-goal fit |
+| OWASP `risk` (schema v3) | `likelihood` — near-equivalent, migrates by rename |
+| OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which now folds into `impact`. It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or `validate-findings`. |
