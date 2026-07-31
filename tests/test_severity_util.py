@@ -224,3 +224,16 @@ class TestRejectNonFiniteConstant:
             '{"relevance": 0.5}', parse_constant=su.reject_non_finite_constant
         )
         assert data == {"relevance": 0.5}
+
+    @pytest.mark.parametrize("literal", ["1e400", "-1e400"])
+    def test_overflowing_literal_bypasses_the_callback(self, literal):
+        """The guard covers bare NaN/Infinity tokens only. `1e400` is an
+        ordinary JSON number that Python converts to inf without consulting
+        parse_constant, so the docstring must not claim otherwise — the
+        downstream isinf check and the schema's maximum are what catch it."""
+        value = json.loads(
+            f'{{"likelihood": {literal}}}',
+            parse_constant=su.reject_non_finite_constant,
+        )["likelihood"]
+        assert math.isinf(value)
+        assert su.derive_overall({"likelihood": value, "impact": 0.5}) is None
