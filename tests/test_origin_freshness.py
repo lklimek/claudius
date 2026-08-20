@@ -276,6 +276,14 @@ def test_nested_branch_name_keeps_its_slashes() -> None:
         "origin/main",
         "origin/release/7.x",
     }
+    # The report's "ref" label above is built straight from config, not parsed
+    # from git's output, so it can't catch a regression that truncates the
+    # ref actually sent to git — and the FakeGit response table is keyed on
+    # the leaf segment (_kind()), so a truncated argv would resolve to the
+    # same canned response. Assert the real argv independently.
+    full_ref = "refs/remotes/origin/release/7.x"
+    for command in ("rev-list", "log", "diff"):
+        assert any(call[-1].endswith(full_ref) for call in git.argv(command)), command
 
 
 # ---------------------------------------------------------------------------
