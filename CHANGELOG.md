@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-07-31
+
+### Added
+
+- **Base-freshness probe at session start** — a session now learns before it plans that the ground under its branch has moved, instead of discovering it at merge time:
+  - **`scripts/origin_freshness.py`**: new SessionStart hook (sibling entry in `hooks/hooks.json`, timeout 10s — deliberately not folded into `hooks/session-start.sh`, whose 5s budget and Source-of-Truth injection must not be at the mercy of a slow remote). Reports two independent kinds of staleness, deduped when they are the same ref: the **base branch** moved since the merge base (the signal that matters — a feature branch perfectly in sync with its own upstream can still sit on a base three PRs ahead), and the branch's **own upstream** moved (someone else pushed to it). Both counted `HEAD..<ref>`, since "behind" is actionable and "diverged" is not. Output carries the count, the new commits, and the changed paths; silence when current. Base branch resolves offline from `refs/remotes/<remote>/HEAD`, else a `main`/`master` remote-tracking ref, else the base half is skipped silently while the upstream half still reports — never a forge CLI, which would put auth and a second network round trip on a path whose contract is "never hang". Both refs travel in **one** fetch, whose explicit refspecs keep the write surface to exactly those two remote-tracking refs: no index, working tree, checked-out branch or local branch is touched.
+  - Fails open and silent on every degenerate case — detached HEAD, no configured upstream, local-only (`.`) upstream, unregistered remote, unreachable/auth-failing remote, not a repository, git absent, unparseable output, budget exhausted — each producing no output and exit 0. `GIT_TERMINAL_PROMPT=0` plus `echo` askpass keeps an auth-prompting remote from burning the budget on a prompt it can never answer. All git calls share one 8s monotonic deadline (5s of it for the single fetch) that stays strictly under the declared hook timeout, so the probe always reaches its own quiet exit rather than being killed mid-write.
+  - **`grand-admiral` § Session Protocol**: the coordinator owns base freshness before planning and acts on *what* moved — the base commits touching the files the task will touch — not on the count. Explicitly claims the check even when the probe was silent, since silence also means "could not tell".
+- **`grand-admiral` § Session Protocol**: search persistent memory on **surprise** — an unexpected result, a repeating error, an approach failing for a non-obvious reason — not only at session start, when what will confuse the session is not yet known. Query the literal tokens on screen (command as typed, error text verbatim) kept short, since a full-sentence symptom description retrieves measurably worse; and treat one miss as a bad query rather than proof nothing is stored, because a record can be invisible to every symptom phrasing yet top-ranked for a mechanism keyword.
+
 ## [7.0.1] - 2026-07-31
 
 ### Fixed
