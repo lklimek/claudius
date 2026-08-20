@@ -247,7 +247,7 @@
         },
         "intent_basis": {
           "type": ["string", "null"],
-          "description": "Exact requirement or claim justifying a blocking class; null or absent otherwise."
+          "description": "Justification for a blocking class; null or absent otherwise. For merge_class=blocking this MUST cite the tripped blocker gate as 'G-ID: evidence' (e.g. 'G-SECRET: seed phrase written to debug log at wallet/import.rs:88') using a gate ID from severity_util.GATE_IDS \u2014 see skills/severity/SKILL.md \u00a72. A bare requirement quote is flagged by validate_report.py's consistency gate."
         },
         "likelihood": { "$ref": "#/$defs/severity_float", "description": "Probability a real user or attacker reaches this defect under zone-realistic usage (1.0 happy path, ~0.7 workflow-plausible, ~0.4 edge case, ~0.1 pathological). See skills/severity/SKILL.md (source of truth)." },
         "impact": { "$ref": "#/$defs/severity_float", "description": "Worst plausible outcome, capped by the finding's backstop zone; blast radius folds in here (1.0 irreversible loss of funds/keys/data, ~0.7 recoverable loss or unrecoverable-stuck user, ~0.4 failed task or scary UX, ~0.1 cosmetic)." },

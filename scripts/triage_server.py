@@ -23,7 +23,7 @@ from http import HTTPStatus
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
-from severity_util import reject_non_finite_constant
+from severity_util import load_json_strict
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -87,10 +87,7 @@ def _generate_triage_html() -> str:
 def _load_report() -> dict:
     """Load the report JSON."""
     t0 = time.monotonic()
-    report = json.loads(
-        REPORT_PATH.read_text(encoding="utf-8"),
-        parse_constant=reject_non_finite_constant,
-    )
+    report = load_json_strict(REPORT_PATH.read_text(encoding="utf-8"))
     log.debug("Loaded report in %.1fms", (time.monotonic() - t0) * 1000)
     return report
 
@@ -232,7 +229,7 @@ class TriageHandler(BaseHTTPRequestHandler):
             log.debug("POST /api/decisions: reading %d bytes", content_len)
             body = self.rfile.read(content_len)
             try:
-                payload = json.loads(body, parse_constant=reject_non_finite_constant)
+                payload = load_json_strict(body)
                 decisions = payload.get("decisions", [])
                 triaged_by = payload.get("triaged_by", "user")
                 report = _save_triage(decisions, triaged_by)

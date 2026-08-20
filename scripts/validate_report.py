@@ -14,6 +14,7 @@ Exit codes:
     2  File/parse error (missing file, invalid JSON)
 """
 
+import re
 import argparse
 import json
 import sys
@@ -27,8 +28,8 @@ from severity_util import (  # noqa: E402
     INFORMATIONAL_FLOOR_KEYS,
     derive_finding_severity,
     derive_severity_int,
+    load_json_strict,
     migrate_legacy_floats,
-    reject_non_finite_constant,
     sanitize_log_value,
 )
 
@@ -72,14 +73,25 @@ def _fid(finding: dict) -> str:
 
 
 def _iter_findings(report: dict) -> list[dict]:
-    """Flatten all per-section findings into one list (empty on odd shapes)."""
+    """Flatten all per-section findings into one list (empty on odd shapes).
+
+    Mirrors ``severity_util._iter_migratable_findings``: a producer array may
+    hold bare findings that were never wrapped in a section, so an entry with
+    no nested ``findings`` list is treated as a finding itself. Dropping those
+    silently would exempt them from the merge-class gate checks below — the one
+    shape a producer is most likely to get wrong is then the one shape that
+    skips validation.
+    """
     sections = report.get("findings", []) if isinstance(report, dict) else report
     out: list[dict] = []
     for section in sections or []:
-        if isinstance(section, dict):
-            out.extend(
-                f for f in section.get("findings", []) or [] if isinstance(f, dict)
-            )
+        if not isinstance(section, dict):
+            continue
+        nested = section.get("findings")
+        if isinstance(nested, list):
+            out.extend(f for f in nested if isinstance(f, dict))
+        elif nested is None:
+            out.append(section)
     return out
 
 
@@ -102,7 +114,7 @@ def check_merge_classification(f: dict) -> list[str]:
     """Gate-citation warnings for one finding's merge_class / intent_basis.
 
     The blocker gates in ``skills/severity/SKILL.md`` §2 are the change's
-    headline control, and prose is all that enforced them: any non-empty
+    headline control, and prose was the only thing checking them: any non-empty
     ``intent_basis`` used to pass, so a bare requirement quote read as a cited
     gate. Both directions are checked, because both are silent failures:
 
@@ -117,6 +129,10 @@ def check_merge_classification(f: dict) -> list[str]:
     three producers permitted to emit ``merge_class`` inline (review-pr Pass C,
     check-pr-comments, review-dependency) are validated with ``--producer``,
     which skips the rest of the gate.
+
+    Advisory only. Every string returned here is printed as a ``[consistency]``
+    warning and never changes the exit code — a miscited gate is surfaced to a
+    reader, not blocked at the CLI.
     """
     warnings: list[str] = []
     merge_class = f.get("merge_class")
@@ -160,14 +176,36 @@ def check_merge_classification(f: dict) -> list[str]:
                 f"[consistency] finding {_fid(f)}: intent_basis cites {gate} "
                 "with no evidence after the colon — name what trips the gate"
             )
-    elif gate in GATE_IDS:
-        warnings.append(
-            f"[consistency] finding {_fid(f)}: intent_basis cites {gate} but "
-            f"merge_class={merge_class or 'absent'} — a tripped gate is "
-            "merge_class=blocking; deferring one is a doctrine violation the "
-            "human must be told about explicitly"
-        )
+    else:
+        # The reverse rule asks a different question from the forward one, so it
+        # must not reuse the anchored citation match. Forward asks "is this in
+        # canonical 'G-ID: evidence' form?" and is rightly strict. Reverse asks
+        # "does a gate appear here at all?" — and a deferral reading
+        # "Trips G-SECRET: seed in log" escaped the anchor entirely, which is
+        # precisely the silent deferral this check exists to catch. Scan.
+        mentioned = gate if gate in GATE_IDS else _mentioned_gate(text)
+        if mentioned:
+            warnings.append(
+                f"[consistency] finding {_fid(f)}: intent_basis cites "
+                f"{mentioned} but merge_class={merge_class or 'absent'} — a "
+                "tripped gate is merge_class=blocking; deferring one is a "
+                "doctrine violation the human must be told about explicitly"
+            )
     return warnings
+
+
+def _mentioned_gate(text: str) -> str | None:
+    """First known gate ID appearing anywhere in *text*, else None.
+
+    Deliberately laxer than ``GATE_CITATION_RE``: this feeds the reverse rule,
+    where a missed detection silently licenses the exact deferral the doctrine
+    forbids, while a false positive merely asks a human to look. Word-bounded so
+    ``G-DATA`` does not match inside a longer token.
+    """
+    for gate in GATE_IDS:
+        if re.search(rf"\b{re.escape(gate)}\b", text):
+            return gate
+    return None
 
 
 def check_consistency(report: dict) -> list[str]:
@@ -327,9 +365,7 @@ def main() -> int:
         }
 
     try:
-        report = json.loads(
-            Path(args.report).read_text(), parse_constant=reject_non_finite_constant
-        )
+        report = load_json_strict(Path(args.report).read_text())
     except FileNotFoundError:
         print(f"Report not found: {args.report}", file=sys.stderr)
         return 2

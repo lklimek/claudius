@@ -21,6 +21,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from severity_util import load_json_strict
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
@@ -29,9 +31,15 @@ _INTERMEDIATE_ONLY_FIELDS = {"agent", "category", "section_title", "positives"}
 
 
 def _load_json(path: Path) -> Any:
-    """Load JSON from path and report parse errors as ValueError."""
+    """Load JSON from path and report parse errors as ValueError.
+
+    Uses the same non-finite guards as every other report loader: this helper
+    sits mid-pipeline between ``prepare`` and ``assemble``, so a NaN or an
+    overflowing literal skipping the guard here reaches ``assemble`` as an
+    already-laundered float.
+    """
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return load_json_strict(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {path}")
     except json.JSONDecodeError as error:
@@ -253,7 +261,7 @@ def write_merged_findings(path: Path, document: dict[str, Any]) -> None:
     """Write a merged-findings document as formatted JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(document, indent=2) + "\n",
+        json.dumps(document, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
     )
 
