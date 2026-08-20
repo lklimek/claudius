@@ -117,7 +117,7 @@ def _load_json_file(path: Path, max_size: int = MAX_INPUT_SIZE) -> dict | list:
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in {path}: {e}") from e
     except ValueError as e:
-        raise ValueError(f"Non-finite JSON number in {path}: {e}") from e
+        raise ValueError(f"Non-finite JSON value in {path}: {e}") from e
     for warning in migrate_legacy_floats(data).warnings(str(path)):
         log.warning("%s", warning)
     return data

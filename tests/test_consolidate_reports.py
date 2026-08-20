@@ -1685,6 +1685,16 @@ class TestNonFiniteRejection:
         assert cr.cmd_prepare(args) == 2
         assert not output.exists()
 
+    def test_load_json_file_error_wording_not_misleading_for_constant(self, tmp_path):
+        """`_load_json_file`'s wrapper must not call a bare NaN/Infinity
+        constant a "number" — that's the overflowing-literal case
+        (`1e400`), a different failure `reject_non_finite_number` guards."""
+        bad = tmp_path / "bad.json"
+        bad.write_text('{"x": NaN}')
+        with pytest.raises(ValueError) as exc_info:
+            cr._load_json_file(bad)
+        assert "json number" not in str(exc_info.value).lower()
+
 
 # ---------------------------------------------------------------------------
 # Required-field guard in cmd_assemble (Bug: bare KeyError on dropped field)

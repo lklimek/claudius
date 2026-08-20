@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [7.0.2] - 2026-08-20
+
+### Fixed
+
+- **`_load_json_file`'s error wrapper mislabeled non-finite constants as "number" overflow**: a bare `NaN`/`Infinity` JSON literal (rejected by `reject_non_finite_constant`) was reported as `"Non-finite JSON number in {path}: ..."`, the same wording used for an overflowing numeric token like `1e400` (rejected by `reject_non_finite_number`) — misleading for the constant case. Reworded to the neutral `"Non-finite JSON value in {path}: ..."`, which covers both. (Copilot review, PR #87)
+
 ## [7.0.1] - 2026-07-31
 
 ### Fixed
