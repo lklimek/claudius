@@ -84,7 +84,9 @@ Probability that a real user or attacker reaches this defect under zone-realisti
 - **Precondition probability** — triggered by ordinary input is high; needs unusual config or rare input is mid; requires concurrent callers that structurally cannot exist in the deployment is bottom
 - **Triggering actor** — any user or untrusted automation is high; internal automation mid; deliberate action by a trusted operator low
 
-🔴 **Evidence rule** — a low operational score MUST cite its evidence: the reviewer's own call-tree/entry-point trace (already mandatory, see `grumpy-review`), a Context Digest claim carrying evidence (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence for the operational reality, score generically — the same rating the finding would get with no context at all. This axis lowers a score only on evidence, never on assumption, and it never suppresses a finding; it adjusts the floats, and the finding is still reported.
+The three are **conjunctive**: the defect is reached only when all three line up, so the most limiting one sets the ceiling. Place the finding at that factor's rung — a bug on a per-request hot path that also needs a precondition which structurally cannot occur is rare, not frequent.
+
+🔴 **Evidence rule** — a low rung on any of these MUST cite its evidence: the reviewer's own call-tree/entry-point trace (already mandatory, see `grumpy-review`), a Context Digest claim carrying evidence (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence for the operational reality, score generically — the same rating the finding would get with no context at all. This axis lowers a score only on evidence, never on assumption, and it never suppresses a finding; it adjusts the floats, and the finding is still reported.
 
 ### `impact` — how bad is the worst plausible outcome?
 
@@ -98,7 +100,7 @@ Capped by the backstop zone (§1). Blast radius folds in here — a defect reach
 | `~0.1` | Cosmetic |
 | `0.0` | No defect exists — informational only (see below) |
 
-**Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood 0.0, impact 0.0, relevance 0.0`. That derives to `0.0` → INFO, which is the only band whose meaning is "no action required". Use exact zeros, never a small hedge like `0.05`: there is no defect, so the probability and the damage are genuinely zero, and a hedged value both misstates that and drifts across documents. Producers relying on a low third term to sink an informational finding into INFO is a v3 habit that no longer works — `relevance` is not in the mean.
+**Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood = 0.0, impact = 0.0`, `relevance = 0.0`. That derives to `0.0` → INFO, which is the only band whose meaning is "no action required". Use exact zeros, never a small hedge like `0.05`: there is no defect, so the probability and the damage are genuinely zero, and a hedged value both misstates that and drifts across documents. Producers relying on a low third term to sink an informational finding into INFO is a v3 habit that no longer works — `relevance` is not in the mean.
 
 ### `relevance` — does it fit what this PR set out to do?
 
@@ -146,7 +148,7 @@ In finding JSON, `severity` is the integer, not the label.
 - Anything that may require action is **LOW or higher**; **INFO** is exclusively praise and context — never a suggestion
 - In doubt between two levels, take the higher
 - Severity never reflects effort to fix — a one-line fix can be CRITICAL
-- UX impact is a real severity input: a scary error dialog on the happy path is `likelihood 1.0`, `impact ~0.4` → HIGH, and it trips G-UI-TEXT
+- UX impact is a real severity input: a scary error dialog on the happy path is `likelihood = 1.0, impact ≈ 0.4` → HIGH, and it trips G-UI-TEXT
 
 ## 5. Merge Classification
 
@@ -173,9 +175,7 @@ trips any blocker gate (§2), reachable through
   this PR's code paths                             → blocking
 relevance ≥ ~0.5 (in or adjacent to the change)    → non_blocking
 must not survive this review — leaving it in the
-  codebase indefinitely is unacceptable
-    fixing it grows the PR beyond its stated intent → out_of_scope_follow_up
-    otherwise                                      → non_blocking
+  codebase indefinitely is unacceptable            → non_blocking
 otherwise (acceptable to leave permanently)        → out_of_scope_follow_up
 ```
 

@@ -53,8 +53,8 @@ from severity_util import (
     build_severity_stats,
     derive_overall,
     derive_severity_int,
+    load_json_strict,
     migrate_legacy_floats,
-    reject_non_finite_constant,
     sanitize_log_value,
 )
 
@@ -222,7 +222,26 @@ def _normalize_report(data: dict[str, Any]) -> None:
     for warning in migration.warnings(_report_source(data)):
         log.warning("%s", warning)
     _normalize_finding_severities(data)
-    _normalize_summary_statistics(data, force=bool(migration))
+    # force is derived from the DECLARED schema version, not from whether this
+    # call migrated anything. ``main()`` migrates once up front to emit its
+    # warnings, so by the time a renderer reaches here the migration is a no-op
+    # and ``bool(migration)`` is False -- leaving a v3 report's
+    # 3-term-formula severity_counts intact while the finding bodies below them
+    # carry recomputed v4 bands. A declared 3.x means those counts were computed
+    # under the old formula whoever migrated them, so recompute regardless.
+    _normalize_summary_statistics(
+        data, force=bool(migration) or _declares_legacy_schema(data)
+    )
+
+
+def _declares_legacy_schema(data: dict[str, Any]) -> bool:
+    """True when the report declares a schema-v3 version.
+
+    Its ``summary_statistics`` were then computed under the 3-term mean and
+    cannot be trusted against v4-derived finding bands.
+    """
+    declared = data.get("schema_version") if isinstance(data, dict) else None
+    return isinstance(declared, str) and declared.startswith("3.")
 
 
 def _report_source(data: dict[str, Any]) -> str:
@@ -3338,10 +3357,7 @@ def main() -> None:
     # Load and validate
     log.info("Loading report: %s", report_path)
     try:
-        data = json.loads(
-            report_path.read_text(encoding="utf-8"),
-            parse_constant=reject_non_finite_constant,
-        )
+        data = load_json_strict(report_path.read_text(encoding="utf-8"))
     except ValueError as e:
         log.error("Invalid JSON in %s: %s", report_path, e)
         sys.exit(1)
