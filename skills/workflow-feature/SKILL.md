@@ -169,4 +169,4 @@ ALL code-mutating spawned agents MUST work in an isolated git worktree — no ex
 
 **Pre-flight pattern**: see `grand-admiral` § Worktree Isolation. Default is Option A (local-SHA injection, no push); Option B (push first) is the explicit fallback.
 
-**Post-wave**: verify worktree commits, merge into the feature branch, run tests, then clean up worktrees. Push only when the user explicitly authorizes it (e.g., via `/push`, `/ci-dance`, or direct instruction) — never as an automatic step.
+**Post-wave**: verify worktree commits, merge into the feature branch, run tests, then clean up worktrees. Push per `grand-admiral` § Worktree Isolation → Post-wave push.

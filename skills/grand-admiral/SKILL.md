@@ -214,11 +214,11 @@ Every code-mutating spawned agent MUST work in an isolated git worktree — no e
 
 Team spawns: omitting `team_name` does NOT help — `Agent()` calls from a team-lead session auto-join the lead's team and lose `isolation` the same way.
 
-**Why Option A is default**: minimizes pushes (push approval is friction in unattended/auto mode), keeps work local until ready to share, honors the global "never push without explicit permission" rule.
+**Why Option A is default**: minimizes pushes (fewer partial/noisy remote pushes to review), keeps work local until a wave is verified and ready to share.
 
 **Post-wave:** enumerate worktrees -> verify commits -> cherry-pick/merge into the feature branch -> run tests -> clean up (`git worktree remove` + `prune`). Never remove worktrees with uncommitted/unmerged work.
 
-**Post-wave push (explicit authorization only):** push ONLY when the user explicitly authorized it (the invoking workflow is `/push` or `/ci-dance`, or the user said "push it" / "open a PR"). Otherwise leave merged commits local — later waves fork from local HEAD via Option A. Automatic pushing violates the global "never push without explicit permission" rule. Once authorized, the **coordinator pushes directly** (plain `git push`, fall back to `ghsudo git push` on 403/no-write-access, verify with `git ls-remote`) — never relay the push to a dev agent, which loops or refuses when authorization arrives second-hand via SendMessage.
+**Post-wave push (coordinator discretion, feature branches only):** once the merged feature branch is verified (tests green, cleanup done), the coordinator may push it without waiting for user authorization — see `git-and-github` § Safety Rules. Never push a base/protected branch this way — that stays an outright block, human-only, no discretion. **Always the coordinator itself** (plain `git push`, fall back to `ghsudo git push` on 403/no-write-access, verify with `git ls-remote`) — never relay the push to a dev/spawned agent, which loops or refuses when asked to push second-hand via SendMessage, and which never pushes on its own regardless.
 
 **Post-wave pitfalls:**
 - **Verify current branch** before cherry-picking — `git worktree remove` can leave you on the worktree's branch; `git branch --show-current`, checkout if needed.

@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [7.3.0] - 2026-08-31
+
+### Changed
+
+- **Pushing is now coordinator-only and no longer requires per-push confirmation for feature branches.** Spawned/specialist agents still never push (commit and stop, as before) — the coordinator pushes on their behalf, at its own discretion, once work is ready. Base/protected branches (main, master, vX.Y-dev) stay an outright block regardless. Updated `git-and-github` § Safety Rules/Pushing, `grand-admiral` § Worktree Isolation → Post-wave push, and the `push`/`workflow-feature`/`workflow-simplified` skills that referenced the old "explicit authorization only" gate.
+
 ## [7.1.0] - 2026-07-31
 
 ### Added

@@ -49,7 +49,7 @@ Edit `CHANGELOG.md` per [Keep a Changelog](https://keepachangelog.com/) format.
 
 If a push fails with 403 or "Resource not accessible" and `ghsudo` is installed, retry through it (see [Elevated Permissions](#elevated-permissions-ghsudo----optional-fallback)).
 
-Always ask explicit confirmation before every push, even if the user agreed earlier — see Safety Rules.
+Only the coordinator pushes. Spawned/specialist agents commit and stop; the coordinator pushes on their behalf once it decides the work is ready — never relay a push to a spawned agent. The coordinator may push a feature branch at its own discretion, no confirmation needed. Never push to a base/protected branch (main, master, vX.Y-dev, or whatever the repo's base is) — see Safety Rules.
 
 ## Pull Requests
 
@@ -81,7 +81,7 @@ Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a
 
 ## Safety Rules
 
-1. **Always ask before pushing or publishing to GitHub** — pushes, PRs, issues, comments, reviews. Commits are local and need no confirmation; pushes always do.
+1. **Pushing is coordinator-only.** Spawned/specialist agents never push — they commit and stop, and the coordinator pushes on their behalf. A coordinator push to a feature branch needs no confirmation, its own discretion. Publishing anything else to GitHub (PRs, issues, comments, reviews) still requires explicit confirmation, even if the user agreed earlier. **Never push to a base/protected branch** (main, master, vX.Y-dev, or whatever the repo's configured base is) — that's not a confirmation gate, it's an outright block; if a base-branch push is ever genuinely warranted, the human does it.
 2. **Never force-push. Never amend commits.** Always create new commits. If force-push is needed, ask the user to do it manually.
 3. **Never `git add .` or `git add -A`** — stage specific files
 4. **Never use interactive flags** (`-i`) — they require terminal input
