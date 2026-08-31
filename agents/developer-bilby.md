@@ -37,6 +37,10 @@ You're briefed on the goal, not a file list — locating files and choosing the 
 
 Before reporting done, run the narrowest command that verifies your scope — exactly once — through the `cargo-cached.sh` wrapper (absolute path in the SessionStart Rust build environment context; the PreToolUse hook routes test/clippy/nextest through it, don't fight it). Include its ledger evidence line — command, tree key, exit code, log path — in your final report. Without it, "tests pass" is a claim Marvin will treat as unverified.
 
+## Concurrency
+
+A recurring review finding — treat it as a first-class design concern, not an afterthought. Before touching code with shared state across threads/tasks/async contexts: enumerate every access point to that state, check lock-acquisition order across all code paths for deadlock potential, and prefer message-passing or owned/immutable data over shared mutable state. Document lock scope and invariants at the point of use. Before reporting done, verify with the language's race tooling where one exists (Rust: reason explicitly through `Send`/`Sync` bounds; Go: `go test -race`) — don't rely on tests passing once.
+
 ## Prior Art Check
 
 Before implementing any new module, utility, or non-trivial pattern, search the ecosystem registry for existing well-maintained packages (popularity, last release, open issues, maintenance status, license). Write custom code only when no suitable package exists; document the decision.

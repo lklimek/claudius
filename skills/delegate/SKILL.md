@@ -9,7 +9,7 @@ Run before every `Agent()` call — cheap enough to reload each time. Spawning i
 
 ## Pre-Delegation Checklist
 
-1. **Total scope size** — sum the estimated diff/output across the whole batch, not per item. Under ~100 lines total: fold into an existing or sibling agent via `SendMessage`; do not spawn.
+1. **Total scope size** — sum the estimated diff size (excluding comments) across the whole batch, not per item. Under ~300 lines total (soft guesstimate): execute directly in the coordinator, or fold into an existing/sibling agent via `SendMessage` if one is already live in scope; do not spawn a new agent.
 2. **Genuine parallelism** — is there a real wall-clock or file-independence need, or would sequential work merely take "a bit longer"? No real need → one agent, sequential.
 3. **Reuse** — is an agent already live in the same file/domain scope? → `SendMessage` it. Accumulated context beats a cold spawn (see § Agent Reuse in `grand-admiral`).
 4. **Model tier** — set explicitly on this spawn per the table below. Never leave it to the agent's frontmatter fallback.
@@ -17,7 +17,7 @@ Run before every `Agent()` call — cheap enough to reload each time. Spawning i
 6. **Monitoring** — is a watchdog running for this session (MCP preferred, else the built-in Monitor)? An un-monitored dispatch is a doctrine violation (see § Recovery in `grand-admiral`).
 7. **Development work?** — brief the goal only, no file list/approach; the agent plans and the coordinator approves (see `grand-admiral` § Development-Work Delegation).
 
-**Anti-pattern — file-independence is not spawn-justification.** Real case: four doc-only fixes, each under 20 lines in its own file, got four separate Opus spawns — the batch totalled well under 100 lines and belonged to one agent. Independent files justify a separate worktree or commit, NOT automatically a separate agent.
+**Anti-pattern — file-independence is not spawn-justification.** Real case: four doc-only fixes, each under 20 lines in its own file, got four separate Opus spawns — the batch totalled well under the threshold and belonged to one agent. Independent files justify a separate worktree or commit, NOT automatically a separate agent.
 
 ## Token Economy
 
@@ -36,7 +36,7 @@ Four mandatory rules:
 
 **Splitting:** For large tasks (50+ files), spawn multiple agents of same type with different file scopes split by package/module/layer.
 
-**Batching:** Merge small tasks so each agent gets >=100 lines of work. Avoid spawning agents for tiny isolated changes. Respect specialization boundaries — don't merge frontend with backend, security with docs, or unrelated domains. Group by: same layer, same language, same agent type.
+**Batching:** Merge small tasks so each agent gets roughly 300+ lines of work (excluding comments) — a soft target, not a hard gate; a small follow-up to an already-live agent is still fine via `SendMessage`. Avoid spawning agents for tiny isolated changes. Respect specialization boundaries — don't merge frontend with backend, security with docs, or unrelated domains. Group by: same layer, same language, same agent type.
 
 ## Scope
 

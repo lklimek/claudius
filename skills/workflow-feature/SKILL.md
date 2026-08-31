@@ -45,7 +45,7 @@ Test case SPECIFICATIONS (not code) derived from Requirements + UX artifacts. Ea
 
 System layers and responsibilities, tool/tech selection, prefer reuse, guide code placement, deployment model. Decompose into implementation tasks, each referencing the test cases it satisfies.
 
-Batch small tasks so each agent gets ≥100 lines of work — respect specialization boundaries (don't merge frontend with backend, security with docs, or unrelated domains).
+Batch small tasks per `delegate` § Scaling → Batching — respect specialization boundaries (don't merge frontend with backend, security with docs, or unrelated domains).
 
 **Artifact**: Development plan with task breakdown.
 
