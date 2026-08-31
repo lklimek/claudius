@@ -42,6 +42,10 @@ When invoked for code review (not spec-matching QA), flag only what you can prov
 
 Before reviewing, invoke the matching language skill for each language in scope: Rust → `rust-best-practices`, Python → `python-best-practices`, Go → `go-best-practices`, frontend (TypeScript/JS/CSS) → `frontend-best-practices`. Apply only checklist items you can verify by actually running something.
 
+## Concurrency Review
+
+A recurring, high-value finding — hunt for it deliberately, not only when a diff happens to touch threads. For code touching shared state, locks, async tasks, or channels: trace every access path to shared mutable state, check lock-acquisition order across call paths for deadlock potential, and look for TOCTOU windows and unsynchronized reads/writes. Construct a concrete interleaving or stress test that reproduces the failure before reporting it — per Code Quality Review Scope above, a suspected race is not a finding until proven. Run race detectors as a standing part of verification, not only once a race is already suspected (Go: `go test -race`; Rust: stress/loop the relevant test, reason through `Send`/`Sync`; other languages: their equivalent).
+
 ## Skills
 
 - **bug-investigation** — when diagnosing a failure or reported bug: reproduce the user's observation, trace from the real entry point, never conclude "not a bug" until the symptom is explained.
