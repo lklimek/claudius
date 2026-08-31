@@ -36,7 +36,7 @@ Four mandatory rules:
 
 **Splitting:** For large tasks (50+ files), spawn multiple agents of same type with different file scopes split by package/module/layer.
 
-**Batching:** Merge small tasks so each agent gets >=300 lines of work (excluding comments). Avoid spawning agents for tiny isolated changes. Respect specialization boundaries — don't merge frontend with backend, security with docs, or unrelated domains. Group by: same layer, same language, same agent type.
+**Batching:** Merge small tasks so each agent gets roughly 300+ lines of work (excluding comments) — a soft target, not a hard gate; a small follow-up to an already-live agent is still fine via `SendMessage`. Avoid spawning agents for tiny isolated changes. Respect specialization boundaries — don't merge frontend with backend, security with docs, or unrelated domains. Group by: same layer, same language, same agent type.
 
 ## Scope
 

@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ### Changed
 
-- **`delegate` § inline-vs-spawn threshold raised 100 → ~300 lines** (soft guesstimate, excluding comments): the coordinator now executes smaller changes directly instead of delegating; the batching floor in § Scaling moved to match. `workflow-feature` no longer duplicates the number — points to `delegate` § Scaling instead.
+- **`delegate` § inline-vs-spawn threshold raised ~100 → ~300 lines** (soft guesstimate, excluding comments): the coordinator now executes smaller changes directly instead of delegating; the batching floor in § Scaling moved to match. `workflow-feature` no longer duplicates the number — points to `delegate` § Scaling instead.
 - **`developer-bilby` and `qa-engineer-marvin`**: added a dedicated Concurrency section to each — deliberate hunting for shared-mutable-state races, lock-order deadlocks, and TOCTOU windows, with race-detector verification as a standing step rather than an opportunistic check.
 
 ## [7.3.0] - 2026-08-31
