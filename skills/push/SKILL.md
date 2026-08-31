@@ -36,6 +36,5 @@ Load `claudius:git-and-github` skill first — all commit, push, PR, and attribu
 
 ## Notes
 
-- **No push confirmation needed** — user explicitly invoked `/push`, intent is clear
-- This overrides the "ask before push" rule from `git-and-github` **for this invocation only**
+- Push per `git-and-github` § Safety Rules — coordinator-only, no confirmation needed for a feature-branch push
 - After completing, do NOT push again without a new explicit `/push` or user request — one invocation = one push
