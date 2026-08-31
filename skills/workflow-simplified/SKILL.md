@@ -29,7 +29,7 @@ Out-of-scope findings during self-review: note them in the Final Report, don't f
 
 Commit all changes before exiting — uncommitted work cannot be merged.
 
-Code-mutating agents work in an isolated git worktree, coordinator pre-created (see `grand-admiral` § Worktree Isolation, Option A default). Push only when the user explicitly authorizes it.
+Code-mutating agents work in an isolated git worktree, coordinator pre-created (see `grand-admiral` § Worktree Isolation, Option A default). Push per `grand-admiral` § Worktree Isolation → Post-wave push.
 
 ## Stuck?
 
