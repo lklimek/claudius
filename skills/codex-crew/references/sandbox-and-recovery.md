@@ -20,7 +20,7 @@ These are host-specific example values; adjust them to match the local filesyste
 
 ```toml
 sandbox_mode = "workspace-write"
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "high"
 
 [sandbox_workspace_write]

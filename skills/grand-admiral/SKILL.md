@@ -65,7 +65,7 @@ Workflow skills define phases and agent sequencing. The coordinator selects a wo
 
 ### Development-Work Delegation (WHAT, not HOW)
 
-Applies to actual coding work (Bilby, or Codex Sol per `codex-crew`'s dev-preference routing). Review, QA execution, security, docs, and UX delegation keep the file-list briefing in § Agent Prompt Requirements.
+Applies to actual coding work (Bilby, or Codex Astra per `codex-crew`'s dev-preference routing). Review, QA execution, security, docs, and UX delegation keep the file-list briefing in § Agent Prompt Requirements.
 
 - **Stay high-level.** Brief the goal from Requirements/UX/architecture docs — no file list or approach; don't read source to build one. Small-effort exception: a trivial one-file/one-grep lookup is fine inline (see `delegate`).
 - **Evidence is not a verdict.** Supplying logs plus a suspected cause is useful, but label the cause as a hypothesis and explicitly tell the agent to verify or refute it against the evidence before proposing implementation. Never ask an agent to implement a coordinator hypothesis on faith; approve the plan only after the agent establishes the actual defect.

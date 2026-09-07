@@ -1,6 +1,6 @@
 ---
 name: codex-crew
-description: "This skill should be used when preparing to dispatch work to Codex Sol, deciding whether to route coding to Codex, dispatching directly via codex-companion.mjs rather than the codex:codex-rescue subagent, handling a Codex job that fails to write or commit, monitoring a running Codex job, or recovering a stale Codex broker. The coordinator reads its pre-flight guidance once before the first Codex dispatch of a session."
+description: "This skill should be used when preparing to dispatch work to Codex Astra, deciding whether to route coding to Codex, dispatching directly via codex-companion.mjs rather than the codex:codex-rescue subagent, handling a Codex job that fails to write or commit, monitoring a running Codex job, or recovering a stale Codex broker. The coordinator reads its pre-flight guidance once before the first Codex dispatch of a session."
 ---
 
 # Codex Crew — Enlisting Codex Agents
@@ -12,14 +12,14 @@ Codex agents (OpenAI Codex CLI, run via the `codex` plugin's `codex-companion.mj
 ## When to Enlist Codex
 
 - **Opt-in, not default** — when the user asks, or per the coding preference below.
-- **Coding-first (project default):** code-writing work prefers **Codex Sol** over Opus-tier claudius agents (`developer-bilby`) — an intentional override of `delegate`'s Token Economy tiering for implementation tasks.
+- **Coding-first (project default):** code-writing work prefers **Codex Astra** over Opus-tier claudius agents (`developer-bilby`) — an intentional override of `delegate`'s Token Economy tiering for implementation tasks.
 - **Non-coding roles keep normal tiering:** review, QA, security, architecture, and docs stay with claudius agents unless the user opts them into Codex.
 
 ## Routing — One Model, High Effort
 
-- **Codex Sol = `--model gpt-5.6-sol --effort high`. Always high effort.** State both flags on every dispatch — omitting either drops to the runtime default, not Sol.
+- **Codex Astra = `--model gpt-6-astra --effort high`. Always high effort.** State both flags on every dispatch — omitting either drops to the runtime default, not Astra. Astra's rollout is gated behind OpenAI's Trusted Access Programme; confirm account access before assuming it resolves.
 - Dispatch via `codex-companion.mjs task` directly (§ Direct Dispatch). Nothing monitors, polls, or fetches results on its own — that's coordinator work (§ Monitoring). Codex CAN attempt a commit when the prompt instructs it, but success is inconsistent; verify independently (Sandbox & Workdir rule 2).
-- The lighter `spark` alias (`gpt-5.3-codex-spark`) exists; claudius standardizes on Sol at high effort.
+- The lighter `spark` alias (`gpt-5.3-codex-spark`) exists; claudius standardizes on Astra at high effort.
 
 ## Direct Dispatch
 
@@ -38,7 +38,7 @@ node "$CODEX_ROOT/scripts/codex-companion.mjs" task \
   --cwd <worktree-abs-path> \
   --prompt-file <scratch-abs-path>/<descriptive-name>.txt \
   --write --background \
-  --model gpt-5.6-sol --effort high
+  --model gpt-6-astra --effort high
 ```
 
 - **`--cwd <worktree-abs-path>` binds the broker/workspace slug to the intended worktree** — pass it on every dispatch; never rely on the invoking shell's cwd or on prompt text telling Codex to `cd` (prompt text has zero effect on cwd resolution — rule 3).
