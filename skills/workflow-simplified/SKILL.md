@@ -13,7 +13,7 @@ Give the goal, acceptance criteria, and any relevant Prior Knowledge (MemCan) �
 
 ## Model
 
-Route to a high-capability model — Codex Sol (`--effort high`), `opus`, or `fable`. Follow any standing dev-routing preference for code work if one is configured. Not for lightweight tiers: the point is trusting one agent through the whole cycle unattended.
+Route to a high-capability model — Codex Astra (`--effort high`), `opus`, or `fable`. Follow any standing dev-routing preference for code work if one is configured. Not for lightweight tiers: the point is trusting one agent through the whole cycle unattended.
 
 ## Single-Agent Loop
 

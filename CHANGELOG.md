@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [7.4.1] - 2026-09-07
+
+### Changed
+
+- **Codex model alias "Sol" (`gpt-5.6-sol`) → "Astra" (`gpt-6-astra`)**: updated `codex-crew` (dispatch routing, direct-dispatch example, `workspace-write` config reference), `grand-admiral` § Development-Work Delegation, and `workflow-simplified` § Model. Still always `--effort high`. Astra's rollout is gated behind OpenAI's Trusted Access Programme — confirm account access before assuming the alias resolves.
+
 ## [7.4.0] - 2026-08-31
 
 ### Changed
