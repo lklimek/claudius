@@ -67,7 +67,7 @@ Set `model` per spawn: **opus** for every dependency bump — a bump pulls in th
 2. CI status — green or red, which checks failed
 3. Mergeable state
 4. Instruction to invoke `review-dependency` skill with the PR number as argument
-5. Instruction to post a comment with findings via `mcp__plugin_claudius_github__add_issue_comment` (include attribution footer)
+5. Instruction to post a comment with findings via `mcp__plugin_claudius_github__add_issue_comment` (include attribution footer), and to report back either "confirmed posted: `<comment URL>`" or "NOT posted: `<reason>`" — never a bare "published"/"done", which has been observed meaning only "returned the text to you"
 6. **If Green**: merge via `ghsudo gh pr merge <number> --repo <owner>/<repo> --squash`
 7. **If Red or Conflicting**: do NOT merge; post `@dependabot rebase`, then enter **Rebase Watch Loop** (step 5a)
 
@@ -75,7 +75,9 @@ Spawn **all agents in a single message** for maximum parallelism.
 
 ### 5. Collect Results and Handle Write Blocks
 
-As agents complete, check results. Agents may be blocked from GitHub write operations by hooks. For blocked agents:
+As agents complete, check results. **Never trust a "posted"/"published" self-report at face value** — confirmed case: an agent reported the comment published when the PR actually had zero comments, and separately stated unverified claims (signature checks, release immutability) as confirmed fact. Verify independently before moving on: `gh pr view <number> --json comments` (or the MCP equivalent) for an actual comment matching this run, and re-read the agent's own reasoning for anything phrased as fact that it did not actually check.
+
+Agents may be blocked from GitHub write operations by hooks. For blocked agents, or where verification above fails:
 1. Post the review comment yourself using GitHub MCP
 2. Execute the merge, rebase request, or watch loop yourself
 

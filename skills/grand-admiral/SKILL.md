@@ -173,6 +173,7 @@ Agents have NO conversation history. Every prompt MUST include:
 11. **Coding standards (mandatory)**: any agent that writes, modifies, reviews, or tests code MUST be told to load and continuously apply `/coding-best-practices` (plus the relevant language best-practices skill) throughout the task — not as a one-time read. It is preloaded via frontmatter, but state it explicitly so the agent applies it as it works.
 12. **Cargo scope (code agents)**: name the narrowest cargo scope allowed (`-p` covering its files) and require the ledger evidence line (command, tree key, exit, log path) in its report. Workspace-wide runs are rarely warranted — reserve for real cross-cutting regression risk (see Verification Economy), never a default merge-gate step. Per-checkout target-dir isolation is automatic (`cargo-cached.sh` derives it — no manual `CARGO_TARGET_DIR`), but still require the provenance check (specific test names in the log) — see Worktree Isolation § Same-HEAD hazard.
 13. **Executable brief**: require only actions supported by the selected agent's frontmatter tools. A non-Task agent such as `technical-writer-trillian` cannot invoke another agent; tell it to "apply the `plugin-dev:skill-reviewer` rubric directly (read `plugin-dev/agents/skill-reviewer.md` if unfamiliar)," not to run that agent.
+14. **Reporting channel**: state explicitly that the agent is always a subagent, never the top-level session — inline assistant text reaches no coordinator, regardless of what the agent's own reasoning concludes about its position. Give it the exact `to:` value to use (a named spawn's own coordinator identity, or `team-lead`); `to:"main"` is rejected for a named subagent ("You are the main conversation") and has caused agents to fall back to inline text, orphaning full reports. If a SendMessage-addressed agent goes silent anyway (correctly addressed but never acknowledged, e.g. stuck on a plan-approval gate), don't assume it's idle — see Recovery § Reporting Channel Failures.
 
 ## MemCan Context Injection
 
@@ -205,6 +206,8 @@ Every code-mutating spawned agent MUST work in an isolated git worktree — no e
 3. Only when origin is genuinely required (cross-machine work, PR-gated CI, cross-session sharing).
 
 **`isolation` silently dropped — KNOWN BROKEN** in two confirmed scenarios: (1) **team-spawns** — `Agent(team_name=..., isolation="worktree")` ignores the flag; the agent runs in the lead's CWD; (2) **standalone `run_in_background` spawns** — two background agents landed in the main repo with no worktree, switched its branch, and left uncommitted edits, corrupting main. Symptom in both: `pwd` returns the main repo path, not `/data/git-worktrees/<repo-path-slug>`. An in-prompt pwd self-check ("STOP if pwd not under /data/git-worktrees") is NOT sufficient — agents may proceed anyway.
+
+**A pre-created worktree can also vanish mid-session** (cause unconfirmed — not by the occupying agent), silently falling back to the parent's real checkout with whatever branch it happens to have checked out. Confirmed: an agent caught this only by chance, checking `pwd` before a merge commit that would otherwise have landed on the user's real branch. The one-time pwd self-check above is a start-of-session check and misses this — instruct every worktree-scoped agent to re-verify `pwd` against its assigned worktree path before EVERY git write command (not just at start), and to fail closed: refuse the write and report the mismatch to the coordinator rather than proceeding against whatever real checkout `pwd` now resolves to.
 
 **The coordinator sets up the worktree — the agent cannot.** For ANY code-mutating background agent (team or standalone), BEFORE spawning:
 1. Pre-create: `git worktree add -B <branch> <abs-path> <SHA>` — resolved SHA, never a branch name or symbolic ref.
@@ -282,6 +285,14 @@ Monitor(persistent=true, description="agent stall watchdog",
 `${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (resolves at skill-load time). Allow-list once in settings: `Bash(python3 */scripts/minion-monitoring.py *)`. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+); point `--worktrees`/`$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root (also feeds Codex job discovery). `TaskStop` it when the wave completes.
 
 **Load `references/stall-watchdog.md` before the first dispatch on this fallback path** — discovery sources, full event grammar (`STALL`/`RESUMED`/`GONE`/`CODEX_*`), Multi-Session Hygiene traps, and the mandatory STALL/GONE response playbooks. Never improvise a response to either event without it.
+
+### Reporting Channel Failures
+
+A correctly-addressed `SendMessage` to the coordinator can still fail to arrive — confirmed live: an agent blocked ~40 minutes on a plan-approval gate, staying alive with CPU activity (so no watchdog stall fires) with its message never reaching the coordinator's context. This looks externally identical to a genuine stall, but the fix is different: a stall needs redirection or a kill; a silently-undelivered message needs its content recovered, not the agent restarted.
+
+1. **Check liveness first** (`pgrep`/`ps` on the agent's PID, tmux pane activity) — CPU activity with zero edits for longer than a normal plan-gate wait is the signature, not "no output at all."
+2. **Recover the payload from its own transcript**, not by re-asking the agent: grep the agent's JSONL under `~/.claude/projects/` for its last outgoing message, or dispatch a disposable `Explore` agent to extract undelivered `SendMessage` payloads and inline text from that transcript.
+3. **Don't conclude "idle" or "no work happened"** from mailbox silence alone — a subagent that hit this wall (or the related `to:"main"` rejection, § Agent Prompt Requirements #14) has been observed falling back to inline assistant text, which is recoverable the same way (grep its transcript) rather than lost.
 
 ## Anti-Patterns
 
