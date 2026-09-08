@@ -126,6 +126,8 @@ After upstream review completes, assess how the dependency is used in **our** co
 
 ## 6. Consolidated Report
 
+**This skill only produces and returns the report — it never posts anywhere.** `allowed-tools` above has no GitHub comment/write tool; there is nothing here that could publish this report even if instructed to. Never describe the report as "posted" or "published" in any form — say "returned" or "written to `<path>`". The invoking skill or coordinator owns actually publishing it (see e.g. `dependabot-merge` § 5) and is responsible for verifying that publish actually happened (comment count/URL), not for trusting a self-report of success from whatever produced the text.
+
 Present a single report:
 
 ### Change Summary

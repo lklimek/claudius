@@ -16,6 +16,15 @@
 # many REAL cargo runs execute at once across every wrapper sharing that ledger.
 set -uo pipefail
 
+# A spawned agent's Bash tool can start with a PATH that omits ~/.cargo/bin
+# (rustup's install location) even though the invoking user's interactive
+# shell has it — every such agent hits "cargo: command not found" on its
+# first wrapped call. Prepend it defensively; a no-op when already present
+# or when cargo lives elsewhere (e.g. a system package).
+if [[ -n "${HOME:-}" ]]; then
+  [[ ":$PATH:" == *":$HOME/.cargo/bin:"* ]] || PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 CACHE_ROOT="${CLAUDIUS_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claudius}"
 TTL_HOURS=24
 

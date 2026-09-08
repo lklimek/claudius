@@ -96,6 +96,8 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 9. **Cross-domain hints**: passively report any issue noticed in a peer's primary domain rather than hunting outside the assigned scope, silently duplicating it, or omitting it; tag the finding with `cross_domain_hint: "<peer-role>"` so consolidation can weigh the overlap
 10. **UI-text scan**: scan the diff's user-visible strings — labels, buttons, toasts, dialogs, error messages — for raw exception text, stack traces, error codes, internal jargon, or alarming wording on a benign condition; these trip `G-UI-TEXT` (`claudius:severity`)
 11. **Context Digest** (verbatim, when the invoker supplied one — defined in `review-pr` § Context Digest; never restate or reinvent its contents): pass it as its own numbered item with this rule attached — *the digest adjusts scoring (via `claudius:severity`'s non-adversarial `likelihood` recipe), it never suppresses reporting: report the finding with context-adjusted floats, never drop it; a field marked `unknown` changes nothing.*
+12. **Worktree isolation (mandatory upfront, not reactive)**: any agent instructed to `git checkout`/build/test the reviewed branch MUST be told to work in a pre-created isolated worktree in its FIRST spawn prompt — never bolted on as a follow-up correction after it has already touched the shared tree (see `grand-admiral` § Worktree Isolation for setup). A reactive correction arrives too late: the checkout already happened, flipping HEAD under any other agent concurrently reading the same shared tree.
+13. **Cross-branch isolation, reviewing sibling PRs in one session**: when this session is reviewing more than one branch/PR against the same repo, tell every agent to verify any symbol, function, or API it cites — in findings, positives, or recommendations — actually exists on the branch it was assigned (`git show <its-target-ref>:<file>`), not a sibling branch reviewed in the same session. A shared "positives" blurb or boilerplate recommendation reused across findings is exactly where a sibling branch's content leaks in unnoticed.
 
 ### Finding format (JSON)
 
@@ -136,17 +138,19 @@ Agents MUST write findings to the specified file path as a JSON array of `findin
 
 **Metadata is coordinator-owned**: producers emit only the bare `finding_section[]` array, with no envelope object or metadata fields. The coordinator resolves the full 40-character commit SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` when the branch has no upstream) and supplies commit/date/branch/project through `prepare --metadata`; `prepare` derives repository metadata from `--repo-root`.
 
-Include this contract, with the actual roster and output path substituted, in every producer spawn prompt:
+**Hoist the invariant part into a file, don't restate it per spawn.** Items 2–13 above are identical across every producer in a fan-out; with N producers, retyping them N times costs the coordinator real output tokens for zero variable content (measured: ~2500 lines across 5 producers on one large review). Before spawning, copy [references/producer-contract.md](references/producer-contract.md) to `<SCRATCH_DIR>/producer-contract.md` unmodified — it already contains the finding-format JSON contract, the producers-must-NOT-emit list, the ID-prefix table, the call-tree/UI-text/UX-DX/collision/process rules, and the terse report-back instruction (everything below that has no per-agent variable). Then each spawn prompt carries only what actually varies:
 
 ```text
+Read <SCRATCH_DIR>/producer-contract.md and <SCRATCH_DIR>/context-digest.md (if present) before emitting anything — both apply to your output.
+
 Deployed peers (all already live; do not ask whether they are running):
 - <teammate-name> — <reviewer role/focus> — <file scope>
 - <teammate-name> — <reviewer role/focus> — <file scope>
 
-Write ONLY the bare finding_section[] JSON array to <SCRATCH_DIR>/<role>-findings.json. Do not add an envelope object or any metadata/commit/repository/date/branch field; the coordinator supplies metadata separately through consolidate_reports.py prepare --metadata. Do NOT run consolidate_reports.py yourself and do NOT pre-assemble report.json shape; the coordinator does that.
-Before writing, check whether the target already exists. If it is not your own in-progress output, preserve it as <role>-findings.PRE-COLLISION.json before writing; never overwrite another session's output silently.
-Passively tag an incidentally noticed peer-domain issue with cross_domain_hint: "<peer-role>"; do not actively search outside your assigned scope.
+Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json.
 ```
+
+This also makes the fan-out auditable after the fact — archive `producer-contract.md` next to `report.json` so a reader can see exactly what producers were told, same as `context-digest.md`.
 
 **ID prefixes**: `SEC-` security, `PROJ-` project, `QA-`/`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` code quality (jointly owned by `project-reviewer-adams` and `qa-engineer-marvin` — see `report-format`'s ID-prefix table; prefix reflects finding category/language, not agent identity), `DOC-` docs, `CALL-` call-tree. Agents assign provisional sequential IDs within their prefix (e.g., `SEC-001`, `SEC-002`); collisions across parallel agents are fine — consolidation (5c) deduplicates and reassigns final IDs.
 

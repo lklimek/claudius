@@ -6,6 +6,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+### Added
+
+- **`codex-crew` § Routing**: security-related Codex dispatches (security audits/reviews, auth/crypto/secrets handling, vulnerability triage/remediation, dependency security review) now route to `--model gpt-daybreak-blue-latest --effort high` instead of Astra, when available; a job that fails with an unknown-model/access-gate error falls back to `gpt-6-astra --effort high` for that dispatch, reported to the user. Non-security coding dispatch is unchanged (Astra remains the default).
+
+## [7.5.0] - 2026-09-07
+
+### Added
+
+- **`grand-admiral` § Agent Prompt Requirements**, new item 14 (Reporting channel): every spawn prompt must state the agent is always a subagent and give it the exact `SendMessage` `to:` target — fixes agents falling back to unread inline text after a `to:"main"` rejection or a self-diagnosed "I'm top-level" mistake.
+- **`grand-admiral` § Recovery → Reporting Channel Failures**: recovery playbook for a correctly-addressed `SendMessage` that never arrives (e.g. an agent stuck ~40min on a plan-approval gate) — check liveness, then recover the payload from the agent's own JSONL transcript rather than assuming it's idle or restarting it.
+- **`grand-admiral` § Worktree Isolation**: a pre-created worktree can vanish mid-session with no guard — added a fail-closed instruction (re-verify `pwd` before every git write, refuse and report on mismatch, not just a one-time start-of-session check).
+- **`grumpy-review` § Craft Agent Prompts**, items 12–13: mandate worktree isolation in the agent's INITIAL spawn prompt (not a reactive follow-up) for any agent that checks out/builds/tests the reviewed branch, plus a cross-branch citation guard for sessions reviewing sibling PRs in the same repo.
+- **`review-dependency`**: explicit statement that the skill only returns/writes its report and never posts anywhere (its `allowed-tools` has no GitHub write tool) — fixes a fork conflating "returned text to caller" with "posted to GitHub."
+- **`dependabot-merge` § 5**: require the spawned agent to report "confirmed posted: `<url>`" vs "NOT posted", and require the coordinator to verify the actual PR comment before trusting a "published" self-report.
+
+### Changed
+
+- **`grumpy-review`**: hoisted the per-producer boilerplate (finding-format contract, ID prefixes, output rules — items 2–13) into a shipped template (`references/producer-contract.md`, copied to `<SCRATCH_DIR>` once per review) instead of restated in every spawn prompt; ~2500 lines of redundant coordinator output on a 5-producer round, per measurement. Producers now also report back in ≤3 lines (band counts, output path, candy tally) instead of prose restating their own JSON file.
+- **`scripts/cargo-cached.sh`**: prepend `~/.cargo/bin` to `PATH` defensively — spawned agents' Bash tool can start without it, hitting "cargo: command not found" on the first wrapped call.
+
 ## [7.4.1] - 2026-09-07
 
 ### Changed
