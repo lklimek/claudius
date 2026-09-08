@@ -6,8 +6,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [7.6.0] - 2026-09-08
-
 ### Added
 
 - **`codex-crew` § Routing**: security-related Codex dispatches (security audits/reviews, auth/crypto/secrets handling, vulnerability triage/remediation, dependency security review) now route to `--model gpt-daybreak-blue-latest --effort high` instead of Astra, when available; a job that fails with an unknown-model/access-gate error falls back to `gpt-6-astra --effort high` for that dispatch, reported to the user. Non-security coding dispatch is unchanged (Astra remains the default).
