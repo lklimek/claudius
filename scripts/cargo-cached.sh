@@ -21,7 +21,9 @@ set -uo pipefail
 # shell has it — every such agent hits "cargo: command not found" on its
 # first wrapped call. Prepend it defensively; a no-op when already present
 # or when cargo lives elsewhere (e.g. a system package).
-[[ ":$PATH:" == *":$HOME/.cargo/bin:"* ]] || PATH="$HOME/.cargo/bin:$PATH"
+if [[ -n "${HOME:-}" ]]; then
+  [[ ":$PATH:" == *":$HOME/.cargo/bin:"* ]] || PATH="$HOME/.cargo/bin:$PATH"
+fi
 
 CACHE_ROOT="${CLAUDIUS_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/claudius}"
 TTL_HOURS=24
