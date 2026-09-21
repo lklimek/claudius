@@ -82,7 +82,7 @@ Applies to actual coding work (Bilby, or Codex Astra per `codex-crew`'s dev-pref
 
 ### Monitoring (Mandatory)
 
-Every dispatched agent — Claude subagent or Codex job — MUST be watched for stalls. **Prefer the MCP watchdog** (§ Recovery → MCP Watchdog) when `mcp__agent-watchdog__*` tools are available; otherwise launch the built-in Monitor once per session (§ Recovery → Built-in Stall Watchdog). A fixed-tool Claude subagent without watchdog tools uses that fallback when permitted, or native Claude Code task/teammate notifications when user policy overrides the fallback; see MCP Watchdog step 2. Both watchdogs are silent when healthy — zero coordinator tokens until something stalls, fails, or vanishes — so cost never justifies skipping. An un-monitored dispatch is a doctrine violation: Codex jobs emit no reliable completion signal (see `codex-crew`), so without a watchdog a finished or failed job sits unnoticed.
+Every dispatched agent — Claude subagent or Codex job — MUST be watched for stalls: launch the built-in Monitor once per session (§ Recovery → Stall Watchdog). It's silent when healthy — zero coordinator tokens until something stalls, fails, or vanishes — so cost never justifies skipping. An un-monitored dispatch is a doctrine violation: Codex jobs emit no reliable completion signal (see `codex-crew`), so without a watchdog a finished or failed job sits unnoticed.
 
 ### Standalone vs Coordinated
 
@@ -263,19 +263,9 @@ The harness auto-notifies on agent completion AND death (crash, rate-limit, term
 
 Treat every `<task-notification>` as a routing hint, not proof that the task belongs to this session: unrelated sessions' notifications have been observed in the same stream. Before acting, match its job id and workspace against a job this session dispatched, then verify the direct job-state file and worktree path; ignore and report notifications that fail that check.
 
-### MCP Watchdog (preferred)
+### Stall Watchdog
 
-If `mcp__agent-watchdog__*` tools are available, use them instead of the Monitor script — one mechanism covers Claude agents and Codex CLI/Companion jobs (`runtime: claude_code|codex_cli|codex_companion`), no polling script or session-id guessing.
-
-1. **Register once** at session start: `register_session(runtime="claude_code", kind="main", native_id=<your session id>, event_key=<fresh>)` — binds this transport to one tree. Keep the returned `session_id`.
-2. **Per spawn**: inject your `session_id` into the agent's prompt so it can self-register as a child (`register_session(kind="child", parent_session_id=<yours>, event_key=<fresh>)`) only if its explicit toolset carries the MCP tool; then `register_delegation(parent_session_id, child_session_id, event_key=<fresh>)` to record the relation (optional `deadline_ms`). Claudius plugin agents with fixed toolsets carry `mcp__agent-watchdog__register_session`; a third-party or generic fixed-tool Claude subagent without it cannot self-register, and the coordinator has no native child id with which to register it on the subagent's behalf. Cover that external subagent with the built-in fallback below when permitted; if user-level policy overrides that fallback in favor of MCP-only monitoring, native Claude Code task/teammate completion, death, and idle notifications are the sanctioned coverage for this specific invisible subagent — corroborate them with transcript/process/worktree evidence rather than pretending it is in the MCP tree.
-3. **Monitor**: `list_events(after=<cursor>)` as a durable inbox — process the page, pass its `next_cursor` back as `after` to acknowledge. `get_session`/`get_session_tree` for point-in-time views; `get_watchdog_health` for adapter/tree health.
-4. **Experimental — corroborate, never trust alone.** Cross-check every signal (stall, completion, disappearance) against direct evidence (tmux pane, process liveness, `git log`/`status`, ledger) before acting — same discipline as the built-in watchdog's STALL/GONE handling (see `references/stall-watchdog.md`).
-5. **Report anomalies** (stale/incorrect state, a dropped session binding needing re-registration, degraded adapters, false stalls/completions): tell the user, and log via `memcan:todo` (`project=agent-watchdog`) once memcan is reachable so the tool improves.
-
-### Built-in Stall Watchdog (fallback)
-
-When the MCP watchdog is unavailable or degraded, launch ONE persistent Monitor per session/wave — silent until an agent actually stalls:
+Launch ONE persistent Monitor per session/wave — silent until an agent actually stalls:
 
 ```
 Monitor(persistent=true, description="agent stall watchdog",
@@ -284,7 +274,7 @@ Monitor(persistent=true, description="agent stall watchdog",
 
 `${CLAUDE_SKILL_DIR}/../../scripts/` is the portable plugin-root path (resolves at skill-load time). Allow-list once in settings: `Bash(python3 */scripts/minion-monitoring.py *)`. Tune `--stall-secs` to expected build duration (cold Rust builds: 600+); point `--worktrees`/`$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root (also feeds Codex job discovery). `TaskStop` it when the wave completes.
 
-**Load `references/stall-watchdog.md` before the first dispatch on this fallback path** — discovery sources, full event grammar (`STALL`/`RESUMED`/`GONE`/`CODEX_*`), Multi-Session Hygiene traps, and the mandatory STALL/GONE response playbooks. Never improvise a response to either event without it.
+**Load `references/stall-watchdog.md` before the first dispatch** — discovery sources, full event grammar (`STALL`/`RESUMED`/`GONE`/`CODEX_*`), Multi-Session Hygiene traps, and the mandatory STALL/GONE response playbooks. Never improvise a response to either event without it.
 
 ### Reporting Channel Failures
 

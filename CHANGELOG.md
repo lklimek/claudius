@@ -6,9 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+### Fixed
+
+- Updated monitoring instructions and Recovery section references in `delegate`, `codex-crew`, `ci-dance`, and the stall watchdog reference to consistently use the built-in Monitor after removal of the MCP integration.
+
+## [7.6.0] - 2026-09-17
+
 ### Added
 
 - **`codex-crew` § Routing**: security-related Codex dispatches (security audits/reviews, auth/crypto/secrets handling, vulnerability triage/remediation, dependency security review) now route to `--model gpt-daybreak-blue-latest --effort high` instead of Astra, when available; a job that fails with an unknown-model/access-gate error falls back to `gpt-6-astra --effort high` for that dispatch, reported to the user. Non-security coding dispatch is unchanged (Astra remains the default).
+
+### Removed
+
+- **MCP `agent-watchdog` integration**: dropped in favor of the built-in Monitor-based stall watchdog alone. Removed `mcp__agent-watchdog__register_session` from the 7 core agents' fixed toolsets (`architect-nagatha`, `developer-bilby`, `project-reviewer-adams`, `qa-engineer-marvin`, `security-engineer-smythe`, `technical-writer-trillian`, `ux-designer-diziet`) and the `grand-admiral` § Recovery → MCP Watchdog section; `Stall Watchdog` (renamed from `Built-in Stall Watchdog (fallback)`) is now the sole monitoring mechanism.
 
 ## [7.5.0] - 2026-09-07
 

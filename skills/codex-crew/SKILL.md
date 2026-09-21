@@ -80,8 +80,6 @@ Mitigation: poll for terminal status before the next same-cwd dispatch (never a 
 
 ## Monitoring a Codex Job
 
-**MCP watchdog covers Codex too** (`runtime: codex_cli`/`codex_companion` in `register_session`) — prefer it over the `CODEX_*` machinery below when available (see `grand-admiral` § Recovery → MCP Watchdog), with the same corroborate-before-acting caution.
-
 **Direct dispatch has no agent lifecycle to watch — by design.** A `--background` dispatch is a detached Node process with on-disk job-state files: no subagent, no `idle_notification`, nothing to shut down. Go straight to the job-state file. (If `codex:codex-rescue` is ever in play — the interactive `/codex:rescue` command — treat its `idle_notification` as worthless in either direction: confirmed 4-for-4 in one wave, jobs sat `completed` 40–85 minutes before the wrapper reported.)
 
 **Primary method: read the job's on-disk state directly** (mtime-gated, minimal-field reads — never the full state blob). See `references/sandbox-and-recovery.md` § On-Disk Job State for the field list, `result.rawOutput`/`result.touchedFiles` usage, and matching jobs to dispatches. Load-bearing, not a fallback — it is what actually recovers status/results when the stall watchdog can't.
@@ -113,10 +111,10 @@ The loop is itself a backgrounded Bash call and inherits the silent-kill risk of
 
 `ScheduleWakeup` is not a substitute — it's `/loop` dynamic-mode-only and errors outside that context.
 
-- The built-in stall watchdog (`grand-admiral` § Recovery → Built-in Stall Watchdog, `scripts/minion-monitoring.py`) discovers Codex jobs and emits `CODEX_*` transition events when the MCP watchdog isn't in use. A watchdog — MCP or built-in — is **mandatory** whenever any agent, Claude or Codex, is dispatched (see `grand-admiral` § Spawning → Monitoring). Treat `CODEX_*` events as **best-effort, layered on top of** the direct job-state check — never a substitute.
+- The built-in stall watchdog (`grand-admiral` § Recovery → Stall Watchdog, `scripts/minion-monitoring.py`) discovers Codex jobs and emits `CODEX_*` transition events. It is **mandatory** whenever any agent, Claude or Codex, is dispatched (see `grand-admiral` § Spawning → Monitoring). Treat `CODEX_*` events as **best-effort, layered on top of** the direct job-state check — never a substitute.
 - **Codex discovery requires `--worktrees`** — a direct dispatch is never a teammate, so `--worktrees` pointed at the configured worktree root is the only way the built-in watchdog sees it. Without it: a one-time startup warning, then silently zero Codex monitoring.
 - **Direct discovery (`--worktrees`/Source C) bypasses the session gate entirely** — a workspace under the worktree root surfaces every job's `CODEX_*` events regardless of `sessionId`. The strict single-session match applies only to *ambient* discovery (a workspace reachable solely via team lead/member cwd, not also under the worktree root) — `codex-companion.mjs` stamps each job's `sessionId` from its own dispatching session, never the coordinator's, so the ambient path can under-report on a mismatch. The direct job-state check is unaffected either way — which is why it's primary.
-- Don't guess the Monitor's `--session-id`: derive `--team-dir` from a spawn's own `agent_id` per `grand-admiral`'s `references/stall-watchdog.md` (linked from § Recovery → Built-in Stall Watchdog).
+- Don't guess the Monitor's `--session-id`: derive `--team-dir` from a spawn's own `agent_id` per `grand-admiral`'s `references/stall-watchdog.md` (linked from § Recovery → Stall Watchdog).
 
 ## Recovering a Stale Broker
 
