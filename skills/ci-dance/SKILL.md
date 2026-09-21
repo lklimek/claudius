@@ -155,7 +155,7 @@ SendMessage(to="grumpy-stream", message="I'm fixing src/auth.rs:17-25, skip this
 
 After all three streams complete:
 
-**An empty task-notification is not clean completion.** A stream notification with no substantive report or findings is a possible STALL — investigate and resume per `grand-admiral` § Recovery → Built-in Stall Watchdog, never treat it as a zero-finding result.
+**An empty task-notification is not clean completion.** A stream notification with no substantive report or findings is a possible STALL — investigate and resume per `grand-admiral` § Recovery → Stall Watchdog, never treat it as a zero-finding result.
 
 1. Collect each stream's final report — findings fixed, findings claim-deferred (claimed by another stream, not yet self-verified), findings classified `out_of_scope_follow_up` — from its completion `SendMessage`, plus its worktree commit log (`git -C <worktree> log --oneline`)
 2. Enumerate worktree branches — collect commits from each stream's worktree

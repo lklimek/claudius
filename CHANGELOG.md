@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+### Fixed
+
+- Updated monitoring instructions and Recovery section references in `delegate`, `codex-crew`, `ci-dance`, and the stall watchdog reference to consistently use the built-in Monitor after removal of the MCP integration.
+
 ## [7.6.0] - 2026-09-17
 
 ### Added

@@ -1,6 +1,6 @@
 # Built-in Stall Watchdog — Reference
 
-Deep mechanics behind `grand-admiral` § Recovery → Built-in Stall Watchdog. Load before your first dispatch on a session using this fallback (MCP watchdog unavailable/degraded) — required before acting on any STALL/GONE event.
+Deep mechanics behind `grand-admiral` § Recovery → Stall Watchdog. Load before your first dispatch — required before acting on any STALL/GONE event.
 
 ## Stall Definition & Discovery
 
@@ -11,7 +11,7 @@ A stall is **owning an in_progress task AND idle past threshold AND no build run
 - **Individual/background subagents** (`…/subagents/agent-*.jsonl`) — ANONYMOUS, **off by default**; enable with `--watch-subagents`. Best-effort: a finished subagent has a stale transcript by design with no reliable on-disk completion signal, and the harness already notifies on completion/death — treat any subagent STALL as an investigate prompt.
 - **Codex Companion jobs** (`jobs/*.json` below the state directory mapped from the selected team's workspaces) — session- and workspace-scoped, with an independent `CODEX_*` state machine. Detailed job records provide terminal truth; job/log mtimes provide progress; compatible launcher/broker PIDs provide corroborating liveness.
 
-Launch command: see `grand-admiral` § Recovery → Built-in Stall Watchdog (kept there so `${CLAUDE_SKILL_DIR}` substitution resolves at skill-load time).
+Launch command: see `grand-admiral` § Recovery → Stall Watchdog (kept there so `${CLAUDE_SKILL_DIR}` substitution resolves at skill-load time).
 
 **Point `--worktrees` or exported `$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root.** The flag takes precedence over the environment, and the built-in default is `/data/git-worktrees`. The selected root carries double duty: Source C stall-tracks the worktrees it finds there, AND those same dirs are appended to the Codex Source D workspace candidate list. Without the correct root, Source D sees only the team's lead/member cwds — so an **unnamed** Codex dispatch, which contributes no member cwd, is invisible and its jobs go unmonitored. Source C matches worktree dirs under that root by this repo's `<repo-path-slug>` naming (per `grand-admiral` § Worktree Isolation), not an `agent-` prefix.
 
