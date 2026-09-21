@@ -6,8 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [7.6.1] - 2026-09-21
+
 ### Fixed
 
+- **`codex-crew` § Routing**: Daybreak Blue documented as an alias of `gpt-5.6-sol` (not Astra) with reduced refusals for defensive work, gated by separate Trusted Access for Cyber approval; Astra access noted as Daybreak/Trusted-Access gated.
 - Updated monitoring instructions and Recovery section references in `delegate`, `codex-crew`, `ci-dance`, and the stall watchdog reference to consistently use the built-in Monitor after removal of the MCP integration.
 
 ## [7.6.0] - 2026-09-17
