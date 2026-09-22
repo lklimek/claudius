@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 import jsonschema
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import consolidate_reports as cr
@@ -190,6 +191,55 @@ class TestCallTreeCategory:
         }
         errors = list(VALIDATOR.iter_errors(report))
         assert errors, "Expected schema to reject finding with unknown id prefix XYZ-"
+
+
+class TestArchitectureAndUxCategories:
+    """architect-nagatha (ARCH-/architecture) and ux-designer-diziet (UX-/ux)
+    must validate end-to-end, same as every other reviewer's category+prefix."""
+
+    @pytest.mark.parametrize(
+        "category,prefix,title",
+        [
+            ("architecture", "ARCH", "Architecture"),
+            ("ux", "UX", "UX"),
+        ],
+    )
+    def test_prefix_finding_validates(self, category, prefix, title):
+        report = {
+            "schema_version": "4.0.0",
+            "metadata": {"project": "p", "date": "2026-09-22"},
+            "executive_summary": {"overall_assessment": "ok"},
+            "summary_statistics": {
+                "total_findings": 1,
+                "severity_counts": {
+                    "CRITICAL": 0,
+                    "HIGH": 0,
+                    "MEDIUM": 1,
+                    "LOW": 0,
+                    "INFO": 0,
+                },
+            },
+            "findings": [
+                {
+                    "title": title,
+                    "category": category,
+                    "findings": [
+                        {
+                            "id": f"{prefix}-001",
+                            "likelihood": 0.5,
+                            "impact": 0.5,
+                            "relevance": 1.0,
+                            "title": "Finding",
+                            "location": "src/x.rs:1",
+                            "description": "d",
+                            "recommendation": "r",
+                        }
+                    ],
+                }
+            ],
+        }
+        errors = list(VALIDATOR.iter_errors(report))
+        assert errors == [], [e.message for e in errors]
 
 
 class TestV31AdditiveFields:

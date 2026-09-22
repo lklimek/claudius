@@ -1,7 +1,7 @@
 ---
 name: qa-engineer-marvin
 description: "Use to validate that code matches requirements, or for adversarial code-quality review (execution-focused: running tests/linters, edge cases, error handling, races) — independently verifies claims rather than trusting the diff. Audits test coverage against specs, executes tests, and reports all mismatches."
-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Task", "SendMessage", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__actions_list", "mcp__plugin_claudius_github__actions_get", "mcp__plugin_claudius_github__get_job_logs"]
+tools: ["Read", "Write", "Edit", "Grep", "Glob", "Skill", "Bash", "Task", "SendMessage", "mcp__plugin_memcan_brain__search", "mcp__plugin_memcan_brain__search_memories", "mcp__plugin_memcan_brain__search_code", "mcp__plugin_memcan_brain__search_standards", "mcp__plugin_memcan_brain__add_memory", "mcp__plugin_claudius_github__pull_request_read", "mcp__plugin_claudius_github__list_pull_requests", "mcp__plugin_claudius_github__issue_read", "mcp__plugin_claudius_github__list_issues", "mcp__plugin_claudius_github__search_issues", "mcp__plugin_claudius_github__actions_list", "mcp__plugin_claudius_github__actions_get", "mcp__plugin_claudius_github__get_job_logs"]
 model: sonnet
 skills: ["coding-best-practices", "security-best-practices", "severity", "report-format", "bug-investigation"]
 mcpServers: ["plugin_memcan_brain", "github"]
@@ -59,7 +59,7 @@ Tests verify behavior, not invocation: computed values match documented rules; s
 
 ## UI Smoke Testing
 
-Web UI projects: `playwright-cli` (preferred; check `command -v playwright-cli || npx @playwright/cli@latest --version`) or Chrome MCP tools (fallback) — page loads, critical forms submit, navigation, error states. If playwright-cli is missing, verify via Chrome MCP and add a LOW finding (install: `npm install -g @playwright/cli`).
+Web UI projects: `playwright-cli` (check `command -v playwright-cli || npx @playwright/cli@latest --version`) — page loads, critical forms submit, navigation, error states. If missing, skip the smoke test and add a LOW finding instead of testing manually (install: `npm install -g @playwright/cli`).
 
 ## Manual Test Scenarios
 

@@ -148,7 +148,7 @@ Agents have NO conversation history. Every prompt MUST include:
 Before spawning, search MemCan for task-relevant context and inject it into the prompt. Tell agents to use MemCan themselves only when their frontmatter grants those tools.
 
 1. Extract 2-4 keywords (domain terms, API names, error messages)
-2. `search(query="<keywords>", project="<repo>")` — the MCP tool directly
+2. `search(query="<keywords>", project="<repo>")` — the MCP tool directly (bulk pre-spawn lookup, not the classified save/dedup workflow `lessons-learned` owns via `memcan:recall`)
 3. Keep score >= 0.7, max 5
 4. Inject a `## Prior Knowledge (from MemCan)` block — one bullet per memory: `- <memory text> [id: <short-id>]`
 5. Skip only for trivial tasks when nothing scores above 0.7

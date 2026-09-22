@@ -16,7 +16,7 @@ Agents emit a JSON array of `finding_section` objects:
 [
   {
     "title": "Section Title",
-    "category": "security|project|code_quality|call_tree|dependencies|documentation|pr_comments|pr_promises",
+    "category": "security|project|code_quality|call_tree|dependencies|documentation|pr_comments|pr_promises|architecture|ux",
     "findings": [
       {
         "id": "PREFIX-001",
@@ -56,7 +56,11 @@ Producer-emitted shape: integer `severity` and float `overall_severity` are abse
 
 Producers MUST emit `likelihood`, `impact`, and `relevance` — the schema rejects findings missing any; the coordinator derives `overall_severity` and integer `severity` per the `severity` skill's band table. The `validate-findings` skill is the only documented path to re-estimate floats post-hoc when a producer's partial output arrives without them.
 
-**Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (only when the producer captured exact source during analysis — never invent one).
+**Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (see below).
+
+### code_snippets
+
+Array of `{"language", "caption", "content"}`, only when the producer captured exact source during analysis — never invent one. `language` is a free-form tag naming the snippet's syntax for highlighting (e.g. `rust`, `python`, `diff` for a raw diff hunk); `caption` is a short `path:location` label; `content` is the literal snippet text.
 
 **Merge classification** (orthogonal to severity — see `severity` skill § Merge Classification): `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` and `intent_basis` (string|null — for `blocking`, the gate ID plus one line of evidence, e.g. `"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`). Coordinator-owned like `overall_severity`; the ONLY producers allowed to emit them are **coordinator-inline producers** (review-pr Pass C `pr_promises`, check-pr-comments, review-dependency) — same exception pattern as `location_permalink` below. `summary_statistics.merge_class_counts` (optional) carries the per-class tally.
 
@@ -96,6 +100,8 @@ Write findings files with the Write tool — never `cat > file`, `tee`, heredocs
 | `PPM-` | pr_promises | review-pr (Pass C: promise verification) |
 | `DEP-` | dependencies | review-dependency |
 | `CALL-` | call_tree | reviewer call-tree inspection pass |
+| `ARCH-` | architecture | architect-nagatha |
+| `UX-` | ux | ux-designer-diziet |
 
 `CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` are category prefixes, not identity-bound — whichever of `project-reviewer-adams` or `qa-engineer-marvin` surfaced the finding emits them. IDs are provisional — consolidation deduplicates and reassigns final IDs.
 

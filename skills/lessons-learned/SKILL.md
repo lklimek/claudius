@@ -23,4 +23,4 @@ For each qualified item:
 2. **Type**: lesson, decision, or preference
 3. **`memcan:remember`** to persist; memcan unavailable → report the items and note they were not persisted
 
-Log each save (scope, type, one-line summary) and the total. Never call memcan MCP tools directly — saves go through `memcan:remember`, searches through `memcan:recall`.
+Log each save (scope, type, one-line summary) and the total. Never call memcan MCP tools directly for this skill's own save/dedup/search workflow — saves go through `memcan:remember`, searches through `memcan:recall`. (Exception: `grand-admiral`'s pre-delegation context injection calls the MCP `search` tool directly — that's a bulk lookup for prompt-briefing, not the classification/dedup work this skill owns.)

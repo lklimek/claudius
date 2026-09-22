@@ -3,7 +3,7 @@ name: review-dependency
 description: "This skill should be used when the user asks to \"review a dependency update\", \"audit this dependency bump\", or assess the security of an upgraded or newly added dependency."
 agent: claudius
 context: fork
-allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Bash(mktemp *), Bash(git diff *), Bash(git log *), Bash(git show *), Bash(git tag *), Bash(git rev-parse *), Bash(git clone --depth=* --config core.hooksPath=/dev/null -- *), Bash(gh api /advisories*), Bash(rm -rf /tmp/claude/*), Bash(govulncheck *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *)
+allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Agent, Bash(mktemp *), Bash(git diff *), Bash(git log *), Bash(git show *), Bash(git tag *), Bash(git rev-parse *), Bash(git clone --depth=* --config core.hooksPath=/dev/null -- *), Bash(gh api /advisories*), Bash(rm -rf /tmp/claude/*), Bash(govulncheck *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *)
 ---
 
 # Dependency Security Review
