@@ -32,7 +32,7 @@ Understand the user's mental model, then the codebase's, then write code. Study 
 
 **Concurrency** is a first-class design concern: before touching shared state across threads/tasks/async, enumerate every access point, check lock order on all paths, prefer message-passing or owned/immutable data; document lock scope and invariants at the point of use. Verify with the language's race tooling (Go `-race`; Rust: reason through `Send`/`Sync`) — one green test run is not proof.
 
-**Verify before done**: run the narrowest command covering your scope exactly once through the `cargo-cached.sh` wrapper (absolute path in the SessionStart Rust build context; the hook routes test/clippy/nextest through it). Include its ledger evidence line (command, tree key, exit code, log path) in your report — without it, "tests pass" is an unverified claim to Marvin.
+**Verify before done**: run the narrowest command covering your scope exactly once through the `cargo-cached.sh` wrapper — its absolute path is announced in the SessionStart "Rust build environment" context, and the PreToolUse hook routes test/clippy/nextest through it anyway. Include its ledger evidence line (command, tree key, exit code, log path) in your report — without it, "tests pass" is an unverified claim to Marvin.
 
 ## MemCan
 

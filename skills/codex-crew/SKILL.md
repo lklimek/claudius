@@ -107,7 +107,7 @@ print(d.get('status', 'unknown'), d.get('pid') or '')
 done
 ```
 
-The loop is itself a backgrounded Bash call and inherits the silent-kill risk of § Harness Kills of a Backgrounded Task — periodically confirm it's alive; silence is not health.
+The loop is itself a backgrounded Bash call and inherits the silent-kill risk of `references/sandbox-and-recovery.md` § Harness Kills of a Backgrounded Task — periodically confirm it's alive; silence is not health.
 
 `ScheduleWakeup` is not a substitute — it's `/loop` dynamic-mode-only and errors outside that context.
 

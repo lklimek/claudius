@@ -1,7 +1,7 @@
 ---
 name: grumpy-review
 description: "This skill should be used when the user requests a code review, audit, or quality assessment covering quality, security, dependencies, and documentation. It uses parallel agents and produces a deduplicated, severity-ranked report."
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Bash(mv *), Agent, SendMessage, TaskStop
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*merge_findings_helper.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Bash(mv *), Agent, SendMessage, TaskStop
 ---
 
 # Code Review Methodology
@@ -86,7 +86,7 @@ For 50+ files / 5000+ lines, spawn multiple agents of the same type with differe
 Beyond the general agent prompt requirements, every review agent prompt MUST include:
 
 1. **Comparison base**: how to see what changed (`git show <base>:<file>` or `git diff`)
-2. **Finding format**: the severity levels and structure below
+2. **Finding format**: per [references/producer-contract.md](references/producer-contract.md)
 3. **Review checklists**: embed relevant checklist content or rely on preloaded skills
 4. **BP preload**: every spawned reviewer (`security-engineer-smythe`, `project-reviewer-adams`, `qa-engineer-marvin`, `technical-writer-trillian`, etc.) MUST preload `coding-best-practices` so its Cross-Cutting Rules govern every finding — state this explicitly in each spawn prompt
 5. **UX/DX lens**: assess how findings affect end-user workflows and developer experience, not just code correctness

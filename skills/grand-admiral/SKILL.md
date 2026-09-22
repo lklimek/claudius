@@ -178,9 +178,9 @@ Every code-mutating spawned agent MUST work in an isolated git worktree — no e
 
 **Cargo target-dir isolation is automatic** — every invocation through `cargo-cached.sh` derives a per-checkout target dir; never assign `CARGO_TARGET_DIR` per agent. Mechanics, caveats, and the shared-dir behavior of unwrapped builds: `references/cargo-isolation.md`.
 
-**Same-HEAD hazard (confirmed silent corruption):** N worktree agents forked from the SAME commit sharing a target dir produce identical artifact paths; cargo mtime-checks A's edits against B's binary, declares A "fresh", and runs B's binary — reporting B's result as A's. A sub-few-second "fresh" `cargo test`/`clippy` result during a same-commit wave is not trustworthy on its face; `cargo-cached.sh` warns on implausibly fast real runs (`CLAUDIUS_MIN_PLAUSIBLE_DUR`) — treat that as a hard re-verify signal.
+**Same-HEAD hazard (confirmed silent corruption):** N worktree agents forked from the SAME commit sharing a target dir (an unwrapped `cargo build`, or auto-derivation failing — `references/cargo-isolation.md`) produce identical artifact paths; cargo mtime-checks A's edits against B's binary, declares A "fresh", and runs B's binary — reporting B's result as A's. A sub-few-second "fresh" `cargo test`/`clippy` result during a same-commit wave is not trustworthy on its face; `cargo-cached.sh` warns on implausibly fast real runs (`CLAUDIUS_MIN_PLAUSIBLE_DUR`) — treat that as a hard re-verify signal.
 
-**Provenance check, even with automatic isolation.** A green exit and an aggregate pass count are not proof — `cargo test <filter-matching-nothing>` exits 0 and prints "test result: ok". Every verification report must grep the ledger log for the specific new/changed test names and confirm `passed + filtered == expected total`. A green whose log doesn't name your tests is not a green.
+**Provenance check, even with automatic isolation.** A green exit and an aggregate pass count are not proof — `cargo test <filter-matching-nothing>` exits 0 and prints "test result: ok". Every verification report must grep the ledger log for the specific new/changed test names and confirm `passed + filtered == expected total` — this also catches residual collisions where auto-derivation didn't apply (e.g. `cargo metadata` resolution failed). A green whose log doesn't name your tests is not a green.
 
 ## Output
 

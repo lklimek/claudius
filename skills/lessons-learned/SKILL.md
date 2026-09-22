@@ -13,7 +13,7 @@ Extract, qualify, and persist reusable knowledge from the current session.
 
 ## Phase 1 — Gather
 
-Scan the conversation for items passing the Source of Truth categories and quality gate; collect as a numbered list. `memcan:recall` to drop duplicates, applying **Opportunistic Cleanup** to failing memories found on the way. Phrase per the **Authoring rules**: "[Subject]: [what/what to do] — [why/context]".
+Scan the conversation for items passing the Source of Truth categories and quality gate; collect as a numbered list. `memcan:recall` to drop duplicates, applying **Opportunistic Cleanup** to failing memories found on the way. Phrase per the **Authoring rules**, factual and third-person: "[Subject]: [what/what to do] — [why/context]".
 
 ## Phase 2 — Save
 

@@ -6,8 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [7.7.0] - 2026-09-22
+
+### Changed
+
+- **Token-footprint pass over all 8 agents and 30 skills** (~16% fewer characters overall; agents 30–47% smaller, `grand-admiral` 26%), no operational content dropped: per-agent copies of Security Awareness / Commit Discipline / the "Beyond persona" brevity paragraph removed in favor of the preloaded `coding-best-practices` (new § Agent Output); Smythe's inline per-language security lists replaced by a pointer to `security-best-practices/references/*-security-patterns.md`; `grumpy-review`'s inline finding-format JSON (a third copy of `references/producer-contract.md` / `report-format`) replaced by a pointer; language `*-best-practices` skills condensed to merged bullet lists with every checklist item and ID prefix intact; remaining skills reworded to terse imperatives and cross-references instead of restated rules.
+- **`grand-admiral`**: cargo target-dir isolation mechanics moved to new `references/cargo-isolation.md`; the tmux orphan-pane cleanup recipe moved to `references/stall-watchdog.md` § Orphaned Panes and Processes. All section anchors cited by other skills are retained.
+- **`workflow-feature` § Model Selection** no longer claims agents default to `model: inherit` — they carry tiered `model:` fallbacks; set the model per spawn via `delegate`.
+- **`grand-admiral` § Crew Roster**: "architecture issues" dropped from Marvin's row (Nagatha's domain per the Candy Economy).
+
 ### Fixed
 
+- **`grumpy-review` `allowed-tools`**: added `Bash(*merge_findings_helper.py *)` — §5b invokes the helper but it was never on the allow-list.
+- **`grumpy-review` §5f**: reviewer teammates are shut down via `SendMessage({type: "shutdown_request"})`, matching `grand-admiral` § Terminating Teammates (`TaskStop` cannot address a named teammate and always returned "No task found"); the lingering tmux process is handled by the orphan-pane sweep instead.
 - Updated monitoring instructions and Recovery section references in `delegate`, `codex-crew`, `ci-dance`, and the stall watchdog reference to consistently use the built-in Monitor after removal of the MCP integration.
 
 ## [7.6.0] - 2026-09-17

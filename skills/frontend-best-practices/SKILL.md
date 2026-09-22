@@ -33,7 +33,7 @@ allowed-tools: Read
 
 ## Design Quality
 
-High-fidelity UI work: the `frontend-design:frontend-design` skill, when available.
+For high-fidelity UI work, load `frontend-design:frontend-design` when available.
 
 ## Code Review Checklist
 - TypeScript strict mode compliance, no unjustified `any`

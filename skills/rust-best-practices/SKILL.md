@@ -169,7 +169,7 @@ For detailed descriptions of any M-prefixed item, read `references/microsoft-gui
 - [ ] **M-YIELD-POINTS** — Long-running tasks have yield points (10-100us between yields)
 
 ### Documentation
-- [ ] **M-NO-TOMBSTONES** — Never add comments explaining removed code; git history is the record
+- [ ] **M-NO-TOMBSTONES** — Never add comments explaining removed code; git history is the record (Claudius local rule, not in the Microsoft reference)
 - [ ] **M-FIRST-DOC-SENTENCE** — First doc sentence is one line, ~15 words
 - [ ] **M-MODULE-DOCS** — Non-trivial public modules have `//!` documentation
 - [ ] **M-CANONICAL-DOCS** — Complex APIs have canonical doc sections (Examples, Errors, Panics, Safety)
