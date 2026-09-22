@@ -267,7 +267,7 @@ When presenting results, filter the consolidated findings for `merge_class == "o
 
 ### 5f. Stop reviewer processes
 
-After every reviewer output has been read and consolidation is complete, run `TaskStop` once for each spawned teammate using its bare name, including teammates already marked inactive. Do not assume agent completion tears down the tmux-backend process.
+After every reviewer output has been read and consolidation is complete, send `SendMessage({type: "shutdown_request"})` to each spawned teammate, including ones already marked inactive (`grand-admiral` § Terminating Teammates — `TaskStop` cannot address a named teammate). Agent completion does not reliably tear down the tmux-backed process: sweep orphaned panes per `grand-admiral`'s `references/stall-watchdog.md` § Orphaned Panes and Processes.
 
 ## 6. Iterate if Needed
 
