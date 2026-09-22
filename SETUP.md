@@ -368,7 +368,6 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `triage` | Reproduce and root-cause GitHub issues, assess severity, and post status |
 | `triage-findings` | Interactive finding triage -- classify in browser, decisions feed back to Claude |
 | `validate-findings` | LLM validation pass for consolidated review findings |
-| `workflow-feature` | Full workflow for new features or major refactoring |
 | `workflow-simplified` | Single-agent plan/TDD/implement/self-review loop for bug fixes or small-to-medium changes (≤1000 LOC) |
 
 ## Evaluated Skills

@@ -35,6 +35,15 @@ Delegate deep audits: security → ensure `security-engineer-smythe` is invoked;
 - **Dependencies**: versions consistent across packages; no redundant or unused deps; lock files current (semver ranges are fine where lock files exist — don't flag); custom code justified against existing packages; new deps checked for maintenance health
 - **Git**: clear, atomic commits; branch current with base; no accidental files (`.env`, IDE configs)
 
+## Deep Audits
+
+On request, run one or both of these as additional READ-ONLY passes (never fix, only report) — same `report-format` finding shape as any other review, so they band and tally normally:
+
+- **Docs review**: comments and API doc comments touched by the diff, checked against Cross-Cutting Rules — `CODE-` findings.
+- **Dedup audit**: every new public function/type/trait/module, checked against the workspace, direct dependencies, and any reference repos the project's own docs/`CLAUDE.md` name as canonical upstreams — `CODE-`/`PROJ-` findings for duplicates, partial overlaps, and reviewed-and-rejected candidates, with file:line on both sides in `description`.
+
+Write to the caller-specified findings file, same as any other pass.
+
 ## Priorities
 
 - **Critical**: breaking inconsistencies — API contract mismatch, config/code drift causing runtime failure, cross-service contract violations, missing migrations

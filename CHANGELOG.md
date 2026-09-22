@@ -6,7 +6,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
-## [7.7.0] - 2026-09-22
+## [8.0.0] - 2026-09-22
+
+A skill-catalog value audit (30 skills, cross-referenced against one month of local Claude Code
+session telemetry — 675 transcripts, `Skill`-tool calls, user slash invocations, and agent
+frontmatter preloads) found one skill with zero invocations and heavy content duplication, and
+one skill whose preloaded footprint was double what its producer-facing consumers actually need.
+Same evidentiary standard as the `[6.0.0]` `review-loop`/`workflow-trivial` removal.
+
+### Removed
+
+- **`workflow-feature` skill**: zero invocations (model-triggered or user slash) across 675
+  transcripts despite a broad trigger ("build a new project", "add a feature", "major
+  refactoring") — feature work in practice goes through `grand-admiral` + `delegate` (+ Codex)
+  directly. Its Implementation/QA phases substantially restated `grand-admiral` §
+  Development-Work Delegation and `grumpy-review`; not preloaded anywhere, so this is a pure
+  existence call, not a token saving. The one piece of genuinely reusable content — Adams'
+  read-only "Docs review" and "Dedup audit" passes — is preserved: moved into
+  `project-reviewer-adams` § Deep Audits so it stays available outside this one workflow.
+  `grand-admiral` § Skills Reference and `SETUP.md`'s skill inventory updated to match.
+
+### Changed
+
+- **`report-format`**: split producer-facing content (kept in `SKILL.md`, preloaded on 6 agents)
+  from coordinator/standalone-producer-only content (Report Pipeline Tools, Full Report
+  Envelope — moved to new `references/coordinator-envelope.md`, loaded on demand instead of on
+  every preload). The duplicated `pr_promises` JSON example is replaced with a pointer to
+  `review-pr`'s own (more complete) worked example. No schema or behavior change; ~74
+  preloads/month now load ~23% less content by default.
+- **`security-best-practices`**: removed the "Framework-Specific Security" table — it fully
+  duplicated the "Frameworks" row already in the Local Reference Index's Cheat Sheets category
+  table (same file prefixes, same coverage). The OWASP Top 10 / API / AI-LLM checklists were
+  deliberately left intact: `SETUP.md`'s own eval data for this skill (3 scenarios, 7
+  expectations each) shows the checklist itself — not just the reference index — measurably
+  raises pass rate (86–90% → 100%) and lowers the debatable-finding rate vs. relying on the
+  model's built-in knowledge, so cutting it further risked a real regression the value audit
+  didn't have visibility into.
 
 ### Added
 

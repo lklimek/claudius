@@ -11,7 +11,7 @@ Security checklists by OWASP Top 10 (2021) category, each item linked to its OWA
 
 ## How to Use
 
-Walk the checklists for the categories the code touches. For depth: `Grep` `references/` for keywords or ASVS IDs (V1, V1.2, V1.2.4) and read only matching sections (30–50 lines) — never whole files; `search_standards` MCP (if available) for standards beyond local references; fetch the linked cheat sheet when local references aren't enough; [Framework-Specific Security](#framework-specific-security) for framework pitfalls. Cite cheat-sheet URLs and ASVS requirement IDs in output.
+Walk the checklists for the categories the code touches. For depth: `Grep` `references/` for keywords or ASVS IDs (V1, V1.2, V1.2.4) and read only matching sections (30–50 lines) — never whole files; `search_standards` MCP (if available) for standards beyond local references; fetch the linked cheat sheet when local references aren't enough; for framework-specific pitfalls, use the Cheat Sheets index's Frameworks row below. Cite cheat-sheet URLs and ASVS requirement IDs in output.
 
 ### Local Reference Index
 
@@ -182,21 +182,6 @@ Each file includes language-specific security scanner recommendations.
 - [ ] Validate and sanitize all LLM inputs and outputs ([LLM Prompt Injection Prevention](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html))
 - [ ] Apply least privilege to AI agent tool access and actions ([AI Agent Security](https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html))
 - [ ] Secure model serving infrastructure: access controls, input limits, monitoring ([Secure AI Model Ops](https://cheatsheetseries.owasp.org/cheatsheets/Secure_AI_Model_Ops_Cheat_Sheet.html))
-
-## Framework-Specific Security
-
-When working with a specific framework, consult its cheat sheet for framework-specific pitfalls and mitigations:
-
-| Framework | Cheat Sheet |
-|-----------|-------------|
-| Django | [Django Security](https://cheatsheetseries.owasp.org/cheatsheets/Django_Security_Cheat_Sheet.html), [Django REST Framework](https://cheatsheetseries.owasp.org/cheatsheets/Django_REST_Framework_Cheat_Sheet.html) |
-| Laravel | [Laravel](https://cheatsheetseries.owasp.org/cheatsheets/Laravel_Cheat_Sheet.html) |
-| Symfony | [Symfony](https://cheatsheetseries.owasp.org/cheatsheets/Symfony_Cheat_Sheet.html) |
-| Ruby on Rails | [Ruby on Rails](https://cheatsheetseries.owasp.org/cheatsheets/Ruby_on_Rails_Cheat_Sheet.html) |
-| Node.js | [Node.js Security](https://cheatsheetseries.owasp.org/cheatsheets/Nodejs_Security_Cheat_Sheet.html), [Node.js Docker](https://cheatsheetseries.owasp.org/cheatsheets/NodeJS_Docker_Cheat_Sheet.html) |
-| .NET | [.NET Security](https://cheatsheetseries.owasp.org/cheatsheets/DotNet_Security_Cheat_Sheet.html) |
-| Java | [Java Security](https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html), [Injection Prevention in Java](https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_in_Java_Cheat_Sheet.html) |
-| C/C++ | [C-Based Toolchain Hardening](https://cheatsheetseries.owasp.org/cheatsheets/C-Based_Toolchain_Hardening_Cheat_Sheet.html) |
 
 ## Additional References
 
