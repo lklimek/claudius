@@ -5,9 +5,9 @@ description: "This skill should be used when preparing to dispatch work to Codex
 
 # Codex Crew — Enlisting Codex Agents
 
-Codex agents (OpenAI Codex CLI, run via the `codex` plugin's `codex-companion.mjs` runtime) are external crew a coordinator can enlist alongside the claudius roster. Opt-in. Read once before the session's first Codex dispatch.
+Codex agents (OpenAI Codex CLI via the `codex` plugin's `codex-companion.mjs` runtime) are external crew a coordinator can enlist alongside the claudius roster. Opt-in. Read once before the session's first Codex dispatch.
 
-**Dispatch directly, never through `codex:codex-rescue`.** For coordinator-orchestrated work that subagent is pure overhead: one `Bash` call forwarding stdout unchanged — no monitoring, no analysis, unreliable lifecycle signals (`idle_notification`, teammate shutdown, stall tracking) layered over a worker that is already a detached Node process with its own job-state files — and it never exposes `--cwd`/`--prompt-file`, the root cause of most bugs below. Call `codex-companion.mjs task` directly (§ Direct Dispatch): nothing to spawn, track, or shut down. Reserve `codex:codex-rescue` for the user-typed `/codex:rescue` interactive command, which this skill doesn't govern.
+**Dispatch directly, never through `codex:codex-rescue`.** For coordinator-orchestrated work that subagent is pure overhead — one `Bash` call forwarding stdout, unreliable lifecycle signals, and no `--cwd`/`--prompt-file` (the root cause of most bugs below). Call `codex-companion.mjs task` directly (§ Direct Dispatch): nothing to spawn, track, or shut down. `codex:codex-rescue` stays for the user-typed `/codex:rescue` command, which this skill doesn't govern.
 
 ## When to Enlist Codex
 
@@ -18,9 +18,9 @@ Codex agents (OpenAI Codex CLI, run via the `codex` plugin's `codex-companion.mj
 ## Routing — Model Selection, High Effort
 
 - **Default: Codex Astra = `--model gpt-6-astra --effort high`. Always high effort.** State both flags on every dispatch — omitting either drops to the runtime default, not Astra. Astra's rollout is gated behind OpenAI's Trusted Access Programme; confirm account access before assuming it resolves.
-- **Security-related dispatch: `--model gpt-daybreak-blue-latest --effort high` instead of Astra, when available.** Applies to any Codex task that is itself security work — security audits/reviews, auth/crypto/secrets handling, vulnerability triage or remediation, dependency security review — not to ordinary feature/bugfix code that happens to touch an authenticated endpoint. Its availability isn't confirmed; treat "when available" literally: if the dispatch's job record shows `status: failed` with an unknown-model or access-gate/auth error, redispatch the same prompt on Astra instead and tell the user the fallback happened. Never silently retry Daybreak Blue more than once per dispatch.
-- Dispatch via `codex-companion.mjs task` directly (§ Direct Dispatch). Nothing monitors, polls, or fetches results on its own — that's coordinator work (§ Monitoring). Codex CAN attempt a commit when the prompt instructs it, but success is inconsistent; verify independently (Sandbox & Workdir rule 2).
-- The lighter `spark` alias (`gpt-5.3-codex-spark`) exists; claudius standardizes on Astra (Daybreak Blue for security work) at high effort.
+- **Security-related dispatch: `--model gpt-daybreak-blue-latest --effort high` instead of Astra, when available** — for Codex tasks that are themselves security work (audits/reviews, auth/crypto/secrets handling, vulnerability triage/remediation, dependency security review), not ordinary code that happens to touch an authenticated endpoint. Availability is unconfirmed: if the job record shows `status: failed` with an unknown-model or access-gate/auth error, redispatch the same prompt on Astra and tell the user. Never retry Daybreak Blue more than once per dispatch.
+- Nothing monitors, polls, or fetches results on its own — coordinator work (§ Monitoring). Codex CAN attempt a commit when instructed, but success is inconsistent; verify independently (Sandbox & Workdir rule 2).
+- The lighter `spark` alias (`gpt-5.3-codex-spark`) exists; claudius standardizes on Astra (Daybreak Blue for security) at high effort.
 
 ## Direct Dispatch
 
@@ -80,11 +80,11 @@ Mitigation: poll for terminal status before the next same-cwd dispatch (never a 
 
 ## Monitoring a Codex Job
 
-**Direct dispatch has no agent lifecycle to watch — by design.** A `--background` dispatch is a detached Node process with on-disk job-state files: no subagent, no `idle_notification`, nothing to shut down. Go straight to the job-state file. (If `codex:codex-rescue` is ever in play — the interactive `/codex:rescue` command — treat its `idle_notification` as worthless in either direction: confirmed 4-for-4 in one wave, jobs sat `completed` 40–85 minutes before the wrapper reported.)
+**Direct dispatch has no agent lifecycle to watch — by design.** A `--background` dispatch is a detached Node process with on-disk job-state files: no subagent, nothing to shut down. (If `codex:codex-rescue` is ever in play, its `idle_notification` is worthless in either direction — confirmed 4-for-4, jobs sat `completed` 40–85 minutes before the wrapper reported.)
 
-**Primary method: read the job's on-disk state directly** (mtime-gated, minimal-field reads — never the full state blob). See `references/sandbox-and-recovery.md` § On-Disk Job State for the field list, `result.rawOutput`/`result.touchedFiles` usage, and matching jobs to dispatches. Load-bearing, not a fallback — it is what actually recovers status/results when the stall watchdog can't.
+**Primary method: read the job's on-disk state directly** (mtime-gated, minimal-field reads — never the full blob): `references/sandbox-and-recovery.md` § On-Disk Job State for the field list, `result.rawOutput`/`result.touchedFiles`, and matching jobs to dispatches. Load-bearing, not a fallback.
 
-**Get notified, don't just poll on request.** Arm a `Bash` `run_in_background` loop on the job's own `state/<workspace-slug>-<hash>/jobs/<job-id>.json` (resolve the path per § On-Disk Job State) — a single, job-specific completion signal needing no team/session discovery. For a populated `pid`, cross-check liveness with `ps -p <pid>` on every poll; a missing process while the record still says `running` is a crash signal, not a healthy job:
+**Get notified, don't just poll on request.** Arm a `Bash` `run_in_background` loop on the job's own `state/<workspace-slug>-<hash>/jobs/<job-id>.json` — a job-specific completion signal needing no team/session discovery. Cross-check a populated `pid` with `ps -p <pid>` on every poll; a missing process while the record says `running` is a crash signal:
 
 ```bash
 while true; do
@@ -111,10 +111,9 @@ The loop is itself a backgrounded Bash call and inherits the silent-kill risk of
 
 `ScheduleWakeup` is not a substitute — it's `/loop` dynamic-mode-only and errors outside that context.
 
-- The built-in stall watchdog (`grand-admiral` § Recovery → Stall Watchdog, `scripts/minion-monitoring.py`) discovers Codex jobs and emits `CODEX_*` transition events. It is **mandatory** whenever any agent, Claude or Codex, is dispatched (see `grand-admiral` § Spawning → Monitoring). Treat `CODEX_*` events as **best-effort, layered on top of** the direct job-state check — never a substitute.
-- **Codex discovery requires `--worktrees`** — a direct dispatch is never a teammate, so `--worktrees` pointed at the configured worktree root is the only way the built-in watchdog sees it. Without it: a one-time startup warning, then silently zero Codex monitoring.
-- **Direct discovery (`--worktrees`/Source C) bypasses the session gate entirely** — a workspace under the worktree root surfaces every job's `CODEX_*` events regardless of `sessionId`. The strict single-session match applies only to *ambient* discovery (a workspace reachable solely via team lead/member cwd, not also under the worktree root) — `codex-companion.mjs` stamps each job's `sessionId` from its own dispatching session, never the coordinator's, so the ambient path can under-report on a mismatch. The direct job-state check is unaffected either way — which is why it's primary.
-- Don't guess the Monitor's `--session-id`: derive `--team-dir` from a spawn's own `agent_id` per `grand-admiral`'s `references/stall-watchdog.md` (linked from § Recovery → Stall Watchdog).
+- The built-in stall watchdog (`grand-admiral` § Recovery → Stall Watchdog) discovers Codex jobs and emits `CODEX_*` events — **mandatory** for every dispatch, but **best-effort, layered on top of** the direct job-state check, never a substitute.
+- **Codex discovery requires `--worktrees`** at the configured worktree root — a direct dispatch is never a teammate. Without it: a one-time startup warning, then silently zero Codex monitoring. Direct discovery bypasses the session gate (every job under the root surfaces regardless of `sessionId`); only *ambient* discovery (workspace reachable solely via a team cwd) is session-gated, and `codex-companion.mjs` stamps `sessionId` from its own dispatching session, so that path can under-report.
+- Don't guess the Monitor's `--session-id`: derive `--team-dir` from a spawn's own `agent_id` per `grand-admiral`'s `references/stall-watchdog.md`.
 
 ## Recovering a Stale Broker
 

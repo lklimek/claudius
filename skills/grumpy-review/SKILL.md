@@ -6,11 +6,11 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *),
 
 # Code Review Methodology
 
-Systematic review using parallel specialist agents; produces a consolidated report with severity-ranked, deduplicated findings.
+Parallel specialist agents → consolidated, severity-ranked, deduplicated report.
 
 ## Tone
 
-Keep the Claudius/Skippy persona — sarcastic superiority, theatrical sighs, dry wit — with extra grumpiness about the code: complain, express disbelief at obvious mistakes, be opinionated. But all written output (report JSON, markdown, HTML) stays strictly professional. Grumpiness is for the human; the report is for posterity.
+Claudius/Skippy persona with extra grumpiness about the code — complain, disbelieve obvious mistakes, be opinionated. All written output (report JSON, markdown, HTML) stays strictly professional: grumpiness is for the human; the report is for posterity.
 
 **Argument**: `$ARGUMENTS` — optional scope description (e.g., "feat/zk branch", "packages/auth/", "last 5 commits"). If empty, review all changes on the current branch vs the main branch.
 
@@ -63,7 +63,7 @@ The single agent stands in for the entire trio — its prompt must cover securit
 | `claudius:project-reviewer-adams` | opus | Cross-artifact consistency, convention adherence, doc accuracy, structural/idiom code quality (readability, naming, DRY, cross-file duplication, maintainability), specialist orchestration |
 | `claudius:qa-engineer-marvin` | sonnet | Adversarial/correctness code quality — actually running tests and lints, edge cases, ownership/panic/error-handling bugs, independent verification against ground truth |
 
-All three are ALWAYS included for any non-trivial review — no separate per-language conditional agent. Adams and Marvin jointly cover the code-quality slice `developer-bilby` used to own alone (see Focus column for the split); `developer-bilby` no longer participates in code review in any capacity — implementation-only.
+All three are ALWAYS included for any non-trivial review — no per-language conditional agent; Adams and Marvin jointly cover the code-quality slice (see Focus). `developer-bilby` never reviews — implementation-only.
 
 ### Language best-practices preload
 
@@ -99,44 +99,9 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 12. **Worktree isolation (mandatory upfront, not reactive)**: any agent instructed to `git checkout`/build/test the reviewed branch MUST be told to work in a pre-created isolated worktree in its FIRST spawn prompt — never bolted on as a follow-up correction after it has already touched the shared tree (see `grand-admiral` § Worktree Isolation for setup). A reactive correction arrives too late: the checkout already happened, flipping HEAD under any other agent concurrently reading the same shared tree.
 13. **Cross-branch isolation, reviewing sibling PRs in one session**: when this session is reviewing more than one branch/PR against the same repo, tell every agent to verify any symbol, function, or API it cites — in findings, positives, or recommendations — actually exists on the branch it was assigned (`git show <its-target-ref>:<file>`), not a sibling branch reviewed in the same session. A shared "positives" blurb or boilerplate recommendation reused across findings is exactly where a sibling branch's content leaks in unnoticed.
 
-### Finding format (JSON)
+### Finding format
 
-Agents MUST write findings to the specified file path as a JSON array of `finding_section` objects:
-
-```json
-[
-  {
-    "title": "Section Title",
-    "category": "security|project|code_quality|dependencies|documentation|call_tree",
-    "findings": [
-      {
-        "id": "PREFIX-001",
-        "likelihood": 0.6,
-        "impact": 0.7,
-        "relevance": 0.5,
-        "title": "Short finding title",
-        "tags": ["A03 Injection", "CWE-79"],
-        "location": "src/auth.rs:42-56",
-        "description": "What the issue is and why it matters",
-        "impact_description": "What could go wrong (Markdown narrative)",
-        "recommendation": "How to fix it",
-        "code_snippets": [
-          {"language": "rust", "caption": "auth.rs:42", "content": "let user = unwrap_token(&hdr);"}
-        ]
-      }
-    ],
-    "positives": "Optional positive observations"
-  }
-]
-```
-
-**Required finding fields**: `id`, `likelihood`/`impact`/`relevance` (floats 0.0–1.0), `title`, `location`, `description`, `recommendation`. See `claudius:severity` for the float definitions, the backstop-zone `impact` cap, and the band table the coordinator uses to derive integer `severity`. Rate `relevance` as real PR-goal fit per `claudius:severity` — never default it to `1.0`. The floats are the single source of truth; never hand-type a severity label.
-
-**Optional**: `tags`, `impact_description` (Markdown impact narrative; the numeric `impact` float is separate), `code_snippets` (only when you captured the exact source during analysis — never invent one), `cross_domain_hint` (a peer role whose primary domain owns an issue noticed incidentally; never actively search that domain).
-
-**Producers must NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, any `metadata`/`commit`/`repository`/`date`/`branch` field, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, `merge_class`, `intent_basis`, and the derived integer `severity` when emitting floats. `likelihood`/`impact`/`relevance` are required — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
-
-**Metadata is coordinator-owned**: producers emit only the bare `finding_section[]` array, with no envelope object or metadata fields. The coordinator resolves the full 40-character commit SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` when the branch has no upstream) and supplies commit/date/branch/project through `prepare --metadata`; `prepare` derives repository metadata from `--repo-root`.
+Producers write a bare JSON array of `finding_section` objects — the exact shape, required/optional fields, the producers-must-NOT-emit list, and the ID-prefix table are in [references/producer-contract.md](references/producer-contract.md) (mirrors `report-format`). Metadata is coordinator-owned: the coordinator resolves the full 40-character commit SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` without an upstream) and supplies commit/date/branch/project through `prepare --metadata`; `prepare` derives repository metadata from `--repo-root`.
 
 **Hoist the invariant part into a file, don't restate it per spawn.** Items 2–13 above are identical across every producer in a fan-out; with N producers, retyping them N times costs the coordinator real output tokens for zero variable content (measured: ~2500 lines across 5 producers on one large review). Before spawning, copy [references/producer-contract.md](references/producer-contract.md) to `<SCRATCH_DIR>/producer-contract.md` unmodified — it already contains the finding-format JSON contract, the producers-must-NOT-emit list, the ID-prefix table, the call-tree/UI-text/UX-DX/collision/process rules, and the terse report-back instruction (everything below that has no per-agent variable). Then each spawn prompt carries only what actually varies:
 
@@ -150,23 +115,11 @@ Deployed peers (all already live; do not ask whether they are running):
 Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json.
 ```
 
-This also makes the fan-out auditable after the fact — archive `producer-contract.md` next to `report.json` so a reader can see exactly what producers were told, same as `context-digest.md`.
-
-**ID prefixes**: `SEC-` security, `PROJ-` project, `QA-`/`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` code quality (jointly owned by `project-reviewer-adams` and `qa-engineer-marvin` — see `report-format`'s ID-prefix table; prefix reflects finding category/language, not agent identity), `DOC-` docs, `CALL-` call-tree. Agents assign provisional sequential IDs within their prefix (e.g., `SEC-001`, `SEC-002`); collisions across parallel agents are fine — consolidation (5c) deduplicates and reassigns final IDs.
-
-**Location** MUST include the full file path (e.g., `src/auth.rs:42-56`), never bare line numbers.
-
-**Severity levels**: CRITICAL > HIGH > MEDIUM > LOW > INFO (see `severity` skill).
-
-**Tags**: classification references — OWASP (`A01`–`A10`), CWE, language best-practice IDs, etc. Tag ALL security findings with OWASP categories; non-security findings may omit tags.
+Archive `producer-contract.md` next to `report.json` (like `context-digest.md`) so the fan-out is auditable after the fact.
 
 ### Call-tree inspection
 
-When the diff modifies or removes any function/method declaration, every code-quality reviewer agent MUST run a deep transitive in-repo caller walk before emitting findings. Methodology: [references/call-tree-walk.md](references/call-tree-walk.md) — read it once per review and follow the steps.
-
-Finding shape: `category: "call_tree"`, ID prefix `CALL-` (provisional from producer, coordinator reassigns). Every `call_tree` finding's `description` MUST start with a `Walked via: <tool>` line so the reader can judge walk depth and tool quality.
-
-Skip the walk for pure additions, doc-only PRs, and changes confined to test files.
+When the diff modifies or removes any function/method declaration, every code-quality reviewer runs the deep transitive in-repo caller walk in [references/call-tree-walk.md](references/call-tree-walk.md) before emitting findings (`category: "call_tree"`, `CALL-` prefix, `description` starting `Walked via: <tool>`). Skip for pure additions, doc-only PRs, and test-file-only changes.
 
 ### Ephemeral-ID lint
 
@@ -180,9 +133,9 @@ For each hit, judge genuine violation vs quoted/escaped example (a code fence de
 
 ## 4. Spawn Agents
 
-This skill runs inline (not forked) specifically so it can spawn reviewer agents. For any non-trivial review, confirm the `Agent` tool is available before fanning out. If not (e.g. executing inside a subagent, which cannot spawn nested agents), STOP and report that the review cannot fan out — do NOT silently fall back to a single self-run review. The single-agent TRIVIAL path in §1/§2 is the only legitimate one-agent review; every non-trivial review REQUIRES fan-out.
+This skill runs inline (not forked) so it can spawn reviewer agents. Before fanning out, confirm the `Agent` tool is available; if not (e.g. inside a subagent, which cannot spawn nested agents), STOP and report that the review cannot fan out — never silently fall back to a single self-run review. The TRIVIAL path (§1/§2) is the only legitimate one-agent review.
 
-Spawn all agents in parallel per the general spawning guidelines, with fixed per-role model tiering: `claudius:security-engineer-smythe` on `opus`, `claudius:project-reviewer-adams` on `opus`, `claudius:qa-engineer-marvin` on `sonnet` (matches `claudius:delegate` § Token Economy). This replaces the old "opus for all by default" rule.
+Spawn all agents in parallel with fixed per-role tiering: `claudius:security-engineer-smythe` on `opus`, `claudius:project-reviewer-adams` on `opus`, `claudius:qa-engineer-marvin` on `sonnet` (`claudius:delegate` § Token Economy).
 
 **Model override (user-requested; confirm before downgrading Smythe)**: on explicit request (e.g. "review with Sonnet") the user may force a uniform model override across all 3 agents. Apply it to Adams and Marvin freely. Before applying an override that would downgrade `security-engineer-smythe` below `opus`, STOP and confirm the user really means it — security depth is not silently traded away by a blanket model request. Once confirmed, apply to all three including Smythe.
 
@@ -196,7 +149,7 @@ Agent(subagent_type="claudius:qa-engineer-marvin", model="sonnet", prompt="...",
 
 ## 5. Consolidate Findings
 
-After all agents complete, use the two-phase consolidation script. It automates the mechanical work (flattening, duplicate detection, ID assignment, statistics), leaving judgment calls (dedup merging, severity re-assessment, executive summary) to you.
+After all agents complete, the two-phase consolidation script does the mechanical work (flattening, duplicate detection, ID assignment, statistics); judgment calls (dedup merging, severity re-assessment, executive summary) are yours.
 
 ### 5a. Phase 1 — Prepare
 
@@ -337,8 +290,6 @@ See `git-and-github` skill § Context Management for the subagent delegation pat
 
 ## Anti-Patterns (Review-Specific)
 
-Beyond the general anti-patterns in the Claudius agent prompt:
-
-1. **Skipping scope assessment** — agent mix and split strategy depend on whether the review is small, medium, or large.
-2. **Missing comparison base** — review agents need to know what changed; always include the git diff/show commands in the prompt.
-3. **No deduplication** — multiple agents will flag the same issue (e.g., `.unwrap()` panics); always consolidate and deduplicate before presenting findings.
+1. **Skipping scope assessment** — agent mix and split strategy depend on review size.
+2. **Missing comparison base** — always include the git diff/show commands in the prompt.
+3. **No deduplication** — parallel agents flag the same issue; always consolidate before presenting.

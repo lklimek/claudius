@@ -6,25 +6,15 @@ allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(*gh-post-rev
 
 # PR Audit Workflow
 
-Workflow for auditing/reviewing a PR. Runs inline (not forked) so it — and the `/claudius:grumpy-review` it invokes in §3 — keeps the `Agent` tool and can fan out parallel reviewer agents.
+Runs inline (not forked) so it — and the `/claudius:grumpy-review` it invokes in §3 — keeps the `Agent` tool for fan-out.
 
 ## 1. Gather PR Context
 
-Load /claudius:git-and-github skill.
-
-Fetch PR metadata via `pull_request_read`: `method: "get"` (title, body, URL, base/head branches, number), `method: "get_files"` (changed files with stats), `method: "get_diff"` (full diff).
-
-**Note**: `get_files`/`get_diff` can return large responses — use the subagent delegation pattern from `git-and-github` skill § Context Management to avoid polluting your context.
-
-Use local git for commit history and detailed diffs.
-
-If GitHub MCP is unavailable, see [pr-review.md](../git-and-github/references/pr-review.md) for `gh` CLI equivalents.
+Load `/claudius:git-and-github`. Fetch PR metadata via `pull_request_read`: `get` (title, body, URL, base/head, number), `get_files`, `get_diff` — the latter two via the subagent pattern in `git-and-github` § Context Management. Local git for commit history and detailed diffs. No MCP → [pr-review.md](../git-and-github/references/pr-review.md).
 
 ### Context Digest
 
-**The single definition of "the digest"** — every other skill referencing it points here; none redefines its contents.
-
-Build it as an ordered list of `{source, claim}` entries plus four narrative fields:
+**The single definition of "the digest"** — other skills point here, none redefines it. An ordered list of `{source, claim}` entries plus four narrative fields:
 
 ```
 Promises: <ordered {source, claim} list per the intent priority in `claudius:severity` § Merge Classification>
@@ -43,17 +33,11 @@ Source priority for every field:
 3. MemCan architecture decisions for the repo
 4. Code evidence — the call-tree/entry-point walk
 
-🔴 **Unknown ≠ benign.** A field with no evidence is written `unknown`, and an `unknown` field never downgrades anything: findings in that area score exactly as they would with no digest at all (`claudius:severity` § `likelihood` evidence rule). The digest may adjust scoring only where a claim carries its evidence, and it **never suppresses reporting** — a context-adjusted finding is still reported, with adjusted floats.
-
-The digest feeds Pass C (§2), the reviewer spawns and merge classification in §3, and every fixer prompt downstream (`ci-dance`).
+🔴 **Unknown ≠ benign.** A field with no evidence is written `unknown` and never downgrades anything (`claudius:severity` § `likelihood` evidence rule). The digest adjusts scoring only where a claim carries evidence and **never suppresses reporting**. It feeds Pass C (§2), the reviewer spawns and merge classification in §3, and every fixer prompt downstream (`ci-dance`).
 
 ## 2. Pass C — Functional Promise Verification
 
-Audit whether the diff **functionally delivers** what the PR's self-description claims — verify the code implements each promised behavior, not merely that a related hunk exists. Reuses §1's title, body, file list, diff, and Context Digest.
-
-Pass C runs BEFORE consolidation (§3) and writes its findings to a report **file** like any producer, so they flow through prepare/§5b with everything else. As a coordinator-inline producer, Pass C is the exception allowed to emit `merge_class`/`intent_basis` directly (see `claudius:report-format`).
-
-Findings use the v4 report format: `claudius:report-format` for the envelope, `claudius:severity` for `likelihood`/`impact`/`relevance` float scoring and § Merge Classification.
+Audit whether the diff **functionally delivers** what the PR's self-description claims — the code implements each promised behavior, not merely that a related hunk exists. Reuses §1's inputs. Runs BEFORE consolidation (§3) and writes findings to a report **file** like any producer (v4 format: `claudius:report-format`; floats and § Merge Classification: `claudius:severity`). As a coordinator-inline producer, Pass C emits `merge_class`/`intent_basis` directly.
 
 ### Body extraction heuristics
 
@@ -151,11 +135,11 @@ The grumpy-review delegation inherits the deep transitive call-tree walk (`categ
 
 `out_of_scope_follow_up` findings are reported, never filed (`claudius:severity` § `out_of_scope_follow_up`): they go in Part A, and when reporting back to the user, filter the consolidated findings for that class and name them as deferral candidates. Tracking one (GitHub issue, `memcan:todo`, or neither) is the user's decision, taken via `claudius:triage-findings` or by hand.
 
-Ask if findings should be published as a GitHub PR review. Posted in **two parts**:
+Ask if findings should be published as a GitHub PR review. Two parts:
 
 ### Part A: Summary comment (visible immediately)
 
-Post the audit summary as a normal PR issue comment via `gh pr comment` — always visible (draft reviews hide their body text). Include:
+A normal PR issue comment via `gh pr comment` (draft reviews hide their body text). Include:
 - **Attribution**: "Reviewed by: Claude Code" plus team members with roles
 - Overall assessment (LLM-authored; must not contradict the merge classification — reflect every valid `blocking` finding)
 - Findings table (merge class, severity, tags, location, description) — `blocking` first
@@ -178,13 +162,7 @@ EOF
 
 ### Part B: Inline comments (draft review)
 
-Post **only actionable findings** inline on specific diff lines: everything `blocking` (any severity — a blocking LOW is still a blocker) plus actionable `non_blocking` findings (CRITICAL–LOW). Skip `disputed` and `out_of_scope_follow_up` (Part A only). **No INFO-level inline comments** — INFO findings are positive observations (praise, good patterns) and belong in Part A; non-actionable comments clutter the review.
-
-Post as a draft review so the user can review and submit manually. For trivial changes, include ```suggestion ``` blocks.
-
-#### Posting inline comments
-
-See [pr-review.md](../git-and-github/references/pr-review.md) for verifying diff bounds (base SHA, hunk checks), deduplication (fetch existing reviews/comments first), and posting with `gh-post-review.sh`. `body` can be minimal — the detail lives in Part A.
+Inline on specific diff lines, **only actionable findings**: everything `blocking` (any severity — a blocking LOW is still a blocker) plus actionable `non_blocking` (CRITICAL–LOW). `disputed`, `out_of_scope_follow_up`, and INFO stay in Part A. Draft review, so the user submits manually; ```suggestion``` blocks for trivial fixes. Diff-bounds verification, deduplication, and posting with `gh-post-review.sh`: [pr-review.md](../git-and-github/references/pr-review.md). `body` can be minimal — the detail lives in Part A.
 
 ## 5. Cleanup
 

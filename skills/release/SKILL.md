@@ -60,7 +60,7 @@ Collect all detected versions:
    - **patch**: only fixes, refactors, docs, CI
    - Default to `patch` if unclear
 
-4. **Ask for confirmation.** Show: current → proposed version, commit list, key diff findings, justification, files to update, post-bump commands. Options: proposed (recommended), alternatives, or abort.
+4. **Ask for confirmation**: current → proposed version, commit list, key diff findings, justification, files to update. Options: proposed (recommended), alternatives, abort.
 
 ### 4. Update Version Files
 
@@ -71,7 +71,7 @@ Update all version files (within confirmed scope from Step 2). Then sync lock fi
 
 ### 5. Generate Changelog Entry
 
-If `CHANGELOG.md` exists, prepend new entry after header. If absent, create it. Format per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Map conventional commit types to sections. Omit empty sections. If compare links exist at bottom, add one for this version.
+Prepend the entry to `CHANGELOG.md` (create if absent) per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): commit types → sections, empty sections omitted, compare link added if the file uses them.
 
 ### 6. Commit and Push
 

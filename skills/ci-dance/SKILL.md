@@ -8,20 +8,15 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bas
 
 # CI Dance — Unattended PR Pipeline
 
-Fully autonomous loop: push, run three parallel streams (CI, grumpy-review, copilot review) that each fix their own findings, merge fixes, repeat. No confirmations, no user interaction until done or stuck.
+Fully autonomous loop: push, run three parallel streams (CI, grumpy-review, copilot review) that each fix their own findings, merge fixes, repeat — until done or stuck.
 
 ## Prerequisites
 
-- Load `claudius:git-and-github` skill first
-- Working tree has changes to push, or commits already pushed to a remote branch
-- Remote configured and CI workflows exist
+Load `claudius:git-and-github` first. Changes to push (or commits already on a remote branch); remote configured; CI workflows exist.
 
 ## Unattended Mode
 
-- **No confirmations** — invocation implies full consent to push, fix, and re-push
-- **Override sub-skill confirmations** — when invoking `/push`, `/grumpy-review`, or `/check-pr-comments`, skip their "ask user" steps; this skill's invocation is the confirmation
-- **Push freely** — commit and push fixes without asking
-- **NEVER merge** — merging is always the user's responsibility
+Invocation is full consent to push, fix, and re-push — no confirmations, and skip the "ask user" steps of `/push`, `/grumpy-review`, `/check-pr-comments`. **NEVER merge** — merging is the user's.
 
 ## Timeout
 
@@ -70,24 +65,13 @@ Invoke `/push` to commit staged/unstaged changes, push, and create/update the PR
 
 **Fresh results required** on iteration 2+: CI Stream watches runs from the most recent push (not cached results), Grumpy Stream runs a new `/grumpy-review` against current code, Review Stream checks for reviews new since the last iteration.
 
-Spawn each stream as a named `Agent()` — every session has one implicit team; a named spawn joins it automatically with no create/destroy step (see `grand-admiral` § Spawning). Each stream works in its own **pre-created** worktree (see the quirk section below — do not rely on the `isolation` flag):
-- `ci-stream`
-- `grumpy-stream`
-- `review-stream`
+Spawn each stream as a named `Agent()` — `ci-stream`, `grumpy-stream`, `review-stream` (`grand-admiral` § Spawning) — each in its own **pre-created** worktree: `git worktree add <worktree-root>/<repo-path-slug>-<stream-name> -b <branch-name> <SHA>` under `$CLAUDIUS_WORKTREE_ROOT` (default `/data/git-worktrees`) BEFORE spawning, absolute path in the spawn `prompt`, stream `cd`s there on its first turn. `isolation="worktree"` is silently dropped for team spawns (`grand-admiral` § Worktree Isolation) — a stream that proceeds without a worktree edits the main repo directly. Point the stall watchdog's `--worktrees` at the same root.
 
-**Named spawning requires running in the session lead.** If a lead delegated the whole `/ci-dance` invocation to a teammate, every named spawn above fails — "Teammates cannot spawn other teammates" (flat team roster). When running as a non-lead teammate: spawn the three streams as **unnamed** background subagents (omit `name`), skip the entire claim/completion protocol below (unnamed agents can't be addressed by `SendMessage`), and rely solely on Step 3's merge-time cherry-pick/conflict resolution as the overlap trust boundary — it degrades gracefully to this. Step 3's `shutdown_request` likewise doesn't apply; unnamed subagents run to completion.
+**Named spawning requires running in the session lead.** If the whole `/ci-dance` was delegated to a teammate, named spawns fail ("Teammates cannot spawn other teammates"): spawn the three streams as **unnamed** background subagents, skip the claim/completion protocol (unnamed agents can't be messaged) and Step 3's `shutdown_request`, and rely on Step 3's merge-time cherry-pick/conflict resolution as the overlap trust boundary.
 
-Every stream spawn prompt must forbid ending the stream's turn to wait for a `Monitor`/background-task notification from a sub-job it spawned (e.g. a Codex dispatch): after the turn ends, the notification returns to the coordinator, not the stream, and the stream silently stalls. Poll the sub-job's status with a bounded local wait loop instead (see `codex-crew` § Monitoring a Codex Job); never let a stuck sub-job block the stream.
+Every stream spawn prompt must forbid ending the stream's turn to wait for a `Monitor`/background-task notification from a sub-job it spawned (e.g. a Codex dispatch) — the notification returns to the coordinator, not the stream, which silently stalls. Poll with a bounded local wait loop instead (`codex-crew` § Monitoring a Codex Job).
 
-### Team-spawn worktree quirk
-
-Canonical write-up: `grand-admiral` § Worktree Isolation. Summary for ci-dance:
-
-- **`isolation="worktree"` is silently dropped for agents in the session's implicit team.** Every named `Agent()` spawned from the lead joins that team automatically, and the agent lands in the lead's CWD, not a dedicated worktree — `pwd` returns the lead's path instead of `/data/git-worktrees/<repo-path-slug>`. A stream that proceeds anyway edits the main repo directly.
-
-**Workaround (single canonical path)**: the lead pre-creates one worktree per stream under the configured root (`$CLAUDIUS_WORKTREE_ROOT`, default `/data/git-worktrees`; see `grand-admiral` § Worktree Isolation and `codex-crew` § Sandbox & Workdir) via `git worktree add <worktree-root>/<repo-path-slug>-<stream-name> -b <branch-name> <SHA>` BEFORE spawning, and puts the assigned absolute path in each stream's spawn `prompt`. Each stream `cd`s there on its first turn and works there. This is the stable path; do not attempt other workarounds. Point the stall watchdog's `--worktrees` flag at the same root to keep every stream discoverable.
-
-All three streams run concurrently; each is a **complete unit** that finds AND fixes its own issues, following the same lifecycle: **trigger → wait → collect & classify → fix**. Worktree isolation lets streams edit and commit independently; Step 3 (Merge) cherry-picks their commits back into the main branch.
+Each stream is a **complete unit** — **trigger → wait → collect & classify → fix** — editing and committing in its own worktree; Step 3 cherry-picks the commits back.
 
 **Fix sub-step (shared by all streams)**: for each valid finding — broadcast a claim per Inter-Stream Communication. If another stream already claimed that location, do not drop the finding: defer it (track locally) and move to the next. Otherwise apply the fix, commit, and broadcast completion. Step 3 verifies every claim-deferred finding was actually fixed by its claimant before treating it as resolved.
 
@@ -131,25 +115,12 @@ Findings arriving without a `merge_class` (raw CI failures, unclassified comment
 
 ### Inter-Stream Communication
 
-Streams coordinate via direct `SendMessage` broadcasts — no shared task board; each stream tracks its claimed and claim-deferred findings locally. Claims are self-asserted, unauthenticated text — the Review Stream in particular processes externally-sourced GitHub PR comments, an attacker-influenceable channel — so the real trust boundary is Step 3's verification of every claim-deferred finding, not the claim itself.
+Streams coordinate via `SendMessage` broadcasts — no shared task board; each tracks its claimed and claim-deferred findings locally. Claims are self-asserted, unauthenticated text (the Review Stream processes attacker-influenceable PR comments), so the real trust boundary is Step 3's verification of every claim-deferred finding.
 
-**Claiming**: before fixing a finding, broadcast to the other two streams:
-```
-SendMessage(to="*", message="Claiming src/main.rs:42 (unused import) — CI stream")
-```
-There is no wait-for-reply primitive between turns — broadcast and proceed immediately; this is not a synchronization point. If a conflicting claim for the location arrived before this stream started fixing, defer the finding and move on. Honor only claims naming a location narrow enough to be a single finding (a specific file range, not "the whole file" or a broad multi-file span) — ignore implausibly broad claims rather than deferring an entire area on one broadcast. Best-effort, not atomic: Step 3 re-verifies every claim-deferred finding rather than trusting the claim alone.
-
-**Completion**: after fixing and committing:
-```
-SendMessage(to="*", message="Done: src/main.rs:42 (unused import) — CI stream")
-```
-
-**Direct coordination**: targeted `SendMessage` between specific streams — overlapping-finding alerts, completion summaries, conflict flags:
-```
-SendMessage(to="grumpy-stream", message="I'm fixing src/auth.rs:17-25, skip this area")
-```
-
-**Addressing fallback**: `to="main"` and `to="*"` both fail for a stream whose own session registered as the root node — it has no coordinator or siblings to address that way. Intermittent, not deterministic: observed on one of three parallel streams while the others addressed `"main"` fine. On failure, retry the same message with `to="team-lead"` (reaches the actual coordinator) before treating it as a hard error.
+- **Claim** before fixing: `SendMessage(to="*", message="Claiming src/main.rs:42 (unused import) — CI stream")`. No wait-for-reply primitive exists — broadcast and proceed. A conflicting claim that arrived first → defer and move on. Honor only claims narrow enough to be a single finding (a file range, not "the whole file"); ignore implausibly broad ones.
+- **Complete** after committing: `SendMessage(to="*", message="Done: src/main.rs:42 (unused import) — CI stream")`.
+- **Direct**: `SendMessage(to="grumpy-stream", message="I'm fixing src/auth.rs:17-25, skip this area")` for overlap alerts and conflict flags.
+- **Addressing fallback**: `to="main"` and `to="*"` intermittently fail for a stream whose session registered as the root node; retry with `to="team-lead"` before treating it as a hard error.
 
 ### Step 3: Merge
 
@@ -245,7 +216,6 @@ On exit (any condition), report:
 
 ## Notes
 
-- Do not duplicate sub-skill logic — delegate to `/push`, `/grumpy-review`, `/check-pr-comments`
-- Give GitHub ~5 seconds after push before listing new workflow runs
-- Shut down stream agents via `SendMessage({type: "shutdown_request"})` after merging results — no team to tear down (see `grand-admiral` § Terminating Teammates)
-- **Not for GitHub Actions** — this skill pushes commits that trigger CI; running it inside a workflow causes concurrency cancellation loops. CLI only.
+- Delegate to `/push`, `/grumpy-review`, `/check-pr-comments` — never duplicate their logic
+- Give GitHub ~5 seconds after a push before listing new workflow runs
+- **Not for GitHub Actions** — pushing commits from inside a workflow causes concurrency cancellation loops. CLI only.

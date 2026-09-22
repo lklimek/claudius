@@ -100,8 +100,7 @@ Apply the categories relevant to the library's purpose:
 **All libraries** — Input validation and sanitization, memory safety and resource limits, error handling and information disclosure, concurrency safety (races, deadlocks), file system operations (path traversal, symlink attacks), transitive dependency risk, debug/logging modes that may leak sensitive data
 
 ### Output Format
-Rate findings by emitting the three floats `likelihood`, `impact`, `relevance` per `severity` skill § 3 — never a hand-typed severity label; the pipeline derives the band from the floats, and a label authored alongside them drifts and is wrong by construction. This skill runs coordinator-inline (`agent: claudius`, `context: fork`) with no separate consolidation pass, so — like review-pr Pass C and check-pr-comments — it is the exception allowed to assign `merge_class`/`intent_basis` directly per `severity` skill § Merge Classification, in the v4 report JSON it emits (see `claudius:report-format`).
-Include: file:line references, CWE IDs where applicable, impact, and remediation.
+Emit `likelihood`/`impact`/`relevance` floats per `severity` skill § 3 — never a hand-typed label. Runs coordinator-inline (`agent: claudius`, `context: fork`, no consolidation pass), so like review-pr Pass C and check-pr-comments it assigns `merge_class`/`intent_basis` directly (`severity` § Merge Classification) in the v4 report JSON it emits (`claudius:report-format`). Include file:line references, CWE IDs where applicable, impact, and remediation.
 
 ## 4. Vulnerability Research
 
@@ -126,7 +125,7 @@ After upstream review completes, assess how the dependency is used in **our** co
 
 ## 6. Consolidated Report
 
-**This skill only produces and returns the report — it never posts anywhere.** `allowed-tools` above has no GitHub comment/write tool; there is nothing here that could publish this report even if instructed to. Never describe the report as "posted" or "published" in any form — say "returned" or "written to `<path>`". The invoking skill or coordinator owns actually publishing it (see e.g. `dependabot-merge` § 5) and is responsible for verifying that publish actually happened (comment count/URL), not for trusting a self-report of success from whatever produced the text.
+**This skill only produces and returns the report — it never posts anywhere** (`allowed-tools` has no GitHub write tool). Say "returned" or "written to `<path>`", never "posted"/"published". The invoking skill or coordinator publishes it (e.g. `dependabot-merge` § 5) and verifies the publish actually happened.
 
 Present a single report:
 

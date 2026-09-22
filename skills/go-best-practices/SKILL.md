@@ -6,61 +6,17 @@ allowed-tools: Read
 
 # Go Best Practices
 
-## Technical Standards
-- **Go Version**: 1.21+ (or latest stable)
-- **Code Style**: gofmt/goimports enforced
-- **Linting**: golangci-lint with comprehensive checks
-- **Testing**: go test with table-driven tests
-- **Documentation**: One-line Godoc comment for every exported identifier; expand only when non-obvious
-- **Error Handling**: Explicit with error wrapping (fmt.Errorf with %w)
-- **Modules**: Go modules for dependency management
-- **Context**: context.Context for cancellation and timeouts
+## Standards
+- Go 1.21+; gofmt/goimports; golangci-lint (staticcheck, errcheck, govet, …); gosec; `go mod tidy`/`go mod verify`
+- `go test -race -cover ./...` with table-driven tests; `go test -bench=. -benchmem` for benchmarks
+- One-line Godoc per exported identifier, expanded only when non-obvious
 
-## Best Practices
-- Accept interfaces, return structs
-- Keep interfaces small (single-method often best)
-- Use context.Context for cancellation propagation
-- Always check errors — don't ignore with `_`
-- Use defer for cleanup (close files, unlock mutexes)
-- Goroutines: always know when they exit
-- Channels for communication, mutexes for state
-- Prefer composition over embedding
-- Use `internal/` package for private code
-- Prefer standard library first
-
-## Common Patterns
-- **Error Wrapping**: `fmt.Errorf("context: %w", err)`
-- **Options Pattern**: Functional options for constructors
-- **Context**: Pass as first parameter
-- **Interfaces**: io.Reader, io.Writer, io.Closer patterns
-- **Middleware**: Handler wrapping for HTTP servers
-- **Worker Pools**: Channel-based task distribution for bounded concurrency
-- **Graceful Shutdown**: Signal handling with context cancellation
-
-## Concurrency
-- Use sync.WaitGroup to wait for goroutines
-- Use buffered channels carefully — understand blocking
-- Use select for channel multiplexing
-
-## Error Handling
-- Define custom error types for sentinel errors
-- Use errors.Is() and errors.As() for checking
-- Return errors as last return value
-- Don't panic in library code — return errors
-- Log errors at the right level in the call stack
-
-## Code Quality Tools
-- **Formatting**: gofmt, goimports
-- **Linting**: golangci-lint (staticcheck, errcheck, govet, etc.)
-- **Testing**: `go test -race -cover ./...`
-- **Security**: gosec
-- **Dependencies**: `go mod tidy`, `go mod verify`
-- **Benchmarks**: `go test -bench=. -benchmem`
-
-## Common Pitfalls
-- Don't use global variables excessively
-- Don't use init() unless absolutely necessary
-- Don't over-use interfaces early — add when needed
+## Practices
+- Accept interfaces, return structs; keep interfaces small; don't over-use them early; composition over embedding; `internal/` for private code; standard library first
+- Errors: always checked (never `_`); wrapped with `fmt.Errorf("context: %w", err)`; custom types for sentinels, checked with `errors.Is`/`errors.As`; last return value; no panics in library code
+- `context.Context` as first parameter for cancellation/timeouts; `defer` for cleanup; every goroutine has a known exit; `sync.WaitGroup` to wait; channels for communication, mutexes for state; `select` for multiplexing; understand buffered-channel blocking
+- Patterns: functional options for constructors; `io.Reader`/`Writer`/`Closer`; middleware as handler wrapping; channel-based worker pools; graceful shutdown via signal + context cancellation
+- Avoid excessive globals and `init()`
 
 ## Code Review Checklist
 - Idiomatic Go style (Effective Go compliance)

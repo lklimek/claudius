@@ -13,9 +13,7 @@ Audit, comment, and merge open dependabot PRs. Each PR gets a security review vi
 
 ## Prerequisites
 
-- `ghsudo` installed for write operations (`pip install ghsudo`)
-- GitHub MCP tools available (`mcp__plugin_claudius_github__*`)
-- `review-dependency` skill available
+`ghsudo` (`pip install ghsudo`) for write operations; GitHub MCP tools; `review-dependency` skill.
 
 ## Workflow
 
@@ -30,13 +28,7 @@ Extract per PR: number, title, CI status (which checks passed/failed), mergeable
 
 ### 2. Check for Unpushed Commits
 
-Before spawning worktree agents:
-
-```bash
-git log @{upstream}..HEAD --oneline
-```
-
-If unpushed commits exist, **alert the user and stop** — worktree agents fork from remote state and would miss them. If no upstream is configured, fall back to `git log origin/$(git branch --show-current)..HEAD`.
+`git log @{upstream}..HEAD --oneline` (no upstream: `git log origin/$(git branch --show-current)..HEAD`). Unpushed commits → **alert the user and stop** — worktree agents fork from remote state and would miss them.
 
 ### 3. Classify PRs
 
@@ -75,11 +67,7 @@ Spawn **all agents in a single message** for maximum parallelism.
 
 ### 5. Collect Results and Handle Write Blocks
 
-As agents complete, check results. **Never trust a "posted"/"published" self-report at face value** — confirmed case: an agent reported the comment published when the PR actually had zero comments, and separately stated unverified claims (signature checks, release immutability) as confirmed fact. Verify independently before moving on: `gh pr view <number> --json comments` (or the MCP equivalent) for an actual comment matching this run, and re-read the agent's own reasoning for anything phrased as fact that it did not actually check.
-
-Agents may be blocked from GitHub write operations by hooks. For blocked agents, or where verification above fails:
-1. Post the review comment yourself using GitHub MCP
-2. Execute the merge, rebase request, or watch loop yourself
+**Never trust a "posted"/"published" self-report** — confirmed: an agent reported a comment published when the PR had zero comments, and stated unverified claims (signature checks, release immutability) as fact. Verify with `gh pr view <number> --json comments` (or MCP) for an actual comment from this run, and re-read the agent's reasoning for anything phrased as fact it did not check. Where an agent was blocked from GitHub writes by hooks, or verification fails: post the comment and execute the merge/rebase/watch loop yourself.
 
 ### 5a. Rebase Watch Loop
 
@@ -123,20 +111,9 @@ Include:
 
 After all PRs, invoke `claudius:lessons-learned` skill if notable patterns emerged (flaky tests blocking merges, recurring merge conflicts, security concerns).
 
-## Attribution Footer
-
-Every GitHub comment MUST end with:
-
-```
-
-<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
-```
-
 ## Safety Rules
 
-- Never merge a PR with security concerns — comment only
-- Never merge a PR with failing CI — request rebase instead
-- Always get user confirmation before starting the bulk operation
-- Use `ghsudo` for all write operations (merge, comment) when `gh` alone fails with 403/404
-- If `ghsudo` exits with code 2 (user denied), skip that PR and move on
-- If `ghsudo` exits with code 4 (no token), inform user to run `ghsudo --setup <org>`
+- Every GitHub comment ends with the attribution footer from `git-and-github`
+- Never merge a PR with security concerns (comment only) or failing CI (request rebase)
+- User confirmation before starting the bulk operation
+- `ghsudo` for writes when `gh` alone fails with 403/404; exit 2 (user denied) → skip that PR; exit 4 (no token) → ask the user to run `ghsudo --setup <org>`
