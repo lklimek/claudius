@@ -14,6 +14,10 @@ Claudius/Skippy persona with extra grumpiness about the code — complain, disbe
 
 **Argument**: `$ARGUMENTS` — optional scope description (e.g., "feat/zk branch", "packages/auth/", "last 5 commits"). If empty, review all changes on the current branch vs the main branch.
 
+## Report Is Mandatory, Even Empty
+
+This skill MUST end with a written `report.json` (and whichever rendered format was requested) — every time, regardless of what reviewers found. Zero findings is a valid, successful outcome (`findings: []`, a positive `executive_summary`), never a reason to skip §5 or leave the report unwritten. Callers such as `claudius-review-action` treat a missing `report.json` as a hard CI failure with no findings posted, independent of whether any exist. This binds every path: the TRIVIAL single-agent path (§2), every spawned producer (§3 — always write your findings file, even a bare `[]`), and the coordinator's consolidation pipeline (§5 — run prepare → merge → assemble → render unconditionally, never short-circuit because every producer came back empty).
+
 ## 1. Scope the Review
 
 ```bash
@@ -53,7 +57,7 @@ Skip the multi-agent pipeline and the fixed trio; spawn exactly ONE fallback rev
 
 Determine the authoring tier from `git log` (commit author/trailer, PR metadata, or the invoking workflow's recorded model selection) before spawning; if genuinely indeterminate, use the default above.
 
-The single agent stands in for the entire trio — its prompt must cover security, structural, and adversarial-correctness concerns in one pass; instruct it to also apply the `security-best-practices` and `coding-best-practices` checklists. It writes the report JSON directly — no consolidation. Since §5b never runs on this path, the coordinator assigns `merge_class`/`intent_basis` inline after the producer returns (per `severity` skill § Merge Classification), before rendering.
+The single agent stands in for the entire trio — its prompt must cover security, structural, and adversarial-correctness concerns in one pass; instruct it to also apply the `security-best-practices` and `coding-best-practices` checklists. It writes the report JSON directly — no consolidation — and MUST do so even if it found nothing: a full valid v4 envelope with `findings: []` and a positive `executive_summary`, never a skipped file. Since §5b never runs on this path, the coordinator assigns `merge_class`/`intent_basis` inline after the producer returns (per `severity` skill § Merge Classification), before rendering.
 
 ### Core agents (always include — fixed trio, every non-trivial review)
 
@@ -149,7 +153,7 @@ Agent(subagent_type="claudius:qa-engineer-marvin", model="sonnet", prompt="...",
 
 ## 5. Consolidate Findings
 
-After all agents complete, the two-phase consolidation script does the mechanical work (flattening, duplicate detection, ID assignment, statistics); judgment calls (dedup merging, severity re-assessment, executive summary) are yours.
+After all agents complete, the two-phase consolidation script does the mechanical work (flattening, duplicate detection, ID assignment, statistics); judgment calls (dedup merging, severity re-assessment, executive summary) are yours. Run this pipeline through to §5e even when every producer's file is `[]` — an all-empty `intermediate.json` (0 raw findings, 0 duplicate groups) is not an early-exit signal, it's the expected shape of a clean review; `assemble` and the renderers already handle it (0 findings, all-zero severity counts).
 
 ### 5a. Phase 1 — Prepare
 
@@ -176,7 +180,7 @@ Read `intermediate.json` and decide:
 3. **Severity re-evaluation**: load the `severity` skill (`/severity`), then re-assess every finding strictly against its criteria — agents often over-inflate.
 4. **Merge classification**: assign `merge_class` per `severity` skill § Merge Classification — `blocking` only when a blocker gate trips, with `intent_basis` naming the gate ID plus one line of evidence. Use the Context Digest when the invoker supplied one (`review-pr` § Context Digest) for `G-INTENT` judgment; with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Apply the digest as a coordinator-side backstop too: re-check any finding whose floats ignore an evidenced operational-profile claim a producer plainly didn't have (`severity` skill § `likelihood`). Severity never determines `merge_class`. Escalate to the human explicitly (never silently defer) any pre-existing finding tripping `G-FUNDS`/`G-SECRET`/`G-CRYPTO`/`G-DATA`.
 5. **Merge sections**: combine same-category agent sections into unified sections.
-6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding.
+6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding. Zero raw findings is not a reason to stop here — write a short positive summary (e.g. "No issues found across N reviewers — clean PR.") and continue to §5c; the report still gets written.
 7. **Agent stats**: copy `intermediate.json`'s `agent_stats` array verbatim into `merged-findings.json` — `prepare` already computes it; do not hand-author or reshape it.
 
 For reviews above roughly 30 raw findings, use the ready-to-run merge helper instead of transcribing the entire document by hand. Record the review-specific judgment in `"$SCRATCH_DIR"/merge-decisions.json`: each true duplicate cluster names its members by `agent` + `original_id`, selects one member as the base, records a `reason`, and supplies only the hand-authored merged fields in `updates`. Include the step 6 `executive_summary` in the same file. Do not list candidate clusters you decide to keep separate.
