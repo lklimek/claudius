@@ -18,9 +18,7 @@ Start an interactive triage session: the user classifies each finding in a brows
    ```bash
    python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py "$ARGUMENTS"
    ```
-   Requires `python3-jsonschema` (`apt install python3-jsonschema`).
-   If validation fails, fix the JSON and re-validate. Do NOT start the triage server with invalid data.
-   The validator also prints non-blocking `[consistency]` warnings to stderr (label/band drift, or an un-rated axis such as `relevance` pinned at `1.0`). These don't fail validation, but surface them to the user — severity labels are *derived* from `likelihood`/`impact` per `claudius:severity` (`relevance` drives `merge_class`/ordering only), never hand-typed, so a warning means the floats need rerating, not a label edit.
+   Requires `python3-jsonschema`. Invalid → fix and re-validate; never start the server with invalid data. Non-blocking `[consistency]` warnings on stderr (label/band drift, `relevance` pinned at `1.0`) don't fail validation but must be surfaced to the user — labels derive from the floats (`claudius:severity`), so a warning means the floats need rerating.
 
 2. Start the triage server (default port 8741):
    ```bash
@@ -47,17 +45,9 @@ Replace `8741` with the actual port if `--port` was used.
 
 5. For findings marked `fix`: apply the recommended fixes using the finding's `location`, `description`, and `recommendation`. Work through them one at a time, verifying each achieves the desired end-user or developer experience (not just code correctness) before proceeding.
 
-6. For findings marked `defer`: add a `TODO` comment at the finding's location with a short descriptive slug and the finding's title — never the finding ID itself (`coding-best-practices`' Cross-Cutting Rules ban ephemeral review-finding IDs like `SEC-004` in committed code; they're reassigned on every consolidator run and go dead after merge):
-   ```
-   // TODO(banner-atomicity): BannerHandle is Send+Sync but read-modify-write is not atomic
-   ```
-   Use the file's native comment syntax (`//`, `#`, `<!-- -->`, etc.). If traceability back to the original finding is wanted, put the ID in the PR/commit description or a coordinator-maintained ID→slug map — never in the committed comment text.
+6. `defer` → a `TODO(<slug>)` comment at the location with a descriptive slug and the finding's title (file's native comment syntax), e.g. `// TODO(banner-atomicity): BannerHandle is Send+Sync but read-modify-write is not atomic`. Never the finding ID (`coding-best-practices` bans ephemeral review IDs in committed code); traceability goes in the PR/commit description or a coordinator-kept ID→slug map.
 
-7. For findings marked `accept_risk`: add an `INTENTIONAL` comment at the finding's location documenting the accepted risk and rationale, again with a descriptive slug rather than the finding ID:
-   ```
-   // INTENTIONAL(relaxed-ordering): Relaxed ordering adequate for single-threaded UI model
-   ```
-   Use the rationale from the triage decision if provided, else summarize from the finding's description. Future reviews encountering an `INTENTIONAL` comment downgrade the finding to INFO severity — this match is by proximity to the flagged location, not by the slug text, so the slug is free-form.
+7. `accept_risk` → an `INTENTIONAL(<slug>)` comment at the location with the accepted risk and rationale (from the triage decision, else the finding's description), e.g. `// INTENTIONAL(relaxed-ordering): Relaxed ordering adequate for single-threaded UI model`. Future reviews downgrade a finding near an `INTENTIONAL` comment to INFO — matched by proximity, not slug text.
 
 ## Comment-Check Reports
 

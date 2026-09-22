@@ -6,33 +6,16 @@ allowed-tools: Read
 
 # Frontend Best Practices
 
-## Technical Standards
-- **Language**: TypeScript with strict mode enabled
-- **Code Style**: ESLint + Prettier, consistent with project config
-- **Type Safety**: No `any` types without explicit justification
-- **Testing**: Vitest or Jest with Testing Library, minimum 80% coverage
-- **Accessibility**: axe-core automated checks, manual keyboard testing
-- **Performance**: Lighthouse CI, bundle size budgets
-- **Documentation**: One-line JSDoc for every public function; expand only for complex logic
+## Standards
+- TypeScript strict mode; no `any` without explicit justification (`unknown` + narrowing); ESLint (+ jsx-a11y) + Prettier per project config; `tsc --noEmit`
+- Vitest or Jest with Testing Library (query by role/label, not test IDs), MSW for API mocking, minimum 80% coverage; axe-core + manual keyboard testing; Lighthouse CI and bundle-size budgets (vite-plugin-visualizer / webpack-bundle-analyzer)
+- One-line JSDoc per public function, expanded only for complex logic
 
-## Best Practices
-- Semantic HTML elements over generic divs
-- CSS custom properties for theming
-- Component composition over prop drilling
-- Lazy loading for code splitting
-- Optimistic UI updates where appropriate
-- Proper error boundaries and fallback UI
-- Accessible forms with proper labels, error messages, focus management
-- Progressive enhancement
+## Practices
+- Semantic HTML over generic divs; CSS custom properties for theming; component composition over prop drilling; lazy loading for code splitting; optimistic UI where appropriate; error boundaries with fallback UI; accessible forms (labels, error messages, focus management); progressive enhancement
 
-## Common Patterns
-- **State Management**: React Context for simple state, Zustand/Jotai for complex; Redux only when justified
-- **Data Fetching**: TanStack Query or SWR for server state, avoid raw useEffect
-- **Forms**: React Hook Form or Formik with Zod/Yup schema validation
-- **Routing**: Framework router (Next.js App Router, React Router, Vue Router)
-- **Styling**: CSS Modules, Tailwind CSS, or styled-components — consistent with project
-- **Testing**: Testing Library (query by role/label, not test IDs), MSW for API mocking
-- **Error Handling**: Error boundaries per route/feature, toast for recoverable errors
+## Patterns
+- State: React Context for simple, Zustand/Jotai for complex, Redux only when justified. Server state: TanStack Query or SWR, not raw `useEffect`. Forms: React Hook Form or Formik with Zod/Yup. Routing: the framework router. Styling: CSS Modules, Tailwind, or styled-components — consistent with the project. Errors: boundaries per route/feature, toasts for recoverable errors
 
 ## Common Pitfalls
 - Don't use `any` — use `unknown` and narrow, or define proper types
@@ -46,21 +29,11 @@ allowed-tools: Read
 - Don't forget `loading`, `error`, and `empty` states in data-driven components
 
 ## Package.json
-- Use `peerDependencies` for shared framework deps in libraries
-- Keep `devDependencies` vs `dependencies` accurate
-- Audit with `npm audit` or `pnpm audit` before releases
+- `peerDependencies` for shared framework deps in libraries; accurate `devDependencies` vs `dependencies`; `npm audit`/`pnpm audit` before releases
 
 ## Design Quality
 
-For high-fidelity UI work, invoke the `frontend-design:frontend-design` skill.
-
-## Code Quality Tools
-- **Linting**: ESLint with TypeScript plugin
-- **Formatting**: Prettier
-- **Type Checking**: `tsc --noEmit`
-- **Testing**: `vitest run --coverage`
-- **Accessibility**: eslint-plugin-jsx-a11y, axe-core
-- **Bundle Analysis**: vite-plugin-visualizer or webpack-bundle-analyzer
+For high-fidelity UI work, load `frontend-design:frontend-design` when available.
 
 ## Code Review Checklist
 - TypeScript strict mode compliance, no unjustified `any`

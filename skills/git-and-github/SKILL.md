@@ -5,7 +5,7 @@ description: "This skill should be used when running git or gh commands, interac
 
 # GitHub Workflow
 
-**Tooling**: `git` for repository operations (clone, fetch, commit, push, branch, merge); GitHub MCP tools (`mcp__plugin_claudius_github__*`) for all GitHub API operations (PRs, issues, reviews, Actions, checks, branches, releases, security alerts). If MCP is unavailable, read [gh-cli-fallback.md](references/gh-cli-fallback.md) for `gh` CLI equivalents. Bare coordinator sessions typically lack these tools and should default directly to the CLI fallback; spawned agents whose frontmatter lists them still prefer MCP.
+**Tooling**: `git` for repository operations; GitHub MCP tools (`mcp__plugin_claudius_github__*`) for GitHub API operations (PRs, issues, reviews, Actions, checks, branches, releases, security alerts). No MCP → [gh-cli-fallback.md](references/gh-cli-fallback.md). Bare coordinator sessions typically lack the MCP tools and go straight to the CLI fallback; spawned agents whose frontmatter lists them prefer MCP.
 
 **Attribution**: every commit, PR, issue, and comment posted to GitHub **must** include this footer (blank line before it):
 
@@ -47,9 +47,7 @@ Edit `CHANGELOG.md` per [Keep a Changelog](https://keepachangelog.com/) format.
 
 ## Pushing
 
-If a push fails with 403 or "Resource not accessible" and `ghsudo` is installed, retry through it (see [Elevated Permissions](#elevated-permissions-ghsudo----optional-fallback)).
-
-Only the coordinator pushes. Spawned/specialist agents commit and stop; the coordinator pushes on their behalf once it decides the work is ready — never relay a push to a spawned agent. The coordinator may push a feature branch at its own discretion, no confirmation needed. Never push to a base/protected branch (main, master, vX.Y-dev, or whatever the repo's base is) — see Safety Rules.
+On 403 / "Resource not accessible", retry through `ghsudo` if installed (see [Elevated Permissions](#elevated-permissions-ghsudo----optional-fallback)). Who may push, and where: Safety Rules #1.
 
 ## Pull Requests
 
@@ -94,30 +92,9 @@ Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a
 
 ## Context Management — Large MCP Responses
 
-GitHub MCP tools can return 10k+ tokens (file lists, diffs, review threads, CI logs), polluting the caller's context with briefly-needed data.
+GitHub MCP tools can return 10k+ tokens (file lists, diffs, review threads, CI logs). Delegate unbounded calls — `pull_request_read` with `get_files`/`get_diff`/`get_review_comments`, `get_job_logs`, `list_*`/`search_*` with many results — to a disposable subagent that returns a concise summary (`Explore` for read-only extraction, `general-purpose` when writes are needed). Bounded calls (single PR `get`, single issue, branch list, single commit) are fine directly.
 
-**Solution**: delegate large MCP calls to a disposable subagent (Agent tool) that extracts what's needed and returns a concise summary; its context is discarded after completion.
-
-**Delegate these** (unbounded/large responses):
-- `pull_request_read` with `get_files` — file lists on large PRs
-- `pull_request_read` with `get_diff` — full PR diffs
-- `pull_request_read` with `get_review_comments` — PRs with many threads
-- `get_job_logs` — CI logs (10k+ tokens typical)
-- `list_*` and `search_*` operations with many results
-
-**Safe to call directly** (bounded data): single PR metadata (`get`), single issue, branch list, single commit.
-
-**Pattern**:
-```
-Agent(
-  subagent_type="Explore",
-  prompt="Fetch changed files for PR #123 in owner/repo using pull_request_read (get_files). Return only: file paths with +/- line counts and total stats."
-)
-```
-
-Use `Explore` for read-only extraction (has MCP tools, no Edit/Write); `general-purpose` when writes are needed.
-
-**Key principle**: tell the subagent exactly what to extract and what format to return — not "fetch PR data" but "fetch changed file list, return file paths with +/- line counts, total stats."
+Tell the subagent exactly what to extract and in what format: `Agent(subagent_type="Explore", prompt="Fetch changed files for PR #123 in owner/repo via pull_request_read (get_files). Return only file paths with +/- line counts and total stats.")`
 
 ## Escaping and Formatting
 

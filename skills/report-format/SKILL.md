@@ -16,7 +16,7 @@ Agents emit a JSON array of `finding_section` objects:
 [
   {
     "title": "Section Title",
-    "category": "security|project|code_quality|call_tree|dependencies|documentation|pr_comments|pr_promises",
+    "category": "security|project|code_quality|call_tree|dependencies|documentation|pr_comments|pr_promises|architecture|ux",
     "findings": [
       {
         "id": "PREFIX-001",
@@ -39,7 +39,7 @@ Agents emit a JSON array of `finding_section` objects:
 ]
 ```
 
-This is the producer-emitted shape: integer `severity` and float `overall_severity` are absent — the coordinator's derive pass adds them from `likelihood`/`impact` (see below). The example validates against the v4 schema as-is (derived fields are optional); producer skills can run `validate_report.py` on their own output before consolidation.
+Producer-emitted shape: integer `severity` and float `overall_severity` are absent — the coordinator's derive pass adds them from `likelihood`/`impact`. The example validates against the v4 schema as-is; producers may run `validate_report.py` on their own output.
 
 ## Required Fields
 
@@ -56,7 +56,11 @@ This is the producer-emitted shape: integer `severity` and float `overall_severi
 
 Producers MUST emit `likelihood`, `impact`, and `relevance` — the schema rejects findings missing any; the coordinator derives `overall_severity` and integer `severity` per the `severity` skill's band table. The `validate-findings` skill is the only documented path to re-estimate floats post-hoc when a producer's partial output arrives without them.
 
-**Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (only when the producer captured exact source during analysis — never invent one).
+**Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (see below).
+
+### code_snippets
+
+Array of `{"language", "caption", "content"}`, only when the producer captured exact source during analysis — never invent one. `language` is a free-form tag naming the snippet's syntax for highlighting (e.g. `rust`, `python`, `diff` for a raw diff hunk); `caption` is a short `path:location` label; `content` is the literal snippet text.
 
 **Merge classification** (orthogonal to severity — see `severity` skill § Merge Classification): `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` and `intent_basis` (string|null — for `blocking`, the gate ID plus one line of evidence, e.g. `"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`). Coordinator-owned like `overall_severity`; the ONLY producers allowed to emit them are **coordinator-inline producers** (review-pr Pass C `pr_promises`, check-pr-comments, review-dependency) — same exception pattern as `location_permalink` below. `summary_statistics.merge_class_counts` (optional) carries the per-class tally.
 
@@ -73,15 +77,11 @@ Populated downstream; producers must NOT set:
 
 ## Long-Text Field Format
 
-**Markdown** by default — agents emit Markdown, renderers parse it as CommonMark: `description`, `impact_description`, `recommendation`, `ai_assessment`, `executive_summary.summary_text` / `.verdict_text`. Single-line fields (`title`, `severity`, `category`, `location`, etc.) stay plain text.
-
-**Markdown style for agents**: separate lists, code blocks, and headings from preceding text with a blank line (CommonMark requires this).
-
-**For consumers**: parse long-text fields as CommonMark. Reference renderer: `scripts/generate_review_report.py` — HTML uses the `markdown` Python package sanitised through `nh3`, PDF walks the parsed HTML to ReportLab mini-XML. Markdown output passes through verbatim.
+`description`, `impact_description`, `recommendation`, `ai_assessment`, `executive_summary.summary_text` / `.verdict_text` are **Markdown** (CommonMark — blank line before lists, code blocks, headings); single-line fields (`title`, `category`, `location`, …) are plain text. Reference renderer: `scripts/generate_review_report.py` (HTML via `markdown` + `nh3`, PDF via ReportLab).
 
 ## File Output
 
-When writing findings to a file, ALWAYS use the Write tool — never `cat > file`, `tee`, heredoc redirects, or inline `python3` scripts. Write is allowed in all CI environments; Bash file-writing commands are typically blocked by tool allowlists.
+Write findings files with the Write tool — never `cat > file`, `tee`, heredocs, or inline `python3`; Bash file writes are typically blocked by tool allowlists.
 
 ## ID Prefixes
 
@@ -100,10 +100,10 @@ When writing findings to a file, ALWAYS use the Write tool — never `cat > file
 | `PPM-` | pr_promises | review-pr (Pass C: promise verification) |
 | `DEP-` | dependencies | review-dependency |
 | `CALL-` | call_tree | reviewer call-tree inspection pass |
+| `ARCH-` | architecture | architect-nagatha |
+| `UX-` | ux | ux-designer-diziet |
 
-`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` are category prefixes, not identity-bound — either `project-reviewer-adams` or `qa-engineer-marvin` may emit them, whichever agent's pass surfaced the finding (both preload the matching `*-best-practices` skill for the language(s) in scope). `developer-bilby`, formerly the exclusive owner, no longer participates in code review.
-
-IDs are provisional -- consolidation deduplicates and reassigns final IDs.
+`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` are category prefixes, not identity-bound — whichever of `project-reviewer-adams` or `qa-engineer-marvin` surfaced the finding emits them. IDs are provisional — consolidation deduplicates and reassigns final IDs.
 
 ## Domain-Specific Fields
 
@@ -129,11 +129,7 @@ Rationale: no commit-relative file:line target exists, hence the synthetic `loca
 
 ## Report Pipeline Tools
 
-| Tool | Purpose | Usage |
-|------|---------|-------|
-| `scripts/validate_report.py` | Validate report JSON against schema | `python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py report.json` |
-| `scripts/consolidate_reports.py` | Merge multiple agent reports, deduplicate findings | Two-phase `prepare`/`assemble` subcommand CLI — see `grumpy-review/SKILL.md` §5a and §5c for exact invocation |
-| `scripts/generate_review_report.py` | Render consolidated report as Markdown/HTML/PDF/triage | Requires `--format {md,html,triage,pdf}` — see `grumpy-review/SKILL.md` §5e |
+`scripts/validate_report.py report.json` (schema validation); `scripts/consolidate_reports.py prepare`/`assemble` (merge + dedup — `grumpy-review` §5a/§5c); `scripts/generate_review_report.py --format {md,html,triage,pdf}` (`grumpy-review` §5e). All under `${CLAUDE_SKILL_DIR}/../../scripts/`.
 
 ## Full Report Envelope
 
@@ -153,6 +149,4 @@ For complete reports (grumpy-review, check-pr-comments), wrap finding sections i
 }
 ```
 
-`metadata.commit` must be a full 40-character SHA when present (the coordinator builds permalinks from it). Both `metadata.commit` and `metadata.repository` are optional — omit for non-git directories; permalinks are silently skipped, everything else renders normally.
-
-See `schemas/review-report.schema.json` for the complete envelope schema.
+`metadata.commit` is a full 40-character SHA when present (permalinks are built from it); `metadata.commit` and `metadata.repository` are optional — omit for non-git directories and permalinks are skipped. Complete envelope: `schemas/review-report.schema.json`.

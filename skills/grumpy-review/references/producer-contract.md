@@ -85,6 +85,10 @@ silently overwrite another session's output.
 
 ## Process rules
 
+- **Always write your output file, even when you found nothing.** A bare `[]` is a valid,
+  successful result — a missing file fails the coordinator's `prepare` step outright (exit 2),
+  taking down the whole review with no report at all. Zero findings is never a reason to skip
+  the Write call.
 - Do NOT run `consolidate_reports.py` yourself and do NOT pre-assemble `report.json` shape —
   the coordinator does that.
 - Use the Write tool for creating files — never `cat > file` or heredoc redirections.
@@ -96,5 +100,6 @@ silently overwrite another session's output.
 
 Your findings file is the report — the coordinator reads it directly. When you finish, report
 back in **at most 3 lines**: counts by severity band, your output file path, and your candy
-tally. Do not restate your findings in prose; a 1-2 KB narrative repeating the JSON you just
-wrote wastes tokens the coordinator has to read anyway.
+tally. Found nothing? Say so plainly ("0 findings, wrote `<path>` as `[]`") — that is a
+complete, successful report, not an empty one. Do not restate your findings in prose; a 1-2 KB
+narrative repeating the JSON you just wrote wastes tokens the coordinator has to read anyway.

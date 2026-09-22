@@ -6,7 +6,7 @@ allowed-tools: Read
 
 # Coding Best Practices
 
-Universal rules for all developer agents. Language-specific guidance lives in each agent's own instructions.
+Universal rules for every agent that writes, reviews, or tests code. Language specifics live in the `*-best-practices` skills.
 
 ## Workflow Discipline
 
@@ -78,6 +78,10 @@ Tests must never touch real user data: override `XDG_CONFIG_HOME`/`XDG_DATA_HOME
 - **User-friendly**: plain description of what happened, not internal jargon — understandable without knowing this specific function.
 - **Greppable**: unique wording per call site — no two log statements share message text, so a message uniquely locates its source.
 - **Actionable**: state what to do next when cheap (a config key to check, a retry that already happened) — never invent logic or a lookup just to be actionable.
+
+## Agent Output
+
+Reports, findings, comments, and commit messages: concise and formal — no obvious or redundant explanations, fewer tokens for equal value. The coordinator translates for the human; do not soften or pad for that audience. Published documentation deliverables (README, guides, changelogs) are written for their reader instead.
 
 ## Commit Discipline
 Before finishing, **commit all changes** with a descriptive message. Never leave uncommitted work. Never commit to main/master. Run `git status` to confirm clean state before exiting.

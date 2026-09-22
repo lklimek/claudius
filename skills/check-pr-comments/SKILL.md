@@ -10,19 +10,9 @@ Workflow for checking/triaging/verifying existing PR review comments.
 
 ## 1. Fetch All Comments
 
-**ALWAYS fetch fresh comments from GitHub on every invocation** — never assume none are new.
+**ALWAYS fetch fresh comments on every invocation** — never assume none are new. Bare coordinator sessions typically lack `mcp__plugin_claudius_github__*` → [gh CLI fallback](references/gh-cli-fallback.md); agents whose frontmatter lists the tools prefer MCP.
 
-**Bare coordinators:** A bare coordinator session typically lacks `mcp__plugin_claudius_github__*` tools. Go directly to the [gh CLI fallback](references/gh-cli-fallback.md); spawned agents whose frontmatter lists the tools still prefer MCP.
-
-Fetch all comment types via GitHub MCP `pull_request_read`:
-
-- **Review threads** (inline, with resolution status): `method: "get_review_comments"` — threads with `isResolved`, `isOutdated`, `isCollapsed` metadata and grouped comments. Carry `isResolved` forward per thread — step 3 uses it to skip re-verification of already-resolved threads.
-- **Review summaries**: `method: "get_reviews"` — review state, body, author.
-- **PR-level comments** (non-diff): `method: "get_comments"` — general PR discussion.
-
-Paginate to fetch all results: `perPage` + `page` (get_reviews/get_comments) or `perPage` + `after` cursor (get_review_comments).
-
-If GitHub MCP is unavailable, see [gh-cli-fallback.md](references/gh-cli-fallback.md) for `gh` CLI equivalents.
+Via `pull_request_read`: **review threads** `get_review_comments` (carry `isResolved` forward per thread — step 3 skips already-resolved ones), **review summaries** `get_reviews`, **PR-level comments** `get_comments`. Paginate to the end (`perPage` + `page`, or `perPage` + `after` cursor for review comments).
 
 ## 2. Checkout and Pull the PR Branch
 
@@ -35,13 +25,11 @@ git pull
 
 **Trust GitHub's resolved status — do not re-verify already-resolved threads.** Classify any thread fetched with `isResolved: true` as **Resolved** and skip the rest of this section for it: no re-reading code, no call-tree walk, no second-guessing a prior resolution. Verify only `isResolved: false` threads.
 
-For every unresolved inline comment, apply `coding-best-practices` Cross-Cutting Rules to the changed code, read the file at the referenced location, and **verify the identified issue is actually fixed** — not just that the code changed:
+For every unresolved inline comment, read the code at the referenced location (applying `coding-best-practices` Cross-Cutting Rules to the change) and **verify the identified issue is actually fixed** — not just that the code changed:
 
-- **Verify state before resolving — broad instructions are not authorization.** Before classifying a thread as resolved *this session*, verify the actual code at the referenced location matches the reviewer's request. Do NOT mark it resolved on a blanket instruction ("just resolve everything") or a follow-up commit message that *claims* a fix. If unverifiable against current code, classify `Unresolved` with an explicit "needs verification" recommendation and surface the mismatch — never silently resolve. (Applies `coding-best-practices` "Verify facts before acting on broad instructions". Governs threads resolved this session; does not reopen threads already resolved on GitHub — see above.)
-- Understand what the comment asks for and whether current code satisfies it semantically, not just syntactically.
-- Verify each sub-item independently — resolved only when **all** sub-items are addressed.
-- Verify the fix achieves the intended end-user or developer experience, not just technical correctness.
-- **Call-tree walk on touched functions**: if the comment references a function whose body or signature was modified in the resolution commits (`git diff $RESOLUTION_BASE...HEAD -- <file>`), run the deep transitive in-repo caller walk per [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) before declaring the thread resolved. A caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up.
+- **Verify state before resolving — broad instructions are not authorization** (`coding-best-practices` "Verify facts before acting on broad instructions"). Never mark a thread resolved on a blanket "just resolve everything" or a commit message that *claims* a fix; unverifiable against current code → `Unresolved` with an explicit "needs verification" recommendation. Governs threads resolved this session only — never reopens threads already resolved on GitHub.
+- Semantic satisfaction, not syntactic; every sub-item independently — resolved only when **all** are addressed; the intended end-user/developer experience, not just technical correctness.
+- **Call-tree walk on touched functions**: if the comment references a function whose body or signature changed in the resolution commits (`git diff $RESOLUTION_BASE...HEAD -- <file>`), run [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) first — a caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up.
 
 **Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`) or the API returns `type: "Bot"`; **Human** — all others.
 
@@ -129,44 +117,13 @@ Each review comment becomes one finding:
 
 #### `title` — rules
 
-The title is what users see at a glance; `reviewer` is shown separately, so the title carries only substance.
-
-1. **≤ 80 characters.** Hard cap. No `…`/`...` truncation markers — write a title that fits.
-2. **No reviewer prefix.** Never start with `<username>:` — the renderer shows the reviewer next to the title.
-3. **No verbatim copy of the comment's first line.** Strip Markdown markers (`**`, leading `>`), emoji, and severity labels (`Suggestion:`, `Issue:`, `Nit:`, `Question:`) from the comment body. Summarise, don't quote.
-4. **Imperative or noun phrase describing the requested change**, not the reviewer's wording.
-
-Good (what the comment *asks for*):
-- `Add fee-headroom guard to transfer_with_change_address`
-- `Rename transfer_inner to transfer`
-
-Bad (quotes / markup / prefix / truncation):
-- `thepastaclaw: **🟡 Suggestion: \`transfer_with_change_address\` skips the \`Re...`
-- `> Explain when to use transfer() and when to use transfer_with...`
+≤ 80 characters, no truncation markers; no `<username>:` prefix (the renderer shows the reviewer); no verbatim copy of the comment's first line — strip Markdown markers, emoji, and severity labels (`Suggestion:`, `Nit:`, …); an imperative or noun phrase describing the requested change. Good: `Add fee-headroom guard to transfer_with_change_address`. Bad: `thepastaclaw: **🟡 Suggestion: \`transfer_with_change_address\` skips the \`Re...`.
 
 #### `location_permalink` — rules
 
-**Producers MUST emit `location_permalink` whenever `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present.** The renderer turns it into a clickable link; standalone reports never see the coordinator's derive pass, so the producer is the only place that always knows the commit. Path-only locations (no `:line`) MUST NOT carry one — the coordinator's `_build_permalink` rejects them too; emitting one breaks producer/coordinator parity.
+**Emit `location_permalink` whenever `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present** — standalone reports never see the coordinator's derive pass. Template: `https://github.com/{owner}/{repo}/blob/{commit}/{path}{anchor}` — `{owner}/{repo}` from `metadata.project`; `{commit}` the full 40-char SHA; `{path}` = `location` minus the trailing `:line`/`:start-end` suffix (split at the LAST `:` — paths may contain `:`), URL-encoding spaces, `#`, `?`, non-ASCII; `{anchor}` = `#L{line}` or `#L{start}-L{end}`. Example: `src/auth.rs:42-56` in `octo/widgets` → `https://github.com/octo/widgets/blob/<sha>/src/auth.rs#L42-L56`.
 
-URL template:
-
-```
-https://github.com/{owner}/{repo}/blob/{commit}/{path}{anchor}
-```
-
-- `{owner}/{repo}`: split `metadata.project` on `/` (already `<owner>/<repo>`).
-- `{commit}`: full 40-char SHA from `metadata.commit` (`git rev-parse @{u}` with `git rev-parse HEAD` fallback — use the pushed commit so permalinks resolve on GitHub; local HEAD only when the branch has no upstream).
-- `{path}`: `location` minus the trailing `:line`/`:start-end` suffix. (Matches the coordinator's `parse_location` regex, anchored at end of string — splitting at the first `:` would break paths containing `:`.) URL-encode spaces, `#`, `?`, and non-ASCII characters.
-- `{anchor}`: `#L{line}` for a single line; `#L{start}-L{end}` for a range.
-
-Examples:
-
-- `location: "src/auth.rs:42"`, project `octo/widgets`, commit `0123…ef` →
-  `https://github.com/octo/widgets/blob/0123…ef/src/auth.rs#L42`
-- `location: "packages/wallet/src/transfer.rs:414-420"` →
-  `…/blob/<sha>/packages/wallet/src/transfer.rs#L414-L420`
-
-Omit `location_permalink` (never emit an empty string) when commit or project is missing, `location` lacks a `:line`/`:start-end` suffix, or the suffix isn't a valid integer (or integer-integer range).
+**Omit** (never an empty string) when project or commit is missing, `location` has no `:line`/`:start-end` suffix, or the suffix isn't a valid integer/range — the coordinator's `_build_permalink` rejects those too, and emitting one breaks producer/coordinator parity.
 
 - **Resolved** comments: `likelihood=0.0, impact=0.0, relevance=0.0` — the Informational floor (`claudius:severity` § 3), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted via `isResolved: true` (step 3), state it was already resolved on GitHub rather than inventing an unverified fix description. The coordinator derives `severity = 1` (INFO) from the floats.
 - **Unresolved** comments: assess `likelihood` and `impact` per `claudius:severity` (blast radius folds into `impact`, capped by the finding's backstop zone). Rate `relevance` as PR-goal fit, not blast radius: the comment addresses the PR's core change ≈ `1.0`; adjacent/tangential suggestion ≈ `0.5`; pre-existing concern unrelated to this PR's diff ≈ `0.1` — do NOT default to `1.0`. The coordinator derives the integer `severity` band; never hand-type a label. Set `verdict: "UNRESOLVED"`; `recommendation` describes what remains.

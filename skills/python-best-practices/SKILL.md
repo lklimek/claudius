@@ -6,31 +6,14 @@ allowed-tools: Read
 
 # Python Best Practices
 
-## Technical Standards
-- **Python Version**: 3.9+ features
-- **Code Style**: PEP 8, use black/ruff for formatting
-- **Type Hints**: typing module for all public APIs
-- **Testing**: pytest with minimum 80% coverage
-- **Documentation**: One-line docstring for every public function/class; expand only when non-obvious (Google/NumPy/Sphinx style)
-- **Error Handling**: Specific exception types, proper error messages
-- **Dependencies**: uv or poetry
-- **Virtual Environments**: Always use them (uv creates them automatically)
+## Standards
+- Python 3.9+; PEP 8 via ruff/black; type hints on all public APIs (mypy/pyright); pytest with coverage.py, minimum 80%; bandit for security
+- One-line docstring per public function/class, expanded only when non-obvious (Google/NumPy/Sphinx style)
+- Specific exception types with proper messages; no bare `except`
+- Dependencies via uv or poetry, always in a virtual environment (uv creates one)
 
-## Best Practices
-- Context managers (with statements) for resource management
-- Prefer composition over inheritance
-- Use dataclasses or Pydantic for data structures
-- Generators for memory efficiency with large datasets
-- Proper logging (logging module, not print)
-- async/await for I/O-bound operations when beneficial
-- No mutable default arguments
-
-## Code Quality Tools
-- **Linting**: pylint, flake8, or ruff
-- **Formatting**: black or ruff
-- **Type Checking**: mypy or pyright
-- **Testing**: pytest with coverage.py
-- **Security**: bandit for security checks
+## Practices
+- Context managers for resources; composition over inheritance; dataclasses or Pydantic for data structures; generators for large datasets; `logging`, not `print`; async/await for I/O-bound work when beneficial; no mutable default arguments
 
 ## Code Review Checklist
 - PEP 8 compliance and consistent style

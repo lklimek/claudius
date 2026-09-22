@@ -7,18 +7,11 @@ allowed-tools: Grep, Read, Glob, WebFetch, WebSearch
 
 # Secure Programming Best Practices
 
-Actionable security checklists by OWASP Top 10 (2021) category; each item links to the relevant OWASP Cheat Sheet.
+Security checklists by OWASP Top 10 (2021) category, each item linked to its OWASP Cheat Sheet.
 
 ## How to Use
 
-1. Identify the categories relevant to the code being written or reviewed
-2. Walk their checklist items below
-3. **Consult the reference index below** for relevant ASVS chapters and cheat sheets by topic
-4. **Search local references** — `Grep` `references/` for keywords, ASVS IDs (V1, V1.2, V1.2.4), or topic terms. **Never read entire files** — read only matching sections with context (30–50 lines)
-5. Use the `search_standards` MCP tool (if available) for standards beyond local references
-6. **Fetch OWASP cheat sheets** for implementation detail when local references aren't enough — fetch the linked URL for every relevant checklist item
-7. For framework-specific guidance, see [Framework-Specific Security](#framework-specific-security) and read or fetch the corresponding cheat sheet
-8. Always include OWASP cheat sheet URLs and ASVS requirement IDs in output
+Walk the checklists for the categories the code touches. For depth: `Grep` `references/` for keywords or ASVS IDs (V1, V1.2, V1.2.4) and read only matching sections (30–50 lines) — never whole files; `search_standards` MCP (if available) for standards beyond local references; fetch the linked cheat sheet when local references aren't enough; [Framework-Specific Security](#framework-specific-security) for framework pitfalls. Cite cheat-sheet URLs and ASVS requirement IDs in output.
 
 ### Local Reference Index
 

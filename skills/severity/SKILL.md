@@ -10,7 +10,7 @@ Two independent axes per finding:
 - **severity** — how bad is the shipped defect? Derived from the `likelihood`/`impact` floats.
 - **merge_class** — does this stop THIS PR? Decided by the **blocker gates** below.
 
-Never encode one in the other. A LOW can block (it trips a gate); a CRITICAL can be `out_of_scope_follow_up` (pre-existing, untouched, no gate reachable through this PR).
+Never encode one in the other: a LOW can block (it trips a gate); a CRITICAL can be `out_of_scope_follow_up` (pre-existing, untouched, no gate reachable through this PR).
 
 ## 1. Backstop zone (judge this first)
 
@@ -24,9 +24,7 @@ Before rating anything, answer: **what stands between this defect and irreversib
 
 For **server-side code**, the code owns the data — read it as Sovereign over its own persistence, with the operator's monitoring as the only backstop against silent breakage (hence G-SILENT).
 
-**Zone is per finding, never per repo or per app.** One PR routinely spans all three: a wallet's balance-refresh path is Backstopped, its seed-phrase handling is Sovereign, its send-confirmation screen is Boundary. Judge each finding on the code path it actually sits on, from the PR's own context. Do not assign a project a standing zone.
-
-Unsure between two zones → take the more sovereign one.
+**Zone is per finding, never per repo or app** — one PR routinely spans all three (balance refresh: Backstopped; seed-phrase handling: Sovereign; send-confirmation screen: Boundary). Judge the code path the finding sits on. Unsure between two zones → the more sovereign one.
 
 ## 2. Blocker gates
 
@@ -65,7 +63,7 @@ Getting stuck, one-way migrations, protocol drift, compatibility breaks, agent a
 
 ## 3. Severity floats
 
-Three 0.0–1.0 numbers per finding. No external methodology; these definitions are the whole specification.
+Three 0.0–1.0 numbers per finding; these definitions are the whole specification.
 
 ### `likelihood` — how likely is this hit?
 
@@ -78,15 +76,13 @@ Probability that a real user or attacker reaches this defect under zone-realisti
 | `~0.4` | Edge case, unusual sequence, unlucky timing |
 | `~0.1` | Pathological only — requires deliberate, unrealistic effort |
 
-**Non-adversarial findings** (correctness, concurrency, robustness — no attacker in the story) have no threat agent, and improvising one inflates every such finding. Place them on the ladder using the operational reality instead:
+**Non-adversarial findings** (correctness, concurrency, robustness — no attacker in the story): don't improvise a threat agent; place them by operational reality, three **conjunctive** factors — the most limiting one sets the ceiling:
 
-- **Execution frequency** of the affected path — per-request hot path is near `1.0`; occasional background job mid-ladder; one-time admin-triggered migration near the bottom
-- **Precondition probability** — triggered by ordinary input is high; needs unusual config or rare input is mid; requires concurrent callers that structurally cannot exist in the deployment is bottom
-- **Triggering actor** — any user or untrusted automation is high; internal automation mid; deliberate action by a trusted operator low
+- **Execution frequency** — per-request hot path near `1.0`; occasional background job mid; one-time admin migration near the bottom
+- **Precondition probability** — ordinary input high; unusual config/rare input mid; concurrent callers that structurally cannot exist bottom
+- **Triggering actor** — any user or untrusted automation high; internal automation mid; deliberate trusted-operator action low
 
-The three are **conjunctive**: the defect is reached only when all three line up, so the most limiting one sets the ceiling. Place the finding at that factor's rung — a bug on a per-request hot path that also needs a precondition which structurally cannot occur is rare, not frequent.
-
-🔴 **Evidence rule** — a low rung on any of these MUST cite its evidence: the reviewer's own call-tree/entry-point trace (already mandatory, see `grumpy-review`), a Context Digest claim carrying evidence (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence for the operational reality, score generically — the same rating the finding would get with no context at all. This axis lowers a score only on evidence, never on assumption, and it never suppresses a finding; it adjusts the floats, and the finding is still reported.
+🔴 **Evidence rule** — a low rung on any factor MUST cite evidence: the reviewer's own call-tree/entry-point trace (`grumpy-review`), an evidenced Context Digest claim (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence, score generically. This axis lowers a score only on evidence, never suppresses a finding — adjusted floats, still reported.
 
 ### `impact` — how bad is the worst plausible outcome?
 
@@ -100,7 +96,7 @@ Capped by the backstop zone (§1). Blast radius folds in here — a defect reach
 | `~0.1` | Cosmetic |
 | `0.0` | No defect exists — informational only (see below) |
 
-**Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood = 0.0, impact = 0.0`, `relevance = 0.0`. That derives to `0.0` → INFO, which is the only band whose meaning is "no action required". Use exact zeros, never a small hedge like `0.05`: there is no defect, so the probability and the damage are genuinely zero, and a hedged value both misstates that and drifts across documents. Producers relying on a low third term to sink an informational finding into INFO is a v3 habit that no longer works — `relevance` is not in the mean.
+**Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood = 0.0, impact = 0.0`, `relevance = 0.0` → INFO, the only band meaning "no action required". Exact zeros, never a hedge like `0.05` (no defect means genuinely zero, and hedges drift across documents); a low `relevance` cannot sink a finding into INFO — it is not in the mean.
 
 ### `relevance` — does it fit what this PR set out to do?
 
@@ -125,11 +121,9 @@ Drives `merge_class` and report ordering. **Not** part of the severity math.
 | ≥ 0.1 | 2 | LOW |
 | < 0.1 | 1 | INFO |
 
-`relevance` is deliberately excluded: a pre-existing catastrophe is still a catastrophe, and averaging it with PR-fit used to launder it down to MEDIUM.
+`relevance` is deliberately excluded: a pre-existing catastrophe is still a catastrophe; averaging in PR-fit used to launder it down to MEDIUM.
 
-Producers emit `likelihood`/`impact`/`relevance`; the coordinator (or `validate-findings` when a producer omits them) writes `overall_severity` and integer `severity`.
-
-The floats are the **single source of truth** for severity. Producers MUST NOT hand-type a severity label anywhere — every human-readable label is derived by the pipeline, and a parallel label drifts and is wrong by construction.
+Producers emit `likelihood`/`impact`/`relevance`; the coordinator (or `validate-findings` when a producer omits them) writes `overall_severity` and integer `severity`. The floats are the **single source of truth** — producers MUST NOT hand-type a severity label anywhere; a parallel label drifts and is wrong by construction.
 
 ## 4. Levels
 
@@ -187,14 +181,11 @@ Other pre-existing issues block only when the PR relies on them, worsens them, o
 
 ### `out_of_scope_follow_up` means "probably never fixed"
 
-🔴 Deferral is not a plan — no follow-up strategy exists; deferred findings have a **low probability of ever being actioned** (realistic outcome: a `TODO` comment that outlives everyone who read the review). Mechanics reinforce this: `out_of_scope_follow_up` findings are summary-only, never inline comments (review-pr § Part B), so nobody is asked to act on them.
+🔴 Deferral is not a plan — nothing files these findings (summary-only, never inline: review-pr § Part B), so they have a **low probability of ever being actioned**. Read the class as **"acceptable to never fix"**:
 
-Read the class as **"acceptable to never fix"**, not "fix later":
-
-- Because nothing files them, deferrals MUST be surfaced: name the deferred list to the user when presenting results (grumpy-review §5e). An unmentioned deferral is an invisible one, and a user cannot accept a risk they never saw.
-- Deferring a finding *because* someone will presumably pick it up later is a mis-classification — that assumption is false. If a finding genuinely must be fixed, classify it for fixing now: `blocking` when a gate trips, `non_blocking` otherwise.
-- It stays correct only where permanent non-fix is acceptable: unrelated pre-existing nits, speculative hardening, taste.
-- The tradeoff is deliberate: this bias grows PRs and puts more work in front of authors — accepted in exchange for not laundering real defects into a backlog that does not exist.
+- Deferrals MUST be surfaced by name when presenting results (grumpy-review §5e) — a user cannot accept a risk they never saw.
+- Deferring *because* someone will presumably pick it up later is a mis-classification. A finding that must be fixed is classified for fixing now: `blocking` when a gate trips, `non_blocking` otherwise.
+- Correct only where permanent non-fix is acceptable: unrelated pre-existing nits, speculative hardening, taste. The bias toward larger PRs is deliberate — better than laundering real defects into a backlog that does not exist.
 
 ## External-reviewer compatibility map
 

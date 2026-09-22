@@ -136,6 +136,8 @@ MATRIX_CATEGORIES: list[str] = [
     "pr_comments",
     "pr_promises",
     "dependencies",
+    "architecture",
+    "ux",
 ]
 
 # Band table, applied descending. Thresholds were originally derived from CVSS

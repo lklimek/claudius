@@ -1,6 +1,6 @@
 # Built-in Stall Watchdog — Reference
 
-Deep mechanics behind `grand-admiral` § Recovery → Stall Watchdog. Load before your first dispatch — required before acting on any STALL/GONE event.
+Deep mechanics behind `grand-admiral` § Recovery → Stall Watchdog, plus orphan cleanup for § Terminating Teammates. Load before the first dispatch — required before acting on any STALL/GONE event.
 
 ## Stall Definition & Discovery
 
@@ -51,3 +51,12 @@ On a shared host, several Claude Code sessions each own a `~/.claude/teams/sessi
 4. **Escalate** — if the replacement also goes GONE, report to the user: agent name, GONE reason, last commit, transcript path.
 
 `RESUMED agent=<name> reason=recovered` clears a prior GONE (the pane went live again) — no action needed.
+
+## Orphaned Panes and Processes
+
+Sweep at two trigger points (not periodically): after a wave of shutdowns completes, while the pane/PID mapping is still known; and on resuming after compaction.
+
+1. `tmux list-panes -a -F '#{pane_id} #{pane_title}'` — the `%N` pane_id is permanent for the pane's life, never reused or renumbered.
+2. `tmux capture-pane -t %N -p -S -N` on each candidate's scrollback; grep for content unique to a currently-active spawn (worktree path, agent name) to positively identify panes to PRESERVE.
+3. `tmux kill-pane -t %N` on every other confirmed-stale, non-coordinator pane. Always target `%N`, never a window-relative index (`session:window.N`) — killing by index renumbers survivors after each kill (confirmed tmux 3.6: killing index 1 of {0,1,2,3} shifts 2→1, 3→2), so batched index kills hit wrong panes. If only an index is available, kill strictly highest-to-lowest.
+4. Monitor-wrapped processes: `pgrep -f minion-monitoring.py` and kill by PID — `TaskStop` success does not prove the process died.

@@ -16,18 +16,10 @@ Default discipline for diagnosing a reported bug. The user's reproducible observ
 4. **Reproduce or it's unsolved** — analysis that cannot reproduce the user's concrete observation is INCOMPLETE. Never conclude "not a bug" until the observation is explained. A clash between analysis and a user-observed fact is a STOP signal, not a footnote. When the repro artifact is a test, it must be RED against the documented contract on the buggy revision, not green mirroring the defect — see `coding-best-practices` § Workflow Discipline TDD "Repro tests go RED first".
 5. **Brief with the literal reproduction** (coordinator-facing) — investigation spawn prompts MUST quote the user's exact reproduction steps and the literal entry point, and require: "trace from this entry point; if you can't reproduce the observed symptom, you haven't found the cause."
 
-## Failure Mode (worked example)
+## Failure Mode (real case)
 
-A real funds-safety bug (receive address derived past the SPV gap window → invisible funds) was wrongly cleared as "not a bug"; only a user-supplied on-chain reproduction caught it.
-
-| Rule violated | What went wrong |
-|---|---|
-| Rule 1 | Anchored on the user's gap-limit THEORY instead of the OBSERVATION (button → index 32 → funds missing) |
-| Rule 2 | Traced `next_receive_address` (a correct backend path) by name instead of from the UI button → `add_receiving_address` → legacy `Wallet::receive_address` |
-| Rule 3 | Proved a correct path exists rather than checking the path the button actually calls |
-| Rule 4 | Noticed an index 32 vs claimed 0 contradiction and rationalized it away instead of stopping |
+A funds-safety bug (receive address derived past the SPV gap window → invisible funds) was cleared as "not a bug" by violating all four rules: anchored on the user's gap-limit THEORY instead of the OBSERVATION (button → index 32 → funds missing); traced `next_receive_address` by name instead of from the UI button → `add_receiving_address` → legacy `Wallet::receive_address`; proved a correct path exists rather than the one the button calls; rationalized away an index-32-vs-claimed-0 contradiction instead of stopping. Only a user-supplied on-chain reproduction caught it.
 
 ## Composition
 
-- Complements `coding-best-practices` § Cross-Cutting Rules "Verify facts before acting on broad instructions" (that rule is about broad user directives; this skill is about not concluding prematurely during diagnosis).
-- This is a FORWARD trace (entry point → symptom); for the BACKWARD direction (which callers a changed function breaks) see `grumpy-review`'s `references/call-tree-walk.md`.
+Complements `coding-best-practices` "Verify facts before acting on broad instructions" (broad user directives vs. premature diagnostic conclusions). This is a FORWARD trace (entry point → symptom); the BACKWARD direction (which callers a changed function breaks) is `grumpy-review`'s `references/call-tree-walk.md`.

@@ -113,6 +113,8 @@ CATEGORY_LABELS: dict[str, str] = {
     "dependencies": "Dependencies",
     "pr_comments": "PR Comments",
     "pr_promises": "PR Promises",
+    "architecture": "Architecture",
+    "ux": "UX",
 }
 
 

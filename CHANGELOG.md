@@ -6,9 +6,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [7.7.0] - 2026-09-22
+
+### Added
+
+- **`architecture`/`ux` finding categories** and `ARCH-`/`UX-` ID prefixes (schema, `consolidate_reports.py`, `severity_util.py`, `generate_review_report.py`, `report-format`) so `architect-nagatha` and `ux-designer-diziet` findings get real IDs and matrix/label support instead of silently falling back to `CODE-`. Both agents now preload `severity`/`report-format` and carry the `Skill` tool.
+- **`report-format` § `code_snippets`**: the field now has its own documented subsection (`language`/`caption`/`content`), making `review-pr`'s "report-format` §code_snippets`" cross-reference resolve to real content.
+- **`Skill` tool** added to `developer-bilby`, `project-reviewer-adams`, `qa-engineer-marvin` frontmatter — their bodies already instruct "apply/invoke `<skill>`" but the tool was missing.
+
+### Changed
+
+- **Token-footprint pass over all 8 agents and 30 skills** (~16% fewer characters overall; agents 30–47% smaller, `grand-admiral` 26%), no operational content dropped: per-agent copies of Security Awareness / Commit Discipline / the "Beyond persona" brevity paragraph removed in favor of the preloaded `coding-best-practices` (new § Agent Output); Smythe's inline per-language security lists replaced by a pointer to `security-best-practices/references/*-security-patterns.md`; `grumpy-review`'s inline finding-format JSON (a third copy of `references/producer-contract.md` / `report-format`) replaced by a pointer; language `*-best-practices` skills condensed to merged bullet lists with every checklist item and ID prefix intact; remaining skills reworded to terse imperatives and cross-references instead of restated rules.
+- **`grand-admiral`**: cargo target-dir isolation mechanics moved to new `references/cargo-isolation.md`; the tmux orphan-pane cleanup recipe moved to `references/stall-watchdog.md` § Orphaned Panes and Processes. All section anchors cited by other skills are retained.
+- **`workflow-feature` § Model Selection** no longer claims agents default to `model: inherit` — they carry tiered `model:` fallbacks; set the model per spawn via `delegate`.
+- **`grand-admiral` § Crew Roster**: "architecture issues" dropped from Marvin's row (Nagatha's domain per the Candy Economy).
+
 ### Fixed
 
+- **`grumpy-review` `allowed-tools`**: added `Bash(*merge_findings_helper.py *)` — §5b invokes the helper but it was never on the allow-list.
+- **`grumpy-review` §5f**: reviewer teammates are shut down via `SendMessage({type: "shutdown_request"})`, matching `grand-admiral` § Terminating Teammates (`TaskStop` cannot address a named teammate and always returned "No task found"); the lingering tmux process is handled by the orphan-pane sweep instead.
 - Updated monitoring instructions and Recovery section references in `delegate`, `codex-crew`, `ci-dance`, and the stall watchdog reference to consistently use the built-in Monitor after removal of the MCP integration.
+- **`qa-engineer-marvin` § UI Smoke Testing**: dropped the Chrome MCP fallback (Marvin has no browser MCP grant) — missing `playwright-cli` now yields a LOW finding instead of an unusable fallback instruction.
+- **`review-dependency` `allowed-tools`**: added `Agent` — §3/§4 spawn `security-engineer-smythe`/`architect-nagatha`, which the allow-list didn't permit.
+- **MemCan doctrine contradiction** between `lessons-learned` (never call MemCan MCP tools directly) and `grand-admiral` § MemCan Context Injection (call `search` directly): both now state the exception explicitly — direct calls are for bulk pre-spawn lookups, not the classified save/dedup workflow `lessons-learned` owns.
+- **`grumpy-review` never guaranteed a written report on a clean review**: nothing told producers to write their findings file when they found nothing, and a missing file fails `consolidate_reports.py prepare` outright (exit 2), aborting the whole pipeline before `report.json` exists. `claudius-review-action`'s "Verify review report was produced" step then fails the CI job with no findings posted, regardless of whether any exist. Added an explicit "Report Is Mandatory, Even Empty" invariant plus per-path instructions (TRIVIAL producer, fan-out producers via `producer-contract.md`, and the §5 consolidation pipeline) to always write a full valid v4 report (`findings: []`, a positive `executive_summary`) instead of skipping. `consolidate_reports.py`/`generate_review_report.py` already handled zero findings correctly (verified end-to-end: prepare → assemble → validate → render, all exit 0) — this was purely a missing instruction, not a script bug.
 
 ## [7.6.0] - 2026-09-17
 

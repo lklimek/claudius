@@ -6,19 +6,7 @@ allowed-tools: Read, WebFetch
 
 # Rust Best Practices
 
-Two authoritative sources of Rust best practices, presented as checklists for quick reference.
-
-## How to Use
-
-1. **Writing/review**: scan the relevant checklist sections below
-2. **Detailed guidance**: read the reference file linked in each section header
-3. **API design**: Rust API Guidelines checklist (C-prefixed); **production systems**: Microsoft checklist (M-prefixed)
-
-### Sources
-
-- Microsoft Pragmatic Rust Guidelines: https://microsoft.github.io/rust-guidelines/
-  - AI-friendly condensed version: https://microsoft.github.io/rust-guidelines/agents/all.txt
-- Rust API Guidelines: https://rust-lang.github.io/api-guidelines/
+Checklists from the [Microsoft Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines/) (M-prefixed, production systems; [AI-condensed](https://microsoft.github.io/rust-guidelines/agents/all.txt)) and the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) (C-prefixed, API design). Scan the relevant sections while writing or reviewing; item details are in the linked `references/` files.
 
 ## Technical Standards & Patterns
 
@@ -77,13 +65,8 @@ pub enum MyError {
 
 ## Common Pitfalls
 
-- Don't clone unnecessarily — use references
-- Don't use unwrap() in production code — handle errors properly
-- Don't use unsafe without extensive justification and safety comments
-- Don't fight the borrow checker — redesign if struggling
-- Don't ignore clippy warnings — fix or explicitly allow with reasoning
-- Don't use Arc<Mutex<T>> when RefCell or channels would work
-- Don't rely on `debug_assert!`/`debug_assert_eq!`/`cfg(debug_assertions)` for correctness or safety invariants — compiled out in release builds. Validate at runtime and **return a typed error**. `panic!`/`assert!`/`.unwrap()` are not an acceptable default — reserve for genuinely unrecoverable invariant violations.
+- Unnecessary clones (use references); `Arc<Mutex<T>>` where `RefCell` or channels would do; fighting the borrow checker instead of redesigning; ignoring clippy warnings (fix, or `#[expect]` with reasoning); `unsafe` without justification and safety comments
+- `debug_assert!`/`cfg(debug_assertions)` for correctness or safety invariants — compiled out in release. Validate at runtime and **return a typed error**; `panic!`/`assert!`/`.unwrap()` only for genuinely unrecoverable invariant violations
 
 ## Code Quality Tools
 
@@ -97,16 +80,12 @@ pub enum MyError {
 
 ## Build Optimization
 
-Rust builds are expensive. `cargo build`, `cargo clippy`, and `cargo test` all compile the code — never chain them or run one as a pre-check for another.
+`cargo build`, `cargo clippy`, and `cargo test` all compile — never chain them or run one as a pre-check for another (`cargo check && cargo test` wastes a full compile cycle; `cargo check` itself is redundant — clippy is a strict superset).
 
-- **Use LSP as primary feedback loop** — rust-analyzer catches errors without a rebuild
-- **Defer builds to QA phase** — don't run `cargo test`/`cargo clippy`/`cargo fmt` after every edit
-- **Never use `cargo check`** — `cargo clippy` is a strict superset (compilation + lints)
-- **Never pre-compile** — `cargo check && cargo test` or `cargo clippy && cargo build` wastes a full compile cycle; run the target command directly
-- **Capture output with `tee`** — see `coding-best-practices` § Build & Test Output Capture
-- **Always go through the `cargo-cached.sh` wrapper** for test/clippy/nextest (absolute path announced in the SessionStart Rust build environment context — the plugin-relative `scripts/cargo-cached.sh` only resolves inside the plugin itself) — identical command + identical tree replays the recorded log instantly, across all agents and worktrees. The PreToolUse hook enforces this for test/clippy/nextest; plain `build` may route through it for dedup but is not hook-enforced (a build's output is an artifact, not a replayable verdict).
-- **Don't override `CARGO_TARGET_DIR`/`--target-dir` manually — isolation is automatic**: any invocation through `cargo-cached.sh` auto-derives a per-checkout, path-keyed target dir, so concurrent same-HEAD worktrees/clones can't collide. `CLAUDIUS_TARGET_PREFIX` roots the hashed dirs elsewhere; an explicit `CARGO_TARGET_DIR` via `CLAUDIUS_ISOLATE_TARGET=1` wins (the manual escape hatch for edge cases — see `grand-admiral` § Worktree Isolation, not routine); unset/empty prefix keeps the canonical default. The hook denies ad-hoc overrides. A raw `cargo build` NOT routed through the wrapper uses the machine's shared `~/.cargo/config.toml` dir and sccache. Caveat: a bare `cargo metadata` outside the wrapper reports the shared dir, not the isolated one — don't use it to locate a wrapper-built artifact.
-- **Prefer `cargo nextest run` for test-heavy iteration when installed** (check `command -v cargo-nextest`; SessionStart context states availability) — nextest skips doctests, so the merge gate still needs a `cargo test` (or nextest + a separate `--doc` pass).
+- **LSP first** — rust-analyzer catches errors without a rebuild; defer builds to verification, not after every edit
+- **Always go through the `cargo-cached.sh` wrapper** for test/clippy/nextest (absolute path in the SessionStart Rust build context; the plugin-relative path only resolves inside the plugin) — identical command + identical tree replays the recorded log instantly across agents and worktrees; the PreToolUse hook enforces it for test/clippy/nextest (`build` may route through it but isn't enforced). Output capture: `coding-best-practices` § Build & Test Output Capture
+- **Never set `CARGO_TARGET_DIR`/`--target-dir` by hand** — the wrapper auto-derives a per-checkout target dir (the hook denies ad-hoc overrides); knobs and caveats in `grand-admiral`'s `references/cargo-isolation.md`
+- **`cargo nextest run` for test-heavy iteration when installed** (`command -v cargo-nextest`; SessionStart context states availability) — nextest skips doctests, so the merge gate still needs `cargo test` (or a separate `--doc` pass)
 
 ## Code Review Checklist
 
@@ -190,7 +169,7 @@ For detailed descriptions of any M-prefixed item, read `references/microsoft-gui
 - [ ] **M-YIELD-POINTS** — Long-running tasks have yield points (10-100us between yields)
 
 ### Documentation
-- [ ] **M-NO-TOMBSTONES** — Never add comments explaining removed code; git history is the record
+- [ ] **M-NO-TOMBSTONES** — Never add comments explaining removed code; git history is the record (Claudius local rule, not in the Microsoft reference)
 - [ ] **M-FIRST-DOC-SENTENCE** — First doc sentence is one line, ~15 words
 - [ ] **M-MODULE-DOCS** — Non-trivial public modules have `//!` documentation
 - [ ] **M-CANONICAL-DOCS** — Complex APIs have canonical doc sections (Examples, Errors, Panics, Safety)
@@ -285,10 +264,4 @@ For detailed descriptions of any C-prefixed item, read `references/api-guideline
 
 ## rust-analyzer LSP Integration
 
-The `rust-analyzer-lsp` plugin (from `claude-plugins-official`) provides LSP code intelligence for Rust files. When available, use it for:
-
-- **Diagnostics**: compilation errors, warnings, type mismatches without running `cargo build`
-- **Navigation**: definitions, references, type hierarchies
-- **Type inspection**: hover for inferred types and documentation
-
-LSP diagnostics are a fast feedback complement, not a replacement — comprehensive checks still require `cargo clippy` and `cargo test`.
+The `rust-analyzer-lsp` plugin (`claude-plugins-official`), when available: diagnostics without a build, navigation (definitions, references, type hierarchies), hover for inferred types. A fast complement, not a replacement for `cargo clippy` and `cargo test`.
