@@ -114,6 +114,12 @@ class TestRemoteCredentialsNeverLeak:
             f"https://x-access-token:{FAKE_TOKEN}@github.com/octo",
             f"x-access-token:{FAKE_TOKEN}@example.com:octo/widgets.git",
             f"https://user@x:{FAKE_TOKEN}@evil.example/octo/widgets",
+            # userinfo without "@": nothing to partition on
+            f"https://x-access-token:{FAKE_TOKEN}",
+            f"https://x-access-token:{FAKE_TOKEN}/octo/widgets",
+            # "@" inside the query/fragment must not pick the "host"
+            f"https://gitlab.com/octo/widgets?x=public@{FAKE_TOKEN}",
+            f"https://gitlab.com/octo/widgets#public@{FAKE_TOKEN}",
         ],
     )
     def test_unrecognized_remote_log_is_redacted(self, url, tmp_path, caplog, capsys):
@@ -122,7 +128,23 @@ class TestRemoteCredentialsNeverLeak:
             assert cr._derive_metadata_repository(str(tmp_path)) is None
         captured = capsys.readouterr()
         assert FAKE_TOKEN not in caplog.text + captured.out + captured.err
-        assert "skipping" in caplog.text  # the URL is still reported, redacted
+        assert "skipping" in caplog.text
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            f"https://github.com/octo/widgets.git?x=public@{FAKE_TOKEN}",
+            f"https://github.com/octo/widgets#public@{FAKE_TOKEN}",
+        ],
+    )
+    def test_query_and_fragment_are_stripped_before_userinfo(
+        self, url, tmp_path, caplog
+    ):
+        self._init_repo(tmp_path, url)
+        with caplog.at_level(logging.DEBUG):
+            result = cr._derive_metadata_repository(str(tmp_path))
+        assert result == {"owner": "octo", "repo": "widgets"}
+        assert FAKE_TOKEN not in caplog.text
 
     def test_prepare_output_and_streams_never_carry_the_token(self, tmp_path):
         repo = tmp_path / "repo"
