@@ -1,19 +1,19 @@
 ---
 name: validate-findings
 description: "This skill should be used when a coordinator performs the LLM validation pass on a consolidated v4 findings report. It adds ai_assessment, ai_verdict, and ai_verdict_confidence and, in the rare partial-producer case, re-estimates missing likelihood, impact, and relevance. Coordinator-only."
-allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(*consolidate_reports.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
+allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(*consolidate_reports.py *), Bash(*generate_review_report.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
 model: inherit
 ---
 
 # Validate Findings
 
-Opt-in coordinator-only LLM validation pass over a consolidated v4 report: adds AI assessment, verdict, and confidence per finding. Floats stay untouched unless the consolidator left them absent (partial producer output). NOT part of the automatic pipeline — invoke after `consolidate_reports.py assemble` when a triage-quality pass is wanted.
+Opt-in coordinator-only LLM validation pass over a consolidated v4 report: adds AI assessment, verdict, and confidence per finding. Floats stay untouched unless the consolidator left them absent (partial producer output). NOT part of the automatic pipeline — invoke after `consolidate_reports.py finalize` (or `assemble`) when a triage-quality pass is wanted.
 
 **Argument**: `$ARGUMENTS` — path to the consolidated `report.json`. Edited in place.
 
 ## Inputs
 
-- A consolidated v4 report on disk (output of `consolidate_reports.py assemble`).
+- A consolidated v4 report on disk (output of `consolidate_reports.py finalize` or `assemble`).
 - The producer commit (when `metadata.commit` is present) for best-effort source lookup via `git show`.
 
 ## Per-finding loop
@@ -59,6 +59,11 @@ Write changes back with the `Edit` tool — single JSON file, in place. No `Writ
    ```
 
 3. **Re-sort** `findings[].findings` by `overall_severity` desc (then integer `severity` desc, then `id` asc) so the highest-impact items surface first after re-estimation.
+4. **Re-render** — `finalize` rendered before this pass, so every `report.md`/`.html`/`.pdf` next to the report is now stale. Re-render each one present:
+
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py "$ARGUMENTS" --format <md|html|pdf>
+   ```
 
 ## Scope and boundaries
 

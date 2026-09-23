@@ -158,6 +158,9 @@ def test_main_applies_decisions_and_writes_output(tmp_path):
                         "updates": {"description": "Merged description."},
                     }
                 ],
+                "finding_updates": {
+                    "security:SEC-001": {"merge_class": "non_blocking"}
+                },
             }
         )
     )
@@ -179,3 +182,307 @@ def test_main_applies_decisions_and_writes_output(tmp_path):
     assert output["findings"][0]["findings"][0]["description"] == (
         "Merged description."
     )
+
+
+# ---------------------------------------------------------------------------
+# finding_updates: per-finding merge_class / float overrides
+# ---------------------------------------------------------------------------
+def test_resolve_findings_applies_per_finding_updates():
+    raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
+    resolved = helper.resolve_findings(
+        raw,
+        {
+            "finding_updates": {
+                "security:SEC-001": {
+                    "merge_class": "blocking",
+                    "intent_basis": "G-SECRET: token logged at src/example.py:10",
+                    "likelihood": 0.9,
+                },
+                "qa:QA-003": {"merge_class": "non_blocking", "relevance": 0.4},
+            }
+        },
+    )
+    assert resolved[0]["merge_class"] == "blocking"
+    assert resolved[0]["intent_basis"].startswith("G-SECRET:")
+    assert resolved[0]["likelihood"] == 0.9
+    assert resolved[1]["merge_class"] == "non_blocking"
+    assert resolved[1]["relevance"] == 0.4
+    assert "merge_class" not in raw[0]
+
+
+def test_resolve_findings_applies_updates_before_cluster_merge():
+    raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
+    resolved = helper.resolve_findings(
+        raw,
+        {
+            "merges": [
+                {
+                    "reason": "Same bug.",
+                    "members": [
+                        {"agent": "security", "original_id": "SEC-001"},
+                        {"agent": "qa", "original_id": "QA-003"},
+                    ],
+                    "base": {"agent": "security", "original_id": "SEC-001"},
+                    "updates": {"description": "Merged."},
+                }
+            ],
+            "finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}},
+        },
+    )
+    assert len(resolved) == 1
+    assert resolved[0]["merge_class"] == "non_blocking"
+    assert resolved[0]["description"] == "Merged."
+
+
+def test_finding_update_on_merged_away_member_is_rejected():
+    raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
+    with pytest.raises(ValueError, match="qa:QA-003.*merged away"):
+        helper.resolve_findings(
+            raw,
+            {
+                "merges": [
+                    {
+                        "reason": "Same bug.",
+                        "members": [
+                            {"agent": "security", "original_id": "SEC-001"},
+                            {"agent": "qa", "original_id": "QA-003"},
+                        ],
+                        "base": {"agent": "security", "original_id": "SEC-001"},
+                        "updates": {},
+                    }
+                ],
+                "finding_updates": {"qa:QA-003": {"merge_class": "blocking"}},
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"nobody:X-1": {"merge_class": "blocking"}}, "unknown finding"),
+        ({"SEC-001": {"merge_class": "blocking"}}, "<agent>:<original_id>"),
+        ({"security:SEC-001": {"title": "x"}}, "unsupported field"),
+        ({"security:SEC-001": {"merge_class": "maybe"}}, "merge_class"),
+        ({"security:SEC-001": {"likelihood": 1.5}}, "likelihood"),
+        ({"security:SEC-001": {"impact": True}}, "impact"),
+        ({"security:SEC-001": {"intent_basis": 3}}, "intent_basis"),
+        ({"security:SEC-001": "blocking"}, "must be an object"),
+    ],
+)
+def test_invalid_finding_updates_are_rejected(updates, message):
+    with pytest.raises(ValueError, match=message):
+        helper.resolve_findings(
+            [_finding("security", "SEC-001")], {"finding_updates": updates}
+        )
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"merge_class": "blocking"},
+        {"merge_class": "blocking", "intent_basis": "  "},
+        {"merge_class": "blocking", "intent_basis": None},
+    ],
+)
+def test_blocking_update_requires_intent_basis(update):
+    with pytest.raises(ValueError, match="intent_basis"):
+        helper.resolve_findings(
+            [_finding("security", "SEC-001")],
+            {"finding_updates": {"security:SEC-001": update}},
+        )
+
+
+def test_blocking_update_keeps_producer_intent_basis():
+    resolved = helper.resolve_findings(
+        [_finding("security", "SEC-001", intent_basis="G-DATA: wipes rows")],
+        {"finding_updates": {"security:SEC-001": {"merge_class": "blocking"}}},
+    )
+    assert resolved[0]["intent_basis"] == "G-DATA: wipes rows"
+
+
+def test_unblocking_update_clears_stale_intent_basis():
+    resolved = helper.resolve_findings(
+        [
+            _finding(
+                "security",
+                "SEC-001",
+                merge_class="blocking",
+                intent_basis="G-DATA: wipes rows",
+            )
+        ],
+        {"finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}}},
+    )
+    assert resolved[0]["merge_class"] == "non_blocking"
+    assert "intent_basis" not in resolved[0]
+
+
+def test_original_id_containing_colon_is_addressable():
+    resolved = helper.resolve_findings(
+        [_finding("security", "SEC:001")],
+        {"finding_updates": {"security:SEC:001": {"merge_class": "disputed"}}},
+    )
+    assert resolved[0]["merge_class"] == "disputed"
+
+
+def test_find_missing_merge_class_lists_every_unclassified_finding():
+    findings = [
+        _finding("security", "SEC-001", merge_class="blocking"),
+        _finding("qa", "QA-003"),
+        _finding("project", "PROJ-002"),
+    ]
+    assert helper.find_missing_merge_class(findings) == [
+        "qa:QA-003",
+        "project:PROJ-002",
+    ]
+
+
+def test_main_fails_listing_findings_without_merge_class(tmp_path, caplog):
+    intermediate_path = tmp_path / "intermediate.json"
+    decisions_path = tmp_path / "merge-decisions.json"
+    output_path = tmp_path / "merged-findings.json"
+    intermediate_path.write_text(
+        json.dumps(
+            {
+                "metadata": {"project": "claudius", "date": "2026-07-28"},
+                "raw_findings": [
+                    _finding("security", "SEC-001"),
+                    _finding("qa", "QA-003"),
+                ],
+            }
+        )
+    )
+    decisions_path.write_text(
+        json.dumps(
+            {"finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}}}
+        )
+    )
+
+    result = helper.main(
+        [
+            "--input",
+            str(intermediate_path),
+            "--decisions",
+            str(decisions_path),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert result == 1
+    [missing] = [r.message for r in caplog.records if "lack merge_class" in r.message]
+    assert "qa:QA-003" in missing
+    assert "security:SEC-001" not in missing
+    assert not output_path.exists()
+
+
+@pytest.mark.parametrize("bad", [["X"], {"k": 1}, 7, None])
+def test_malformed_merge_member_keys_are_value_errors(bad):
+    raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
+    decisions = {
+        "merges": [
+            {
+                "reason": "Same bug.",
+                "members": [
+                    {"agent": "security", "original_id": "SEC-001"},
+                    {"agent": "qa", "original_id": bad},
+                ],
+                "base": {"agent": bad, "original_id": "SEC-001"},
+                "updates": {},
+            }
+        ],
+        "finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}},
+    }
+    with pytest.raises(ValueError):
+        helper.resolve_findings(raw, decisions)
+
+
+@pytest.mark.parametrize("key", ["", ":", "security:", ":SEC-001", "SEC-001"])
+def test_malformed_finding_update_keys_are_value_errors(key):
+    with pytest.raises(ValueError, match="<agent>:<original_id>"):
+        helper.resolve_findings(
+            [_finding("security", "SEC-001")],
+            {"finding_updates": {key: {"merge_class": "non_blocking"}}},
+        )
+
+
+def _write_cli_inputs(tmp_path, decisions):
+    intermediate = tmp_path / "intermediate.json"
+    intermediate.write_text(
+        json.dumps(
+            {
+                "agent_stats": [],
+                "duplicate_groups": [],
+                "raw_findings": [_finding("security", "SEC-001")],
+            }
+        )
+    )
+    decisions_path = tmp_path / "merge-decisions.json"
+    decisions_path.write_text(json.dumps(decisions))
+    return intermediate, decisions_path
+
+
+def _run_cli(intermediate, decisions_path, output):
+    return helper.main(
+        ["--input", str(intermediate), "--decisions", str(decisions_path)]
+        + ["--output", str(output)]
+    )
+
+
+def test_main_invalid_decision_exits_1_like_finalize(tmp_path):
+    update = {"security:SEC-001": {"merge_class": "blocking"}}
+    intermediate, decisions = _write_cli_inputs(tmp_path, {"finding_updates": update})
+    output = tmp_path / "merged.json"
+    assert _run_cli(intermediate, decisions, output) == 1
+    assert not output.exists()
+
+
+def test_main_unreadable_input_exits_2_like_finalize(tmp_path):
+    _, decisions = _write_cli_inputs(tmp_path, {})
+    assert _run_cli(tmp_path / "nope.json", decisions, tmp_path / "m.json") == 2
+
+
+@pytest.mark.parametrize(
+    "cluster_update",
+    [
+        {"merge_class": "blocking"},
+        {"merge_class": "nonsense"},
+        {"likelihood": 2.0},
+    ],
+)
+def test_cluster_updates_cannot_bypass_classification_rules(cluster_update):
+    findings = [_finding("security", "SEC-001"), _finding("qa", "QA-001")]
+    decisions = {
+        "finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}},
+        "merges": [
+            {
+                "reason": "Same issue.",
+                "members": [
+                    {"agent": "security", "original_id": "SEC-001"},
+                    {"agent": "qa", "original_id": "QA-001"},
+                ],
+                "base": {"agent": "security", "original_id": "SEC-001"},
+                "updates": cluster_update,
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="security:SEC-001"):
+        helper.resolve_findings(findings, decisions)
+
+
+def test_cluster_update_to_blocking_with_intent_basis_is_accepted():
+    findings = [_finding("security", "SEC-001"), _finding("qa", "QA-001")]
+    decisions = {
+        "merges": [
+            {
+                "reason": "Same issue.",
+                "members": [
+                    {"agent": "security", "original_id": "SEC-001"},
+                    {"agent": "qa", "original_id": "QA-001"},
+                ],
+                "base": {"agent": "security", "original_id": "SEC-001"},
+                "updates": {"merge_class": "blocking", "intent_basis": "G-DATA: x"},
+            }
+        ],
+    }
+    [merged] = helper.resolve_findings(findings, decisions)
+    assert merged["merge_class"] == "blocking"

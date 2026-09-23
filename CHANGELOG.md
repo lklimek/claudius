@@ -6,6 +6,64 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [8.1.0] - 2026-09-23
+
+Cuts `grumpy-review` coordinator rounds under restricted headless-CI Bash allowlists
+(`claudius-review-action`: no `$VAR`, `python3 -c`, redirects, pipes into scripts). A measured
+run took 78 coordinator rounds (~45 of them permission denials); the steps below replace
+hand-transcription and denied shell idioms with single allowlisted script calls.
+
+### Added
+
+- `scripts/post_pr_review.py`: builds and posts a PR review from a schema-valid `report.json` (anything else
+  exits 2). Posting is bound to `metadata.commit` matching the PR head; an explicit `--commit`
+  must match both, and head changes during diff/thread reads abort. Stale reports exit 2;
+  missing reviewed SHA forces COMMENT with a warning. APPROVE also needs `metadata.base_commit`
+  (recorded by `consolidate_reports.py prepare --base-ref <ref>`) to equal the PR's current
+  merge-base; a changed diff scope (e.g. retargeted base) exits 2. It selects MEDIUM+ or blocking findings,
+  skips ones an unresolved RIGHT-side thread on the same path and overlapping current line
+  cites by exact whole title (case-insensitive, never ID alone), and maps locations onto the
+  diff's RIGHT side. Thread pagination fails closed at its cap. Off-diff and deferred findings
+  go into the body. It APPROVEs only with a reviewed SHA, no posted findings or unresolved
+  threads, and no non-disputed blocking or MEDIUM+ finding (`--draft` for pending), keeps
+  within GitHub's size limits (overflow named, never dropped silently; each finding's ID,
+  severity, title and location stay outside clipped text), neutralizes @mentions
+  and raw HTML everywhere, code included (after clipping, within the size cap), rejects stats that contradict the findings,
+  and falls back on HTTP 422 and a rejected APPROVE. Only reads retry via `ghsudo`.
+  The caller supplies only a one-line body and an optional `{final_id: text}` map. Documented
+  in `git-and-github/references/pr-review.md`; used by `review-pr` Part B.
+- `consolidate_reports.py gate <findings.json>`: prints the max severity band, `BLOCKING`, and
+  the HIGH+/blocker-gate candidate IDs (bands derived from the floats, as in assemble), and
+  flags with exit 1 whatever prepare or finalize would reject, including `blocking` without
+  a nonempty `intent_basis`. `gate` and `prepare` turn all report read errors into exit 2 with
+  an ERROR line and no traceback. Producers end their reply with it, so the coordinator's
+  early-stop check never reads findings files.
+- `consolidate_reports.py finalize`: runs merge decisions → assemble → schema validation →
+  render in one call, all-or-nothing (a failure leaves no report, render or merged file; outputs of an earlier run, and on success renders of unrequested formats, are renamed `*.stale`).
+- `consolidate_reports.py prepare --digest`: writes and prints a compact `digest.md`
+  (per-finding key, band, floats, location, clipped description, duplicate groups, INTENTIONAL
+  hits) in place of reading `intermediate.json`.
+- `merge_findings_helper.py` `finding_updates`: a per-finding override table
+  (`merge_class`, `intent_basis`, floats) keyed `<agent>:<original_id>`; `blocking` requires
+  `intent_basis`, leaving `blocking` clears a stale one. The helper refuses
+  output while any finding lacks `merge_class`, and lists the ones missing it.
+- `metadata.plugin_version` (optional schema field), auto-filled by `prepare`.
+- `lint_ephemeral_ids.py --range <rev-range>`: runs `git diff` itself (pinned output format,
+  whole range only), so no pipe is needed.
+- Producer contract § Bash hygiene. `grumpy-review` conditional-agent table gains a Model column.
+
+### Changed
+
+- `grumpy-review` §5: `merge-decisions.json` + `finalize` is the only merge path (the
+  ">~30 raw findings" threshold, the hand-written `merged-findings.json` template, and the
+  manual re-validate step are gone). Command snippets use literal `<PLACEHOLDER>`s instead of
+  shell variables.
+- Producers read `producer-contract.md` in place by absolute plugin path; it is no longer
+  copied into the scratch dir.
+- `review-pr` posts its summary via `gh pr comment --body-file` and lints with `--range`;
+  `git-and-github/references/pr-review.md` uses `<plugin-root>` paths (reference files get no
+  `${CLAUDE_SKILL_DIR}` substitution) and a Write-tool draft payload.
+
 ## [8.0.0] - 2026-09-22
 
 A skill-catalog value audit (30 skills, cross-referenced against one month of local Claude Code

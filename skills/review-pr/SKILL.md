@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness."
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(*post_pr_review.py *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage
 ---
 
 # PR Audit Workflow
@@ -129,7 +129,7 @@ Invoke `/claudius:grumpy-review` with the PR scope as argument — it covers age
 
 Pass the PR's scope (changed files, base branch) as context. Feed the Pass C report file (§2) into `consolidate_reports.py prepare` alongside the agent reports, and supply the Context Digest (§1) to grumpy-review's §3 spawn prompts and §5b judgment step, where the coordinator assigns `merge_class`/`intent_basis` to every finding per `claudius:severity` § Merge Classification. One consolidation round covers all passes — never consolidate twice (`assign_ids` renumbers on every run).
 
-The grumpy-review delegation inherits the deep transitive call-tree walk (`category: "call_tree"`, `CALL-` prefix; see [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md)), the ephemeral-ID lint, and the G-UI-TEXT user-visible-string scan (`claudius:grumpy-review` §3). After the review completes, run `git diff $BASE_BRANCH...HEAD | python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --diff` against the PR diff and fold genuine `code_quality` hits into the audit before posting.
+The grumpy-review delegation inherits the deep transitive call-tree walk (`category: "call_tree"`, `CALL-` prefix; see [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md)), the ephemeral-ID lint, and the G-UI-TEXT user-visible-string scan (`claudius:grumpy-review` §3). After the review completes, run `python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --range <BASE>...HEAD` (`<BASE>` = the PR's base branch, substituted literally) and fold genuine `code_quality` hits into the audit before posting.
 
 ## 4. Post GitHub PR Review
 
@@ -147,8 +147,9 @@ A normal PR issue comment via `gh pr comment` (draft reviews hide their body tex
 - Pre-existing / outside-diff issues with details
 - Positive observations
 
-```bash
-gh pr comment <number> --body "$(cat <<'EOF'
+Write the comment to `<SCRATCH_DIR>/summary.md` (grumpy-review's scratch dir) with the Write tool, then post it:
+
+```markdown
 ## Audit Summary
 
 **Reviewed by:** Claude Code with a N-agent team:
@@ -156,13 +157,15 @@ gh pr comment <number> --body "$(cat <<'EOF'
 ...
 
 [Summary text, findings table, pre-existing issues, positive observations]
-EOF
-)"
+```
+
+```bash
+gh pr comment <number> --body-file <SCRATCH_DIR>/summary.md
 ```
 
 ### Part B: Inline comments (draft review)
 
-Inline on specific diff lines, **only actionable findings**: everything `blocking` (any severity — a blocking LOW is still a blocker) plus actionable `non_blocking` (CRITICAL–LOW). `disputed`, `out_of_scope_follow_up`, and INFO stay in Part A. Draft review, so the user submits manually; ```suggestion``` blocks for trivial fixes. Diff-bounds verification, deduplication, and posting with `gh-post-review.sh`: [pr-review.md](../git-and-github/references/pr-review.md). `body` can be minimal — the detail lives in Part A.
+Inline on specific diff lines, **only actionable findings**: everything `blocking` (any severity — a blocking LOW is still a blocker) plus actionable `non_blocking` (CRITICAL–LOW). `disputed`, `out_of_scope_follow_up`, and INFO stay in Part A. Draft review, so the user submits manually; ```suggestion``` blocks for trivial fixes. Post with `post_pr_review.py … --draft --min-severity LOW` (handles diff bounds and thread dedup; pass `--comments` for suggestion blocks) per [pr-review.md](../git-and-github/references/pr-review.md) § Post a Review from report.json. `body` can be minimal — the detail lives in Part A.
 
 ## 5. Cleanup
 

@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -265,3 +266,158 @@ def test_pattern_built_from_prefixes() -> None:
     for prefix in lint.PREFIXES:
         stem = prefix.rstrip("-")
         assert stem in lint.PATTERN.pattern, f"Stem {stem!r} missing from regex"
+
+
+def _git_repo(tmp_path: Path) -> None:
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True)
+
+    git("init", "-q")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "T")
+    (tmp_path / "a.md").write_text("clean\n")
+    git("add", "a.md")
+    git("commit", "-q", "-m", "base")
+    git("branch", "base")
+    (tmp_path / "a.md").write_text("clean\nsee SEC-014\n")
+    git("commit", "-q", "-am", "head")
+
+
+def _lint_range(tmp_path: Path, *extra: str, env=None):
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "base...HEAD", *extra],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+        env=env,
+    )
+
+
+def test_range_that_names_a_file_is_not_a_path_filter(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "a.md"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert result.returncode == 2
+
+
+def test_range_mode_runs_git_diff_itself(tmp_path: Path) -> None:
+    """--range avoids a `git diff | python3` pipe (denied by CI allowlists)."""
+    _git_repo(tmp_path)
+    result = _lint_range(tmp_path)
+    assert result.returncode == 0
+    hits = json.loads(result.stdout)
+    assert [(h["file"], h["line"], h["matched_id"]) for h in hits] == [
+        ("a.md", 2, "SEC-014")
+    ]
+
+
+def test_range_mode_git_failure_exits_2(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "nope...HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert result.returncode == 2
+
+
+def test_range_mode_missing_git_exits_2_without_traceback(tmp_path: Path) -> None:
+    empty = tmp_path / "empty-bin"
+    empty.mkdir()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "base...HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={**os.environ, "PATH": str(empty)},
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "git diff base...HEAD failed" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"color.diff": "always"},
+        {"diff.noprefix": "true"},
+        {"diff.mnemonicPrefix": "true"},
+        {"diff.external": "false"},
+    ],
+)
+def test_range_mode_ignores_user_diff_config(tmp_path: Path, config) -> None:
+    _git_repo(tmp_path)
+    env = dict(os.environ, GIT_CONFIG_COUNT=str(len(config)))
+    for index, (key, value) in enumerate(config.items()):
+        env[f"GIT_CONFIG_KEY_{index}"] = key
+        env[f"GIT_CONFIG_VALUE_{index}"] = value
+    result = _lint_range(tmp_path, env=env)
+    assert result.returncode == 0, result.stderr
+    assert [(h["file"], h["line"]) for h in json.loads(result.stdout)] == [("a.md", 2)]
+
+
+def test_range_mode_rejects_extra_paths(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    result = _lint_range(tmp_path, "a.md")
+    assert result.returncode == 2
+    assert "--range" in result.stderr
+
+
+def test_range_option_looking_value_is_not_a_git_option(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    target = tmp_path / "pwned"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), f"--range=--output={target}"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert result.returncode == 2 and not target.exists()
+
+
+QUOTED_PATH_DIFF = """\
+diff --git "a/caf\\303\\251.md" "b/caf\\303\\251.md"
+--- "a/caf\\303\\251.md"
++++ "b/caf\\303\\251.md"
+@@ -1 +1,2 @@
+ clean
++see SEC-014
+diff --git "a/t\\ta\\"b.md" "b/t\\ta\\"b.md"
+--- "a/t\\ta\\"b.md"
++++ "b/t\\ta\\"b.md"
+@@ -0,0 +1 @@
++see CMT-001
+"""
+
+
+def test_diff_mode_decodes_git_quoted_paths() -> None:
+    hits = lint.scan_diff(QUOTED_PATH_DIFF)
+    assert [(h["file"], h["line"]) for h in hits] == [
+        ("caf\u00e9.md", 2),
+        ('t\ta"b.md', 1),
+    ]
+
+
+def test_range_mode_reports_unicode_paths(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    (tmp_path / "caf\u00e9.md").write_text("see SEC-015\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "u"], check=True)
+    env = dict(os.environ, GIT_CONFIG_COUNT="1")
+    env.update(GIT_CONFIG_KEY_0="core.quotePath", GIT_CONFIG_VALUE_0="true")
+    result = _lint_range(tmp_path, env=env)
+    assert result.returncode == 0, result.stderr
+    hits = json.loads(result.stdout)
+    assert [(h["file"], h["line"]) for h in hits] == [
+        ("a.md", 2),
+        ("caf\u00e9.md", 1),
+    ]

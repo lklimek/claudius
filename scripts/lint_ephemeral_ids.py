@@ -23,10 +23,14 @@ come straight from ``CATEGORY_PREFIX`` and ``CODE_QUALITY_PREFIXES``.
     # and report only added (`+`) lines.
     git diff $BASE...HEAD | python3 lint_ephemeral_ids.py --diff
 
+    # Range mode: run `git diff <range>` itself (no pipe; allowlist-friendly)
+    python3 lint_ephemeral_ids.py --range origin/main...HEAD
+
     # Text output for human eyeballing
     python3 lint_ephemeral_ids.py --format text path/to/file.md
 
-The script ALWAYS exits 0 — this is advisory. Reviewer skills decide whether
+The script exits 0 on every scan — this is advisory (exit 2 only on a usage
+error or when ``--range`` cannot run ``git diff``). Reviewer skills decide whether
 each hit is a genuine violation or an in-skill example block that demonstrates
 the rule. The intentional false positives in the lint's own docstrings and in
 the skill files demonstrating this rule are by design: keep the lint dumb.
@@ -37,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -89,13 +94,30 @@ def scan_file(path: Path) -> list[dict]:
 
 
 _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
-_FILE_HEADER = re.compile(r"^\+\+\+ b/(.+)$")
+_GIT_ESCAPE = re.compile(rb'\\([0-7]{3}|[abtnvfr"\\])')
+_GIT_ESCAPES = {b"a": 7, b"b": 8, b"t": 9, b"n": 10, b"v": 11, b"f": 12, b"r": 13}
+
+
+def _unquote_git_path(path: str) -> str:
+    """Decode git's C-style quoted path (``"b/caf\\303\\251.md"``); pass others."""
+    if len(path) < 2 or not (path.startswith('"') and path.endswith('"')):
+        return path
+
+    def unescape(match: re.Match) -> bytes:
+        code = match.group(1)
+        if len(code) == 3:
+            return bytes([int(code, 8) & 0xFF])
+        return bytes([_GIT_ESCAPES.get(code, code[0])])
+
+    raw = _GIT_ESCAPE.sub(unescape, path[1:-1].encode("utf-8"))
+    return raw.decode("utf-8", errors="replace")
 
 
 def scan_diff(diff_text: str) -> list[dict]:
     """Scan a unified diff and report only added (`+`) lines.
 
-    File names come from ``+++ b/<path>`` headers. Line numbers come from the
+    File names come from ``+++ b/<path>`` headers (git's quoted form decoded).
+    Line numbers come from the
     hunk header's new-file start, incremented for each context (` `) and
     added (`+`) line; removed (`-`) lines do not advance the new-file pointer.
     Skips diff metadata lines (``---``, ``+++``, ``@@``, ``diff``, ``index``)
@@ -108,9 +130,9 @@ def scan_diff(diff_text: str) -> list[dict]:
 
     for raw in diff_text.splitlines():
         if raw.startswith("+++ "):
-            m = _FILE_HEADER.match(raw)
-            if m:
-                current_file = m.group(1)
+            path = _unquote_git_path(raw[4:])
+            if path.startswith("b/"):
+                current_file = path[2:]
             continue
         if (
             raw.startswith("--- ")
@@ -158,14 +180,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=(
             "Dumb advisory lint for ephemeral review-finding IDs "
             "(CMT-/SEC-/RUST-/CALL-/etc.) in committed artifacts. "
-            "Always exits 0; the reviewer dismisses in-skill example matches."
+            "Exits 0 on every scan; the reviewer dismisses in-skill example matches."
         )
     )
     parser.add_argument(
         "files",
         nargs="*",
         type=Path,
-        help="Files to scan (file mode). Ignored when --diff is set.",
+        help="Files to scan (file mode). Ignored with --diff; rejected with --range.",
     )
     parser.add_argument(
         "--diff",
@@ -173,19 +195,66 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Read a unified diff from stdin and report only added (`+`) lines.",
     )
     parser.add_argument(
+        "--range",
+        metavar="REV_RANGE",
+        help="Run `git diff REV_RANGE` in the cwd and scan its added lines "
+        "(whole range only: no paths).",
+    )
+    parser.add_argument(
         "--format",
         choices=("json", "text"),
         default="json",
         help="Output format (default: json).",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.range is not None and (args.files or args.diff):
+        parser.error("--range scans the whole range; drop the paths / --diff")
+    return args
+
+
+# Pin the output format scan_diff parses, whatever the user's diff config says.
+_GIT_DIFF_ARGS = (
+    "--no-color",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-relative",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     hits: list[dict] = []
 
-    if args.diff:
+    if args.range is not None:
+        try:
+            result = subprocess.run(
+                # quotePath=false keeps non-ASCII paths raw; scan_diff still decodes
+                # the quoting git applies to control characters, quotes and backslashes.
+                [
+                    "git",
+                    "-c",
+                    "core.quotePath=false",
+                    "diff",
+                    *_GIT_DIFF_ARGS,
+                    "--end-of-options",
+                    args.range,
+                    "--",  # a range naming a file must not become a path filter
+                ],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError as error:  # e.g. git not on PATH
+            sys.stderr.write(f"git diff {args.range} failed: {error}\n")
+            return 2
+        if result.returncode != 0:
+            sys.stderr.write(f"git diff {args.range} failed: {result.stderr}")
+            return 2
+        hits = scan_diff(result.stdout)
+    elif args.diff:
         diff_text = sys.stdin.read()
         hits = scan_diff(diff_text)
     else:

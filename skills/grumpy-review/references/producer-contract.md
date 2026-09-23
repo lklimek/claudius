@@ -1,9 +1,7 @@
-# Producer Contract Template
+# Producer Contract
 
-Copy this file to `<SCRATCH_DIR>/producer-contract.md` once per review (substitute nothing —
-it's identical across producers). Every spawn prompt then points here instead of restating
-these items. See `grumpy-review` § Craft Agent Prompts for the numbered source items this
-mirrors, kept in sync with it.
+Identical for every producer in a fan-out; spawn prompts point here (by absolute plugin path)
+instead of restating it. Mirrors `grumpy-review` § Craft Agent Prompts — keep in sync.
 
 ## Finding format (JSON)
 
@@ -83,23 +81,29 @@ Before writing your output file, check whether it already exists. If it is not y
 in-progress output, preserve it as `<role>-findings.PRE-COLLISION.json` before writing — never
 silently overwrite another session's output.
 
+## Bash hygiene
+
+Restricted allowlists (e.g. CI) deny anything else, and each denial wastes a round: one
+simple allowlisted command per call — no `$VAR`/`$(…)`, loops, pipes, `>` redirects, `cd`, or
+`&&` chains; `python3 -c` and ad-hoc scripts are denied. Create files with the Write tool.
+Prefer Read/Grep/Glob on the checked-out tree over `git show`/`cat`.
+
 ## Process rules
 
 - **Always write your output file, even when you found nothing.** A bare `[]` is a valid,
   successful result — a missing file fails the coordinator's `prepare` step outright (exit 2),
   taking down the whole review with no report at all. Zero findings is never a reason to skip
   the Write call.
-- Do NOT run `consolidate_reports.py` yourself and do NOT pre-assemble `report.json` shape —
-  the coordinator does that.
-- Use the Write tool for creating files — never `cat > file` or heredoc redirections.
+- Run only the `consolidate_reports.py gate` command from your spawn prompt — never
+  `prepare`/`finalize`, and do NOT pre-assemble `report.json` shape; the coordinator does that.
 - When MemCan/WebSearch are unavailable (e.g., CI), do not use memcan tools or
   WebSearch/WebFetch.
 - Preload `coding-best-practices` so its Cross-Cutting Rules govern every finding.
 
 ## Report back tersely
 
-Your findings file is the report — the coordinator reads it directly. When you finish, report
-back in **at most 3 lines**: counts by severity band, your output file path, and your candy
-tally. Found nothing? Say so plainly ("0 findings, wrote `<path>` as `[]`") — that is a
-complete, successful report, not an empty one. Do not restate your findings in prose; a 1-2 KB
-narrative repeating the JSON you just wrote wastes tokens the coordinator has to read anyway.
+Your findings file is the report. After writing it, run the `gate` command from your spawn
+prompt; on `INVALID:` or `ERROR:` fix the file and re-run. Then reply with your output file
+path, your candy tally, and the `gate` output verbatim as the last lines (its `MAX:` line is
+the coordinator's early-stop signal). Found nothing? `[]` gives `MAX: NONE` — a complete,
+successful report. Do not restate findings in prose; the coordinator reads the JSON directly.

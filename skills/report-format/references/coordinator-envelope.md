@@ -7,8 +7,8 @@ coordinator-owned).
 ## Report Pipeline Tools
 
 `scripts/validate_report.py report.json` (schema validation); `scripts/consolidate_reports.py
-prepare`/`assemble` (merge + dedup — `grumpy-review` §5a/§5c); `scripts/generate_review_report.py
---format {md,html,triage,pdf}` (`grumpy-review` §5e). All under
+prepare`/`finalize` (dedup, merge, assemble, render — `grumpy-review` §5a/§5c);
+`scripts/generate_review_report.py --format {md,html,triage,pdf}` (re-render). All under
 `${CLAUDE_SKILL_DIR}/../../scripts/`.
 
 ## Full Report Envelope

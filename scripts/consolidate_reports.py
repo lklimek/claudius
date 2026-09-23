@@ -5,31 +5,49 @@ Two-phase workflow:
   Phase 1 (prepare): Flatten agent reports, detect duplicates, scan INTENTIONAL comments.
   Phase 2 (assemble): Assign IDs, compute statistics, build schema-valid report.json.
 
+Round-saving shortcuts:
+  gate: one producer file -> max severity band + HIGH+/blocker-gate candidate IDs.
+  prepare --digest: also write/print a compact digest.md of intermediate.json.
+  finalize: merge decisions -> assemble (validates) -> render, in one call.
+
 Usage:
     # Phase 1
     python3 scripts/consolidate_reports.py prepare \\
         agent1:path/to/report1.json agent2:path/to/report2.json \\
         --repo-root /path/to/repo --output intermediate.json \\
-        [--metadata '{"project":"X","date":"2026-03-05"}']
+        [--metadata '{"project":"X","date":"2026-03-05"}'] [--digest] \\
+        [--base-ref origin/main]
 
     # Phase 2
     python3 scripts/consolidate_reports.py assemble \\
         --input merged-findings.json --output report.json
 
+    # Phase 2, merge + render included
+    python3 scripts/consolidate_reports.py finalize \\
+        --input intermediate.json --decisions merge-decisions.json \\
+        --output report.json [--format md] [--format html]
+
+    python3 scripts/consolidate_reports.py gate path/to/findings.json
+
 Exit codes:
     0  Success
-    1  Validation error
-    2  File/parse error
+    1  Validation error (gate: INVALID findings; finalize: a decision, the
+       schema or rendering failed — no output is written)
+    2  File/parse error (missing, unparseable or wrongly shaped input)
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
+import functools
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 from collections.abc import Iterator
 from difflib import SequenceMatcher
@@ -37,12 +55,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote as _url_quote
 
+import merge_findings_helper as mfh
 from severity_util import (
+    GATE_CITATION_RE,
+    GATE_IDS,
     SEV_LABELS,
     SEV_ORDER,
     build_merge_class_stats,
     derive_overall,
     effective_severity,
+    derive_finding_severity,
     derive_severity_int,
     load_json_strict,
     migrate_legacy_floats,
@@ -63,9 +85,10 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
-SCHEMA_PATH = (
-    Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
-)
+PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+SCHEMA_PATH = PLUGIN_ROOT / "schemas" / "review-report.schema.json"
+PLUGIN_MANIFEST = PLUGIN_ROOT / ".claude-plugin" / "plugin.json"
+RENDERER = PLUGIN_ROOT / "scripts" / "generate_review_report.py"
 
 CATEGORY_PREFIX: dict[str, str] = {
     "security": "SEC-",
@@ -250,6 +273,25 @@ def _derive_metadata_repository(repo_root: str) -> dict[str, str] | None:
     return {"owner": match["owner"], "repo": match["repo"]}
 
 
+def _git_sha(repo_root: str, *args: str) -> str | None:
+    """Run ``git -C repo_root <args>``; return its output if a full SHA, else None."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_root, *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        log.info("git %s failed in %s: %s", " ".join(args), repo_root, e)
+        return None
+    full = result.stdout.strip()
+    if result.returncode != 0 or not _FULL_SHA_RE.match(full):
+        log.info("git %s could not resolve a SHA in %s", " ".join(args), repo_root)
+        return None
+    return full
+
+
 def _full_sha(commit: str | None, repo_root: str) -> str | None:
     """Expand a commit ref to full 40-char SHA via `git rev-parse`.
 
@@ -259,21 +301,14 @@ def _full_sha(commit: str | None, repo_root: str) -> str | None:
         return None
     if _FULL_SHA_RE.match(commit):
         return commit
-    try:
-        result = subprocess.run(
-            ["git", "-C", repo_root, "rev-parse", commit],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        log.info("git rev-parse failed for %r in %s: %s", commit, repo_root, e)
+    return _git_sha(repo_root, "rev-parse", "--verify", "--end-of-options", commit)
+
+
+def _merge_base(base_ref: str, commit: str | None, repo_root: str) -> str | None:
+    """Merge-base of ``base_ref`` and the reviewed ``commit`` (the reviewed diff's base)."""
+    if not commit:
         return None
-    if result.returncode != 0:
-        log.info("git rev-parse could not resolve %r in %s", commit, repo_root)
-        return None
-    full = result.stdout.strip()
-    return full if _FULL_SHA_RE.match(full) else None
+    return _git_sha(repo_root, "merge-base", "--end-of-options", base_ref, commit)
 
 
 def _build_permalink(
@@ -978,7 +1013,11 @@ def _flatten_agent_report(
             # finding whose floats are unusable -- including a NaN injected by
             # the v3 migration -- at INFO, the one band meaning "no action
             # required", regardless of its impact. Fail high, never quiet.
-            severity = f.get("severity") or effective_severity(f)
+            # Floats first, exactly as assemble derives it, so gate and digest
+            # bands match the final report whatever the producer's label says.
+            severity = (
+                derive_finding_severity(f) or f.get("severity") or effective_severity(f)
+            )
             if not isinstance(severity, int) or not 1 <= severity <= 5:
                 log.warning(
                     "Skipping finding with invalid severity '%s' from agent '%s'",
@@ -1039,6 +1078,73 @@ def _flatten_agent_report(
     return raw, positives
 
 
+class AgentReportError(Exception):
+    """A producer findings file is missing, unparseable, or the wrong shape."""
+
+
+def load_agent_report(path_str: str) -> list[Any]:
+    """Load one producer findings file, which must be a bare JSON array.
+
+    Raises:
+        AgentReportError: with a producer-actionable message on any failure.
+    """
+    try:
+        data = _load_json_file(Path(path_str))
+    except FileNotFoundError:
+        raise AgentReportError(f"Report not found: {path_str}") from None
+    except OSError as e:
+        raise AgentReportError(f"Cannot read report {path_str}: {e}") from e
+    except ValueError as e:
+        raise AgentReportError(str(e)) from e
+
+    # Detect a legacy v1/v2 envelope dict carrying schema_version and give
+    # a version-aware error before the shape check. The plan mandates a
+    # hard cutover: v1/v2 must be rejected with a pointer at the schema.
+    if isinstance(data, dict):
+        declared = data.get("schema_version")
+        if (
+            isinstance(declared, str)
+            and declared
+            and declared not in ACCEPTED_SCHEMA_VERSIONS
+        ):
+            raise AgentReportError(
+                f"Input {path_str} declares schema_version={declared!r}; only "
+                f"{sorted(ACCEPTED_SCHEMA_VERSIONS)} are accepted. v1/v2 reports "
+                "are no longer supported — re-run the producer against the "
+                "current commit to regenerate. See "
+                f"schemas/review-report.schema.json v{SCHEMA_VERSION}."
+            )
+
+    if not isinstance(data, list):
+        raise AgentReportError(
+            f"Expected JSON array in {path_str} — write a bare JSON array of "
+            "finding sections, not an envelope object"
+        )
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise AgentReportError(
+                f"{path_str}: item #{index} must be a finding section object"
+            )
+        findings = item.get("findings", [])
+        if not isinstance(findings, list) or not all(
+            isinstance(f, dict) for f in findings
+        ):
+            raise AgentReportError(
+                f"{path_str}: item #{index} 'findings' must be an array of objects"
+            )
+    return data
+
+
+def _plugin_version() -> str | None:
+    """Return the claudius plugin version from plugin.json, or None if unreadable."""
+    try:
+        version = json.loads(PLUGIN_MANIFEST.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError) as e:
+        log.info("plugin version unavailable (%s): %s", PLUGIN_MANIFEST, e)
+        return None
+    return version if isinstance(version, str) and version else None
+
+
 def cmd_prepare(args: argparse.Namespace) -> int:
     """Execute the prepare phase."""
     raw_findings: list[dict[str, Any]] = []
@@ -1052,40 +1158,10 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         agent_name, path_str = spec.split(":", 1)
         agents.append(agent_name)
 
-        report_path = Path(path_str)
         try:
-            data = _load_json_file(report_path)
-        except FileNotFoundError:
-            log.error("Report not found: %s", path_str)
-            return 2
-        except ValueError as e:
+            data = load_agent_report(path_str)
+        except AgentReportError as e:
             log.error("%s", e)
-            return 2
-
-        # Detect a legacy v1/v2 envelope dict carrying schema_version and give
-        # a version-aware error before the shape check. The plan mandates a
-        # hard cutover: v1/v2 must be rejected with a pointer at the schema.
-        if isinstance(data, dict):
-            declared = data.get("schema_version")
-            if (
-                isinstance(declared, str)
-                and declared
-                and declared not in ACCEPTED_SCHEMA_VERSIONS
-            ):
-                log.error(
-                    "Input %s declares schema_version=%r; only %s are accepted. "
-                    "v1/v2 reports are no longer supported — re-run the "
-                    "producer against the current commit to regenerate. See "
-                    "schemas/review-report.schema.json v%s.",
-                    path_str,
-                    declared,
-                    sorted(ACCEPTED_SCHEMA_VERSIONS),
-                    SCHEMA_VERSION,
-                )
-                return 2
-
-        if not isinstance(data, list):
-            log.error("Expected JSON array in %s", path_str)
             return 2
 
         raw, pos = _flatten_agent_report(agent_name, data)
@@ -1106,16 +1182,37 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         except ValueError as e:
             log.error("Invalid metadata JSON: %s", e)
             return 2
+        if not isinstance(metadata, dict):
+            log.error("--metadata must be a JSON object")
+            return 2
+
+    if "plugin_version" not in metadata:
+        version = _plugin_version()
+        if version is not None:
+            metadata["plugin_version"] = version
 
     if args.repo_root:
         repository = _derive_metadata_repository(args.repo_root)
         if repository is not None:
             metadata["repository"] = repository
-        full = _full_sha(metadata.get("commit"), args.repo_root)
-        if full is not None:
-            metadata["commit"] = full
-        elif "commit" in metadata:
-            metadata.pop("commit")
+        for key in ("commit", "base_commit"):
+            full = _full_sha(metadata.get(key), args.repo_root)
+            if full is not None:
+                metadata[key] = full
+            else:
+                metadata.pop(key, None)
+        base_ref = getattr(args, "base_ref", None)
+        if base_ref:
+            merge_base = _merge_base(base_ref, metadata.get("commit"), args.repo_root)
+            if merge_base is not None:
+                metadata["base_commit"] = merge_base
+            else:
+                metadata.pop("base_commit", None)
+                log.warning(
+                    "No merge-base of --base-ref %s and metadata.commit; omitting "
+                    "metadata.base_commit (post_pr_review.py will not APPROVE)",
+                    base_ref,
+                )
 
     output = {
         "metadata": metadata,
@@ -1136,7 +1233,323 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         len(dup_groups),
         len(intentional),
     )
+    if getattr(args, "digest", False):
+        digest = build_digest(output)
+        (out_path.parent / "digest.md").write_text(digest, encoding="utf-8")
+        print(digest, end="")
     return 0
+
+
+DIGEST_DESCRIPTION_CHARS = 300
+
+
+def _finding_label(finding: dict[str, Any]) -> str:
+    """Return the ``<agent>:<original_id>`` key the merge decisions file uses."""
+    return f"{finding.get('agent', '?')}:{finding.get('original_id', '?')}"
+
+
+def _clip(text: Any, limit: int = DIGEST_DESCRIPTION_CHARS) -> str:
+    """Collapse whitespace and truncate to ``limit`` characters."""
+    flat = " ".join(str(text or "").split())
+    return flat if len(flat) <= limit else flat[: limit - 1].rstrip() + "…"
+
+
+def _float_str(value: Any) -> str:
+    return f"{value:.2f}" if isinstance(value, (int, float)) else "?"
+
+
+def build_digest(intermediate: dict[str, Any]) -> str:
+    """Render a compact Markdown view of prepare output for the coordinator.
+
+    Carries exactly what merge decisions need — keys, bands, floats, location,
+    a clipped description, duplicate clusters and INTENTIONAL hits — so the
+    coordinator can author merge-decisions.json without reading the full
+    intermediate file.
+    """
+    raw = intermediate.get("raw_findings", [])
+    groups = intermediate.get("duplicate_groups", [])
+    intentional = intermediate.get("intentional_downgrades", [])
+    lines = [
+        f"# Consolidation digest — {len(raw)} raw findings, {len(groups)} "
+        f"duplicate groups, {len(intentional)} INTENTIONAL",
+        "",
+        "Keys are `<agent>:<original_id>` (use them in merge-decisions.json). "
+        "L/I/R = likelihood/impact/relevance.",
+        "",
+        "## Findings",
+    ]
+    order = sorted(
+        range(len(raw)), key=lambda i: -effective_severity(raw[i])
+    )  # stable: producer order within a band
+    for i in order:
+        f = raw[i]
+        band = SEV_LABELS.get(effective_severity(f), "?")
+        floats = " ".join(
+            f"{axis[0].upper()}{_float_str(f.get(axis))}"
+            for axis in ("likelihood", "impact", "relevance")
+        )
+        extra = f" [{f['merge_class']}]" if f.get("merge_class") else ""
+        lines.append(
+            f"- `{_finding_label(f)}` {band} ({floats}){extra} — {_clip(f.get('title'), 160)}"
+        )
+        lines.append(
+            f"  `{f.get('location', '')}` [{f.get('category', '')}] "
+            f"{_clip(f.get('description'))}"
+        )
+    if not raw:
+        lines.append("- none")
+
+    lines += ["", "## Duplicate groups"]
+    for group in groups:
+        members = ", ".join(
+            _finding_label(raw[i])
+            for i in group.get("finding_indices", [])
+            if isinstance(i, int) and 0 <= i < len(raw)
+        )
+        lines.append(f"- G{group.get('group_id')}: {members} ({group.get('reason')})")
+    if not groups:
+        lines.append("- none")
+
+    lines += ["", "## INTENTIONAL candidates"]
+    for hit in intentional:
+        idx = hit.get("finding_index")
+        key = (
+            _finding_label(raw[idx])
+            if isinstance(idx, int) and 0 <= idx < len(raw)
+            else "?"
+        )
+        lines.append(
+            f"- `{key}` near `{hit.get('source_line')}`: "
+            f"{_clip(hit.get('intentional_comment'), 160)}"
+        )
+    if not intentional:
+        lines.append("- none")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# gate: early-stop summary of one producer file
+# ---------------------------------------------------------------------------
+_GATE_ID_SET = frozenset(GATE_IDS)
+_HIGH_BAND = 4
+
+
+def _cited_gates(finding: dict[str, Any]) -> list[str]:
+    """Return blocker-gate IDs a finding cites via tags or intent_basis."""
+    gates = [
+        t for t in finding.get("tags", []) if isinstance(t, str) and t in _GATE_ID_SET
+    ]
+    basis = finding.get("intent_basis")
+    match = GATE_CITATION_RE.match(basis) if isinstance(basis, str) else None
+    if match and match.group(1) in _GATE_ID_SET and match.group(1) not in gates:
+        gates.append(match.group(1))
+    return gates
+
+
+def _count_emitted_findings(sections: list[Any]) -> int:
+    """Count finding objects in a producer array, stray bare findings included."""
+    total = 0
+    for item in sections:
+        if not isinstance(item, dict):
+            continue
+        findings = item.get("findings")
+        if isinstance(findings, list):
+            total += sum(isinstance(f, dict) for f in findings)
+        else:
+            total += 1
+    return total
+
+
+def gate_lines(sections: list[Any], source: str = "gate") -> tuple[list[str], int]:
+    """Summarize a producer file for the coordinator's early-stop check.
+
+    Returns the output lines and the exit code: 1 when prepare would drop some
+    finding (so the producer fixes it now), else 0.
+    """
+    raw, _positives = _flatten_agent_report(source, sections)
+    counts = {label: 0 for label in SEV_ORDER}
+    max_band = 0
+    blocking = False
+    candidates: list[str] = []
+    for f in raw:
+        band = f["severity"]
+        counts[SEV_LABELS[band]] += 1
+        max_band = max(max_band, band)
+        gates = _cited_gates(f)
+        if f.get("merge_class") == "blocking" or gates:
+            blocking = True
+        reasons = ([SEV_LABELS[band]] if band >= _HIGH_BAND else []) + gates
+        if f.get("merge_class") == "blocking" and not gates:
+            reasons.append("blocking")
+        if reasons:
+            candidates.append(f"{f.get('original_id') or '?'} ({', '.join(reasons)})")
+
+    lines = [
+        f"MAX: {SEV_LABELS[max_band] if max_band else 'NONE'} "
+        f"BLOCKING: {'yes' if blocking else 'no'}",
+        f"CANDIDATES: {', '.join(candidates) if candidates else 'none'}",
+        "COUNTS: "
+        + " ".join(f"{label}={counts[label]}" for label in SEV_ORDER)
+        + f" TOTAL={len(raw)}",
+    ]
+    problems = _gate_problems(raw)
+    bad_sections = _section_problems(sections)
+    if bad_sections:
+        problems.append("invalid section field(s): " + ", ".join(bad_sections))
+    dropped = _count_emitted_findings(sections) - len(raw)
+    if dropped > 0:
+        problems.insert(
+            0,
+            f"{dropped} finding(s) would be dropped by prepare — check required "
+            "fields (title, location, description, recommendation); see the "
+            "warnings above",
+        )
+    lines += [f"INVALID: {problem}" for problem in problems]
+    return lines, 1 if problems else 0
+
+
+def _gate_problems(raw: list[dict[str, Any]]) -> list[str]:
+    """List what finalize would reject in prepare-surviving findings."""
+    unnamed: list[str] = []
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    bad_floats: list[str] = []
+    bad_fields: list[str] = []
+    for f in raw:
+        fid = f.get("original_id")
+        if not isinstance(fid, str) or not fid.strip():
+            unnamed.append(repr(_clip(f.get("title"), 60)))
+        elif fid in seen:
+            duplicates.append(fid)
+        else:
+            seen.add(fid)
+        axes = [
+            axis
+            for axis in ("likelihood", "impact", "relevance")
+            if not _is_unit_float(f.get(axis))
+        ]
+        if axes:
+            bad_floats.append(f"{fid or '?'} ({', '.join(axes)})")
+        fields = _schema_field_problems(f) + [
+            name
+            for name in _REQUIRED_FINDING_FIELDS
+            if isinstance(f.get(name), str) and not f[name].strip()
+        ]
+        basis = f.get("intent_basis")
+        if (
+            f.get("merge_class") == "blocking"
+            and not (isinstance(basis, str) and basis.strip())
+            and "intent_basis" not in fields
+        ):
+            fields.append("intent_basis (required for blocking)")
+        if fields:
+            bad_fields.append(f"{fid or '?'} ({', '.join(fields)})")
+    problems = []
+    if unnamed:
+        problems.append(f"finding(s) without an id: {', '.join(unnamed)}")
+    if duplicates:
+        problems.append(f"duplicate id(s): {', '.join(sorted(set(duplicates)))}")
+    if bad_floats:
+        problems.append(
+            "missing or out-of-range floats (need numbers in [0, 1]): "
+            + ", ".join(bad_floats)
+        )
+    if bad_fields:
+        problems.append(
+            "missing or wrongly typed schema fields: " + ", ".join(bad_fields)
+        )
+    return problems
+
+
+# Set by assemble (id comes from original_id) or checked separately (floats).
+_GATE_SKIPPED_FIELDS = frozenset(
+    {"id", "severity", "overall_severity", "location_permalink"}
+    | {"likelihood", "impact", "relevance"}
+)
+
+
+@functools.cache
+def _def_validator(name: str) -> Any:
+    """Validator for one schema ``$defs`` entry, or None when unavailable."""
+    if not _HAS_JSONSCHEMA:
+        return None
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        defs = schema["$defs"]
+        defs[name]["properties"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return jsonschema.Draft202012Validator({"$ref": f"#/$defs/{name}", "$defs": defs})
+
+
+def _error_fields(validator: Any, instance: dict[str, Any]) -> list[str]:
+    """Top-level field names ``validator`` rejects in ``instance``."""
+    fields: set[str] = set()
+    for error in validator.iter_errors(instance):
+        if error.absolute_path:
+            fields.add(str(error.absolute_path[0]))
+        elif error.validator == "required":
+            fields.update(k for k in error.validator_value if k not in instance)
+        else:
+            fields.add(error.validator)
+    return sorted(fields)
+
+
+def _section_problems(sections: list[Any]) -> list[str]:
+    """Name section-level fields (title, category, positives, …) finalize rejects.
+
+    Bare findings (no ``findings`` key) are skipped: prepare rescues them into
+    a synthesized section.
+    """
+    validator = _def_validator("finding_section")
+    if validator is None:
+        return []
+    known = validator.schema["$defs"]["finding_section"]["properties"]
+    problems = []
+    for index, section in enumerate(sections):
+        if not isinstance(section, dict) or "findings" not in section:
+            continue
+        projected = {k: v for k, v in section.items() if k in known}
+        projected["findings"] = []
+        fields = _error_fields(validator, projected)
+        if fields:
+            problems.append(f"section #{index} ({', '.join(fields)})")
+    return problems
+
+
+def _schema_field_problems(finding: dict[str, Any]) -> list[str]:
+    """Name the finding fields the report schema would reject after assembly."""
+    validator = _def_validator("finding")
+    if validator is None:
+        return []
+    known = validator.schema["$defs"]["finding"]["properties"]
+    projected = {
+        k: v for k, v in finding.items() if k in known and k not in _GATE_SKIPPED_FIELDS
+    }
+    projected.update(
+        {"id": "QA-001", "likelihood": 0.5, "impact": 0.5, "relevance": 0.5}
+    )
+    return _error_fields(validator, projected)
+
+
+def _is_unit_float(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and 0.0 <= value <= 1.0
+    )
+
+
+def cmd_gate(args: argparse.Namespace) -> int:
+    """Print the early-stop summary for one producer findings file."""
+    try:
+        sections = load_agent_report(args.findings)
+    except AgentReportError as e:
+        print(f"ERROR: {e}")
+        return 2
+    lines, code = gate_lines(sections, args.findings)
+    print("\n".join(lines))
+    return code
 
 
 # ---------------------------------------------------------------------------
@@ -1153,7 +1566,11 @@ def cmd_assemble(args: argparse.Namespace) -> int:
     except ValueError as e:
         log.error("%s", e)
         return 2
+    return _assemble_and_write(data, Path(args.output))
 
+
+def _assemble_and_write(data: dict[str, Any], out_path: Path) -> int:
+    """Build, validate and write report.json from a merged-findings document."""
     metadata = data.get("metadata", {})
     exec_summary = data.get("executive_summary", {})
     findings_sections = data.get("findings", [])
@@ -1219,7 +1636,6 @@ def cmd_assemble(args: argparse.Namespace) -> int:
         log.error("Report failed schema validation, not writing output")
         return 1
 
-    out_path = Path(args.output)
     _write_json_output(
         out_path, report, [f for _s, f in _iter_findings(findings_sections)]
     )
@@ -1254,6 +1670,121 @@ def _validate_report(report: dict[str, Any]) -> bool:
         log.error("Report has %d validation error(s)", len(errors))
         return False
     return True
+
+
+_RENDER_FORMATS = ("md", "html", "pdf")
+
+
+def cmd_finalize(args: argparse.Namespace) -> int:
+    """Merge decisions, assemble + validate, and render in one call.
+
+    All-or-nothing: report.json and its renders are staged in a temp dir and
+    moved into place only after every step succeeds; ``merged-findings.json``
+    (the audit copy, next to the decisions file) is written only then too.
+    On failure, outputs left by an earlier run are renamed to ``*.stale`` so
+    no consumer mistakes them for this run's result.
+    """
+    if Path(args.output).suffix != ".json":
+        # renders land at <output>.with_suffix(.<fmt>) and would overwrite it
+        log.error("--output must be a .json path, got %s", args.output)
+        return 2
+    try:
+        code = _finalize(args)
+    except Exception as e:  # noqa: BLE001 - any failure must still set aside outputs
+        log.error("finalize failed: %s: %s", type(e).__name__, e)
+        code = 1
+    if code != 0:
+        try:
+            _set_aside_stale_outputs(args)
+        except OSError as e:
+            log.error("Could not set aside earlier outputs: %s", e)
+    return code
+
+
+def _set_aside_stale_outputs(args: argparse.Namespace) -> None:
+    """Rename report.json, its renders and merged-findings.json to ``*.stale``."""
+    out_path = Path(args.output)
+    candidates = [out_path]
+    candidates += [out_path.with_suffix(f".{fmt}") for fmt in _RENDER_FORMATS]
+    candidates.append(Path(args.decisions).parent / "merged-findings.json")
+    for path in candidates:
+        _set_aside(path)
+
+
+def _set_aside(path: Path) -> None:
+    """Rename an earlier run's output to ``<name>.stale`` if it exists."""
+    if path.is_file():
+        stale = path.with_name(f"{path.name}.stale")
+        os.replace(path, stale)
+        log.warning("Moved stale %s from an earlier run to %s", path, stale)
+
+
+def _finalize(args: argparse.Namespace) -> int:
+    decisions_path = Path(args.decisions)
+    try:
+        intermediate = mfh.load_intermediate(Path(args.input))
+        decisions = mfh.load_decisions(decisions_path)
+    except (OSError, ValueError) as e:
+        log.error("%s", e)
+        return 2
+
+    try:
+        findings = mfh.resolve_findings(mfh.load_raw_findings(intermediate), decisions)
+        missing = mfh.find_missing_merge_class(findings)
+        if missing:
+            raise ValueError(
+                f"{len(missing)} finding(s) lack merge_class — add them to "
+                f"finding_updates: {', '.join(missing)}"
+            )
+        document = mfh.build_merged_document(
+            intermediate,
+            findings,
+            decisions.get("executive_summary", dict(mfh.DEFAULT_EXECUTIVE_SUMMARY)),
+            top_findings_override=decisions.get("top_findings_override"),
+            remediation_override=decisions.get("remediation_override"),
+        )
+    except ValueError as e:
+        log.error("%s", e)
+        return 1
+    audit_copy = copy.deepcopy(document)  # assembly mutates findings in place
+
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=out_path.parent, prefix=".finalize-") as tmp:
+        staged = Path(tmp) / out_path.name
+        code = _assemble_and_write(document, staged)
+        if code != 0:
+            return code
+        for fmt in args.format or ["md"]:
+            result = subprocess.run(
+                [sys.executable, str(RENDERER), str(staged), "--format", fmt],
+                stdout=subprocess.DEVNULL,  # it would print the staging path
+                check=False,
+            )
+            if result.returncode != 0:
+                log.error(
+                    "Rendering %s failed (exit %d); no report written",
+                    fmt,
+                    result.returncode,
+                )
+                return 1
+        audit_path = decisions_path.parent / "merged-findings.json"
+        audit_staged = audit_path.with_name(f".{audit_path.name}.tmp")
+        try:
+            mfh.write_merged_findings(audit_staged, audit_copy)
+            os.replace(audit_staged, audit_path)
+            requested = set(args.format or ["md"])
+            for fmt in set(_RENDER_FORMATS) - requested:
+                _set_aside(out_path.with_suffix(f".{fmt}"))
+            # report.json last: its presence implies the renders are in place.
+            for item in sorted(Path(tmp).iterdir(), key=lambda p: p == staged):
+                os.replace(item, out_path.parent / item.name)
+                log.info("Wrote %s", out_path.parent / item.name)
+        except OSError as e:
+            log.error("Publishing the report failed: %s", e)
+            audit_staged.unlink(missing_ok=True)
+            return 1
+    return 0
 
 
 def cmd_regenerate(args: argparse.Namespace) -> int:
@@ -1317,6 +1848,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output", required=True, help="Output intermediate JSON path"
     )
     p_prepare.add_argument("--metadata", default=None, help="JSON metadata string")
+    p_prepare.add_argument(
+        "--base-ref",
+        default=None,
+        help="Base ref of the reviewed diff; records metadata.base_commit as its "
+        "merge-base with metadata.commit",
+    )
+    p_prepare.add_argument(
+        "--digest",
+        action="store_true",
+        help="Also write digest.md next to --output and print it",
+    )
 
     p_assemble = sub.add_parser(
         "assemble", help="Phase 2: assign IDs, compute stats, build report"
@@ -1326,6 +1868,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p_assemble.add_argument("--output", required=True, help="Output report JSON path")
 
+    p_finalize = sub.add_parser(
+        "finalize", help="Phase 2 end-to-end: merge decisions, assemble, render"
+    )
+    p_finalize.add_argument("--input", required=True, help="intermediate.json path")
+    p_finalize.add_argument(
+        "--decisions", required=True, help="merge-decisions.json path"
+    )
+    p_finalize.add_argument("--output", required=True, help="Output report JSON path")
+    p_finalize.add_argument(
+        "--format",
+        action="append",
+        choices=list(_RENDER_FORMATS),
+        help="Rendered format (repeatable; default: md)",
+    )
+
+    p_gate = sub.add_parser(
+        "gate", help="Summarize one producer file: max band + blocker candidates"
+    )
+    p_gate.add_argument("findings", help="Producer findings JSON path")
+
     p_regenerate = sub.add_parser(
         "regenerate", help="Recompute derived fields in an existing report"
     )
@@ -1334,15 +1896,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
-    if args.command == "prepare":
-        return cmd_prepare(args)
-    elif args.command == "assemble":
-        return cmd_assemble(args)
-    elif args.command == "regenerate":
-        return cmd_regenerate(args)
-    return 2
+_COMMANDS = {
+    "prepare": cmd_prepare,
+    "assemble": cmd_assemble,
+    "finalize": cmd_finalize,
+    "gate": cmd_gate,
+    "regenerate": cmd_regenerate,
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the consolidate_reports CLI."""
+    args = parse_args(argv)
+    return _COMMANDS[args.command](args)
 
 
 if __name__ == "__main__":
