@@ -731,6 +731,52 @@ class TestApprovalSafety:
         )
         assert result.event == "COMMENT" and result.inline == []
 
+    @staticmethod
+    def _claims(report: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+        """Approvable ``report`` with every derived field copied from ``source``."""
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
+        for key in ("summary_statistics", "top_findings", "remediation"):
+            report[key] = source.get(key)
+        return report
+
+    def test_approval_ignores_derived_fields_claiming_blockers(self):
+        blocker = _finding(
+            "SEC-001", 4, "src/a.py:12", merge_class="blocking", intent_basis="G-X: y"
+        )
+        low = {"likelihood": 0.1, "impact": 0.1}
+        clean = _valid_report(_finding("SEC-002", 1, "src/a.py:12", **low))
+        report = self._claims(clean, _valid_report(blocker))
+        assert _run(report, FakeGh()).event == "APPROVE"
+
+    def test_blocking_finding_blocks_approval_whatever_derived_fields_say(self):
+        blocker = _finding(  # INFO-level floats: held only because it is blocking
+            "SEC-001",
+            1,
+            "src/a.py:12",
+            merge_class="blocking",
+            intent_basis="G-X: y",
+            likelihood=0.1,
+            impact=0.1,
+        )
+        report = self._claims(_valid_report(blocker), _valid_report())
+        report["top_findings"] = []
+        gh = FakeGh()
+        result = _run(report, gh, comments={"SEC-001": None})  # nothing posted
+        assert result.inline == [] and result.in_body == []
+        assert result.event == "COMMENT"
+
+    def test_tampered_merge_class_counts_are_rejected_before_posting(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report(_finding("SEC-001", 2, "src/a.py:12"))
+        data["summary_statistics"]["merge_class_counts"]["blocking"] = 1
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(data))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 2
+        assert gh.calls == []
+
     def test_disputed_only_still_approves(self):
         report = _report(_finding("SEC-001", 5, "src/a.py:11", merge_class="disputed"))
         assert _run(report, FakeGh()).event == "APPROVE"
