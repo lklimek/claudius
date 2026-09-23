@@ -73,3 +73,36 @@ def test_references_do_not_use_plugin_root_placeholder() -> None:
         if "${CLAUDE_PLUGIN_ROOT}" in p.read_text(encoding="utf-8")
     ]
     assert not offenders, f"unsubstituted ${{CLAUDE_PLUGIN_ROOT}} in: {offenders}"
+
+
+FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
+PLAIN_GH_GIT = re.compile(r"^\s*(?:ghsudo )?(?:gh|git) ")
+
+
+@pytest.mark.parametrize("skill", ANCHORED_SKILLS)
+def test_fenced_gh_and_git_commands_match_a_rule(skill: str) -> None:
+    """A fenced command the skill tells the model to run must be pre-approved."""
+    front, body = _split(REPO_ROOT / "skills" / skill / "SKILL.md")
+    rules = _bash_rules(front)
+    for block in FENCE.findall(body):
+        for line in block.splitlines():
+            if not PLAIN_GH_GIT.match(line):
+                continue
+            cmd = line.split("  #", 1)[0].strip()
+            assert any(fnmatchcase(cmd, r) for r in rules), (
+                f"{skill}: no allowed-tools rule matches {cmd!r}"
+            )
+
+
+# Tools that load repo-controlled config, grammars or plugins (or write files
+# via options a repo config can set): never pre-approve them in any skill.
+UNSAFE_TOOL_RULES = re.compile(r"^(?:ctags|global|gtags|tree-sitter|git pull)\b")
+
+
+@pytest.mark.parametrize(
+    "path", sorted(REPO_ROOT.glob("skills/*/SKILL.md")), ids=lambda p: p.parent.name
+)
+def test_no_skill_grants_repo_config_loading_tools(path: Path) -> None:
+    front, _ = _split(path)
+    unsafe = [r for r in _bash_rules(front) if UNSAFE_TOOL_RULES.match(r)]
+    assert not unsafe, f"{path.parent.name}: unsafe Bash grants {unsafe}"

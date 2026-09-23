@@ -56,27 +56,13 @@ description: |
   Deferred (lower risk): foo::leaf_util, ...
 ```
 
-## Step 3 — Probe Tooling
+## Step 3 — Tooling
 
-Run cheap `which` probes once and cache the answers — `which` is the only detection primitive on every skill's allow-list, so prefer it over `test -f`/`ps -e` (which the sandbox blocks):
+Use the Grep tool (`<caller-regex>`, `type: <lang>`) plus Read to confirm each hit; `gh search code repo:<owner>/<repo> "<symbol>"` for cross-repo same-org callers (rate-limited). Never Bash `rg` (`--pre` runs arbitrary commands) and never run `ctags`, GNU `global`/`gtags` or `tree-sitter` on a PR checkout: they load repo-controlled option files, `gtags.conf` plugins or grammars — code execution or arbitrary file writes from PR content.
 
-```bash
-which ctags global gtags tree-sitter
-```
+Every emitted `CALL-` finding must include `Walked via: <tool>` (e.g. `Walked via: Grep`).
 
-Pick whatever the environment offers. Suggested order:
-
-| Tier | Tool | When |
-|---|---|---|
-| Best | `ctags -R --languages=<lang>` (universal-ctags) | Language-aware, fast, scriptable |
-| Best | GNU global (`gtags` + `global -r <sym>`) | Language-aware, fastest cross-ref |
-| Good | `tree-sitter query` | When grammar is installed; precise AST queries |
-| OK | `gh search code repo:<owner>/<repo> "<symbol>"` | Cross-repo same-org (limited rate) |
-| Fallback | Grep tool (`<caller-regex>`, `type: <lang>`) | Always available; never Bash `rg` (`--pre` runs arbitrary commands, so it is not allow-listed) |
-
-Record which tool was used; every emitted `CALL-` finding must include `Walked via: <tool>` (e.g. `Walked via: ctags + Grep fallback`).
-
-### Fallback regex hints
+### Regex hints
 
 | Language | Caller-extraction regex |
 |---|---|
@@ -151,7 +137,7 @@ Finding shape (one section per modified function whose walk surfaced callers, or
       "relevance": 1.0,
       "title": "Caller foo::bar still treats baz() as infallible",
       "location": "src/foo/bar.rs:142",
-      "description": "Walked via: ctags + Grep fallback\nChain: src/foo/bar.rs:142 → baz() (modified at src/baz.rs:88)\nbaz() now returns Result<T, E>; caller uses the value directly without `?` or matching on Err.",
+      "description": "Walked via: Grep\nChain: src/foo/bar.rs:142 → baz() (modified at src/baz.rs:88)\nbaz() now returns Result<T, E>; caller uses the value directly without `?` or matching on Err.",
       "recommendation": "Propagate the error via `?` or handle Err explicitly.",
       "code_snippets": [
         {"language": "rust", "caption": "src/foo/bar.rs:140-145", "content": "let x = baz();\nuse_x(x);"}
