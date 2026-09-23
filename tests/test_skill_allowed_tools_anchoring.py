@@ -63,3 +63,13 @@ def test_body_invocations_match_a_rule(skill: str) -> None:
         assert any(fnmatchcase(cmd, r) for r in rules), (
             f"{skill}: no allowed-tools rule matches {cmd!r}"
         )
+
+
+def test_references_do_not_use_plugin_root_placeholder() -> None:
+    """References are read via Read, unsubstituted: use a `<plugin-root>` placeholder there."""
+    offenders = [
+        str(p.relative_to(REPO_ROOT))
+        for p in REPO_ROOT.glob("skills/*/references/**/*.md")
+        if "${CLAUDE_PLUGIN_ROOT}" in p.read_text(encoding="utf-8")
+    ]
+    assert not offenders, f"unsubstituted ${{CLAUDE_PLUGIN_ROOT}} in: {offenders}"
