@@ -29,8 +29,8 @@ come straight from ``CATEGORY_PREFIX`` and ``CODE_QUALITY_PREFIXES``.
     # Text output for human eyeballing
     python3 lint_ephemeral_ids.py --format text path/to/file.md
 
-The script exits 0 on every scan — this is advisory (exit 2 only when
-``--range`` cannot run ``git diff``). Reviewer skills decide whether
+The script exits 0 on every scan — this is advisory (exit 2 only on a usage
+error or when ``--range`` cannot run ``git diff``). Reviewer skills decide whether
 each hit is a genuine violation or an in-skill example block that demonstrates
 the rule. The intentional false positives in the lint's own docstrings and in
 the skill files demonstrating this rule are by design: keep the lint dumb.
@@ -163,14 +163,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=(
             "Dumb advisory lint for ephemeral review-finding IDs "
             "(CMT-/SEC-/RUST-/CALL-/etc.) in committed artifacts. "
-            "Always exits 0; the reviewer dismisses in-skill example matches."
+            "Exits 0 on every scan; the reviewer dismisses in-skill example matches."
         )
     )
     parser.add_argument(
         "files",
         nargs="*",
         type=Path,
-        help="Files to scan (file mode). Ignored when --diff is set.",
+        help="Files to scan (file mode). Ignored with --diff; rejected with --range.",
     )
     parser.add_argument(
         "--diff",
@@ -180,7 +180,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--range",
         metavar="REV_RANGE",
-        help="Run `git diff REV_RANGE` in the cwd and scan its added lines.",
+        help="Run `git diff REV_RANGE` in the cwd and scan its added lines "
+        "(whole range only: no paths).",
     )
     parser.add_argument(
         "--format",
@@ -188,16 +189,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="json",
         help="Output format (default: json).",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.range is not None and (args.files or args.diff):
+        parser.error("--range scans the whole range; drop the paths / --diff")
+    return args
+
+
+# Pin the output format scan_diff parses, whatever the user's diff config says.
+_GIT_DIFF_ARGS = (
+    "--no-color",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-relative",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     hits: list[dict] = []
 
-    if args.range:
+    if args.range is not None:
         result = subprocess.run(
-            ["git", "diff", "--end-of-options", args.range],
+            ["git", "diff", *_GIT_DIFF_ARGS, "--end-of-options", args.range],
             capture_output=True,
             text=True,
             check=False,

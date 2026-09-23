@@ -15,25 +15,31 @@ hand-transcription and denied shell idioms with single allowlisted script calls.
 
 ### Added
 
-- `scripts/post_pr_review.py`: builds and posts a PR review from `report.json`. It selects
-  MEDIUM+ or blocking findings, skips ones already raised in open threads, and maps locations
-  onto the diff's RIGHT side. Off-diff and deferred findings go into the body. It chooses
-  APPROVE/COMMENT (`--draft` for pending) and falls back on HTTP 422 and a rejected APPROVE.
+- `scripts/post_pr_review.py`: builds and posts a PR review from `report.json` (anything else
+  exits 2). It selects MEDIUM+ or blocking findings, skips ones an open thread on an
+  overlapping current line already cites by final ID or exact title, and maps locations onto
+  the diff's RIGHT side. Off-diff and deferred findings go into the body. It APPROVEs only
+  when no blocking or MEDIUM+ finding exists, posted or not (`--draft` for pending), keeps
+  within GitHub's size limits (overflow named, never dropped silently), neutralizes @mentions,
+  and falls back on HTTP 422 and a rejected APPROVE. Only reads retry via `ghsudo`.
   The caller supplies only a one-line body and an optional `{final_id: text}` map. Documented
   in `git-and-github/references/pr-review.md`; used by `review-pr` Part B.
 - `consolidate_reports.py gate <findings.json>`: prints the max severity band, `BLOCKING`, and
-  the HIGH+/blocker-gate candidate IDs. Producers end their reply with it, so the coordinator's
+  the HIGH+/blocker-gate candidate IDs (bands derived from the floats, as in assemble), and
+  flags with exit 1 whatever prepare or finalize would reject. Producers end their reply with it, so the coordinator's
   early-stop check never reads findings files.
 - `consolidate_reports.py finalize`: runs merge decisions → assemble → schema validation →
-  render in one call.
+  render in one call, all-or-nothing (a failure leaves no report, render or merged file).
 - `consolidate_reports.py prepare --digest`: writes and prints a compact `digest.md`
   (per-finding key, band, floats, location, clipped description, duplicate groups, INTENTIONAL
   hits) in place of reading `intermediate.json`.
 - `merge_findings_helper.py` `finding_updates`: a per-finding override table
-  (`merge_class`, `intent_basis`, floats) keyed `<agent>:<original_id>`. The helper refuses
+  (`merge_class`, `intent_basis`, floats) keyed `<agent>:<original_id>`; `blocking` requires
+  `intent_basis`, leaving `blocking` clears a stale one. The helper refuses
   output while any finding lacks `merge_class`, and lists the ones missing it.
 - `metadata.plugin_version` (optional schema field), auto-filled by `prepare`.
-- `lint_ephemeral_ids.py --range <rev-range>`: runs `git diff` itself, so no pipe is needed.
+- `lint_ephemeral_ids.py --range <rev-range>`: runs `git diff` itself (pinned output format,
+  whole range only), so no pipe is needed.
 - Producer contract § Bash hygiene. `grumpy-review` conditional-agent table gains a Model column.
 
 ### Changed
@@ -44,6 +50,9 @@ hand-transcription and denied shell idioms with single allowlisted script calls.
   shell variables.
 - Producers read `producer-contract.md` in place by absolute plugin path; it is no longer
   copied into the scratch dir.
+- `review-pr` posts its summary via `gh pr comment --body-file` and lints with `--range`;
+  `git-and-github/references/pr-review.md` uses `<plugin-root>` paths (reference files get no
+  `${CLAUDE_SKILL_DIR}` substitution) and a Write-tool draft payload.
 
 ## [8.0.0] - 2026-09-22
 

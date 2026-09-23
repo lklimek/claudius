@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -267,9 +268,7 @@ def test_pattern_built_from_prefixes() -> None:
         assert stem in lint.PATTERN.pattern, f"Stem {stem!r} missing from regex"
 
 
-def test_range_mode_runs_git_diff_itself(tmp_path: Path) -> None:
-    """--range avoids a `git diff | python3` pipe (denied by CI allowlists)."""
-
+def _git_repo(tmp_path: Path) -> None:
     def git(*args: str) -> None:
         subprocess.run(["git", "-C", str(tmp_path), *args], check=True)
 
@@ -283,13 +282,22 @@ def test_range_mode_runs_git_diff_itself(tmp_path: Path) -> None:
     (tmp_path / "a.md").write_text("clean\nsee SEC-014\n")
     git("commit", "-q", "-am", "head")
 
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), "--range", "base...HEAD"],
+
+def _lint_range(tmp_path: Path, *extra: str, env=None):
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "base...HEAD", *extra],
         capture_output=True,
         text=True,
         cwd=tmp_path,
         check=False,
+        env=env,
     )
+
+
+def test_range_mode_runs_git_diff_itself(tmp_path: Path) -> None:
+    """--range avoids a `git diff | python3` pipe (denied by CI allowlists)."""
+    _git_repo(tmp_path)
+    result = _lint_range(tmp_path)
     assert result.returncode == 0
     hits = json.loads(result.stdout)
     assert [(h["file"], h["line"], h["matched_id"]) for h in hits] == [
@@ -306,3 +314,43 @@ def test_range_mode_git_failure_exits_2(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 2
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"color.diff": "always"},
+        {"diff.noprefix": "true"},
+        {"diff.mnemonicPrefix": "true"},
+        {"diff.external": "false"},
+    ],
+)
+def test_range_mode_ignores_user_diff_config(tmp_path: Path, config) -> None:
+    _git_repo(tmp_path)
+    env = dict(os.environ, GIT_CONFIG_COUNT=str(len(config)))
+    for index, (key, value) in enumerate(config.items()):
+        env[f"GIT_CONFIG_KEY_{index}"] = key
+        env[f"GIT_CONFIG_VALUE_{index}"] = value
+    result = _lint_range(tmp_path, env=env)
+    assert result.returncode == 0, result.stderr
+    assert [(h["file"], h["line"]) for h in json.loads(result.stdout)] == [("a.md", 2)]
+
+
+def test_range_mode_rejects_extra_paths(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    result = _lint_range(tmp_path, "a.md")
+    assert result.returncode == 2
+    assert "--range" in result.stderr
+
+
+def test_range_option_looking_value_is_not_a_git_option(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    target = tmp_path / "pwned"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), f"--range=--output={target}"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert result.returncode == 2 and not target.exists()

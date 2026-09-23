@@ -32,6 +32,8 @@ log = logging.getLogger(__name__)
 FindingKey = tuple[str, str]
 _INTERMEDIATE_ONLY_FIELDS = {"agent", "category", "section_title", "positives"}
 _FLOAT_FIELDS = ("likelihood", "impact", "relevance")
+# Used when merge decisions omit executive_summary (the schema requires the key).
+DEFAULT_EXECUTIVE_SUMMARY: dict[str, str] = {"overall_assessment": ""}
 # The per-finding override table carries judgment only — classification and
 # re-rated floats. Text edits belong to a cluster merge's ``updates``.
 _FINDING_UPDATE_FIELDS = frozenset({"merge_class", "intent_basis", *_FLOAT_FIELDS})
@@ -291,9 +293,31 @@ def resolve_findings(
                 f"finding_updates: {label!r} is merged away by a cluster merge; "
                 "update the cluster base instead"
             )
-        by_key[key].update(update)
+        _apply_finding_update(by_key[key], label, update)
 
     return apply_merge_decisions(copies, merges)
+
+
+def _apply_finding_update(
+    finding: dict[str, Any], label: str, update: dict[str, Any]
+) -> None:
+    """Apply one update, keeping ``intent_basis`` consistent with ``merge_class``.
+
+    ``blocking`` must carry an intent_basis (gate + evidence); moving off
+    ``blocking`` without a new intent_basis drops the now-stale one.
+    """
+    finding.update(update)
+    if "merge_class" not in update and "intent_basis" not in update:
+        return
+    if finding.get("merge_class") == "blocking":
+        basis = finding.get("intent_basis")
+        if not isinstance(basis, str) or not basis.strip():
+            raise ValueError(
+                f"finding_updates[{label!r}]: blocking requires a non-empty "
+                "intent_basis (gate ID plus evidence)"
+            )
+    elif "intent_basis" not in update or finding["intent_basis"] is None:
+        finding.pop("intent_basis", None)
 
 
 def find_missing_merge_class(findings: list[dict[str, Any]]) -> list[str]:
@@ -420,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
         document = build_merged_document(
             intermediate,
             findings,
-            decisions.get("executive_summary", {"overall_assessment": ""}),
+            decisions.get("executive_summary", dict(DEFAULT_EXECUTIVE_SUMMARY)),
             top_findings_override=decisions.get("top_findings_override"),
             remediation_override=decisions.get("remediation_override"),
         )

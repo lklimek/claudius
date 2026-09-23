@@ -1,6 +1,6 @@
 # PR Review Operations
 
-All operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`.
+All operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`. `${CLAUDE_SKILL_DIR}` is not substituted in reference files: the caller writes the absolute `<plugin-root>` (the loading skill's `${CLAUDE_SKILL_DIR}/../..`) into each command.
 
 ## Get PR Context
 
@@ -24,13 +24,13 @@ gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, 
 Fetch before posting to avoid duplicates: drop any finding already covered by an existing review (match by file:line and substance, not exact wording).
 
 ```bash
-${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-reviews.sh <owner/repo> <pr>
+<plugin-root>/scripts/gh-fetch-reviews.sh <owner/repo> <pr>
 # -> [{id, state, submitted_at, body, user}]
 
-${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-review-comments.sh <owner/repo> <pr>
+<plugin-root>/scripts/gh-fetch-review-comments.sh <owner/repo> <pr>
 # -> {id, path, line, original_line, body, user, in_reply_to_id, html_url}
 
-${CLAUDE_SKILL_DIR}/../../scripts/gh-list-review-threads.sh <owner/repo> <pr>
+<plugin-root>/scripts/gh-list-review-threads.sh <owner/repo> <pr>
 # -> {id, isResolved, comments: [{databaseId, path, body}]}  (thread resolution status)
 ```
 
@@ -40,7 +40,7 @@ GitHub rejects inline comments on lines outside the diff (HTTP 422). Before post
 
 1. Get the PR base SHA:
    ```bash
-   ${CLAUDE_SKILL_DIR}/../../scripts/gh-pr-base-sha.sh <owner/repo> <number>
+   <plugin-root>/scripts/gh-pr-base-sha.sh <owner/repo> <number>
    ```
 
 2. Check each file's diff hunks:
@@ -58,21 +58,23 @@ selection, diff-bounds mapping, open-thread dedup, off-diff findings, the event,
 rejected-APPROVE fallbacks (details: script docstring):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/post_pr_review.py <owner/repo> <pr> <report.json> --body "<one-line verdict>" [--comments <comments.json>] [--min-severity MEDIUM] [--draft] [--dry-run]
+python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> --body "<one-line verdict>" [--comments <comments.json>] [--min-severity MEDIUM] [--draft] [--dry-run]
 ```
 
 - `--comments`: optional JSON `{"<final_id>": "comment text" | null}` written with the Write
   tool; omitted IDs get text built from the finding, `null` skips one.
-- Without `--draft` it publishes: APPROVE when nothing is posted and no unresolved thread
-  remains, else COMMENT. `--dry-run` prints the payload without posting.
-- Prints `{url, event, inline, in_body, covered_by_open_threads, skipped}`.
+- Without `--draft` it publishes COMMENT, or APPROVE only when nothing is posted, no unresolved
+  thread remains and no non-disputed finding is blocking or MEDIUM+. `--dry-run` prints the
+  payload without posting. Exit 2: the input is not an assembled `report.json`.
+- Prints `{url, event, inline, in_body, omitted, covered_by_open_threads, skipped}`; `omitted`
+  = findings that overflowed GitHub's size limit (named in the body, not posted).
 
 ## Post Draft Review (hand-built payload)
 
-`gh-post-review.sh` strips `event` automatically — reviews always post as drafts:
-```bash
-SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/XXXXXX)
-cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
+`gh-post-review.sh` strips `event` automatically — reviews always post as drafts. Write the
+payload to `<SCRATCH_DIR>/pr-review.json` (any writable scratch dir) with the Write tool:
+
+```json
 {
   "commit_id": "<SHA>",
   "body": "See summary comment for full report.\n\n<sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>",
@@ -80,8 +82,12 @@ cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'
     {"path": "src/file.rs", "line": 42, "side": "RIGHT", "body": "Finding here."}
   ]
 }
-ENDJSON
-${CLAUDE_SKILL_DIR}/../../scripts/gh-post-review.sh <owner/repo> <number> "$SESSION_DIR/pr-review.json"
+```
+
+then post it:
+
+```bash
+<plugin-root>/scripts/gh-post-review.sh <owner/repo> <number> <SCRATCH_DIR>/pr-review.json
 ```
 
 - Use `side: "RIGHT"` for new code

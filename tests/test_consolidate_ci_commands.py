@@ -124,6 +124,67 @@ class TestGate:
     def test_missing_file_is_a_file_error(self, tmp_path):
         assert cr.main(["gate", str(tmp_path / "nope.json")]) == 2
 
+    def _gate(self, tmp_path: Path, findings: list[Any]) -> int:
+        path = _write(
+            tmp_path / "qa.json",
+            [{"title": "QA", "category": "code_quality", "findings": findings}],
+        )
+        return cr.main(["gate", str(path)])
+
+    def test_band_comes_from_floats_not_producer_severity(self, tmp_path, capsys):
+        assert self._gate(tmp_path, [_f("QA-001", 1.0, 0.9, severity=2)]) == 0
+        assert capsys.readouterr().out.startswith("MAX: CRITICAL")
+
+    def test_string_severity_label_does_not_drop_a_rated_finding(
+        self, tmp_path, capsys
+    ):
+        assert self._gate(tmp_path, [_f("QA-001", 1.0, 1.0, severity="CRITICAL")]) == 0
+        assert capsys.readouterr().out.startswith("MAX: CRITICAL")
+
+    @pytest.mark.parametrize(
+        ("findings", "needle"),
+        [
+            ([{k: v for k, v in _f("QA-001", 0.5, 0.5).items() if k != "id"}], "id"),
+            ([_f("", 0.5, 0.5)], "id"),
+            ([_f("QA-001", 0.5, 0.5), _f("QA-001", 0.2, 0.2)], "duplicate"),
+            (
+                [
+                    {
+                        k: v
+                        for k, v in _f("QA-001", 0.5, 0.5).items()
+                        if k not in ("likelihood", "impact", "relevance")
+                    }
+                ],
+                "likelihood",
+            ),
+            ([_f("QA-001", 0.5, 0.5, relevance=None)], "relevance"),
+        ],
+    )
+    def test_flags_what_finalize_would_reject(self, tmp_path, capsys, findings, needle):
+        assert self._gate(tmp_path, findings) == 1
+        out = capsys.readouterr().out
+        assert "INVALID" in out and needle in out
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ["oops"],
+            [{"title": "S", "findings": None}],
+            [{"title": "S", "findings": ["oops"]}],
+            [{"title": "S", "findings": "nope"}],
+        ],
+    )
+    def test_malformed_shapes_exit_2_cleanly(self, tmp_path, capsys, data):
+        path = _write(tmp_path / "bad.json", data)
+        assert cr.main(["gate", str(path)]) == 2
+        assert "ERROR" in capsys.readouterr().out
+
+    def test_malformed_shape_rejected_by_prepare_too(self, tmp_path):
+        path = _write(tmp_path / "bad.json", [{"title": "S", "findings": None}])
+        argv = ["prepare", f"qa:{path}", "--output", str(tmp_path / "i.json")]
+        argv += ["--repo-root", str(tmp_path)]
+        assert cr.main(argv) == 2
+
 
 # ---------------------------------------------------------------------------
 # prepare: plugin_version + --digest
@@ -308,6 +369,62 @@ class TestFinalize:
         argv += ["--decisions", str(decisions_path), "--output", str(out)]
         assert cr.main(argv) == 0
         assert json.loads(out.read_text())["summary_statistics"]["total_findings"] == 0
+
+    def test_render_failure_leaves_nothing_behind(self, tmp_path, monkeypatch):
+        failing = tmp_path / "render.py"
+        failing.write_text(
+            "import sys, pathlib\n"
+            "pathlib.Path(sys.argv[1]).with_suffix('.pdf').write_text('partial')\n"
+            "sys.exit(1)\n"
+        )
+        monkeypatch.setattr(cr, "RENDERER", failing)
+        assert self._run(tmp_path, self._decisions(), "pdf") == 1
+        out_dir = tmp_path / "out"
+        assert not out_dir.exists() or list(out_dir.iterdir()) == []
+        assert not (tmp_path / "merged-findings.json").exists()
+
+    def test_schema_failure_leaves_no_merged_findings(self, tmp_path):
+        decisions = self._decisions(executive_summary={"overall_assessment": 5})
+        assert self._run(tmp_path, decisions) == 1
+        assert not (tmp_path / "merged-findings.json").exists()
+
+    def test_missing_executive_summary_defaults_like_merge_helper(self, tmp_path):
+        decisions = self._decisions()
+        del decisions["executive_summary"]
+        assert self._run(tmp_path, decisions) == 0
+        report = json.loads((tmp_path / "out" / "report.json").read_text())
+        assert report["executive_summary"] == {"overall_assessment": ""}
+
+    def test_empty_decisions_on_empty_review(self, tmp_path):
+        intermediate = _prepare(tmp_path, digest=False, reports={"qa": []})
+        decisions_path = _write(tmp_path / "merge-decisions.json", {})
+        argv = ["finalize", "--input", str(intermediate)]
+        argv += ["--decisions", str(decisions_path)]
+        argv += ["--output", str(tmp_path / "report.json")]
+        assert cr.main(argv) == 0
+
+    def test_missing_input_exits_2(self, tmp_path):
+        decisions_path = _write(tmp_path / "merge-decisions.json", {})
+        argv = ["finalize", "--input", str(tmp_path / "nope.json")]
+        argv += ["--decisions", str(decisions_path)]
+        argv += ["--output", str(tmp_path / "report.json")]
+        assert cr.main(argv) == 2
+
+    def test_unparseable_decisions_exit_2(self, tmp_path):
+        intermediate = _prepare(tmp_path, digest=False, reports={"qa": []})
+        bad = tmp_path / "merge-decisions.json"
+        bad.write_text("{not json")
+        argv = ["finalize", "--input", str(intermediate), "--decisions", str(bad)]
+        argv += ["--output", str(tmp_path / "report.json")]
+        assert cr.main(argv) == 2
+
+    def test_invalid_decision_exits_1(self, tmp_path, caplog):
+        decisions = self._decisions(
+            finding_updates={"security:SEC-001": {"merge_class": "blocking"}}
+        )
+        assert self._run(tmp_path, decisions) == 1
+        assert "intent_basis" in caplog.text
+        assert not (tmp_path / "out" / "report.json").exists()
 
 
 @pytest.mark.parametrize("command", ["gate", "finalize"])

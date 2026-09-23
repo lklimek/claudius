@@ -276,6 +276,46 @@ def test_invalid_finding_updates_are_rejected(updates, message):
         )
 
 
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"merge_class": "blocking"},
+        {"merge_class": "blocking", "intent_basis": "  "},
+        {"merge_class": "blocking", "intent_basis": None},
+    ],
+)
+def test_blocking_update_requires_intent_basis(update):
+    with pytest.raises(ValueError, match="intent_basis"):
+        helper.resolve_findings(
+            [_finding("security", "SEC-001")],
+            {"finding_updates": {"security:SEC-001": update}},
+        )
+
+
+def test_blocking_update_keeps_producer_intent_basis():
+    resolved = helper.resolve_findings(
+        [_finding("security", "SEC-001", intent_basis="G-DATA: wipes rows")],
+        {"finding_updates": {"security:SEC-001": {"merge_class": "blocking"}}},
+    )
+    assert resolved[0]["intent_basis"] == "G-DATA: wipes rows"
+
+
+def test_unblocking_update_clears_stale_intent_basis():
+    resolved = helper.resolve_findings(
+        [
+            _finding(
+                "security",
+                "SEC-001",
+                merge_class="blocking",
+                intent_basis="G-DATA: wipes rows",
+            )
+        ],
+        {"finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}}},
+    )
+    assert resolved[0]["merge_class"] == "non_blocking"
+    assert "intent_basis" not in resolved[0]
+
+
 def test_original_id_containing_colon_is_addressable():
     resolved = helper.resolve_findings(
         [_finding("security", "SEC:001")],

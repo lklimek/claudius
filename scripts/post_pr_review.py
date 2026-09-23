@@ -8,24 +8,36 @@ side of the PR diff, skips findings already raised in an open review thread,
 routes off-diff findings into the review body (never dropping them), picks
 APPROVE vs COMMENT, and posts with fallbacks.
 
+Input must be an assembled report (``schema_version``, ``summary_statistics``
+and ``findings`` sections whose findings carry final IDs); anything else exits 2.
+
 Selection: severity >= ``--min-severity`` (default MEDIUM) or
 ``merge_class == "blocking"``; ``disputed`` findings are never posted and
 ``out_of_scope_follow_up`` ones go to the body, not inline. A ``null`` map
-entry skips that finding.
+entry skips that finding. A finding counts as covered (listed in one body
+line, not re-posted) only when an unresolved thread sits on an overlapping
+current line of the same file and its first comment cites the finding's final
+ID or exact title.
 
-Event: APPROVE when nothing is posted and no unresolved thread remains,
-otherwise COMMENT; ``--draft`` omits the event (pending review).
+Event: APPROVE only when nothing is posted, no unresolved thread remains and no
+non-disputed finding is blocking or MEDIUM+; otherwise COMMENT. ``--draft``
+omits the event (pending review).
+
+Limits: every comment and the body stay within GitHub's 65536 characters;
+body entries that do not fit are named in an "N more finding(s)" line and
+reported as ``omitted``. Posted text has @mentions (outside code) and HTML
+comment openers neutralized.
 
 Fallbacks: HTTP 422 with inline comments -> move them into the body and retry;
-APPROVE rejected (403/422) -> retry as COMMENT.
+APPROVE rejected (403/422) -> retry as COMMENT. Only reads retry via ``ghsudo``.
 
 Usage:
     python3 scripts/post_pr_review.py <owner/repo> <pr> <report.json> \\
         [--comments comments.json] [--body "One-line verdict."] \\
         [--min-severity MEDIUM] [--draft] [--commit SHA] [--dry-run]
 
-Prints one JSON object: the review URL, event, and inline/body/skipped IDs
-(``--dry-run``: the payload instead of posting).
+Prints one JSON object: the review URL, event, and inline/in_body/omitted/
+covered/skipped IDs (``--dry-run``: plus the payload; nothing is posted).
 
 Exit codes: 0 posted (or dry run), 1 GitHub API failure, 2 bad input.
 """
@@ -51,14 +63,20 @@ log = logging.getLogger(__name__)
 SEVERITY_BY_LABEL = {label: level for level, label in SEV_LABELS.items()}
 _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
 _LOCATION_RE = re.compile(r":(\d+)(?:-(\d+))?$")
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_CODE_SPAN_RE = re.compile(r"(`+)(?:(?!\1).)+?\1", re.DOTALL)
+_PARAGRAPH_BREAK_RE = re.compile(r"(\n[ \t]*\n)")
+_MENTION_RE = re.compile(r"(?<!\w)@(?=[A-Za-z0-9])")
 _HTTP_STATUS_RE = re.compile(r"HTTP (\d{3})")
 _REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 _FILES_PER_PAGE = 100
 _MAX_FILE_PAGES = 30  # the API lists at most 3000 files per PR
 _MAX_THREAD_PAGES = 50
-# GitHub caps a review body at 65536 characters; keep headroom for the note.
-_BODY_LIMIT = 60000
+GITHUB_TEXT_LIMIT = 65536  # per review body and per review comment
 _BODY_ITEM_LIMIT = 2000
+_LEAD_LIMIT = 4000
+_OMITTED_LINE_LIMIT = 4000
+_DEFAULT_MIN_SEVERITY = SEVERITY_BY_LABEL["MEDIUM"]
 _MAX_POST_ATTEMPTS = 3
 
 _THREADS_QUERY = """
@@ -68,7 +86,7 @@ query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
       reviewThreads(first: 100, after: $cursor) {
         pageInfo { hasNextPage endCursor }
         nodes {
-          isResolved path line startLine originalLine originalStartLine
+          isResolved path line startLine
           comments(first: 1) { nodes { body } }
         }
       }
@@ -92,7 +110,11 @@ class GhApiError(Exception):
 
 
 class GhCli:
-    """Minimal ``gh api`` client; retries once via ``ghsudo`` on 403/404."""
+    """Minimal ``gh api`` client; reads retry once via ``ghsudo`` on 403/404.
+
+    Writes never escalate: a review (APPROVE above all) must come from the
+    caller's own identity, not a maintainer's.
+    """
 
     def __init__(
         self,
@@ -103,13 +125,16 @@ class GhCli:
         self._which = which
 
     def _invoke(self, prefix: list[str], args: list[str], stdin: Optional[str]):
-        return self._run(
-            [*prefix, "api", *args],
-            input=stdin,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            return self._run(
+                [*prefix, "api", *args],
+                input=stdin,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise GhApiError(None, f"{prefix[0]} CLI not found on PATH") from error
 
     def request(self, method: str, path: str, payload: Any = None) -> Any:
         """Call ``gh api``; return parsed JSON or raise GhApiError."""
@@ -119,7 +144,7 @@ class GhCli:
             args += ["--input", "-"]
             stdin = json.dumps(payload)
         result = self._invoke(["gh"], args, stdin)
-        if result.returncode != 0:
+        if result.returncode != 0 and _is_read(method, path, payload):
             status = _http_status(result.stderr)
             if status in (403, 404) and self._which("ghsudo"):
                 result = self._invoke(["ghsudo", "gh"], args, stdin)
@@ -141,6 +166,18 @@ def graphql(gh: Any, query: str, variables: dict[str, Any]) -> Any:
         errors = data.get("errors") if isinstance(data, dict) else data
         raise GhApiError(None, f"GraphQL error: {json.dumps(errors)}")
     return data
+
+
+def _is_read(method: str, path: str, payload: Any) -> bool:
+    """True for a GET or a GraphQL ``query`` (never a mutation)."""
+    if method == "GET":
+        return True
+    query = payload.get("query") if isinstance(payload, dict) else None
+    return (
+        path == "graphql"
+        and isinstance(query, str)
+        and query.lstrip().startswith(("query", "{"))
+    )
 
 
 def _http_status(stderr: str) -> Optional[int]:
@@ -239,8 +276,10 @@ def fetch_open_threads(gh: Any, repo: str, pr: int) -> list[OpenThread]:
         for node in conn["nodes"]:
             if node.get("isResolved"):
                 continue
-            end = node.get("line") or node.get("originalLine")
-            start = node.get("startLine") or node.get("originalStartLine") or end
+            # Outdated threads have no current line; originalLine numbers an
+            # older commit, so they never anchor coverage.
+            end = node.get("line")
+            start = node.get("startLine") or end
             comments = node.get("comments", {}).get("nodes") or [{}]
             threads.append(
                 OpenThread(
@@ -256,22 +295,33 @@ def fetch_open_threads(gh: Any, repo: str, pr: int) -> list[OpenThread]:
     return threads
 
 
-def is_covered(finding: dict[str, Any], threads: list[OpenThread]) -> bool:
-    """True when an open thread on the same file already raises this finding.
+def _cites(body: str, phrase: str) -> bool:
+    """True when ``phrase`` occurs in ``body`` as a whole, case-insensitive phrase."""
+    words = phrase.split()
+    if not words:
+        return False
+    pattern = r"(?<!\w)" + r"\s+".join(map(re.escape, words)) + r"(?!\w)"
+    return re.search(pattern, body, re.IGNORECASE) is not None
 
-    Covered means an overlapping line range, or the finding title quoted in
-    the thread's first comment (wording-independent of prior finding IDs).
+
+def is_covered(finding: dict[str, Any], threads: list[OpenThread]) -> bool:
+    """True when an open thread already raises this very finding.
+
+    Requires both an overlapping current line on the same file and a first
+    comment citing the finding's final ID or its exact title.
     """
     path, start, end = _parse_location(finding.get("location", ""))
-    title = " ".join(str(finding.get("title", "")).split()).lower()
+    if start is None or end is None:
+        return False
     for thread in threads:
-        if thread.path != path:
+        if thread.path != path or thread.end is None:
             continue
-        if start is not None and thread.end is not None:
-            thread_start = thread.start or thread.end
-            if start <= thread.end and thread_start <= end:
-                return True
-        if title and title in " ".join(thread.body.split()).lower():
+        thread_start = thread.start or thread.end
+        if not (start <= thread.end and thread_start <= end):
+            continue
+        if _cites(thread.body, str(finding.get("id", ""))) or _cites(
+            thread.body, str(finding.get("title", ""))
+        ):
             return True
     return False
 
@@ -279,6 +329,48 @@ def is_covered(finding: dict[str, Any], threads: list[OpenThread]) -> bool:
 # ---------------------------------------------------------------------------
 # Review construction
 # ---------------------------------------------------------------------------
+class ReportError(ValueError):
+    """The input is not an assembled report.json."""
+
+
+def validate_report(report: Any) -> list[dict[str, Any]]:
+    """Return every finding of an assembled report, or raise ReportError.
+
+    Guards against posting ``{}``, a typo'd key, intermediate.json or
+    merged-findings.json: each would otherwise yield zero findings -> APPROVE.
+    """
+    if not isinstance(report, dict):
+        raise ReportError("expected a report object")
+    missing = [
+        key
+        for key, kind in (
+            ("schema_version", str),
+            ("summary_statistics", dict),
+            ("findings", list),
+        )
+        if not isinstance(report.get(key), kind)
+    ]
+    if missing:
+        raise ReportError(
+            f"not an assembled report.json (missing/invalid: {', '.join(missing)})"
+            " — pass finalize's report.json"
+        )
+    findings: list[dict[str, Any]] = []
+    for index, section in enumerate(report["findings"]):
+        if not isinstance(section, dict) or not isinstance(
+            section.get("findings"), list
+        ):
+            raise ReportError(f"findings[{index}]: expected a section object")
+        for finding in section["findings"]:
+            fid = finding.get("id") if isinstance(finding, dict) else None
+            if not isinstance(fid, str) or not fid.strip():
+                raise ReportError(
+                    f"findings[{index}]: every finding needs a final string id"
+                )
+            findings.append(finding)
+    return findings
+
+
 @dataclass
 class ReviewOptions:
     """Caller-supplied review parameters."""
@@ -287,7 +379,7 @@ class ReviewOptions:
     pr: int
     body: str = ""
     comments: dict[str, Optional[str]] = field(default_factory=dict)
-    min_severity: int = SEVERITY_BY_LABEL["MEDIUM"]
+    min_severity: int = _DEFAULT_MIN_SEVERITY
     draft: bool = False
     commit: Optional[str] = None
 
@@ -310,6 +402,7 @@ class PostResult:
     event: Optional[str]
     inline: list[str]
     in_body: list[str]
+    omitted: list[str]
     covered: list[str]
     skipped: list[str]
     payload: dict[str, Any]
@@ -321,20 +414,27 @@ class PostResult:
             "event": self.event,
             "inline": self.inline,
             "in_body": self.in_body,
+            "omitted": self.omitted,
             "covered_by_open_threads": self.covered,
             "skipped": self.skipped,
         }
 
 
 def _iter_report_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
-    findings = [
-        f
-        for section in report.get("findings", [])
-        if isinstance(section, dict)
-        for f in section.get("findings", [])
-        if isinstance(f, dict)
-    ]
-    return sorted(findings, key=lambda f: -effective_severity(f))
+    return sorted(validate_report(report), key=lambda f: -effective_severity(f))
+
+
+def _holds_approval(finding: dict[str, Any]) -> bool:
+    """A non-disputed finding that is blocking or at/above the default threshold.
+
+    Such a finding forbids APPROVE even when unposted (null map entry, a raised
+    ``--min-severity``): approval must not outrank what the report says.
+    """
+    merge_class = finding.get("merge_class")
+    return merge_class != "disputed" and (
+        merge_class == "blocking"
+        or effective_severity(finding) >= _DEFAULT_MIN_SEVERITY
+    )
 
 
 def _heading(finding: dict[str, Any]) -> str:
@@ -350,36 +450,141 @@ def _default_text(finding: dict[str, Any]) -> str:
     return "\n\n".join(p for p in parts if p.strip())
 
 
+def _next_fence(fence: Optional[str], line: str) -> Optional[str]:
+    """Fence state after ``line``: the open fence's marker, or None outside one."""
+    match = _FENCE_RE.match(line)
+    if not match:
+        return fence
+    marker = match.group(1)
+    if fence is None:
+        return marker
+    closes = marker[0] == fence[0] and len(marker) >= len(fence)
+    return None if closes else fence
+
+
+def _open_fence(text: str) -> Optional[str]:
+    """Return the marker of a code fence left open at the end of ``text``."""
+    fence: Optional[str] = None
+    for line in text.splitlines():
+        fence = _next_fence(fence, line)
+    return fence
+
+
 def _clip(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+    """Truncate to ``limit`` characters with a visible marker, closing any open fence."""
+    if len(text) <= limit:
+        return text
+    marker = "\n\n…(truncated)"
+    fences = [m.group(1) for m in map(_FENCE_RE.match, text.splitlines()) if m]
+    reserve = len(marker) + (1 + max(map(len, fences)) if fences else 0)
+    cut = text[: max(limit - reserve, 0)]
+    fence = _open_fence(cut)
+    return cut + (f"\n{fence}" if fence else "") + marker
+
+
+def _neutralize(text: str) -> str:
+    text = _MENTION_RE.sub("@\u200b", text)
+    return text.replace("<!--", "&lt;!--")
+
+
+def _neutralize_prose(text: str) -> str:
+    """Neutralize prose, leaving code spans (which never cross paragraphs) intact."""
+    out: list[str] = []
+    for paragraph in _PARAGRAPH_BREAK_RE.split(text):
+        last = 0
+        for match in _CODE_SPAN_RE.finditer(paragraph):
+            out += [_neutralize(paragraph[last : match.start()]), match.group(0)]
+            last = match.end()
+        out.append(_neutralize(paragraph[last:]))
+    return "".join(out)
+
+
+def sanitize(text: str) -> str:
+    """Stop posted text from pinging users or hiding content in an HTML comment.
+
+    @mentions get a zero-width space and ``<!--`` is escaped — outside code
+    spans and fenced blocks, where they are literal anyway. A fence left open
+    is closed, so it cannot flip the fence state of text concatenated after it.
+    """
+    out: list[str] = []
+    prose: list[str] = []
+    fence: Optional[str] = None
+    for line in text.splitlines(keepends=True):
+        opened = fence is None
+        fence = _next_fence(fence, line)
+        if opened and fence is None:
+            prose.append(line)
+            continue
+        if opened:
+            out.append(_neutralize_prose("".join(prose)))
+            prose = []
+        out.append(line)
+    out.append(_neutralize_prose("".join(prose)))
+    if fence is not None:
+        out.append(f"\n{fence}")
+    return "".join(out)
+
+
+@dataclass
+class _Body:
+    text: str
+    posted: list[str]
+    omitted: list[str]
 
 
 def _render_body(
     body: str, inline: list[_Item], off_diff: list[_Item], covered: list[str]
-) -> str:
-    lead = body.strip() or "Automated review."
-    total = len(inline) + len(off_diff)
-    lines = [
-        lead,
-        "",
-        f"{total} finding(s) posted: {len(inline)} inline, "
-        f"{len(off_diff)} in this body.",
-    ]
+) -> _Body:
+    """Render the review body, packing off-diff items up to GitHub's limit."""
+    lead = _clip(sanitize(body.strip()), _LEAD_LIMIT) or "Automated review."
+    head = [lead, ""]
     if covered:
-        lines.append(f"Already raised in open threads: {', '.join(covered)}.")
-    if off_diff:
-        lines += ["", "### Findings outside the diff or deferred"]
-        for item in off_diff:
-            lines += [
+        head.append(
+            _clip(
+                f"Already raised in open threads: {', '.join(covered)}.",
+                _BODY_ITEM_LIMIT,
+            )
+        )
+    blocks = [
+        "\n".join(
+            [
                 "",
-                f"- {_heading(item.finding)} — `{item.finding.get('location', '')}`",
+                f"- {_heading(item.finding)} — "
+                f"`{str(item.finding.get('location', '')).replace('`', '')}`",
                 "",
                 _clip(item.text, _BODY_ITEM_LIMIT),
             ]
-    text = "\n".join(lines)
-    if len(text) > _BODY_LIMIT:
-        text = _clip(text, _BODY_LIMIT) + "\n\n_(truncated — see the full report)_"
-    return text
+        )
+        for item in off_diff
+    ]
+    budget = GITHUB_TEXT_LIMIT - _OMITTED_LINE_LIMIT - 500  # 500: count line etc.
+    budget -= len("\n".join(head))
+    packed: list[int] = []
+    for index, block in enumerate(blocks):
+        if len(block) + 1 > budget:
+            break
+        budget -= len(block) + 1
+        packed.append(index)
+    posted = [off_diff[i].fid for i in packed]
+    omitted = [item.fid for item in off_diff[len(packed) :]]
+    lines = [
+        *head,
+        f"{len(inline) + len(posted)} finding(s) posted: {len(inline)} inline, "
+        f"{len(posted)} in this body.",
+    ]
+    if posted:
+        lines += ["", "### Findings outside the diff or deferred"]
+        lines += [blocks[i] for i in packed]
+    if omitted:
+        lines += [
+            "",
+            _clip(
+                f"{len(omitted)} more finding(s) did not fit GitHub's size limit "
+                f"— see the full report: {', '.join(omitted)}",
+                _OMITTED_LINE_LIMIT,
+            ),
+        ]
+    return _Body("\n".join(lines), posted, omitted)
 
 
 def build_review(
@@ -410,7 +615,7 @@ def build_review(
         if is_covered(finding, threads):
             covered.append(fid)
             continue
-        text = options.comments.get(fid) or _default_text(finding)
+        text = sanitize(options.comments.get(fid) or _default_text(finding))
         # Deferred follow-ups are listed, not anchored: they are not asks on this diff.
         anchor = (
             None
@@ -432,25 +637,32 @@ def _payload(
     inline: list[_Item],
     off_diff: list[_Item],
     covered: list[str],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], _Body]:
+    body = _render_body(options.body, inline, off_diff, covered)
     payload: dict[str, Any] = {
         "commit_id": commit,
-        "body": _render_body(options.body, inline, off_diff, covered),
+        "body": body.text,
         "comments": [
-            {**item.anchor, "body": f"{_heading(item.finding)}\n\n{item.text}"}
+            {
+                **item.anchor,
+                "body": _clip(
+                    f"{_heading(item.finding)}\n\n{item.text}", GITHUB_TEXT_LIMIT
+                ),
+            }
             for item in inline
             if item.anchor
         ],
     }
     if event is not None:
         payload["event"] = event
-    return payload
+    return payload, body
 
 
 def post_review(
     gh: Any, report: dict[str, Any], options: ReviewOptions, *, dry_run: bool = False
 ) -> PostResult:
     """Build the review from ``report`` and post it (unless ``dry_run``)."""
+    held = any(_holds_approval(f) for f in validate_report(report))
     commit = (
         options.commit
         or gh.request("GET", f"repos/{options.repo}/pulls/{options.pr}")["head"]["sha"]
@@ -461,17 +673,19 @@ def post_review(
 
     event: Optional[str] = None
     if not options.draft:
-        clean = not inline and not off_diff and not threads
+        clean = not inline and not off_diff and not threads and not held
         event = "APPROVE" if clean else "COMMENT"
 
     def result(url: Optional[str] = None) -> PostResult:
+        payload, body = _payload(options, commit, event, inline, off_diff, covered)
         return PostResult(
             event=event,
             inline=[i.fid for i in inline],
-            in_body=[i.fid for i in off_diff],
+            in_body=body.posted,
+            omitted=body.omitted,
             covered=covered,
             skipped=skipped,
-            payload=_payload(options, commit, event, inline, off_diff, covered),
+            payload=payload,
             url=url,
         )
 
@@ -480,7 +694,7 @@ def post_review(
 
     path = f"repos/{options.repo}/pulls/{options.pr}/reviews"
     for attempt in range(1, _MAX_POST_ATTEMPTS + 1):
-        payload = _payload(options, commit, event, inline, off_diff, covered)
+        payload, _body = _payload(options, commit, event, inline, off_diff, covered)
         try:
             response = gh.request("POST", path, payload)
             return result((response or {}).get("html_url"))
@@ -565,8 +779,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
     try:
         report = load_json_strict(args.report.read_text(encoding="utf-8"))
-        if not isinstance(report, dict):
-            raise ValueError(f"{args.report}: expected a report object")
+        validate_report(report)
         options = ReviewOptions(
             repo=args.repo,
             pr=args.pr,
@@ -576,6 +789,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             draft=args.draft,
             commit=args.commit,
         )
+    except ReportError as error:
+        log.error("%s: %s", args.report, error)
+        return 2
     except (OSError, ValueError) as error:
         log.error("%s", error)
         return 2

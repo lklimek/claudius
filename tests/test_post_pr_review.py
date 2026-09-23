@@ -34,7 +34,11 @@ def _finding(fid: str, sev: int, location: str, **extra: Any) -> dict[str, Any]:
 
 def _report(*findings: dict[str, Any]) -> dict[str, Any]:
     return {
-        "findings": [{"title": "S", "category": "security", "findings": list(findings)}]
+        "schema_version": "4.0.0",
+        "summary_statistics": {"total_findings": len(findings)},
+        "findings": [
+            {"title": "S", "category": "security", "findings": list(findings)}
+        ],
     }
 
 
@@ -209,22 +213,57 @@ class TestBuildAndPost:
         assert gh.posted[0]["comments"] == []
         assert result.skipped == ["SEC-001"]
 
-    def test_findings_covered_by_open_threads_are_skipped(self):
+    def test_thread_citing_final_id_on_overlapping_line_covers(self):
         report = _report(
-            _finding("SEC-001", 4, "src/a.py:11-12"),  # overlaps open thread line
+            _finding("SEC-001", 4, "src/a.py:11-12"),
             _finding("SEC-002", 4, "src/a.py:50", title="Unchecked parser error"),
             _finding("SEC-003", 4, "src/a.py:13"),  # only a resolved thread here
         )
         threads = [
-            _thread("src/a.py", 12, "old wording"),
-            _thread("src/a.py", None, "**unchecked parser error** again", original=3),
-            _thread("src/a.py", 13, "fixed", resolved=True),
+            _thread("src/a.py", 12, "**SEC-001** · HIGH\n\nstill open"),
+            _thread("src/a.py", 51, "Re: unchecked parser error.", start=50),
+            _thread("src/a.py", 13, "SEC-003", resolved=True),
         ]
         gh = FakeGh(threads=threads)
         result = _run(report, gh)
         assert result.covered == ["SEC-001", "SEC-002"]
         assert [c["line"] for c in gh.posted[0]["comments"]] == [13]
+        assert "SEC-001" in gh.posted[0]["body"]  # one-line mention
         assert gh.posted[0]["event"] == "COMMENT"
+
+    def test_unrelated_thread_on_overlapping_lines_does_not_cover(self):
+        thread = _thread("src/a.py", 14, "nit: typo in variable name", start=10)
+        report = _report(
+            _finding("SEC-001", 5, "src/a.py:12", title="SQL injection in f()")
+        )
+        result = _run(report, FakeGh(threads=[thread]))
+        assert result.inline == ["SEC-001"] and result.covered == []
+
+    def test_outdated_thread_never_covers(self):
+        thread = _thread("src/a.py", None, "SEC-002: Auth bypass", original=12)
+        report = _report(_finding("SEC-002", 5, "src/a.py:12", title="Auth bypass"))
+        result = _run(report, FakeGh(threads=[thread]))
+        assert result.inline == ["SEC-002"] and result.covered == []
+
+    def test_title_must_match_as_whole_phrase(self):
+        thread = _thread("src/a.py", 11, "This leaks memory, please fix.")
+        report = _report(_finding("QA-003", 4, "src/a.py:11", title="Leak"))
+        result = _run(report, FakeGh(threads=[thread]))
+        assert result.inline == ["QA-003"]
+
+    def test_id_prefix_of_longer_id_does_not_cover(self):
+        thread = _thread("src/a.py", 11, "See SEC-0012 instead.")
+        result = _run(
+            _report(_finding("SEC-001", 4, "src/a.py:11")), FakeGh(threads=[thread])
+        )
+        assert result.covered == []
+
+    def test_thread_on_other_lines_does_not_cover(self):
+        thread = _thread("src/a.py", 50, "SEC-001")
+        result = _run(
+            _report(_finding("SEC-001", 4, "src/a.py:11")), FakeGh(threads=[thread])
+        )
+        assert result.covered == []
 
     def test_clean_review_approves(self):
         gh = FakeGh()
@@ -354,6 +393,51 @@ class TestGhCli:
         assert client.request("GET", "x") == []
         assert cmds[1][:2] == ["ghsudo", "gh"]
 
+    @pytest.mark.parametrize(
+        ("method", "payload"),
+        [
+            ("POST", {"event": "APPROVE"}),
+            ("PATCH", {"body": "x"}),
+            ("POST", {"query": "mutation { resolveReviewThread }"}),
+        ],
+    )
+    def test_writes_never_escalate_to_ghsudo(self, method, payload):
+        cmds: list[list[str]] = []
+
+        def runner(cmd, **kw):
+            cmds.append(cmd)
+            if cmd[0] == "gh":
+                return self._cp(1, "", "HTTP 403: Forbidden")
+            return self._cp(0, '{"html_url": "u"}')
+
+        client = ppr.GhCli(runner=runner, which=lambda name: "/usr/bin/ghsudo")
+        path = "graphql" if "query" in payload else "repos/o/r/pulls/7/reviews"
+        with pytest.raises(ppr.GhApiError) as exc:
+            client.request(method, path, payload)
+        assert exc.value.status == 403
+        assert [c[0] for c in cmds] == ["gh"]
+
+    def test_graphql_read_query_may_escalate(self):
+        cmds: list[list[str]] = []
+
+        def runner(cmd, **kw):
+            cmds.append(cmd)
+            if cmd[0] == "gh":
+                return self._cp(1, "", "HTTP 404: Not Found")
+            return self._cp(0, '{"data": {}}')
+
+        client = ppr.GhCli(runner=runner, which=lambda name: "/usr/bin/ghsudo")
+        client.request("POST", "graphql", {"query": "\nquery($o: String!) { x }"})
+        assert cmds[1][:2] == ["ghsudo", "gh"]
+
+    def test_missing_gh_binary_raises_api_error(self):
+        def runner(cmd, **kw):
+            raise FileNotFoundError(cmd[0])
+
+        client = ppr.GhCli(runner=runner, which=lambda name: None)
+        with pytest.raises(ppr.GhApiError, match="not found"):
+            client.request("GET", "x")
+
     def test_graphql_errors_raise(self):
         client = ppr.GhCli(
             runner=lambda cmd, **kw: self._cp(0, '{"errors":[{"message":"bad"}]}'),
@@ -413,3 +497,183 @@ class TestCli:
         gh = FakeGh(post_errors=[ppr.GhApiError(500, "boom")])
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
         assert ppr.main(["o/r", "7", str(report)]) == 1
+
+
+# ---------------------------------------------------------------------------
+# approval safety
+# ---------------------------------------------------------------------------
+class TestApprovalSafety:
+    def test_null_comment_on_blocking_finding_does_not_approve(self):
+        report = _report(_finding("SEC-001", 5, "src/a.py:11", merge_class="blocking"))
+        result = _run(report, FakeGh(), comments={"SEC-001": None})
+        assert result.event == "COMMENT"
+
+    def test_null_comment_on_medium_finding_does_not_approve(self):
+        result = _run(
+            _report(_finding("SEC-001", 3, "src/a.py:11")),
+            FakeGh(),
+            comments={"SEC-001": None},
+        )
+        assert result.event == "COMMENT"
+
+    def test_min_severity_filter_does_not_approve_over_unposted_high(self):
+        result = _run(
+            _report(_finding("QA-001", 4, "src/a.py:11")), FakeGh(), min_severity=5
+        )
+        assert result.event == "COMMENT" and result.inline == []
+
+    def test_disputed_only_still_approves(self):
+        report = _report(_finding("SEC-001", 5, "src/a.py:11", merge_class="disputed"))
+        assert _run(report, FakeGh()).event == "APPROVE"
+
+    def test_low_below_threshold_still_approves(self):
+        assert (
+            _run(_report(_finding("SEC-001", 2, "src/a.py:11")), FakeGh()).event
+            == "APPROVE"
+        )
+
+
+# ---------------------------------------------------------------------------
+# report validation
+# ---------------------------------------------------------------------------
+class TestReportValidation:
+    @pytest.mark.parametrize(
+        "report",
+        [
+            {},
+            ["oops"],
+            {"findings": None},
+            {"finding": [{"findings": [_finding("X", 5, "src/a.py:11")]}]},
+            {"schema_version": "4.0.0", "summary_statistics": {}, "findings": None},
+            {
+                "schema_version": "4.0.0",
+                "summary_statistics": {},
+                "findings": [{"title": "S", "findings": None}],
+            },
+            {
+                "schema_version": "4.0.0",
+                "summary_statistics": {},
+                "findings": ["oops"],
+            },
+            {
+                "schema_version": "4.0.0",
+                "summary_statistics": {},
+                "findings": [{"title": "S", "findings": ["oops"]}],
+            },
+            {
+                "schema_version": "4.0.0",
+                "summary_statistics": {},
+                "findings": [{"title": "S", "findings": [{"title": "no id"}]}],
+            },
+            # intermediate.json / merged-findings.json are not assembled reports
+            {"metadata": {}, "raw_findings": [], "duplicate_groups": []},
+            {"metadata": {}, "executive_summary": {}, "findings": []},
+        ],
+    )
+    def test_non_report_input_is_rejected(self, report):
+        with pytest.raises(ppr.ReportError):
+            ppr.validate_report(report)
+
+    @pytest.mark.parametrize(
+        "content", ["{}", '["oops"]', '{"findings": null}', '[{"findings": null}]']
+    )
+    def test_cli_bad_report_exits_2_without_posting(
+        self, content, tmp_path, monkeypatch
+    ):
+        report = tmp_path / "report.json"
+        report.write_text(content)
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(report)]) == 2
+        assert gh.calls == []
+
+    def test_cli_subprocess_no_traceback(self, tmp_path):
+        report = tmp_path / "report.json"
+        report.write_text('{"findings": null}')
+        script = Path(ppr.__file__)
+        proc = subprocess.run(
+            [sys.executable, str(script), "o/r", "7", str(report), "--dry-run"],
+            capture_output=True,
+            text=True,
+            env={"PATH": "/nonexistent"},
+        )
+        assert proc.returncode == 2 and "Traceback" not in proc.stderr
+
+    def test_missing_gh_binary_is_clean_api_error(self, tmp_path):
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(_report()))
+        proc = subprocess.run(
+            [sys.executable, str(Path(ppr.__file__)), "o/r", "7", str(report)],
+            capture_output=True,
+            text=True,
+            env={"PATH": "/nonexistent"},
+        )
+        assert proc.returncode == 1 and "Traceback" not in proc.stderr
+        assert "gh" in proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# GitHub size limits and text safety
+# ---------------------------------------------------------------------------
+class TestLimitsAndSanitizing:
+    def test_body_overflow_lists_omitted_ids_and_in_body_is_truthful(self):
+        findings = [
+            _finding(f"QA-{i:03d}", 4, f"other/f{i}.py:1", description="x" * 3000)
+            for i in range(1, 41)
+        ]
+        result = _run(_report(*findings), FakeGh(), dry_run=True)
+        body = result.payload["body"]
+        assert len(body) <= ppr.GITHUB_TEXT_LIMIT
+        assert result.omitted, "expected overflow"
+        assert all(f"**{fid}**" in body for fid in result.in_body)
+        assert set(result.in_body) | set(result.omitted) == {f["id"] for f in findings}
+        assert f"{len(result.omitted)} more finding(s)" in body
+        assert result.omitted[0] in body.rsplit("more finding(s)", 1)[1]
+        assert result.summary()["omitted"] == result.omitted
+
+    def test_huge_inline_comment_is_clipped_and_stays_inline(self):
+        report = _report(_finding("QA-001", 4, "src/a.py:11", description="y" * 70000))
+        gh = FakeGh()
+        result = _run(report, gh)
+        [comment] = gh.posted[0]["comments"]
+        assert len(comment["body"]) <= ppr.GITHUB_TEXT_LIMIT
+        assert result.inline == ["QA-001"] and len(gh.posted) == 1
+
+    def test_clip_closes_an_open_code_fence(self):
+        text = "intro\n```python\n" + "x = 1\n" * 1000 + "```\nafter"
+        clipped = ppr._clip(text, 200)
+        assert len(clipped) <= 200
+        assert clipped.count("```") % 2 == 0
+
+    def test_mentions_outside_code_are_neutralized(self):
+        text = "cc @security-team and `@keep` and\n```\n@also-keep\n```\nmail a@b.io"
+        out = ppr.sanitize(text)
+        assert "@security-team" not in out
+        assert "`@keep`" in out and "\n@also-keep\n" in out
+        assert "a@b.io" in out
+
+    def test_code_span_never_crosses_a_paragraph(self):
+        assert "@team" not in ppr.sanitize("a ` b\n\n@team\n\n` c")
+
+    def test_unclosed_fence_is_closed(self):
+        out = ppr.sanitize("```\n@inside")
+        assert out.count("```") == 2 and "@inside" in out
+
+    def test_backtick_prefixed_mention_outside_span_is_neutralized(self):
+        assert "@team" not in ppr.sanitize("dangling `@team")
+
+    def test_html_comment_opener_is_neutralized(self):
+        out = ppr.sanitize("<!-- hide the rest\nvisible? `<!-- code -->`")
+        assert not out.startswith("<!--")
+        assert "<!--" not in out.replace("`<!-- code -->`", "")
+
+    def test_posted_text_is_sanitized(self):
+        report = _report(
+            _finding("SEC-001", 5, "src/a.py:11", description="<!-- x cc @team"),
+            _finding("SEC-002", 5, "other.py:9", description="ping @team"),
+        )
+        gh = FakeGh()
+        _run(report, gh, body="@boss look")
+        posted = json.dumps(gh.posted[0])
+        assert "@team" not in posted and "@boss" not in posted
+        assert "<!--" not in posted

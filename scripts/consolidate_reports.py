@@ -30,18 +30,22 @@ Usage:
 
 Exit codes:
     0  Success
-    1  Validation error
-    2  File/parse error
+    1  Validation error (gate: INVALID findings; finalize: a decision, the
+       schema or rendering failed — no output is written)
+    2  File/parse error (missing, unparseable or wrongly shaped input)
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 from collections.abc import Iterator
 from difflib import SequenceMatcher
@@ -58,6 +62,7 @@ from severity_util import (
     build_merge_class_stats,
     derive_overall,
     effective_severity,
+    derive_finding_severity,
     derive_severity_int,
     load_json_strict,
     migrate_legacy_floats,
@@ -994,7 +999,11 @@ def _flatten_agent_report(
             # finding whose floats are unusable -- including a NaN injected by
             # the v3 migration -- at INFO, the one band meaning "no action
             # required", regardless of its impact. Fail high, never quiet.
-            severity = f.get("severity") or effective_severity(f)
+            # Floats first, exactly as assemble derives it, so gate and digest
+            # bands match the final report whatever the producer's label says.
+            severity = (
+                derive_finding_severity(f) or f.get("severity") or effective_severity(f)
+            )
             if not isinstance(severity, int) or not 1 <= severity <= 5:
                 log.warning(
                     "Skipping finding with invalid severity '%s' from agent '%s'",
@@ -1095,6 +1104,18 @@ def load_agent_report(path_str: str) -> list[Any]:
             f"Expected JSON array in {path_str} — write a bare JSON array of "
             "finding sections, not an envelope object"
         )
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise AgentReportError(
+                f"{path_str}: item #{index} must be a finding section object"
+            )
+        findings = item.get("findings", [])
+        if not isinstance(findings, list) or not all(
+            isinstance(f, dict) for f in findings
+        ):
+            raise AgentReportError(
+                f"{path_str}: item #{index} 'findings' must be an array of objects"
+            )
     return data
 
 
@@ -1339,15 +1360,59 @@ def gate_lines(sections: list[Any], source: str = "gate") -> tuple[list[str], in
         + " ".join(f"{label}={counts[label]}" for label in SEV_ORDER)
         + f" TOTAL={len(raw)}",
     ]
+    problems = _gate_problems(raw)
     dropped = _count_emitted_findings(sections) - len(raw)
     if dropped > 0:
-        lines.append(
-            f"INVALID: {dropped} finding(s) would be dropped by prepare — "
-            "check required fields (title, location, description, "
-            "recommendation, floats); see the warnings above"
+        problems.insert(
+            0,
+            f"{dropped} finding(s) would be dropped by prepare — check required "
+            "fields (title, location, description, recommendation); see the "
+            "warnings above",
         )
-        return lines, 1
-    return lines, 0
+    lines += [f"INVALID: {problem}" for problem in problems]
+    return lines, 1 if problems else 0
+
+
+def _gate_problems(raw: list[dict[str, Any]]) -> list[str]:
+    """List what finalize would reject in prepare-surviving findings."""
+    unnamed: list[str] = []
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    bad_floats: list[str] = []
+    for f in raw:
+        fid = f.get("original_id")
+        if not isinstance(fid, str) or not fid.strip():
+            unnamed.append(repr(_clip(f.get("title"), 60)))
+        elif fid in seen:
+            duplicates.append(fid)
+        else:
+            seen.add(fid)
+        axes = [
+            axis
+            for axis in ("likelihood", "impact", "relevance")
+            if not _is_unit_float(f.get(axis))
+        ]
+        if axes:
+            bad_floats.append(f"{fid or '?'} ({', '.join(axes)})")
+    problems = []
+    if unnamed:
+        problems.append(f"finding(s) without an id: {', '.join(unnamed)}")
+    if duplicates:
+        problems.append(f"duplicate id(s): {', '.join(sorted(set(duplicates)))}")
+    if bad_floats:
+        problems.append(
+            "missing or out-of-range floats (need numbers in [0, 1]): "
+            + ", ".join(bad_floats)
+        )
+    return problems
+
+
+def _is_unit_float(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and 0.0 <= value <= 1.0
+    )
 
 
 def cmd_gate(args: argparse.Namespace) -> int:
@@ -1485,56 +1550,65 @@ def _validate_report(report: dict[str, Any]) -> bool:
 def cmd_finalize(args: argparse.Namespace) -> int:
     """Merge decisions, assemble + validate, and render in one call.
 
-    Writes ``merged-findings.json`` next to the decisions file so each merge
-    stays auditable, then ``report.json`` and one rendered file per format.
+    All-or-nothing: report.json and its renders are staged in a temp dir and
+    moved into place only after every step succeeds; ``merged-findings.json``
+    (the audit copy, next to the decisions file) is written only then too.
     """
     decisions_path = Path(args.decisions)
     try:
         intermediate = mfh.load_intermediate(Path(args.input))
         decisions = mfh.load_decisions(decisions_path)
-        findings = mfh.resolve_findings(mfh.load_raw_findings(intermediate), decisions)
-    except FileNotFoundError as e:
+    except (OSError, ValueError) as e:
         log.error("%s", e)
         return 2
-    except ValueError as e:
-        log.error("%s", e)
-        return 1
-
-    missing = mfh.find_missing_merge_class(findings)
-    if missing:
-        log.error(
-            "%d finding(s) lack merge_class — add them to finding_updates: %s",
-            len(missing),
-            ", ".join(missing),
-        )
-        return 1
 
     try:
+        findings = mfh.resolve_findings(mfh.load_raw_findings(intermediate), decisions)
+        missing = mfh.find_missing_merge_class(findings)
+        if missing:
+            raise ValueError(
+                f"{len(missing)} finding(s) lack merge_class — add them to "
+                f"finding_updates: {', '.join(missing)}"
+            )
         document = mfh.build_merged_document(
             intermediate,
             findings,
-            decisions.get("executive_summary", {}),
+            decisions.get("executive_summary", dict(mfh.DEFAULT_EXECUTIVE_SUMMARY)),
             top_findings_override=decisions.get("top_findings_override"),
             remediation_override=decisions.get("remediation_override"),
         )
     except ValueError as e:
         log.error("%s", e)
         return 1
-    mfh.write_merged_findings(decisions_path.parent / "merged-findings.json", document)
+    audit_copy = copy.deepcopy(document)  # assembly mutates findings in place
 
     out_path = Path(args.output)
-    code = _assemble_and_write(document, out_path)
-    if code != 0:
-        return code
-
-    for fmt in args.format or ["md"]:
-        result = subprocess.run(
-            [sys.executable, str(RENDERER), str(out_path), "--format", fmt],
-            check=False,
-        )
-        if result.returncode != 0:
-            log.error("Rendering %s failed (exit %d)", fmt, result.returncode)
-            return 1
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=out_path.parent, prefix=".finalize-") as tmp:
+        staged = Path(tmp) / out_path.name
+        code = _assemble_and_write(document, staged)
+        if code != 0:
+            return code
+        for fmt in args.format or ["md"]:
+            result = subprocess.run(
+                [sys.executable, str(RENDERER), str(staged), "--format", fmt],
+                stdout=subprocess.DEVNULL,  # it would print the staging path
+                check=False,
+            )
+            if result.returncode != 0:
+                log.error(
+                    "Rendering %s failed (exit %d); no report written",
+                    fmt,
+                    result.returncode,
+                )
+                return 1
+        # report.json last: its presence implies the renders are in place.
+        for item in sorted(Path(tmp).iterdir(), key=lambda p: p == staged):
+            os.replace(item, out_path.parent / item.name)
+            log.info("Wrote %s", out_path.parent / item.name)
+    mfh.write_merged_findings(
+        decisions_path.parent / "merged-findings.json", audit_copy
+    )
     return 0
 
 
