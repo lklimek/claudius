@@ -1,7 +1,7 @@
 ---
 name: merge-base
 description: "This skill should be used when the user asks to \"merge the base branch\", \"update this feature branch from base\", or resolve conflicts while merging base into a feature branch."
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git *), Bash(gh pr view *)
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git branch --show-current), Bash(git status*), Bash(git rev-parse *), Bash(git fetch --all --prune), Bash(git symbolic-ref refs/remotes/origin/HEAD*), Bash(git merge-base *), Bash(git log *), Bash(git diff *), Bash(git merge *), Bash(git add *), Bash(git commit --no-edit), Bash(gh pr view *)
 ---
 
 # Merge Base Branch
@@ -10,7 +10,7 @@ Merge the remote base branch into the current feature branch: pre-merge analysis
 
 ## Phase 1: Sync with Remote
 
-Fetch all remotes and pull the tracked branch (merge mode, never rebase); resolve any pull conflicts per Phase 4 before continuing.
+Fetch all remotes and merge the tracked branch (never rebase, never `git pull`: its `--upload-pack` runs arbitrary code); resolve any conflicts per Phase 4 before continuing.
 
 ```bash
 CURRENT_BRANCH=$(git branch --show-current)
@@ -19,7 +19,7 @@ TRACKING=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null || echo "")
 git fetch --all --prune
 
 if [ -n "$TRACKING" ]; then
-  git pull --no-rebase
+  git merge --no-edit "$TRACKING"
 fi
 ```
 

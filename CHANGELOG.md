@@ -30,6 +30,9 @@ Headless-CI hardening follow-ups to 8.1.0.
   `disputed` exempts a finding from APPROVE only with `ai_verdict` `false_positive`/`duplicate`.
 - `check-pr-comments`: dropped `ctags`/`global`/`gtags`/`tree-sitter`/`which` grants (they load
   repo-controlled config/grammars → RCE on PR content); call-tree walks use Grep/Read only.
+- `merge-base`, `ci-dance`: `Bash(git *)` narrowed to the git subcommands each body runs; `merge-base`
+  merges `@{upstream}` instead of `git pull` (`--upload-pack` RCE); `review-dependency` clone pinned to
+  `--depth=100`. A test globs every skill rule against sample RCE/config-loading commands.
 
 ### Fixed
 

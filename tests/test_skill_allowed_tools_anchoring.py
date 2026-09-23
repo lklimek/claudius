@@ -79,7 +79,9 @@ FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 PLAIN_GH_GIT = re.compile(r"^\s*(?:ghsudo )?(?:gh|git) ")
 
 
-@pytest.mark.parametrize("skill", ANCHORED_SKILLS)
+@pytest.mark.parametrize(
+    "skill", (*ANCHORED_SKILLS, "ci-dance", "merge-base", "review-dependency")
+)
 def test_fenced_gh_and_git_commands_match_a_rule(skill: str) -> None:
     """A fenced command the skill tells the model to run must be pre-approved."""
     front, body = _split(REPO_ROOT / "skills" / skill / "SKILL.md")
@@ -94,15 +96,33 @@ def test_fenced_gh_and_git_commands_match_a_rule(skill: str) -> None:
             )
 
 
-# Tools that load repo-controlled config, grammars or plugins (or write files
-# via options a repo config can set): never pre-approve them in any skill.
-UNSAFE_TOOL_RULES = re.compile(r"^(?:ctags|global|gtags|tree-sitter|git pull)\b")
+# Commands that run arbitrary code or load repo-controlled config, grammars or
+# plugins. Rules are matched as globs (``*`` spans spaces), so a wildcard grant
+# such as ``git *`` pre-approves these too: never let any skill rule match one.
+UNSAFE_COMMANDS = (
+    "git pull --upload-pack=x",
+    "git fetch --upload-pack=x origin",
+    "git clone --depth=1 --upload-pack=x --config core.hooksPath=/dev/null -- u d",
+    "git -c core.pager=x log",
+    "git -C d -c core.pager=x log",
+    "git config core.pager x",
+    "git submodule foreach x",
+    "ctags -f x",
+    "global -u",
+    "gtags x",
+    "tree-sitter parse x",
+)
 
 
 @pytest.mark.parametrize(
     "path", sorted(REPO_ROOT.glob("skills/*/SKILL.md")), ids=lambda p: p.parent.name
 )
-def test_no_skill_grants_repo_config_loading_tools(path: Path) -> None:
+def test_no_skill_grants_code_exec_or_repo_config_loading(path: Path) -> None:
     front, _ = _split(path)
-    unsafe = [r for r in _bash_rules(front) if UNSAFE_TOOL_RULES.match(r)]
+    unsafe = [
+        (rule, cmd)
+        for rule in _bash_rules(front)
+        for cmd in UNSAFE_COMMANDS
+        if fnmatchcase(cmd, rule)
+    ]
     assert not unsafe, f"{path.parent.name}: unsafe Bash grants {unsafe}"
