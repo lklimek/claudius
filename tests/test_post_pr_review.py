@@ -1700,6 +1700,30 @@ class TestSecretsAreNeverPosted:
         assert "canary" not in str(error.value)
         assert "metadata.commit" in str(error.value)
 
+    @pytest.mark.parametrize(
+        "encoded",
+        [
+            "gh&#x70;_" + "A1" * 18,  # hex entity
+            "gh&#112;_" + "A1" * 18,  # decimal entity
+            "&#X67;&#x68;p_" + "A1" * 18,  # uppercase X, several entities
+            "ghp&lowbar;" + "A1" * 18,  # named entity
+            "X-Access-Token&colon;" + "z" * 20,
+        ],
+    )
+    @pytest.mark.parametrize("where", ["body", "finding"])
+    def test_entity_encoded_secret_exits_2_without_echo(
+        self, encoded, where, tmp_path, monkeypatch, caplog
+    ):
+        finding = _finding("SEC-001", 4, "src/a.py:12")
+        extra: tuple[str, ...] = ()
+        if where == "body":
+            extra = ("--body", f"see {encoded}")
+        else:
+            finding["description"] = f"see {encoded}"
+        code, gh = _cli(_valid_report(finding), tmp_path, monkeypatch, *extra)
+        assert code == 2 and gh.calls == []
+        assert encoded not in caplog.text
+
     def test_described_credential_prefix_is_posted(self, tmp_path, monkeypatch):
         finding = _finding("SEC-001", 4, "src/a.py:12")
         finding["description"] = "Remote embeds x-access-token:ghs_… in the URL."

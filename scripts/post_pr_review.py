@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import html
 import json
 import logging
 import math
@@ -565,9 +566,15 @@ def _strings(value: Any):
 
 
 def _secret_kind(text: str) -> Optional[str]:
-    """Name of the first credential pattern found in ``text``, or None."""
+    """Name of the first credential pattern found in ``text``, or None.
+
+    Also checks the entity-decoded form: GitHub renders ``gh&#x70;_…`` as a
+    live ``ghp_…``. One decode pass only, since ``&amp;#x70;`` renders as a
+    literal entity; percent-encoding is not decoded in rendered text.
+    """
+    decoded = html.unescape(text)
     for kind, pattern in _SECRET_PATTERNS.items():
-        if pattern.search(text):
+        if pattern.search(text) or pattern.search(decoded):
             return kind
     return None
 
