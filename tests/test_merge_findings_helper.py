@@ -486,3 +486,46 @@ def test_cluster_update_to_blocking_with_intent_basis_is_accepted():
     }
     [merged] = helper.resolve_findings(findings, decisions)
     assert merged["merge_class"] == "blocking"
+
+
+def _cluster(updates: dict[str, object]) -> dict[str, object]:
+    return {
+        "reason": "Same issue.",
+        "members": [
+            {"agent": "security", "original_id": "SEC-001"},
+            {"agent": "qa", "original_id": "QA-001"},
+        ],
+        "base": {"agent": "security", "original_id": "SEC-001"},
+        "updates": updates,
+    }
+
+
+@pytest.mark.parametrize("via_finding_update", [True, False])
+def test_cluster_update_unblocking_clears_stale_intent_basis(via_finding_update):
+    blocking = {"merge_class": "blocking", "intent_basis": "G-DATA: wipes rows"}
+    base = _finding("security", "SEC-001", **({} if via_finding_update else blocking))
+    decisions: dict[str, object] = {
+        "merges": [_cluster({"merge_class": "non_blocking"})]
+    }
+    if via_finding_update:
+        decisions["finding_updates"] = {"security:SEC-001": blocking}
+    [merged] = helper.resolve_findings([base, _finding("qa", "QA-001")], decisions)
+    assert merged["merge_class"] == "non_blocking"
+    assert "intent_basis" not in merged
+
+
+def test_cluster_update_keeps_an_explicitly_supplied_intent_basis():
+    base = _finding("security", "SEC-001", merge_class="blocking", intent_basis="x")
+    updates = {"merge_class": "non_blocking", "intent_basis": "Deferred: see #12"}
+    [merged] = helper.resolve_findings(
+        [base, _finding("qa", "QA-001")], {"merges": [_cluster(updates)]}
+    )
+    assert merged["intent_basis"] == "Deferred: see #12"
+
+
+def test_cluster_update_without_classification_keeps_intent_basis():
+    base = _finding("security", "SEC-001", merge_class="blocking", intent_basis="G-X")
+    [merged] = helper.resolve_findings(
+        [base, _finding("qa", "QA-001")], {"merges": [_cluster({"title": "Merged"})]}
+    )
+    assert merged["intent_basis"] == "G-X"
