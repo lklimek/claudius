@@ -21,13 +21,22 @@ Headless-CI hardening follow-ups to 8.1.0.
   honored; base ref resolves `origin/<base>` first; shutdown only for persistent teammates.
 - `post_pr_review.py`: recomputes all derived report fields and exits 2 on any mismatch
   (curated `top_findings`/`remediation` overrides must cite real findings); `--body-file`.
+- `post_pr_review.py` input safety (exit 2, before any GitHub call): `severity`/`overall_severity`
+  must match the floats; `<owner/repo>` must equal `GITHUB_REPOSITORY` (else `origin`);
+  `--body-file` confined to a regular non-symlink file under cwd/report dir, outside `.git`,
+  `/proc`, `/sys`; credential-looking text (GitHub/Anthropic tokens, `x-access-token:`) refused.
+  `disputed` exempts a finding from APPROVE only with `ai_verdict` `false_positive`/`duplicate`.
+- `check-pr-comments`: dropped `ctags`/`global`/`gtags`/`tree-sitter`/`which` grants (they load
+  repo-controlled config/grammars → RCE on PR content); call-tree walks use Grep/Read only.
 
 ### Fixed
 
 - `consolidate_reports.py`: origin URL credentials (e.g. `x-access-token:ghs_…`) never logged or
   emitted; token-bearing remotes resolve `repository` metadata again.
 - `post_pr_review.py`: `_@user` / non-ASCII-prefixed mentions neutralized; own ZWSP-sanitized
-  threads dedup on rerun.
+  threads dedup on rerun; entity mentions (`&#64;`, `&#x40;`, `&commat;`) neutralized; curated
+  `top_findings` entries without `merge_class` accepted.
+- `consolidate_reports.py`: GitHub remotes match with uppercase scheme/host.
 - `merge_findings_helper.py`: cluster updates leaving `blocking` drop the stale `intent_basis`.
 
 ## [8.1.0] - 2026-09-23
