@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import consolidate_reports as cr  # noqa: E402
 import post_pr_review as ppr  # noqa: E402
 
 HEAD = "a" * 40
@@ -47,16 +48,19 @@ def _report(*findings: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _fixture_report() -> dict[str, Any]:
+    """The schema-valid fixture with its derived fields regenerated."""
+    report = json.loads(VALID_REPORT.read_text())
+    cr.regenerate_derived(report)
+    return report
+
+
 def _valid_report(*findings: dict[str, Any]) -> dict[str, Any]:
-    """Schema-valid report (the CLI validates) holding ``findings``."""
+    """Schema-valid, self-consistent report (the CLI validates) holding ``findings``."""
     report = json.loads(VALID_REPORT.read_text())
     floats = {"likelihood": 0.6, "impact": 0.6, "relevance": 0.5}
     report["findings"][0]["findings"] = [{**floats, **f} for f in findings]
-    report["summary_statistics"]["total_findings"] = len(findings)
-    counts = dict.fromkeys(("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"), 0)
-    for f in findings:
-        counts[ppr.SEV_LABELS.get(f.get("severity", 1), "INFO")] += 1
-    report["summary_statistics"]["severity_counts"] = counts
+    cr.regenerate_derived(report)
     return report
 
 
@@ -643,7 +647,7 @@ class TestCli:
 
     def test_api_failure_exits_1(self, tmp_path, monkeypatch):
         report = tmp_path / "report.json"
-        report.write_text(VALID_REPORT.read_text())
+        report.write_text(json.dumps(_fixture_report()))
         gh = FakeGh(post_errors=[ppr.GhApiError(500, "boom")])
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
         assert ppr.main(["o/r", "7", str(report)]) == 1
@@ -879,7 +883,7 @@ class TestReportValidation:
 
     def test_cli_accepts_schema_valid_report(self, tmp_path, monkeypatch):
         report = tmp_path / "report.json"
-        report.write_text(VALID_REPORT.read_text())
+        report.write_text(json.dumps(_fixture_report()))
         monkeypatch.setattr(ppr, "GhCli", FakeGh)
         assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 0
 
@@ -896,12 +900,74 @@ class TestReportValidation:
     ):
         data = _valid_report()
         data["summary_statistics"] = stats
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def _assert_rejected(self, data, tmp_path, monkeypatch) -> None:
         report = tmp_path / "report.json"
         report.write_text(json.dumps(data))
         gh = FakeGh()
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
-        assert ppr.main(["o/r", "7", str(report)]) == 2
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 2
         assert gh.calls == []
+
+    @staticmethod
+    def _blocker() -> dict[str, Any]:
+        return _finding(
+            "SEC-001", 4, "src/a.py:12", merge_class="blocking", intent_basis="G-X: y"
+        )
+
+    @pytest.mark.parametrize(
+        "field",
+        ["merge_class_counts", "severity_category_matrix", "redundancy_ratio"],
+    )
+    def test_empty_report_with_stale_stats_exits_2(self, field, tmp_path, monkeypatch):
+        stale = _valid_report(self._blocker())
+        stale["agent_stats"] = [{"agent": "a", "unique": 1, "redundant": 1}]
+        cr.regenerate_derived(stale)
+        data = _valid_report()
+        data["summary_statistics"][field] = stale["summary_statistics"][field]
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_empty_report_whose_top_findings_claim_a_blocker_exits_2(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report()
+        data["top_findings"] = _valid_report(self._blocker())["top_findings"]
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_remediation_citing_a_missing_finding_exits_2(self, tmp_path, monkeypatch):
+        data = _valid_report()
+        data["remediation"] = _valid_report(self._blocker())["remediation"]
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_top_finding_misstating_its_finding_exits_2(self, tmp_path, monkeypatch):
+        data = _valid_report(self._blocker())
+        data["top_findings"][0]["merge_class"] = "non_blocking"
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_wrong_critical_count_exits_2(self, tmp_path, monkeypatch):
+        data = _valid_report(_finding("SEC-001", 5, "src/a.py:12"))
+        data["summary_statistics"]["critical_count"] = 0
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_curated_overrides_citing_real_findings_are_accepted(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report(self._blocker(), _finding("SEC-002", 5, "src/a.py:13"))
+        data["top_findings"] = data["top_findings"][1:]  # curated subset
+        data["remediation"] = [
+            {
+                "label": "Now",
+                "count": 2,
+                "priority": "before_merge",
+                "finding_ids": ["SEC-002", "SEC-001"],
+            }
+        ]
+        data["summary_statistics"]["critical_count"] = 1
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(data))
+        monkeypatch.setattr(ppr, "GhCli", FakeGh)
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 0
 
     def test_cli_subprocess_no_traceback(self, tmp_path):
         report = tmp_path / "report.json"
@@ -917,7 +983,7 @@ class TestReportValidation:
 
     def test_missing_gh_binary_is_clean_api_error(self, tmp_path):
         report = tmp_path / "report.json"
-        report.write_text(VALID_REPORT.read_text())
+        report.write_text(json.dumps(_fixture_report()))
         proc = subprocess.run(
             [sys.executable, str(Path(ppr.__file__)), "o/r", "7", str(report)],
             capture_output=True,

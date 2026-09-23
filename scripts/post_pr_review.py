@@ -9,7 +9,9 @@ routes off-diff findings into the review body (never dropping them), picks
 APPROVE vs COMMENT, and posts with fallbacks.
 
 Input must be an assembled report (``schema_version``, ``summary_statistics``
-and ``findings`` sections whose findings carry final IDs); anything else exits 2.
+and ``findings`` sections whose findings carry final IDs), schema-valid, with
+derived fields (stats, top findings, remediation) agreeing with the findings;
+anything else exits 2.
 ``metadata.commit`` and an explicit ``--commit`` must match the current PR head.
 The head is checked before and after fetching the diff and threads; posting uses
 that SHA. ``metadata.base_commit``, when present, must equal the PR's current
@@ -54,6 +56,7 @@ Exit codes: 0 posted (or dry run), 1 GitHub API failure, 2 bad input.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
 import re
@@ -64,6 +67,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from consolidate_reports import regenerate_derived
 from severity_util import SEV_LABELS, effective_severity, load_json_strict
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -432,33 +436,43 @@ def check_schema(report: dict[str, Any]) -> None:
         )
 
 
-def check_consistency(report: dict[str, Any], findings: list[dict[str, Any]]) -> None:
-    """Raise ReportError when summary_statistics contradict the findings array.
+def check_derived(report: dict[str, Any], findings: list[dict[str, Any]]) -> None:
+    """Raise ReportError when a finding-derived field contradicts the findings.
 
-    A report whose findings were lost but whose stats still count them must
-    not reach APPROVE on an empty list.
+    Recomputes every derived field on a copy (``regenerate_derived``): a report
+    whose findings were lost while its stats, top findings or remediation still
+    claim blockers must not reach APPROVE. ``summary_statistics`` must match
+    exactly; ``top_findings``/``remediation`` may differ only as a curated
+    override (finalize's ``*_override``) citing real findings faithfully.
     """
-    stats = report.get("summary_statistics")
-    if not isinstance(stats, dict):
-        return  # shape errors are check_schema's job
-    if stats.get("total_findings") != len(findings):
+    expected = copy.deepcopy(report)
+    regenerate_derived(expected)
+    stats, want = report["summary_statistics"], expected["summary_statistics"]
+    if "critical_count" in stats:  # legacy optional key, never regenerated
+        want["critical_count"] = want["severity_counts"].get("CRITICAL", 0)
+    stale = sorted(k for k in set(stats) | set(want) if stats.get(k) != want.get(k))
+    if stale:
         raise ReportError(
-            f"summary_statistics.total_findings={stats.get('total_findings')!r} "
-            f"but the report holds {len(findings)} finding(s)"
+            f"summary_statistics ({', '.join(stale)}) contradict the findings;"
+            " re-run consolidate_reports.py finalize or regenerate"
         )
-    counts = stats.get("severity_counts")
-    if isinstance(counts, dict):
-        actual: dict[str, int] = {}
-        for finding in findings:
-            label = SEV_LABELS.get(finding.get("severity", 1), "INFO")
-            actual[label] = actual.get(label, 0) + 1
-        for label in set(counts) | set(actual):
-            if counts.get(label, 0) != actual.get(label, 0):
-                raise ReportError(
-                    f"summary_statistics.severity_counts[{label}]="
-                    f"{counts.get(label, 0)} but the findings hold "
-                    f"{actual.get(label, 0)}"
-                )
+    by_id = {finding["id"]: finding for finding in findings}
+    for entry in report.get("top_findings") or []:
+        finding = by_id.get(entry.get("id"))
+        if finding is None or any(
+            entry.get(key) != finding.get(key) for key in ("severity", "merge_class")
+        ):
+            raise ReportError(
+                f"top_findings entry {entry.get('id')!r} does not match a finding"
+            )
+    for bucket in report.get("remediation") or []:
+        ids = bucket.get("finding_ids", [])
+        unknown = [fid for fid in ids if fid not in by_id]
+        if unknown or bucket.get("count") != len(ids):
+            raise ReportError(
+                f"remediation bucket {bucket.get('priority')!r} does not match "
+                f"its findings (unknown: {unknown}, count: {bucket.get('count')})"
+            )
 
 
 @dataclass
@@ -965,8 +979,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
     try:
         report = load_json_strict(args.report.read_text(encoding="utf-8"))
-        check_consistency(report, validate_report(report))
+        findings = validate_report(report)
         check_schema(report)
+        check_derived(report, findings)
         options = ReviewOptions(
             repo=args.repo,
             pr=args.pr,
