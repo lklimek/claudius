@@ -3,10 +3,10 @@
 
 Deterministic half of review posting: the caller (an LLM coordinator) supplies
 only a one-line verdict (``--body`` or ``--body-file``) and an optional
-``{final_id: comment text | null}`` map; this script selects the findings, maps each ``location`` onto the RIGHT
-side of the PR diff, skips findings already raised in an open review thread,
-routes off-diff findings into the review body (never dropping them), picks
-APPROVE vs COMMENT, and posts with fallbacks.
+``{final_id: comment text | null}`` map; this script selects the findings, maps
+each ``location`` onto the RIGHT side of the PR diff, skips findings already
+raised in an open review thread, routes off-diff findings into the review body
+(never dropping them), picks APPROVE vs COMMENT, and posts with fallbacks.
 
 Input must be an assembled report (``schema_version``, ``summary_statistics``
 and ``findings`` sections whose findings carry final IDs), schema-valid, with
