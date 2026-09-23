@@ -1547,13 +1547,38 @@ def _validate_report(report: dict[str, Any]) -> bool:
     return True
 
 
+_RENDER_FORMATS = ("md", "html", "pdf")
+
+
 def cmd_finalize(args: argparse.Namespace) -> int:
     """Merge decisions, assemble + validate, and render in one call.
 
     All-or-nothing: report.json and its renders are staged in a temp dir and
     moved into place only after every step succeeds; ``merged-findings.json``
     (the audit copy, next to the decisions file) is written only then too.
+    On failure, outputs left by an earlier run are renamed to ``*.stale`` so
+    no consumer mistakes them for this run's result.
     """
+    code = _finalize(args)
+    if code != 0:
+        _set_aside_stale_outputs(args)
+    return code
+
+
+def _set_aside_stale_outputs(args: argparse.Namespace) -> None:
+    """Rename report.json, its renders and merged-findings.json to ``*.stale``."""
+    out_path = Path(args.output)
+    candidates = [out_path]
+    candidates += [out_path.with_suffix(f".{fmt}") for fmt in _RENDER_FORMATS]
+    candidates.append(Path(args.decisions).parent / "merged-findings.json")
+    for path in candidates:
+        if path.is_file():
+            stale = path.with_name(f"{path.name}.stale")
+            os.replace(path, stale)
+            log.warning("Moved stale %s from an earlier run to %s", path, stale)
+
+
+def _finalize(args: argparse.Namespace) -> int:
     decisions_path = Path(args.decisions)
     try:
         intermediate = mfh.load_intermediate(Path(args.input))
@@ -1698,7 +1723,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p_finalize.add_argument(
         "--format",
         action="append",
-        choices=["md", "html", "pdf"],
+        choices=list(_RENDER_FORMATS),
         help="Rendered format (repeatable; default: md)",
     )
 

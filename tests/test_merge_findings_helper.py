@@ -403,3 +403,39 @@ def test_malformed_finding_update_keys_are_value_errors(key):
             [_finding("security", "SEC-001")],
             {"finding_updates": {key: {"merge_class": "non_blocking"}}},
         )
+
+
+def _write_cli_inputs(tmp_path, decisions):
+    intermediate = tmp_path / "intermediate.json"
+    intermediate.write_text(
+        json.dumps(
+            {
+                "agent_stats": [],
+                "duplicate_groups": [],
+                "raw_findings": [_finding("security", "SEC-001")],
+            }
+        )
+    )
+    decisions_path = tmp_path / "merge-decisions.json"
+    decisions_path.write_text(json.dumps(decisions))
+    return intermediate, decisions_path
+
+
+def _run_cli(intermediate, decisions_path, output):
+    return helper.main(
+        ["--input", str(intermediate), "--decisions", str(decisions_path)]
+        + ["--output", str(output)]
+    )
+
+
+def test_main_invalid_decision_exits_1_like_finalize(tmp_path):
+    update = {"security:SEC-001": {"merge_class": "blocking"}}
+    intermediate, decisions = _write_cli_inputs(tmp_path, {"finding_updates": update})
+    output = tmp_path / "merged.json"
+    assert _run_cli(intermediate, decisions, output) == 1
+    assert not output.exists()
+
+
+def test_main_unreadable_input_exits_2_like_finalize(tmp_path):
+    _, decisions = _write_cli_inputs(tmp_path, {})
+    assert _run_cli(tmp_path / "nope.json", decisions, tmp_path / "m.json") == 2

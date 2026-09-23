@@ -426,6 +426,33 @@ class TestFinalize:
         assert "intent_basis" in caplog.text
         assert not (tmp_path / "out" / "report.json").exists()
 
+    def test_failure_moves_stale_outputs_aside(self, tmp_path):
+        assert self._run(tmp_path, self._decisions(), "md", "html") == 0
+        out_dir = tmp_path / "out"
+        stale = ["report.json", "report.md", "report.html"]
+        assert self._run(tmp_path, self._decisions(finding_updates={})) == 1
+        for name in stale:
+            assert not (out_dir / name).exists()
+            assert (out_dir / f"{name}.stale").is_file()
+        assert not (tmp_path / "merged-findings.json").exists()
+        assert (tmp_path / "merged-findings.json.stale").is_file()
+
+    def test_load_failure_also_moves_stale_report_aside(self, tmp_path):
+        assert self._run(tmp_path, self._decisions()) == 0
+        bad = tmp_path / "merge-decisions.json"
+        bad.write_text("{not json")
+        argv = ["finalize", "--input", str(tmp_path / "intermediate.json")]
+        argv += ["--decisions", str(bad)]
+        argv += ["--output", str(tmp_path / "out" / "report.json")]
+        assert cr.main(argv) == 2
+        assert not (tmp_path / "out" / "report.json").exists()
+        assert (tmp_path / "out" / "report.json.stale").is_file()
+
+    def test_success_leaves_no_stale_files(self, tmp_path):
+        assert self._run(tmp_path, self._decisions()) == 0
+        assert self._run(tmp_path, self._decisions()) == 0
+        assert not list(tmp_path.rglob("*.stale"))
+
 
 @pytest.mark.parametrize("command", ["gate", "finalize"])
 def test_new_commands_are_registered(command):

@@ -29,7 +29,7 @@ hand-transcription and denied shell idioms with single allowlisted script calls.
   flags with exit 1 whatever prepare or finalize would reject. Producers end their reply with it, so the coordinator's
   early-stop check never reads findings files.
 - `consolidate_reports.py finalize`: runs merge decisions → assemble → schema validation →
-  render in one call, all-or-nothing (a failure leaves no report, render or merged file).
+  render in one call, all-or-nothing (a failure leaves no report, render or merged file; outputs of an earlier run are renamed `*.stale`).
 - `consolidate_reports.py prepare --digest`: writes and prints a compact `digest.md`
   (per-finding key, band, floats, location, clipped description, duplicate groups, INTENTIONAL
   hits) in place of reading `intermediate.json`.

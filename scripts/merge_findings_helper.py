@@ -439,6 +439,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         intermediate = load_intermediate(Path(args.input))
         decisions = load_decisions(Path(args.decisions))
+    except (OSError, ValueError) as error:
+        log.error("%s", error)
+        return 2
+    try:
         findings = resolve_findings(load_raw_findings(intermediate), decisions)
         missing = find_missing_merge_class(findings)
         if missing:
@@ -455,10 +459,10 @@ def main(argv: list[str] | None = None) -> int:
             top_findings_override=decisions.get("top_findings_override"),
             remediation_override=decisions.get("remediation_override"),
         )
-        write_merged_findings(Path(args.output), document)
-    except (FileNotFoundError, ValueError) as error:
+    except ValueError as error:
         log.error("%s", error)
-        return 2
+        return 1
+    write_merged_findings(Path(args.output), document)
 
     log.info("Wrote merged findings: %s (%d findings)", args.output, len(findings))
     return 0
