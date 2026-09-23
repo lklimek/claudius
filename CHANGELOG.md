@@ -25,7 +25,7 @@ hand-transcription and denied shell idioms with single allowlisted script calls.
   go into the body. It APPROVEs only with a reviewed SHA, no posted findings or unresolved
   threads, and no non-disputed blocking or MEDIUM+ finding (`--draft` for pending), keeps
   within GitHub's size limits (overflow named, never dropped silently), neutralizes @mentions
-  and HTML comment openers outside code with CommonMark/GFM-correct fence handling,
+  and HTML comment openers outside valid GFM fences (after clipping, within the size cap),
   and falls back on HTTP 422 and a rejected APPROVE. Only reads retry via `ghsudo`.
   The caller supplies only a one-line body and an optional `{final_id: text}` map. Documented
   in `git-and-github/references/pr-review.md`; used by `review-pr` Part B.

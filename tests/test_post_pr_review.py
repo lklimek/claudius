@@ -847,7 +847,7 @@ class TestLimitsAndSanitizing:
         code = "<!-- @inside\n"
         out = ppr.sanitize(f"{opening}\n{code}{closing}\n<!-- @outside")
         assert code in out
-        assert out.endswith("&lt;!-- @\u200boutside")
+        assert out.endswith("<\u200b!-- @\u200boutside")
 
     @pytest.mark.parametrize(
         "false_close",
@@ -898,11 +898,11 @@ class TestLimitsAndSanitizing:
         assert len(clipped) <= 200
         assert clipped.count("```") % 2 == 0
 
-    def test_mentions_outside_code_are_neutralized(self):
-        text = "cc @security-team and `@keep` and\n```\n@also-keep\n```\nmail a@b.io"
+    def test_mentions_outside_fences_are_neutralized(self):
+        text = "cc @security-team and `@span` and\n```\n@also-keep\n```\nmail a@b.io"
         out = ppr.sanitize(text)
         assert "@security-team" not in out
-        assert "`@keep`" in out and "\n@also-keep\n" in out
+        assert "`@\u200bspan`" in out and "\n@also-keep\n" in out
         assert "a@b.io" in out
 
     def test_code_span_never_crosses_a_paragraph(self):
@@ -917,8 +917,7 @@ class TestLimitsAndSanitizing:
 
     def test_html_comment_opener_is_neutralized(self):
         out = ppr.sanitize("<!-- hide the rest\nvisible? `<!-- code -->`")
-        assert not out.startswith("<!--")
-        assert "<!--" not in out.replace("`<!-- code -->`", "")
+        assert "<!--" not in out
 
     def test_posted_text_is_sanitized(self):
         report = _report(
@@ -930,3 +929,89 @@ class TestLimitsAndSanitizing:
         posted = json.dumps(gh.posted[0])
         assert "@team" not in posted and "@boss" not in posted
         assert "<!--" not in posted
+
+
+class TestSanitizeStructure:
+    """Outside valid GFM fences everything is neutralized; clip first, sanitize last."""
+
+    def test_location_newline_cannot_open_html_comment_block(self):
+        report = _report(
+            _finding("QA-001", 4, "other.py:1\n\n<!--"),
+            _finding("QA-002", 4, "other.py:2", title="Second visible finding"),
+        )
+        body = _run(report, FakeGh(), dry_run=True).payload["body"]
+        assert "<!--" not in body
+        assert "`other.py:1 <\u200b!--`" in body
+        assert "**Second visible finding**" in body
+
+    def test_title_is_collapsed_to_one_line(self):
+        report = _report(_finding("QA-001", 4, "other.py:1", title="A\n\n<!--\tB"))
+        body = _run(report, FakeGh(), dry_run=True).payload["body"]
+        assert "**A <\u200b!-- B**" in body
+
+    def test_mismatched_backtick_runs_do_not_exempt_comment_opener(self):
+        assert "<!--" not in ppr.sanitize("``\n<!--\n`")
+
+    @pytest.mark.parametrize(
+        ("text", "name"),
+        [
+            ("`@victim " + "x" * 3000 + "`", "@victim"),
+            ("x" * 40 + "``@team " + "y" * 50 + "``", "@team"),
+        ],
+        ids=["long-span", "double-backtick"],
+    )
+    def test_clipping_cannot_revive_a_mention(self, text, name):
+        out = ppr._fit(text, 80)
+        assert "…(truncated)" in out
+        assert name not in out and name.replace("@", "@\u200b") in out
+
+    def test_clipped_span_in_posted_body_cannot_revive_a_mention(self):
+        report = _report(
+            _finding(
+                "QA-001", 4, "other.py:1", description="`@victim " + "x" * 3000 + "`"
+            )
+        )
+        body = _run(report, FakeGh(), dry_run=True).payload["body"]
+        assert "@victim" not in body and "@\u200bvictim" in body
+
+    def test_inline_code_span_is_neutralized(self):
+        assert ppr.sanitize("see `@x` and `<!-- y -->`") == (
+            "see `@\u200bx` and `<\u200b!-- y -->`"
+        )
+
+    def test_valid_fenced_block_is_untouched(self):
+        text = "```python\n@decorator\n<!-- x -->\n```\n"
+        assert ppr.sanitize(text) == text
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "@a `@b` <!-- c",
+            "```\n@inside",
+            "``\n<!--\n`",
+            "~~~\n@x\n~~~\n@y <!--",
+            "@\u200bz <\u200b!--",
+        ],
+    )
+    def test_sanitize_is_idempotent(self, text):
+        once = ppr.sanitize(text)
+        assert ppr.sanitize(once) == once
+        assert "\u200b\u200b" not in once
+
+    def test_limit_holds_after_zero_width_insertion(self):
+        text = "@a " * 40000
+        report = _report(
+            _finding("QA-001", 4, "src/a.py:11", description=text),
+            _finding("QA-002", 4, "other.py:1"),
+        )
+        gh = FakeGh()
+        _run(report, gh, body=text)
+        [comment] = gh.posted[0]["comments"]
+        assert len(comment["body"]) <= ppr.GITHUB_TEXT_LIMIT
+        assert len(gh.posted[0]["body"]) <= ppr.GITHUB_TEXT_LIMIT
+        assert "@a " not in json.dumps(gh.posted[0])
+
+    def test_fit_respects_limit_on_sanitized_text(self):
+        out = ppr._fit("@a" * 50000, ppr.GITHUB_TEXT_LIMIT)
+        assert len(out) <= ppr.GITHUB_TEXT_LIMIT
+        assert ppr.sanitize(out) == out

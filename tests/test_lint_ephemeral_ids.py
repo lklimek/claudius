@@ -354,3 +354,42 @@ def test_range_option_looking_value_is_not_a_git_option(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 2 and not target.exists()
+
+
+QUOTED_PATH_DIFF = """\
+diff --git "a/caf\\303\\251.md" "b/caf\\303\\251.md"
+--- "a/caf\\303\\251.md"
++++ "b/caf\\303\\251.md"
+@@ -1 +1,2 @@
+ clean
++see SEC-014
+diff --git "a/t\\ta\\"b.md" "b/t\\ta\\"b.md"
+--- "a/t\\ta\\"b.md"
++++ "b/t\\ta\\"b.md"
+@@ -0,0 +1 @@
++see CMT-001
+"""
+
+
+def test_diff_mode_decodes_git_quoted_paths() -> None:
+    hits = lint.scan_diff(QUOTED_PATH_DIFF)
+    assert [(h["file"], h["line"]) for h in hits] == [
+        ("caf\u00e9.md", 2),
+        ('t\ta"b.md', 1),
+    ]
+
+
+def test_range_mode_reports_unicode_paths(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    (tmp_path / "caf\u00e9.md").write_text("see SEC-015\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "u"], check=True)
+    env = dict(os.environ, GIT_CONFIG_COUNT="1")
+    env.update(GIT_CONFIG_KEY_0="core.quotePath", GIT_CONFIG_VALUE_0="true")
+    result = _lint_range(tmp_path, env=env)
+    assert result.returncode == 0, result.stderr
+    hits = json.loads(result.stdout)
+    assert [(h["file"], h["line"]) for h in hits] == [
+        ("a.md", 2),
+        ("caf\u00e9.md", 1),
+    ]

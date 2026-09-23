@@ -94,13 +94,30 @@ def scan_file(path: Path) -> list[dict]:
 
 
 _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
-_FILE_HEADER = re.compile(r"^\+\+\+ b/(.+)$")
+_GIT_ESCAPE = re.compile(rb'\\([0-7]{3}|[abtnvfr"\\])')
+_GIT_ESCAPES = {b"a": 7, b"b": 8, b"t": 9, b"n": 10, b"v": 11, b"f": 12, b"r": 13}
+
+
+def _unquote_git_path(path: str) -> str:
+    """Decode git's C-style quoted path (``"b/caf\\303\\251.md"``); pass others."""
+    if len(path) < 2 or not (path.startswith('"') and path.endswith('"')):
+        return path
+
+    def unescape(match: re.Match) -> bytes:
+        code = match.group(1)
+        if len(code) == 3:
+            return bytes([int(code, 8) & 0xFF])
+        return bytes([_GIT_ESCAPES.get(code, code[0])])
+
+    raw = _GIT_ESCAPE.sub(unescape, path[1:-1].encode("utf-8"))
+    return raw.decode("utf-8", errors="replace")
 
 
 def scan_diff(diff_text: str) -> list[dict]:
     """Scan a unified diff and report only added (`+`) lines.
 
-    File names come from ``+++ b/<path>`` headers. Line numbers come from the
+    File names come from ``+++ b/<path>`` headers (git's quoted form decoded).
+    Line numbers come from the
     hunk header's new-file start, incremented for each context (` `) and
     added (`+`) line; removed (`-`) lines do not advance the new-file pointer.
     Skips diff metadata lines (``---``, ``+++``, ``@@``, ``diff``, ``index``)
@@ -113,9 +130,9 @@ def scan_diff(diff_text: str) -> list[dict]:
 
     for raw in diff_text.splitlines():
         if raw.startswith("+++ "):
-            m = _FILE_HEADER.match(raw)
-            if m:
-                current_file = m.group(1)
+            path = _unquote_git_path(raw[4:])
+            if path.startswith("b/"):
+                current_file = path[2:]
             continue
         if (
             raw.startswith("--- ")
@@ -212,9 +229,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.range is not None:
         result = subprocess.run(
-            ["git", "diff", *_GIT_DIFF_ARGS, "--end-of-options", args.range],
+            # quotePath=false keeps non-ASCII paths raw; scan_diff still decodes
+            # the quoting git applies to control characters, quotes and backslashes.
+            [
+                "git",
+                "-c",
+                "core.quotePath=false",
+                "diff",
+                *_GIT_DIFF_ARGS,
+                "--end-of-options",
+                args.range,
+            ],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if result.returncode != 0:

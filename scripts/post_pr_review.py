@@ -29,9 +29,9 @@ forces COMMENT with a warning. Incomplete thread pagination fails without postin
 
 Limits: every comment and the body stay within GitHub's 65536 characters;
 body entries that do not fit are named in an "N more finding(s)" line and
-reported as ``omitted``. Posted text has @mentions and HTML
-comment openers neutralized outside code. Fence handling follows CommonMark:
-backtick info strings cannot contain backticks; closing fences have no info string.
+reported as ``omitted``. Posted text is clipped first, then has @mentions and
+HTML comment openers neutralized everywhere outside valid GFM fenced code blocks
+(inline code spans included); locations and titles are collapsed to one line.
 
 Fallbacks: HTTP 422 with inline comments -> move them into the body and retry;
 APPROVE rejected (403/422) -> retry as COMMENT. Only reads retry via ``ghsudo``.
@@ -69,8 +69,7 @@ SEVERITY_BY_LABEL = {label: level for level, label in SEV_LABELS.items()}
 _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
 _LOCATION_RE = re.compile(r":(\d+)(?:-(\d+))?(?::\d+)?$")  # optional :col
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
-_CODE_SPAN_RE = re.compile(r"(`+)(?:(?!\1).)+?\1", re.DOTALL)
-_PARAGRAPH_BREAK_RE = re.compile(r"(\n[ \t]*\n)")
+_WHITESPACE_RE = re.compile(r"\s+")
 _MENTION_RE = re.compile(r"(?<!\w)@(?=[A-Za-z0-9])")
 _HTTP_STATUS_RE = re.compile(r"HTTP (\d{3})")
 _REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
@@ -484,14 +483,20 @@ def _holds_approval(finding: dict[str, Any]) -> bool:
     )
 
 
+def _one_line(value: Any) -> str:
+    """Collapse every whitespace run to one space: no line can start a block."""
+    return _WHITESPACE_RE.sub(" ", str(value)).strip()
+
+
 def _heading(finding: dict[str, Any]) -> str:
     label = SEV_LABELS.get(effective_severity(finding), "?")
     blocking = " · BLOCKING" if finding.get("merge_class") == "blocking" else ""
-    return f"**{finding.get('id', '?')}** · {label}{blocking}"
+    return f"**{_one_line(finding.get('id', '?'))}** · {label}{blocking}"
 
 
 def _default_text(finding: dict[str, Any]) -> str:
-    parts = [f"**{finding.get('title', '')}**", str(finding.get("description", ""))]
+    title = _one_line(finding.get("title", ""))
+    parts = [f"**{title}**" if title else "", str(finding.get("description", ""))]
     if finding.get("recommendation"):
         parts.append(f"**Recommendation:** {finding['recommendation']}")
     return "\n\n".join(p for p in parts if p.strip())
@@ -536,47 +541,43 @@ def _clip(text: str, limit: int) -> str:
     return cut + (f"\n{fence}" if fence else "") + marker
 
 
-def _neutralize(text: str) -> str:
-    text = _MENTION_RE.sub("@\u200b", text)
-    return text.replace("<!--", "&lt;!--")
-
-
-def _neutralize_prose(text: str) -> str:
-    """Neutralize prose, leaving code spans (which never cross paragraphs) intact."""
-    out: list[str] = []
-    for paragraph in _PARAGRAPH_BREAK_RE.split(text):
-        last = 0
-        for match in _CODE_SPAN_RE.finditer(paragraph):
-            out += [_neutralize(paragraph[last : match.start()]), match.group(0)]
-            last = match.end()
-        out.append(_neutralize(paragraph[last:]))
-    return "".join(out)
+def _neutralize(line: str) -> str:
+    """Break @mentions and ``<!--`` with a zero-width space (idempotent)."""
+    return _MENTION_RE.sub("@\u200b", line).replace("<!--", "<\u200b!--")
 
 
 def sanitize(text: str) -> str:
     """Stop posted text from pinging users or hiding content in an HTML comment.
 
-    @mentions get a zero-width space and ``<!--`` is escaped — outside code
-    spans and fenced blocks, where they are literal anyway. A fence left open
-    is closed, so it cannot flip the fence state of text concatenated after it.
+    Every line outside a valid GFM fenced code block is neutralized, inline
+    code spans included: span detection is too fragile to exempt. A fence left
+    open is closed, so it cannot flip the state of text concatenated after it.
+    Idempotent, so already-sanitized fragments can be re-sanitized once composed.
     """
     out: list[str] = []
-    prose: list[str] = []
     fence: Optional[str] = None
     for line in text.splitlines(keepends=True):
-        opened = fence is None
+        inside = fence is not None
         fence = _next_fence(fence, line)
-        if opened and fence is None:
-            prose.append(line)
-            continue
-        if opened:
-            out.append(_neutralize_prose("".join(prose)))
-            prose = []
-        out.append(line)
-    out.append(_neutralize_prose("".join(prose)))
+        out.append(line if inside or fence is not None else _neutralize(line))
     if fence is not None:
         out.append(f"\n{fence}")
     return "".join(out)
+
+
+def _fit(text: str, limit: int) -> str:
+    """Clip ``text``, then sanitize it, so the FINAL text fits ``limit`` characters.
+
+    Sanitizing last means a clip can never cut a neutralized construct back open;
+    zero-width insertions lengthen the text, so the clip budget shrinks until
+    the sanitized result fits.
+    """
+    budget = limit
+    while True:
+        out = sanitize(_clip(text, budget))
+        if len(out) <= limit or budget <= 0:
+            return out
+        budget -= len(out) - limit
 
 
 @dataclass
@@ -590,24 +591,27 @@ def _render_body(
     body: str, inline: list[_Item], off_diff: list[_Item], covered: list[str]
 ) -> _Body:
     """Render the review body, packing off-diff items up to GitHub's limit."""
-    lead = _clip(sanitize(body.strip()), _LEAD_LIMIT) or "Automated review."
+    lead = _fit(body.strip(), _LEAD_LIMIT) or "Automated review."
     head = [lead, ""]
     if covered:
         head.append(
-            _clip(
-                f"Already raised in open threads: {', '.join(covered)}.",
+            _fit(
+                f"Already raised in open threads: {_one_line(', '.join(covered))}.",
                 _BODY_ITEM_LIMIT,
             )
         )
     blocks = [
-        "\n".join(
-            [
-                "",
-                f"- {_heading(item.finding)} — "
-                f"`{str(item.finding.get('location', '')).replace('`', '')}`",
-                "",
-                _clip(item.text, _BODY_ITEM_LIMIT),
-            ]
+        _fit(
+            "\n".join(
+                [
+                    "",
+                    f"- {_heading(item.finding)} — "
+                    f"`{_one_line(item.finding.get('location', '')).replace('`', '')}`",
+                    "",
+                    item.text,
+                ]
+            ),
+            _BODY_ITEM_LIMIT,
         )
         for item in off_diff
     ]
@@ -632,13 +636,15 @@ def _render_body(
     if omitted:
         lines += [
             "",
-            _clip(
+            _fit(
                 f"{len(omitted)} more finding(s) did not fit GitHub's size limit "
-                f"— see the full report: {', '.join(omitted)}",
+                f"— see the full report: {_one_line(', '.join(omitted))}",
                 _OMITTED_LINE_LIMIT,
             ),
         ]
-    return _Body("\n".join(lines), posted, omitted)
+    # Safety net: every fragment is already sanitized, so this is a no-op unless
+    # composition somehow re-opened a construct.
+    return _Body(_fit("\n".join(lines), GITHUB_TEXT_LIMIT), posted, omitted)
 
 
 def build_review(
@@ -669,7 +675,7 @@ def build_review(
         if is_covered(finding, threads):
             covered.append(fid)
             continue
-        text = sanitize(options.comments.get(fid) or _default_text(finding))
+        text = options.comments.get(fid) or _default_text(finding)
         # Deferred follow-ups are listed, not anchored: they are not asks on this diff.
         anchor = (
             None
@@ -699,7 +705,7 @@ def _payload(
         "comments": [
             {
                 **item.anchor,
-                "body": _clip(
+                "body": _fit(
                     f"{_heading(item.finding)}\n\n{item.text}", GITHUB_TEXT_LIMIT
                 ),
             }
