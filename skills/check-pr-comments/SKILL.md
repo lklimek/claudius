@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: "This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(gh pr comment *), Bash(git pull *), Bash(git fetch *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(*gh-post-review-reply.sh *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*)
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr comment *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-list-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(ghsudo ${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh *), Bash(which *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*)
 ---
 
 # Check PR Comments Workflow
@@ -13,15 +13,17 @@ Workflow for checking/triaging/verifying existing PR review comments.
 **ALWAYS fetch fresh comments on every invocation** — never assume none are new. Script usage and output shapes: `git-and-github` [pr-review.md](../git-and-github/references/pr-review.md).
 
 ```bash
-${CLAUDE_SKILL_DIR}/../../scripts/gh-list-review-threads.sh <owner/repo> <pr>     # review threads + isResolved
-${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-review-comments.sh <owner/repo> <pr>   # inline comments (path, line, body, html_url)
-${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-reviews.sh <owner/repo> <pr>           # review summaries
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-list-review-threads.sh <owner/repo> <pr>     # review threads + isResolved
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh <owner/repo> <pr>   # inline comments (path, line, body, html_url)
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh <owner/repo> <pr>           # review summaries
 gh pr view <pr> -R <owner/repo> --json comments     # PR-level comments
 ```
 
 Carry `isResolved` forward per thread — step 3 skips already-resolved ones. The wrappers paginate to the end.
 
 ## 2. Checkout and Pull the PR Branch
+
+Skip when `git rev-parse HEAD` already equals the PR head (e.g. a CI checkout). Otherwise (rewrites the working tree, so not pre-approved):
 
 ```bash
 gh pr checkout <number>
@@ -36,7 +38,7 @@ For every unresolved inline comment, read the code at the referenced location (a
 
 - **Verify state before resolving — broad instructions are not authorization** (`coding-best-practices` "Verify facts before acting on broad instructions"). Never mark a thread resolved on a blanket "just resolve everything" or a commit message that *claims* a fix; unverifiable against current code → `Unresolved` with an explicit "needs verification" recommendation. Governs threads resolved this session only — never reopens threads already resolved on GitHub.
 - Semantic satisfaction, not syntactic; every sub-item independently — resolved only when **all** are addressed; the intended end-user/developer experience, not just technical correctness.
-- **Call-tree walk on touched functions**: if the comment references a function whose body or signature changed in the resolution commits (`git diff $RESOLUTION_BASE...HEAD -- <file>`), run [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) first — a caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up.
+- **Call-tree walk on touched functions**: if the comment references a function whose body or signature changed in the resolution commits (`git diff <RESOLUTION_BASE>...HEAD -- <file>`), run [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) first — a caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up.
 
 **Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`) or the API returns `type: "Bot"`; **Human** — all others.
 
@@ -148,7 +150,7 @@ Sequential IDs: `CMT-001`, `CMT-002`, … Order: unresolved first (severity desc
 ## 6. Validate Report
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py report.json
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py report.json
 ```
 
 If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid data.
@@ -156,7 +158,7 @@ If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid d
 ## 7. Render and Present
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py report.json --format md
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py report.json --format md
 ```
 
 Present the rendered markdown to the user. Optionally generate HTML (`--format html`). The user can also invoke `triage-findings report.json` for interactive browser-based triage of unresolved comments.
@@ -182,7 +184,7 @@ Apply the matrix **without asking for confirmation**, except where noted:
 **NEVER auto-resolve human-created threads** without explicit per-invocation permission (e.g. "resolve all fixed threads", "resolve human threads too"). Even when fully fixed, the human reviewer resolves their own threads.
 
 **Posting replies:**
-- Inline thread replies: `${CLAUDE_SKILL_DIR}/../../scripts/gh-post-review-reply.sh <owner/repo> <pr> <comment_id> <body_file>` — `comment_id` = databaseId of the thread's first comment; body read from a Markdown file (no inline form); retries once via `ghsudo` on 403; outputs the reply's html_url
+- Inline thread replies: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh <owner/repo> <pr> <comment_id> <body_file>` — `comment_id` = databaseId of the thread's first comment; body read from a Markdown file (no inline form); retries once via `ghsudo` on 403; outputs the reply's html_url
 - PR-level replies: `gh pr comment <pr> -R <owner/repo> --body-file <file>`
 - Keep replies concise: what was done, what remains, relevant commit reference
 
@@ -190,10 +192,10 @@ Apply the matrix **without asking for confirmation**, except where noted:
 
 ```bash
 # GraphQL node IDs (PRRT_*) — pass directly:
-${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <PRRT_id> [PRRT_id ...]
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh <PRRT_id> [PRRT_id ...]
 
 # REST IDs (discussion_r* or numeric databaseId) — use enhanced mode:
-${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <owner/repo> <pr_number> --id discussion_r123 --id 456 [...]
+${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh <owner/repo> <pr_number> --id discussion_r123 --id 456 [...]
 ```
 
 The wrapper uses a GraphQL mutation directly. The `--id` form auto-converts `discussion_r*`/numeric IDs to thread node IDs; mix freely with `PRRT_*` in one invocation. Never resolve partially-addressed threads.

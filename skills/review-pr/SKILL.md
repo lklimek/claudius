@@ -1,12 +1,12 @@
 ---
 name: review-pr
 description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness."
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(*post_pr_review.py *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/post_pr_review.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-pr-base-sha.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Agent, SendMessage
 ---
 
 # PR Audit Workflow
 
-Runs inline (not forked) so it — and the `/claudius:grumpy-review` it invokes in §3 — keeps the `Agent` tool for fan-out.
+Runs inline (not forked) so it — and the `/claudius:grumpy-review` it invokes in §3 — keeps the `Agent` tool for fan-out. `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) commands is `${CLAUDE_PLUGIN_ROOT}` — write it exactly so the `allowed-tools` rules match.
 
 ## 1. Gather PR Context
 
@@ -127,9 +127,9 @@ Pass C conventions:
 
 Invoke `/claudius:grumpy-review` with the PR scope as argument — it covers agent selection/scaling by PR size, parallel spawning with explicit prompts, OWASP classification on security findings, and consolidated deduplicated report generation.
 
-Pass the PR's scope (changed files, base branch) as context. Feed the Pass C report file (§2) into `consolidate_reports.py prepare` alongside the agent reports, and supply the Context Digest (§1) to grumpy-review's §3 spawn prompts and §5b judgment step, where the coordinator assigns `merge_class`/`intent_basis` to every finding per `claudius:severity` § Merge Classification. One consolidation round covers all passes — never consolidate twice (`assign_ids` renumbers on every run).
+Pass the PR's scope (changed files, base branch) as context. Its §4 foreground-only rule binds here too: never end the turn with reviewers outstanding or before `report.json` exists. Feed the Pass C report file (§2) into `consolidate_reports.py prepare` alongside the agent reports, and supply the Context Digest (§1) to grumpy-review's §3 spawn prompts and §5b judgment step, where the coordinator assigns `merge_class`/`intent_basis` to every finding per `claudius:severity` § Merge Classification. One consolidation round covers all passes — never consolidate twice (`assign_ids` renumbers on every run).
 
-The grumpy-review delegation inherits the deep transitive call-tree walk (`category: "call_tree"`, `CALL-` prefix; see [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md)), the ephemeral-ID lint, and the G-UI-TEXT user-visible-string scan (`claudius:grumpy-review` §3). After the review completes, run `python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --range <BASE>...HEAD` (`<BASE>` = the PR's base branch, substituted literally) and fold genuine `code_quality` hits into the audit before posting.
+The grumpy-review delegation inherits the deep transitive call-tree walk (`category: "call_tree"`, `CALL-` prefix; see [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md)), the ephemeral-ID lint, and the G-UI-TEXT user-visible-string scan (`claudius:grumpy-review` §3). After the review completes, run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD` (`<BASE_REF>` = grumpy-review §1's verified base ref, e.g. `origin/main`) and fold genuine `code_quality` hits into the audit before posting.
 
 ## 4. Post GitHub PR Review
 
@@ -169,4 +169,4 @@ Inline on specific diff lines, **only actionable findings**: everything `blockin
 
 ## 5. Cleanup
 
-Shut down all agents (`SendMessage type: "shutdown_request"`) — no team object to tear down (see `grand-admiral` § Spawning).
+Per `grumpy-review` §5d: returned foreground agents need nothing; shut down only persistent (team/tmux) teammates — no team object to tear down (see `grand-admiral` § Spawning).

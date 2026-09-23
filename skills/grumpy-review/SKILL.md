@@ -1,7 +1,7 @@
 ---
 name: grumpy-review
 description: "This skill should be used when the user requests a code review, audit, or quality assessment covering quality, security, dependencies, and documentation. It uses parallel agents and produces a deduplicated, severity-ranked report."
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*consolidate_reports.py *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*lint_ephemeral_ids.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Bash(mkdir *), Bash(mv *), Agent, SendMessage, TaskStop
+allowed-tools: Read, Grep, Glob, Write, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/grumpy-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Agent, SendMessage
 ---
 
 # Code Review Methodology
@@ -20,15 +20,15 @@ This skill MUST end with a written `report.json` (and whichever rendered format 
 
 ## 1. Scope the Review
 
-**Bash hygiene** (coordinator and producers alike): commands use `<PLACEHOLDER>`s — substitute literal values, one plain command per call; no `$VAR`, `$(…)`, loops, pipes, redirects, `cd` or `python3 -c` (restricted CI allowlists deny them, costing a round each); write files with the Write tool.
+**Bash hygiene** (coordinator and producers alike): commands use `<PLACEHOLDER>`s — substitute literal values, one plain command per call; no `$VAR`, `$(…)`, loops, pipes, redirects, `cd`, `git -C` or `python3 -c` (restricted CI allowlists deny them, costing a round each); write files with the Write tool; read plugin files (skills, references, scripts) with Read, never Bash `ls`/`find`/`cp` — CI sandboxes block Bash outside the working directory.
 
 ```bash
-git rev-parse --verify <BASE>          # <BASE> = main branch; use origin/<main> if this fails
-git log <BASE>..HEAD --oneline
-git diff <BASE>...HEAD --stat          # append `-- <paths>` to scope
+git rev-parse --verify origin/<BASE>   # <BASE> = base branch; CI checkouts often lack a local copy — try plain <BASE> only if this fails
+git log <BASE_REF>..HEAD --oneline     # <BASE_REF> = the ref that verified (e.g. origin/main); use it wherever a base ref is needed below
+git diff <BASE_REF>...HEAD --stat      # append `-- <paths>` to scope
 ```
 
-Before spawning reviewers, choose one collision-resistant scratch directory for all producer and intermediate output. Include a session-specific suffix even when the PR number is known; two coordinators may review the same PR concurrently:
+Before spawning reviewers, fix one `<SCRATCH_DIR>` for all producer and intermediate output. If the invoker supplied one (e.g. `claudius-review-action` passes a dir inside the CI sandbox, where `/data/tmp` is blocked), use it verbatim and skip `mkdir`. Otherwise create a collision-resistant one, with a session-specific suffix even when the PR number is known — two coordinators may review the same PR concurrently:
 
 ```bash
 mkdir -p /data/tmp/grumpy-<PR-number-or-branch>-<session-id-fragment>   # = <SCRATCH_DIR>
@@ -101,16 +101,16 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 
 Producers write a bare JSON array of `finding_section` objects — the exact shape, required/optional fields, the producers-must-NOT-emit list, and the ID-prefix table are in [references/producer-contract.md](references/producer-contract.md) (mirrors `report-format`). Metadata is coordinator-owned: the coordinator resolves the full 40-character commit SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` without an upstream) and supplies commit/date/branch/project through `prepare --metadata`; `prepare` derives repository metadata from `--repo-root`, and with `--base-ref <BASE_REF>` (the ref the diff was reviewed against, e.g. `origin/main`) records `metadata.base_commit` — its merge-base with `commit`, which `post_pr_review.py` requires to APPROVE.
 
-**Point at the invariant part, don't restate it per spawn.** Items 2–13 above are identical across every producer in a fan-out; with N producers, retyping them N times costs the coordinator real output tokens for zero variable content (measured: ~2500 lines across 5 producers on one large review). [references/producer-contract.md](references/producer-contract.md) already holds the finding-format JSON contract, the producers-must-NOT-emit list, the ID-prefix table, the call-tree/UI-text/UX-DX/collision/Bash-hygiene/process rules, and the report-back instruction. Producers read it in place — no copy; `report.json`'s `metadata.plugin_version` pins which version applied. Each spawn prompt carries only what varies. `${CLAUDE_SKILL_DIR}` resolves only in this SKILL body — producers never see it — so replace `<RESOLVED_ABS_PATH>` with its resolved absolute value (this skill's directory) in every prompt:
+**Point at the invariant part, don't restate it per spawn.** Items 2–13 above are identical across every producer in a fan-out; with N producers, retyping them N times costs the coordinator real output tokens for zero variable content (measured: ~2500 lines across 5 producers on one large review). [references/producer-contract.md](references/producer-contract.md) already holds the finding-format JSON contract, the producers-must-NOT-emit list, the ID-prefix table, the call-tree/UI-text/UX-DX/collision/Bash-hygiene/process rules, and the report-back instruction. Producers read it in place — no copy; `report.json`'s `metadata.plugin_version` pins which version applied. Each spawn prompt carries only what varies; copy the template's paths exactly as they appear here (already resolved to absolute paths — producers never see the placeholders):
 
 ```text
-Read <RESOLVED_ABS_PATH>/references/producer-contract.md and <SCRATCH_DIR>/context-digest.md (if present) before emitting anything — both apply to your output.
+Read ${CLAUDE_SKILL_DIR}/references/producer-contract.md and <SCRATCH_DIR>/context-digest.md (if present) before emitting anything — both apply to your output.
 
 Deployed peers (all already live; do not ask whether they are running):
 - <teammate-name> — <reviewer role/focus> — <file scope>
 - <teammate-name> — <reviewer role/focus> — <file scope>
 
-Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json, then run `python3 <RESOLVED_ABS_PATH>/../../scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
+Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json, then run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
 ```
 
 `gate` prints `MAX: <band|NONE> BLOCKING: <yes|no>`, the HIGH+/blocker-gate candidate IDs, and band counts; exit 1 (`INVALID:`) means prepare or finalize would reject a finding (missing or wrongly typed field, id or floats; duplicate id; `blocking` without a nonempty `intent_basis`). Exit 2 (`ERROR:`) means the file is unreadable or not a bare array of section objects; `gate` and `prepare` report read errors, including directories and permission failures, without a traceback. Producers end their reply with its output, so the coordinator never opens a findings file to check for an early stop.
@@ -124,7 +124,7 @@ When the diff modifies or removes any function/method declaration, every code-qu
 After each agent emits findings, run the dumb ephemeral-ID lint against the diff:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --range <BASE>...HEAD
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD
 ```
 
 For each hit, judge genuine violation vs quoted/escaped example (a code fence demonstrating the rule, a test fixture asserting it, this lint's own docstring). Dismiss in-skill examples; promote genuine violations to `code_quality` findings with `tags: ["ephemeral-id-reference"]` and ID prefix `CODE-` (coordinator-assigned). Scans exit 0 whatever they find (exit 2 only if `git diff` fails) — judgement is yours.
@@ -134,6 +134,8 @@ For each hit, judge genuine violation vs quoted/escaped example (a code fence de
 This skill runs inline (not forked) so it can spawn reviewer agents. Before fanning out, confirm the `Agent` tool is available; if not (e.g. inside a subagent, which cannot spawn nested agents), STOP and report that the review cannot fan out — never silently fall back to a single self-run review. The TRIVIAL path (§1/§2) is the only legitimate one-agent review.
 
 Spawn all agents in parallel with fixed per-role tiering: `claudius:security-engineer-smythe` on `opus`, `claudius:project-reviewer-adams` on `opus`, `claudius:qa-engineer-marvin` on `sonnet` (`claudius:delegate` § Token Economy).
+
+**Foreground only — collect before the turn ends.** Issue every `Agent` call in ONE message with `run_in_background: false`: they run concurrently and control returns only after every one has finished. Never background a reviewer: a headless single-shot run (`claude -p`, CI) ends at the first turn end, abandoning background agents, and `report.json` is never written. If one was backgrounded anyway, block on its result before §5. Do not end the turn until §5c has written `report.json` (or the TRIVIAL producer has).
 
 **Model override (user-requested; confirm before downgrading Smythe)**: on explicit request (e.g. "review with Sonnet") the user may force a uniform model override across all 3 agents. Apply it to Adams and Marvin freely. Before applying an override that would downgrade `security-engineer-smythe` below `opus`, STOP and confirm the user really means it — security depth is not silently traded away by a blanket model request. Once confirmed, apply to all three including Smythe.
 
@@ -154,7 +156,7 @@ After all agents complete, scripts do the mechanical work (flattening, duplicate
 Flatten all agent reports, detect duplicate candidates, scan for INTENTIONAL comments (`<REPO_ROOT>` from `git rev-parse --show-toplevel`):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py prepare security-engineer:<SCRATCH_DIR>/security-findings.json project-reviewer:<SCRATCH_DIR>/project-findings.json qa-engineer:<SCRATCH_DIR>/qa-findings.json --repo-root <REPO_ROOT> --base-ref <BASE_REF> --output <SCRATCH_DIR>/intermediate.json --digest --metadata '{"project":"...","date":"...","branch":"...","commit":"..."}'
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py prepare security-engineer:<SCRATCH_DIR>/security-findings.json project-reviewer:<SCRATCH_DIR>/project-findings.json qa-engineer:<SCRATCH_DIR>/qa-findings.json --repo-root <REPO_ROOT> --base-ref <BASE_REF> --output <SCRATCH_DIR>/intermediate.json --digest --metadata '{"project":"...","date":"...","branch":"...","commit":"..."}'
 ```
 
 Writes `intermediate.json` (full `raw_findings`, `duplicate_groups`, `intentional_downgrades`, `section_positives`, `agent_stats`; `metadata.plugin_version` auto-filled) and prints `digest.md` — every finding's `<agent>:<original_id>` key, band, floats, location and clipped description, plus duplicate groups and INTENTIONAL hits by key. Decide from the digest (re-read `<SCRATCH_DIR>/digest.md` if the output was truncated); open `intermediate.json` only when a finding's full text matters.
@@ -194,7 +196,7 @@ Record all of it in one Write of `<SCRATCH_DIR>/merge-decisions.json` — the on
 ### 5c. Finalize
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py finalize --input <SCRATCH_DIR>/intermediate.json --decisions <SCRATCH_DIR>/merge-decisions.json --output <REPORT_DIR>/report.json --format md
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py finalize --input <SCRATCH_DIR>/intermediate.json --decisions <SCRATCH_DIR>/merge-decisions.json --output <REPORT_DIR>/report.json --format md
 ```
 
 Applies the decisions (writing `<SCRATCH_DIR>/merged-findings.json` for audit), assigns sequential IDs by category, computes `summary_statistics`/`top_findings`/`remediation`, validates against the schema, and renders one file per `--format` (repeatable: `md`, `html`, `pdf`; default `md`) next to `report.json`. All-or-nothing: on failure no report, render or `merged-findings.json` is written, and any left by an earlier run are renamed to `*.stale`; on success, renders of formats not requested this time are renamed `*.stale` too. Exit 1 names each finding lacking `merge_class`, each invalid decision (e.g. `blocking` without `intent_basis`), each schema error, or a failed render — fix `merge-decisions.json` (or the format) and re-run; exit 2 means an input file is missing or unparseable. After hand-editing `report.json`, re-validate with `validate_report.py <REPORT_DIR>/report.json`.
@@ -203,7 +205,7 @@ When presenting results, filter the consolidated findings for `merge_class == "o
 
 ### 5d. Stop reviewer processes
 
-After every reviewer output has been read and consolidation is complete, send `SendMessage({type: "shutdown_request"})` to each spawned teammate, including ones already marked inactive (`grand-admiral` § Terminating Teammates — `TaskStop` cannot address a named teammate). Agent completion does not reliably tear down the tmux-backed process: sweep orphaned panes per `grand-admiral`'s `references/stall-watchdog.md` § Orphaned Panes and Processes.
+Foreground `Agent` calls that have returned are finished — send them nothing. Only for reviewers spawned as persistent teammates (team/tmux-backed), after consolidation send `SendMessage({to: <name>, message: {type: "shutdown_request"}})` — the structured object, never a JSON string — to each, including ones already marked inactive (`grand-admiral` § Terminating Teammates), then sweep orphaned panes per `grand-admiral`'s `references/stall-watchdog.md` § Orphaned Panes and Processes.
 
 ## 6. Iterate if Needed
 
@@ -211,7 +213,7 @@ If the initial review reveals areas needing deeper investigation: spawn addition
 
 ## 7. Additional Report Formats (Optional)
 
-Request HTML/PDF via `finalize --format`; to re-render an existing report: `python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py <REPORT_DIR>/report.json --format html` (or `pdf`). For interactive triage, use the `claudius:triage-findings` skill with the `<REPORT_DIR>/report.json` path.
+Request HTML/PDF via `finalize --format`; to re-render an existing report: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py <REPORT_DIR>/report.json --format html` (or `pdf`). For interactive triage, use the `claudius:triage-findings` skill with the `<REPORT_DIR>/report.json` path.
 
 ## CI Log Retrieval
 

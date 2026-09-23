@@ -1,6 +1,6 @@
 # PR Review Operations
 
-All operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`. `${CLAUDE_SKILL_DIR}` is not substituted in reference files: the caller writes the absolute `<plugin-root>` (the loading skill's `${CLAUDE_SKILL_DIR}/../..`) into each command.
+All operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`. Placeholders are not substituted in reference files: the caller writes the absolute `<plugin-root>` — its skill's resolved `${CLAUDE_PLUGIN_ROOT}`, never a `…/skills/<name>/../..` form (anchored `allowed-tools` rules match the literal prefix) — into each command.
 
 ## Get PR Context
 
