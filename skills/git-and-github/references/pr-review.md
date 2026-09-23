@@ -58,7 +58,7 @@ selection, diff-bounds mapping, open-thread dedup, off-diff findings, the event,
 rejected-APPROVE fallbacks (details: script docstring):
 
 ```bash
-python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> --body "<one-line verdict>" [--comments <comments.json>] [--min-severity MEDIUM] [--draft] [--dry-run]
+python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> --body-file <verdict.md> [--comments <comments.json>] [--min-severity MEDIUM] [--draft] [--dry-run]
 ```
 
 - `--comments`: optional JSON `{"<final_id>": "comment text" | null}` written with the Write

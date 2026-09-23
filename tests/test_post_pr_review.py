@@ -1217,3 +1217,70 @@ class TestSanitizeStructure:
         out = ppr._fit("@a" * 50000, ppr.GITHUB_TEXT_LIMIT)
         assert len(out) <= ppr.GITHUB_TEXT_LIMIT
         assert ppr.sanitize(out) == out
+
+
+# ---------------------------------------------------------------------------
+# hardening: mention evasion, dedup round-trip, --body-file
+# ---------------------------------------------------------------------------
+class TestMentionEvasion:
+    @pytest.mark.parametrize(
+        "text", ["_@octocat_", "__@octocat__", "x_@octocat", "é@octocat"]
+    )
+    def test_non_alphanumeric_prefix_does_not_exempt_a_mention(self, text):
+        assert "@octocat" not in ppr.sanitize(text)
+
+    @pytest.mark.parametrize("text", ["a@b.io", "Z9@b.io"])
+    def test_alphanumeric_prefixed_email_is_kept(self, text):
+        assert ppr.sanitize(text) == text
+
+
+class TestDedupRoundTrip:
+    @pytest.mark.parametrize(
+        "title", ["Option<T> unwrap panics", "Ping @octocat on <details> leak"]
+    )
+    def test_posted_comment_covers_the_same_finding_on_rerun(self, title):
+        report = _report(_finding("SEC-001", 4, "src/a.py:12", title=title))
+        first = FakeGh()
+        _run(report, first)
+        [comment] = first.posted[0]["comments"]
+        assert "​" in comment["body"]  # sanitization did alter the title
+        rerun = FakeGh(
+            threads=[_thread(comment["path"], comment["line"], comment["body"])]
+        )
+        result = _run(report, rerun)
+        assert result.covered == ["SEC-001"]
+        assert rerun.posted[0]["comments"] == []
+
+    def test_zero_width_space_in_title_phrase_is_not_a_word_bridge(self):
+        # Stripping ZWSP must not merge words into a false whole-phrase match.
+        assert not ppr._cites("Unchecked​parser error", "unchecked parser error")
+
+
+class TestBodyFile:
+    def _argv(self, tmp_path: Path, *extra: str) -> list[str]:
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(_valid_report()))
+        return ["o/r", "7", str(report), "--dry-run", *extra]
+
+    def test_body_file_is_used_verbatim(self, tmp_path, capsys, monkeypatch):
+        body = tmp_path / "body.md"
+        body.write_text("Costs $HOME and `$(id)` nothing.\n", encoding="utf-8")
+        monkeypatch.setattr(ppr, "GhCli", FakeGh)
+        assert ppr.main(self._argv(tmp_path, "--body-file", str(body))) == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["payload"]["body"].startswith("Costs $HOME and `$(id)` nothing.")
+
+    def test_body_and_body_file_are_mutually_exclusive(self, tmp_path):
+        body = tmp_path / "body.md"
+        body.write_text("x")
+        argv = self._argv(tmp_path, "--body", "y", "--body-file", str(body))
+        with pytest.raises(SystemExit) as exc:
+            ppr.main(argv)
+        assert exc.value.code == 2
+
+    def test_unreadable_body_file_exits_2_without_calls(self, tmp_path, monkeypatch):
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        argv = self._argv(tmp_path, "--body-file", str(tmp_path / "missing.md"))
+        assert ppr.main(argv) == 2
+        assert gh.calls == []

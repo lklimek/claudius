@@ -2,8 +2,8 @@
 """Build and post a GitHub PR review from a consolidated report.json.
 
 Deterministic half of review posting: the caller (an LLM coordinator) supplies
-only a one-line ``--body`` and an optional ``{final_id: comment text | null}``
-map; this script selects the findings, maps each ``location`` onto the RIGHT
+only a one-line verdict (``--body`` or ``--body-file``) and an optional
+``{final_id: comment text | null}`` map; this script selects the findings, maps each ``location`` onto the RIGHT
 side of the PR diff, skips findings already raised in an open review thread,
 routes off-diff findings into the review body (never dropping them), picks
 APPROVE vs COMMENT, and posts with fallbacks.
@@ -42,7 +42,7 @@ APPROVE rejected (403/422) -> retry as COMMENT. Only reads retry via ``ghsudo``.
 
 Usage:
     python3 scripts/post_pr_review.py <owner/repo> <pr> <report.json> \\
-        [--comments comments.json] [--body "One-line verdict."] \\
+        [--comments comments.json] [--body "Verdict." | --body-file body.md] \\
         [--min-severity MEDIUM] [--draft] [--commit SHA] [--dry-run]
 
 Prints one JSON object: the review URL, event, and inline/in_body/omitted/
@@ -74,7 +74,9 @@ _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
 _LOCATION_RE = re.compile(r":(\d+)(?:-(\d+))?(?::\d+)?$")  # optional :col
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _WHITESPACE_RE = re.compile(r"\s+")
-_MENTION_RE = re.compile(r"(?<!\w)@(?=[A-Za-z0-9])")
+# Only an ASCII alphanumeric before "@" exempts it (an email): GitHub still
+# links "_@user_" (emphasis) and "é@user" (non-ASCII is a non-word there).
+_MENTION_RE = re.compile(r"(?<![A-Za-z0-9])@(?=[A-Za-z0-9])")
 _HTTP_STATUS_RE = re.compile(r"HTTP (\d{3})")
 _REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 _FILES_PER_PAGE = 100
@@ -317,12 +319,16 @@ def fetch_open_threads(gh: Any, repo: str, pr: int) -> list[OpenThread]:
 
 
 def _cites(body: str, phrase: str) -> bool:
-    """True when ``phrase`` occurs in ``body`` as a whole, case-insensitive phrase."""
+    """True when ``phrase`` occurs in ``body`` as a whole, case-insensitive phrase.
+
+    Zero-width spaces are dropped from ``body`` first: sanitize() inserts them,
+    so a comment this script posted must still cite its own finding's title.
+    """
     words = phrase.split()
     if not words:
         return False
     pattern = r"(?<!\w)" + r"\s+".join(map(re.escape, words)) + r"(?!\w)"
-    return re.search(pattern, body, re.IGNORECASE) is not None
+    return re.search(pattern, body.replace("\u200b", ""), re.IGNORECASE) is not None
 
 
 def is_covered(finding: dict[str, Any], threads: list[OpenThread]) -> bool:
@@ -919,7 +925,13 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         type=Path,
         help="JSON {final_id: comment text | null}; null skips the finding",
     )
-    parser.add_argument("--body", default="", help="One-line review verdict")
+    body = parser.add_mutually_exclusive_group()
+    body.add_argument("--body", default="", help="One-line review verdict")
+    body.add_argument(
+        "--body-file",
+        type=Path,
+        help="Read the verdict from a UTF-8 file (safe for $ and backticks)",
+    )
     parser.add_argument(
         "--min-severity",
         choices=list(SEVERITY_BY_LABEL),
@@ -958,7 +970,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         options = ReviewOptions(
             repo=args.repo,
             pr=args.pr,
-            body=args.body,
+            body=(
+                args.body_file.read_text(encoding="utf-8")
+                if args.body_file
+                else args.body
+            ),
             comments=_load_comments(args.comments),
             min_severity=SEVERITY_BY_LABEL[args.min_severity],
             draft=args.draft,
