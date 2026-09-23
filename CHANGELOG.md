@@ -20,11 +20,13 @@ Headless-CI hardening follow-ups to 8.1.0.
   `report.json` is written (fixes CI runs ending with no report). Invoker-supplied scratch dir
   honored; base ref resolves `origin/<base>` first; shutdown only for persistent teammates.
 - `post_pr_review.py`: recomputes all derived report fields and exits 2 on any mismatch
-  (curated `top_findings`/`remediation` overrides must cite real findings); `--body-file`.
+  (curated `top_findings`/`remediation` overrides must cite real findings; dropping a section
+  that cites findings is rejected); `--body-file`.
 - `post_pr_review.py` input safety (exit 2, before any GitHub call): `severity`/`overall_severity`
   must match the floats; `<owner/repo>` must equal `GITHUB_REPOSITORY` (else `origin`);
   `--body-file` confined to a regular non-symlink file under cwd/report dir, outside `.git`,
-  `/proc`, `/sys`; text carrying a token value (GitHub/Anthropic, `x-access-token:<token>`) refused.
+  `/proc`, `/sys`; any report/body/comment-map string or key carrying a token value (GitHub/Anthropic,
+  `x-access-token:<token>`) refused before validation, so no error or log can quote it.
   `disputed` exempts a finding from APPROVE only with `ai_verdict` `false_positive`/`duplicate`.
 - `check-pr-comments`: dropped `ctags`/`global`/`gtags`/`tree-sitter`/`which` grants (they load
   repo-controlled config/grammars → RCE on PR content); call-tree walks use Grep/Read only.

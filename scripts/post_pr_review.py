@@ -461,9 +461,10 @@ def check_schema(report: dict[str, Any]) -> None:
     if errors:
         first = errors[0]
         where = ".".join(str(p) for p in first.absolute_path) or "(root)"
+        # Keyword only: jsonschema's message quotes the offending value.
         raise ReportError(
             f"fails review-report schema ({len(errors)} error(s); first at "
-            f"{where}: {first.message})"
+            f"{where}: violates {first.validator!r})"
         )
 
 
@@ -489,6 +490,18 @@ def check_derived(report: dict[str, Any], findings: list[dict[str, Any]]) -> Non
         )
     for finding in findings:
         _check_severity_derivation(finding)
+    # Finalize omits a section only when it cites nothing (remediation always
+    # has its three buckets); dropping one that cites findings hides blockers.
+    cited = {
+        "top_findings": len(expected["top_findings"]),
+        "remediation": sum(b["count"] for b in expected["remediation"]),
+    }
+    for key, count in cited.items():
+        if count and not report.get(key):
+            raise ReportError(
+                f"{key} is missing but {count} finding(s) belong in it;"
+                " re-run consolidate_reports.py finalize or regenerate"
+            )
     by_id = {finding["id"]: finding for finding in findings}
     for entry in report.get("top_findings") or []:
         finding = by_id.get(entry.get("id"))
@@ -539,11 +552,12 @@ def _check_severity_derivation(finding: dict[str, Any]) -> None:
 
 
 def _strings(value: Any):
-    """Yield every string nested in ``value`` (dict values, list items)."""
+    """Yield every string nested in ``value`` (dict keys and values, list items)."""
     if isinstance(value, str):
         yield value
     elif isinstance(value, dict):
-        for item in value.values():
+        for key, item in value.items():
+            yield from _strings(key)
             yield from _strings(item)
     elif isinstance(value, list):
         for item in value:
@@ -558,17 +572,24 @@ def _secret_kind(text: str) -> Optional[str]:
     return None
 
 
-def check_secrets(findings: list[dict[str, Any]], options: "ReviewOptions") -> None:
-    """Raise ReportError if anything that could be posted looks like a credential.
+def check_secrets(report: Any, options: "ReviewOptions") -> None:
+    """Raise ReportError if any input string or key looks like a credential.
 
-    Scans the body, the comment map and every finding string (posted or not:
-    fail closed). The error names where, never the match itself.
+    Scans the body, the comment map and the whole report (posted or not: fail
+    closed) before anything else may quote them in an error or log. The error
+    names where by position, never by a value or key that could be the match.
     """
-    sources: list[tuple[str, Any]] = [("review body", options.body)]
-    sources += [
-        (f"comment for {fid!r}", text) for fid, text in options.comments.items()
+    sources: list[tuple[str, Any]] = [
+        ("review body", options.body),
+        ("comment map", options.comments),
     ]
-    sources += [(f"finding {f.get('id')!r}", f) for f in findings]
+    sections = report.get("findings") if isinstance(report, dict) else None
+    if isinstance(sections, list):
+        for i, section in enumerate(sections):
+            items = section.get("findings") if isinstance(section, dict) else None
+            for j, finding in enumerate(items if isinstance(items, list) else []):
+                sources.append((f"findings[{i}].findings[{j}]", finding))
+    sources.append(("report", report))  # everything, incl. keys (re-scan is cheap)
     for where, value in sources:
         for text in _strings(value):
             kind = _secret_kind(text)
@@ -888,9 +909,9 @@ def build_review(
         )
         item = _Item(finding, text, anchor)
         (inline if item.anchor else off_diff).append(item)
-    unknown = sorted(set(options.comments) - seen)
-    if unknown:
-        log.warning("Comment map IDs not in the report (ignored): %s", unknown)
+    unknown = set(options.comments) - seen
+    if unknown:  # count only: an untrusted key must never reach the log
+        log.warning("%d comment map ID(s) not in the report (ignored)", len(unknown))
     return inline, off_diff, covered, skipped
 
 
@@ -951,8 +972,8 @@ def post_review(
     gh: Any, report: dict[str, Any], options: ReviewOptions, *, dry_run: bool = False
 ) -> PostResult:
     """Build the review from ``report`` and post it (unless ``dry_run``)."""
+    check_secrets(report, options)
     findings = validate_report(report)
-    check_secrets(findings, options)
     held = any(_holds_approval(f) for f in findings)
     pr_path = f"repos/{options.repo}/pulls/{options.pr}"
     head = gh.request("GET", pr_path)["head"]["sha"]
@@ -1137,9 +1158,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
     try:
         report = load_json_strict(args.report.read_text(encoding="utf-8"))
-        findings = validate_report(report)
-        check_schema(report)
-        check_derived(report, findings)
         options = ReviewOptions(
             repo=args.repo,
             pr=args.pr,
@@ -1153,6 +1171,11 @@ def main(argv: Optional[list[str]] = None) -> int:
             draft=args.draft,
             commit=args.commit,
         )
+        # Before validation: its errors may quote report values and keys.
+        check_secrets(report, options)
+        findings = validate_report(report)
+        check_schema(report)
+        check_derived(report, findings)
     except ReportError as error:
         log.error("%s: %s", args.report, error)
         return 2

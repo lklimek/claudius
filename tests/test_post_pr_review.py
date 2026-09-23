@@ -1030,6 +1030,29 @@ class TestReportValidation:
         data["summary_statistics"]["critical_count"] = 0
         self._assert_rejected(data, tmp_path, monkeypatch)
 
+    @pytest.mark.parametrize("field", ["top_findings", "remediation"])
+    @pytest.mark.parametrize("emptied", [False, True])
+    def test_dropped_derived_section_exits_2(
+        self, field, emptied, tmp_path, monkeypatch
+    ):
+        data = _valid_report(self._blocker())
+        if emptied:
+            data[field] = []
+        else:
+            del data[field]
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_absent_derived_sections_pass_when_nothing_is_derived(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report()
+        data.pop("top_findings", None)
+        data.pop("remediation", None)
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(data))
+        monkeypatch.setattr(ppr, "GhCli", FakeGh)
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 0
+
     def test_curated_overrides_citing_real_findings_are_accepted(
         self, tmp_path, monkeypatch
     ):
@@ -1630,6 +1653,52 @@ class TestSecretsAreNeverPosted:
         code, gh = _cli(_valid_report(finding), tmp_path, monkeypatch)
         assert code == 2 and gh.calls == []
         assert _SECRETS[0] not in caplog.text
+
+    def test_secret_in_comment_map_key_exits_2_without_echo(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        comments = tmp_path / "c.json"
+        comments.write_text(json.dumps({_SECRETS[1]: "text"}))
+        data = _valid_report(_finding("SEC-001", 4, "src/a.py:12"))
+        code, gh = _cli(data, tmp_path, monkeypatch, "--comments", str(comments))
+        assert code == 2 and gh.calls == []
+        assert _SECRETS[1] not in caplog.text
+
+    def test_unknown_comment_id_warning_never_echoes_the_key(self, caplog):
+        bogus = "leaked-" + "q" * 30
+        report = _report(_finding("SEC-001", 4, "src/a.py:12"))
+        options = ppr.ReviewOptions(repo="o/r", pr=7, comments={bogus: "x"})
+        ppr.build_review(report, options, {}, [])
+        assert "1 comment map ID" in caplog.text
+        assert bogus not in caplog.text
+
+    @pytest.mark.parametrize(
+        "tamper",
+        [
+            # schema-invalid value: jsonschema quotes it in its message
+            lambda d: d["metadata"].update(commit=_SECRETS[1]),
+            # schema-invalid key: "additional properties ... were unexpected"
+            lambda d: d["metadata"].update({_SECRETS[1]: 1}),
+            # check_derived names the offending top_findings id
+            lambda d: d["top_findings"][0].update(id=_SECRETS[1]),
+        ],
+    )
+    def test_secret_in_invalid_report_is_never_logged(
+        self, tamper, tmp_path, monkeypatch, caplog
+    ):
+        data = _valid_report(_finding("SEC-001", 4, "src/a.py:12"))
+        tamper(data)
+        code, gh = _cli(data, tmp_path, monkeypatch)
+        assert code == 2 and gh.calls == []
+        assert _SECRETS[1] not in caplog.text
+
+    def test_schema_error_message_carries_no_value(self):
+        data = _valid_report()
+        data["metadata"]["commit"] = "not-a-sha-but-a-canary"
+        with pytest.raises(ppr.ReportError) as error:
+            ppr.check_schema(data)
+        assert "canary" not in str(error.value)
+        assert "metadata.commit" in str(error.value)
 
     def test_described_credential_prefix_is_posted(self, tmp_path, monkeypatch):
         finding = _finding("SEC-001", 4, "src/a.py:12")
