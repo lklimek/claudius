@@ -74,8 +74,7 @@ python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> 
   is posted, no unresolved thread remains and no non-disputed finding is blocking or MEDIUM+.
   `--dry-run` prints the payload without posting. Input must be a schema-valid assembled
   `report.json`; otherwise exit 2.
-- Outside valid [GFM fences](https://github.github.com/gfm/#fenced-code-blocks) (inline code
-  included), @mentions and HTML comment openers are neutralized after clipping.
+- @mentions and HTML comment openers are neutralized everywhere, code included, after clipping.
 - Prints `{url, event, inline, in_body, omitted, covered_by_open_threads, skipped}`; `omitted`
   = findings that overflowed GitHub's size limit (named in the body, not posted).
 

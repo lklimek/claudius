@@ -549,17 +549,16 @@ def _neutralize(line: str) -> str:
 def sanitize(text: str) -> str:
     """Stop posted text from pinging users or hiding content in an HTML comment.
 
-    Every line outside a valid GFM fenced code block is neutralized, inline
-    code spans included: span detection is too fragile to exempt. A fence left
-    open is closed, so it cannot flip the state of text concatenated after it.
+    Every line is neutralized, code included: span, fence and HTML-block
+    detection can all be fooled, so nothing is exempt. Fences are still tracked
+    so one left open is closed and cannot swallow text concatenated after it.
     Idempotent, so already-sanitized fragments can be re-sanitized once composed.
     """
     out: list[str] = []
     fence: Optional[str] = None
     for line in text.splitlines(keepends=True):
-        inside = fence is not None
         fence = _next_fence(fence, line)
-        out.append(line if inside or fence is not None else _neutralize(line))
+        out.append(_neutralize(line))
     if fence is not None:
         out.append(f"\n{fence}")
     return "".join(out)

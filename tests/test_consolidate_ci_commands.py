@@ -234,6 +234,8 @@ class TestGate:
             ([_f("QA-001", 0.5, 0.5, relevance=None)], "relevance"),
             ([_f("QA-001", 0.5, 0.5, title=7)], "title"),
             ([_f("QA-001", 0.5, 0.5, recommendation=["x"])], "recommendation"),
+            ([_f("QA-001", 0.5, 0.5, title=" ")], "title"),
+            ([_f("QA-001", 0.5, 0.5, description="\t")], "description"),
             (
                 [{k: v for k, v in _f("QA-001", 0.5, 0.5).items() if k != "location"}],
                 "location",
@@ -596,6 +598,19 @@ class TestFinalize:
         argv += ["--output", str(blocker / "sub" / "report.json")]
         assert cr.main(argv) == 1
         assert "blocker" in caplog.text
+
+    def test_unexpected_error_still_sets_aside_stale_outputs(
+        self, tmp_path, monkeypatch
+    ):
+        assert self._run(tmp_path, self._decisions()) == 0
+
+        def boom(*_args, **_kwargs):
+            raise TypeError("unsupported operand")
+
+        monkeypatch.setattr(cr, "_assemble_and_write", boom)
+        assert self._run(tmp_path, self._decisions()) == 1
+        assert not (tmp_path / "out" / "report.json").exists()
+        assert (tmp_path / "out" / "report.json.stale").is_file()
 
     def test_success_leaves_no_stale_files(self, tmp_path):
         assert self._run(tmp_path, self._decisions()) == 0

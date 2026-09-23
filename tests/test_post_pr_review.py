@@ -841,12 +841,9 @@ class TestLimitsAndSanitizing:
             ("~~~bad`info", "~~~~"),
         ],
     )
-    def test_valid_fences_preserve_code_and_sanitize_following_prose(
-        self, opening, closing
-    ):
-        code = "<!-- @inside\n"
-        out = ppr.sanitize(f"{opening}\n{code}{closing}\n<!-- @outside")
-        assert code in out
+    def test_valid_fences_are_kept_and_everything_is_sanitized(self, opening, closing):
+        out = ppr.sanitize(f"{opening}\n<!-- @inside\n{closing}\n<!-- @outside")
+        assert out.startswith(f"{opening}\n<\u200b!-- @\u200binside\n{closing}\n")
         assert out.endswith("<\u200b!-- @\u200boutside")
 
     @pytest.mark.parametrize(
@@ -856,7 +853,9 @@ class TestLimitsAndSanitizing:
     def test_invalid_closing_fence_keeps_block_open(self, false_close):
         text = f"```python\n{false_close}\n<!-- @inside\n"
         out = ppr.sanitize(text)
-        assert out == text + "\n```"
+        # still open, so sanitize closes it; nothing inside stays live
+        assert out.endswith("\n```")
+        assert "<!--" not in out and "@inside" not in out
 
     def test_invalid_info_string_cannot_hide_later_off_diff_finding(self):
         report = _report(
@@ -898,11 +897,11 @@ class TestLimitsAndSanitizing:
         assert len(clipped) <= 200
         assert clipped.count("```") % 2 == 0
 
-    def test_mentions_outside_fences_are_neutralized(self):
-        text = "cc @security-team and `@span` and\n```\n@also-keep\n```\nmail a@b.io"
+    def test_mentions_everywhere_are_neutralized_but_emails_are_not(self):
+        text = "cc @security-team and `@span` and\n```\n@fenced\n```\nmail a@b.io"
         out = ppr.sanitize(text)
         assert "@security-team" not in out
-        assert "`@\u200bspan`" in out and "\n@also-keep\n" in out
+        assert "`@\u200bspan`" in out and "\n@\u200bfenced\n" in out
         assert "a@b.io" in out
 
     def test_code_span_never_crosses_a_paragraph(self):
@@ -910,7 +909,7 @@ class TestLimitsAndSanitizing:
 
     def test_unclosed_fence_is_closed(self):
         out = ppr.sanitize("```\n@inside")
-        assert out.count("```") == 2 and "@inside" in out
+        assert out.count("```") == 2 and "@\u200binside" in out
 
     def test_backtick_prefixed_mention_outside_span_is_neutralized(self):
         assert "@team" not in ppr.sanitize("dangling `@team")
@@ -979,9 +978,16 @@ class TestSanitizeStructure:
             "see `@\u200bx` and `<\u200b!-- y -->`"
         )
 
-    def test_valid_fenced_block_is_untouched(self):
-        text = "```python\n@decorator\n<!-- x -->\n```\n"
-        assert ppr.sanitize(text) == text
+    def test_fenced_block_is_neutralized_too(self):
+        # Fence detection can be fooled (e.g. by an HTML <pre> block), so
+        # nothing is exempt: the fence stays, its dangerous tokens do not.
+        out = ppr.sanitize("```python\n@decorator\n<!-- x -->\n```\n")
+        assert out.startswith("```python\n") and out.endswith("```\n")
+        assert "@decorator" not in out and "<!--" not in out
+
+    def test_html_pre_block_cannot_fool_fence_detection(self):
+        out = ppr.sanitize("<pre>\n```\n</pre>\n<!--")
+        assert "<!--" not in out
 
     @pytest.mark.parametrize(
         "text",

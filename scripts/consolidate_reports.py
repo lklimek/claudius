@@ -1404,7 +1404,11 @@ def _gate_problems(raw: list[dict[str, Any]]) -> list[str]:
         ]
         if axes:
             bad_floats.append(f"{fid or '?'} ({', '.join(axes)})")
-        fields = _schema_field_problems(f)
+        fields = _schema_field_problems(f) + [
+            name
+            for name in _REQUIRED_FINDING_FIELDS
+            if isinstance(f.get(name), str) and not f[name].strip()
+        ]
         basis = f.get("intent_basis")
         if (
             f.get("merge_class") == "blocking"
@@ -1656,8 +1660,8 @@ def cmd_finalize(args: argparse.Namespace) -> int:
     """
     try:
         code = _finalize(args)
-    except OSError as e:
-        log.error("finalize failed: %s", e)
+    except Exception as e:  # noqa: BLE001 - any failure must still set aside outputs
+        log.error("finalize failed: %s: %s", type(e).__name__, e)
         code = 1
     if code != 0:
         try:
