@@ -1645,9 +1645,16 @@ def cmd_finalize(args: argparse.Namespace) -> int:
     On failure, outputs left by an earlier run are renamed to ``*.stale`` so
     no consumer mistakes them for this run's result.
     """
-    code = _finalize(args)
+    try:
+        code = _finalize(args)
+    except OSError as e:
+        log.error("finalize failed: %s", e)
+        code = 1
     if code != 0:
-        _set_aside_stale_outputs(args)
+        try:
+            _set_aside_stale_outputs(args)
+        except OSError as e:
+            log.error("Could not set aside earlier outputs: %s", e)
     return code
 
 

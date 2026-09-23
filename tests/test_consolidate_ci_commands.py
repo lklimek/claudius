@@ -515,6 +515,16 @@ class TestFinalize:
         assert (out_dir / "report.json.stale").is_file()
         assert not list(out_dir.glob(".finalize-*"))
 
+    def test_unwritable_output_dir_exits_1_without_traceback(self, tmp_path, caplog):
+        intermediate = _prepare(tmp_path, digest=False, reports={"qa": []})
+        decisions = _write(tmp_path / "merge-decisions.json", {})
+        blocker = tmp_path / "blocker"
+        blocker.write_text("not a dir")
+        argv = ["finalize", "--input", str(intermediate), "--decisions", str(decisions)]
+        argv += ["--output", str(blocker / "sub" / "report.json")]
+        assert cr.main(argv) == 1
+        assert "blocker" in caplog.text
+
     def test_success_leaves_no_stale_files(self, tmp_path):
         assert self._run(tmp_path, self._decisions()) == 0
         assert self._run(tmp_path, self._decisions()) == 0
