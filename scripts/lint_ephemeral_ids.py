@@ -228,23 +228,27 @@ def main(argv: list[str] | None = None) -> int:
     hits: list[dict] = []
 
     if args.range is not None:
-        result = subprocess.run(
-            # quotePath=false keeps non-ASCII paths raw; scan_diff still decodes
-            # the quoting git applies to control characters, quotes and backslashes.
-            [
-                "git",
-                "-c",
-                "core.quotePath=false",
-                "diff",
-                *_GIT_DIFF_ARGS,
-                "--end-of-options",
-                args.range,
-            ],
-            capture_output=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                # quotePath=false keeps non-ASCII paths raw; scan_diff still decodes
+                # the quoting git applies to control characters, quotes and backslashes.
+                [
+                    "git",
+                    "-c",
+                    "core.quotePath=false",
+                    "diff",
+                    *_GIT_DIFF_ARGS,
+                    "--end-of-options",
+                    args.range,
+                ],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError as error:  # e.g. git not on PATH
+            sys.stderr.write(f"git diff {args.range} failed: {error}\n")
+            return 2
         if result.returncode != 0:
             sys.stderr.write(f"git diff {args.range} failed: {result.stderr}")
             return 2

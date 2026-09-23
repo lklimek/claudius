@@ -316,6 +316,22 @@ def test_range_mode_git_failure_exits_2(tmp_path: Path) -> None:
     assert result.returncode == 2
 
 
+def test_range_mode_missing_git_exits_2_without_traceback(tmp_path: Path) -> None:
+    empty = tmp_path / "empty-bin"
+    empty.mkdir()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "base...HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={**os.environ, "PATH": str(empty)},
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "git diff base...HEAD failed" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 @pytest.mark.parametrize(
     "config",
     [
