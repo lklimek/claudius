@@ -103,6 +103,7 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _MENTION_RE = re.compile(r"(?<![A-Za-z0-9])@(?=[A-Za-z0-9])")
 _HTTP_STATUS_RE = re.compile(r"HTTP (\d{3})")
 _REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+_COMMIT_RE = re.compile(r"\A[0-9a-fA-F]{7,40}\Z")
 _FILES_PER_PAGE = 100
 _MAX_FILE_PAGES = 30  # the API lists at most 3000 files per PR
 _MAX_THREAD_PAGES = 50
@@ -587,6 +588,8 @@ def check_secrets(report: Any, options: "ReviewOptions") -> None:
     names where by position, never by a value or key that could be the match.
     """
     sources: list[tuple[str, Any]] = [
+        ("repo argument", options.repo),
+        ("--commit", options.commit or ""),
         ("review body", options.body),
         ("comment map", options.comments),
     ]
@@ -1068,6 +1071,22 @@ def _repo_arg(value: str) -> str:
     return value
 
 
+def _commit_arg(value: str) -> str:
+    # argparse echoes the value only for ValueError/TypeError, not this error.
+    if not _COMMIT_RE.match(value):
+        raise argparse.ArgumentTypeError("expected a 7-40 hex digit commit SHA")
+    return value
+
+
+def _severity_arg(value: str) -> str:
+    # Replaces argparse's "invalid choice: <value>", which echoes the input.
+    if value not in SEVERITY_BY_LABEL:
+        raise argparse.ArgumentTypeError(
+            f"expected one of {', '.join(SEVERITY_BY_LABEL)}"
+        )
+    return value
+
+
 def _pr_arg(value: str) -> int:
     if not value.isdigit() or int(value) < 1:
         raise argparse.ArgumentTypeError("expected a positive PR number")
@@ -1096,14 +1115,17 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--min-severity",
-        choices=list(SEVERITY_BY_LABEL),
+        type=_severity_arg,
+        metavar="{" + ",".join(SEVERITY_BY_LABEL) + "}",
         default="MEDIUM",
         help="Lowest band posted (blocking findings always are)",
     )
     parser.add_argument(
         "--draft", action="store_true", help="Create a pending (draft) review"
     )
-    parser.add_argument("--commit", help="Commit SHA (must match report and PR head)")
+    parser.add_argument(
+        "--commit", type=_commit_arg, help="Commit SHA (must match report and PR head)"
+    )
     parser.add_argument(
         "--dry-run", action="store_true", help="Print the payload, do not post"
     )

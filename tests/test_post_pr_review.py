@@ -1724,6 +1724,42 @@ class TestSecretsAreNeverPosted:
         assert code == 2 and gh.calls == []
         assert encoded not in caplog.text
 
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            ("--commit", _SECRETS[1]),
+            ("--min-severity", _SECRETS[1]),
+        ],
+    )
+    def test_secret_in_cli_option_is_never_echoed(
+        self, extra, tmp_path, monkeypatch, caplog, capsys
+    ):
+        with pytest.raises(SystemExit) as exc:
+            _cli(_valid_report(), tmp_path, monkeypatch, *extra)
+        assert exc.value.code == 2
+        captured = capsys.readouterr()
+        assert _SECRETS[1] not in caplog.text + captured.out + captured.err
+
+    def test_secret_shaped_repo_exits_2_without_echo(
+        self, tmp_path, monkeypatch, caplog, capsys
+    ):
+        repo = _SECRETS[1] + "/r"
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(_valid_report()))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main([repo, "7", str(report), "--dry-run"]) == 2
+        assert gh.calls == []
+        captured = capsys.readouterr()
+        assert _SECRETS[1] not in caplog.text + captured.out + captured.err
+
+    def test_secret_in_explicit_commit_is_rejected_value_free(self):
+        report = _report()
+        del report["metadata"]["commit"]
+        with pytest.raises(ppr.ReportError) as error:
+            _run(report, FakeGh(), commit=_SECRETS[1])
+        assert _SECRETS[1] not in str(error.value)
+
     def test_described_credential_prefix_is_posted(self, tmp_path, monkeypatch):
         finding = _finding("SEC-001", 4, "src/a.py:12")
         finding["description"] = "Remote embeds x-access-token:ghs_… in the URL."
