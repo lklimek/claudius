@@ -3,7 +3,7 @@ name: ci-dance
 description: "This skill should be used when the user says 'ci-dance', 'make the PR green', 'ship this and fix CI', 'push and handle reviews', or wants end-to-end PR pipeline automation."
 argument-hint: "timeout=300"
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bash(git *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-request-reviewer.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-post-review-reply.sh *)
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bash(git branch --show-current), Bash(git status*), Bash(git log *), Bash(git diff *), Bash(git show *), Bash(git cherry-pick *), Bash(git worktree add *), Bash(git worktree list*), Bash(git worktree remove *), Bash(git worktree prune), Bash(*gh-fetch-reviews.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-request-reviewer.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-post-review-reply.sh *)
 ---
 
 # CI Dance — Unattended PR Pipeline
@@ -128,7 +128,7 @@ After all three streams complete:
 
 **An empty task-notification is not clean completion.** A stream notification with no substantive report or findings is a possible STALL — investigate and resume per `grand-admiral` § Recovery → Stall Watchdog, never treat it as a zero-finding result.
 
-1. Collect each stream's final report — findings fixed, findings claim-deferred (claimed by another stream, not yet self-verified), findings classified `out_of_scope_follow_up` — from its completion `SendMessage`, plus its worktree commit log (`git -C <worktree> log --oneline`)
+1. Collect each stream's final report — findings fixed, findings claim-deferred (claimed by another stream, not yet self-verified), findings classified `out_of_scope_follow_up` — from its completion `SendMessage`, plus its branch's commit log (`git log --oneline HEAD..<branch-name>`)
 2. Enumerate worktree branches — collect commits from each stream's worktree
 3. Cherry-pick each stream's commits into the main working branch
 4. On cherry-pick conflicts (overlapping edits despite claim coordination), resolve — prefer the more comprehensive fix

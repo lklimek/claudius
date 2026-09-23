@@ -189,6 +189,7 @@ def apply_merge_decisions(
         base, updates = decision
         if key == base:
             finding.update(updates)
+            _drop_stale_intent_basis(finding, updates)
             merged.append(finding)
     return merged
 
@@ -343,7 +344,21 @@ def _apply_finding_update(
                 f"finding_updates[{label!r}]: blocking requires a non-empty "
                 "intent_basis (gate ID plus evidence)"
             )
-    elif "intent_basis" not in update or finding["intent_basis"] is None:
+    _drop_stale_intent_basis(finding, update)
+
+
+def _drop_stale_intent_basis(finding: dict[str, Any], update: dict[str, Any]) -> None:
+    """Drop ``intent_basis`` when ``update`` leaves the finding non-blocking.
+
+    Applies only when ``update`` touches the classification and supplies no
+    new intent_basis; shared by finding_updates and cluster ``updates``.
+    """
+    touched = "merge_class" in update or "intent_basis" in update
+    if (
+        touched
+        and finding.get("merge_class") != "blocking"
+        and update.get("intent_basis") is None
+    ):
         finding.pop("intent_basis", None)
 
 

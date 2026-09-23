@@ -49,11 +49,10 @@ Substitutions: `$ARGUMENTS`, `$0`/`$1`/etc., `${CLAUDE_SESSION_ID}`, `` !`comman
 
 ### Bundled File References
 
-Skills support `${CLAUDE_SKILL_DIR}` substitution — resolves to the skill's directory at load time.
+Claude Code substitutes `${CLAUDE_SKILL_DIR}` and, in plugin skills, `${CLAUDE_PLUGIN_ROOT}` inline in the SKILL.md body and in `allowed-tools` Bash rules ([skills docs](https://code.claude.com/docs/en/skills)). Never in the Bash tool's environment, nor in reference files read via Read — there the caller writes the resolved path.
 
-- **Instructions**: `${CLAUDE_SKILL_DIR}/../../scripts/foo.py` for plugin-root scripts. Relative paths (`scripts/helper.py`, `[ref](references/ref.md)`) for skill-local files.
-- **`allowed-tools`**: path-agnostic globs (e.g., `Bash(*my-script.py *)`) — variable substitution in frontmatter is unreliable.
-- **`${CLAUDE_PLUGIN_ROOT}`**: only for hooks and MCP JSON configs, NOT for skill/command markdown.
+- **Instructions**: `${CLAUDE_PLUGIN_ROOT}/scripts/foo.py` for plugin-root scripts. Relative paths (`scripts/helper.py`, `[ref](references/ref.md)`) for skill-local files.
+- **`allowed-tools`**: anchor script rules — `Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/foo.py *)`. Rules match a literal prefix, so every body invocation must use the identical form (`${CLAUDE_SKILL_DIR}/../../scripts/foo.py` is not normalized and won't match). Grants last only for the invoking turn and, as observed on Claude Code 2.1.280 `-p`, don't apply when the model invokes the skill via the Skill tool — headless callers need their own allowlist. Some skills still use legacy path-agnostic `Bash(*foo.py *)` globs with `../..` body paths; convert both together.
 
 ## Conventions
 
@@ -61,7 +60,7 @@ Skills support `${CLAUDE_SKILL_DIR}` substitution — resolves to the skill's di
 - Self-contained: each agent/skill works independently
 - Frontmatter `description`: state **when** to use, not just what it does
 - Prefer minimal tool sets; read-only agents omit Edit/Write
-- `allowed-tools` Bash globs must be as specific as possible — match exact script names (e.g., `Bash(*gh-resolve-review-threads.sh *)`) not generic patterns (e.g., `Bash(*gh-*.sh *)`)
+- `allowed-tools` Bash globs must be as specific as possible — anchored exact script names (e.g., `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *)`) not generic patterns (e.g., `Bash(*gh-*.sh *)`); grant only what the skill's own turn runs
 - Concise by default — every change (code, docs, descriptions, instructions, commit/PR/changelog text): same value, fewer tokens.
 - Frontmatter values: single-line strings, no YAML folded/literal scalars (`>`, `|`). Use long lines instead of wrapping.
 - **No redundant content**: never duplicate information that lives in another skill, referenced doc, or well-known spec. If a skill loads `git-and-github`, don't repeat git commands. If it references [Keep a Changelog](https://keepachangelog.com/), don't reproduce the format. Delegate to the source — don't inline it.

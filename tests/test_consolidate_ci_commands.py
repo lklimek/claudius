@@ -13,6 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import consolidate_reports as cr  # noqa: E402
+import post_pr_review as ppr  # noqa: E402
 
 PLUGIN_JSON = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
 
@@ -461,6 +462,24 @@ class TestFinalize:
         assert (tmp_path / "out" / "report.html").is_file()
         # the merged intermediate is kept next to the decisions for auditability
         assert (tmp_path / "merged-findings.json").is_file()
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {},
+            {
+                "remediation_override": [
+                    {"label": "All", "count": 0, "priority": "before_merge"}
+                ]
+            },
+        ],
+    )
+    def test_output_passes_post_pr_review_derived_check(self, tmp_path, extra):
+        assert self._run(tmp_path, self._decisions(**extra)) == 0
+        report = json.loads((tmp_path / "out" / "report.json").read_text())
+        findings = ppr.validate_report(report)
+        ppr.check_schema(report)
+        ppr.check_derived(report, findings)
 
     def test_default_format_is_markdown(self, tmp_path):
         assert self._run(tmp_path, self._decisions()) == 0

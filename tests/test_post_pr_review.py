@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -11,7 +13,9 @@ from typing import Any
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import consolidate_reports as cr  # noqa: E402
 import post_pr_review as ppr  # noqa: E402
+import severity_util  # noqa: E402
 
 HEAD = "a" * 40
 BASE_TIP = "c" * 40
@@ -47,17 +51,37 @@ def _report(*findings: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _valid_report(*findings: dict[str, Any]) -> dict[str, Any]:
-    """Schema-valid report (the CLI validates) holding ``findings``."""
+def _fixture_report() -> dict[str, Any]:
+    """The schema-valid fixture with its derived fields regenerated."""
     report = json.loads(VALID_REPORT.read_text())
-    floats = {"likelihood": 0.6, "impact": 0.6, "relevance": 0.5}
-    report["findings"][0]["findings"] = [{**floats, **f} for f in findings]
-    report["summary_statistics"]["total_findings"] = len(findings)
-    counts = dict.fromkeys(("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"), 0)
-    for f in findings:
-        counts[ppr.SEV_LABELS.get(f.get("severity", 1), "INFO")] += 1
-    report["summary_statistics"]["severity_counts"] = counts
+    cr.regenerate_derived(report)
     return report
+
+
+_FLOAT_FOR_SEVERITY = {5: 0.95, 4: 0.8, 3: 0.6, 2: 0.3, 1: 0.05}
+
+
+def _rated(finding: dict[str, Any]) -> dict[str, Any]:
+    """``finding`` with floats (defaulting to its int band) and assemble's derivation."""
+    level = _FLOAT_FOR_SEVERITY[finding["severity"]]
+    rated = {"likelihood": level, "impact": level, "relevance": 0.5, **finding}
+    rated["overall_severity"] = overall = severity_util.derive_overall(rated)
+    rated["severity"] = severity_util.derive_severity_int(overall)
+    return rated
+
+
+def _valid_report(*findings: dict[str, Any]) -> dict[str, Any]:
+    """Schema-valid, self-consistent report (the CLI validates) holding ``findings``."""
+    report = json.loads(VALID_REPORT.read_text())
+    report["findings"][0]["findings"] = [_rated(f) for f in findings]
+    cr.regenerate_derived(report)
+    return report
+
+
+@pytest.fixture(autouse=True)
+def _repo_env(monkeypatch):
+    """The CLI only posts to the checkout's own repository."""
+    monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
 
 
 class FakeGh:
@@ -222,7 +246,13 @@ class TestBuildAndPost:
     def test_blocking_low_is_posted_and_disputed_high_is_not(self):
         report = _report(
             _finding("SEC-001", 2, "src/a.py:12", merge_class="blocking"),
-            _finding("SEC-002", 4, "src/a.py:13", merge_class="disputed"),
+            _finding(
+                "SEC-002",
+                4,
+                "src/a.py:13",
+                merge_class="disputed",
+                ai_verdict="false_positive",
+            ),
         )
         gh = FakeGh()
         _run(report, gh)
@@ -643,7 +673,7 @@ class TestCli:
 
     def test_api_failure_exits_1(self, tmp_path, monkeypatch):
         report = tmp_path / "report.json"
-        report.write_text(VALID_REPORT.read_text())
+        report.write_text(json.dumps(_fixture_report()))
         gh = FakeGh(post_errors=[ppr.GhApiError(500, "boom")])
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
         assert ppr.main(["o/r", "7", str(report)]) == 1
@@ -727,8 +757,62 @@ class TestApprovalSafety:
         )
         assert result.event == "COMMENT" and result.inline == []
 
+    @staticmethod
+    def _claims(report: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+        """Approvable ``report`` with every derived field copied from ``source``."""
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
+        for key in ("summary_statistics", "top_findings", "remediation"):
+            report[key] = source.get(key)
+        return report
+
+    def test_approval_ignores_derived_fields_claiming_blockers(self):
+        blocker = _finding(
+            "SEC-001", 4, "src/a.py:12", merge_class="blocking", intent_basis="G-X: y"
+        )
+        low = {"likelihood": 0.1, "impact": 0.1}
+        clean = _valid_report(_finding("SEC-002", 1, "src/a.py:12", **low))
+        report = self._claims(clean, _valid_report(blocker))
+        assert _run(report, FakeGh()).event == "APPROVE"
+
+    def test_blocking_finding_blocks_approval_whatever_derived_fields_say(self):
+        blocker = _finding(  # INFO-level floats: held only because it is blocking
+            "SEC-001",
+            1,
+            "src/a.py:12",
+            merge_class="blocking",
+            intent_basis="G-X: y",
+            likelihood=0.1,
+            impact=0.1,
+        )
+        report = self._claims(_valid_report(blocker), _valid_report())
+        report["top_findings"] = []
+        gh = FakeGh()
+        result = _run(report, gh, comments={"SEC-001": None})  # nothing posted
+        assert result.inline == [] and result.in_body == []
+        assert result.event == "COMMENT"
+
+    def test_tampered_merge_class_counts_are_rejected_before_posting(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report(_finding("SEC-001", 2, "src/a.py:12"))
+        data["summary_statistics"]["merge_class_counts"]["blocking"] = 1
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(data))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 2
+        assert gh.calls == []
+
     def test_disputed_only_still_approves(self):
-        report = _report(_finding("SEC-001", 5, "src/a.py:11", merge_class="disputed"))
+        report = _report(
+            _finding(
+                "SEC-001",
+                5,
+                "src/a.py:11",
+                merge_class="disputed",
+                ai_verdict="duplicate",
+            )
+        )
         assert _run(report, FakeGh()).event == "APPROVE"
 
     def test_low_below_threshold_still_approves(self):
@@ -879,7 +963,7 @@ class TestReportValidation:
 
     def test_cli_accepts_schema_valid_report(self, tmp_path, monkeypatch):
         report = tmp_path / "report.json"
-        report.write_text(VALID_REPORT.read_text())
+        report.write_text(json.dumps(_fixture_report()))
         monkeypatch.setattr(ppr, "GhCli", FakeGh)
         assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 0
 
@@ -896,12 +980,97 @@ class TestReportValidation:
     ):
         data = _valid_report()
         data["summary_statistics"] = stats
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def _assert_rejected(self, data, tmp_path, monkeypatch) -> None:
         report = tmp_path / "report.json"
         report.write_text(json.dumps(data))
         gh = FakeGh()
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
-        assert ppr.main(["o/r", "7", str(report)]) == 2
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 2
         assert gh.calls == []
+
+    @staticmethod
+    def _blocker() -> dict[str, Any]:
+        return _finding(
+            "SEC-001", 4, "src/a.py:12", merge_class="blocking", intent_basis="G-X: y"
+        )
+
+    @pytest.mark.parametrize(
+        "field",
+        ["merge_class_counts", "severity_category_matrix", "redundancy_ratio"],
+    )
+    def test_empty_report_with_stale_stats_exits_2(self, field, tmp_path, monkeypatch):
+        stale = _valid_report(self._blocker())
+        stale["agent_stats"] = [{"agent": "a", "unique": 1, "redundant": 1}]
+        cr.regenerate_derived(stale)
+        data = _valid_report()
+        data["summary_statistics"][field] = stale["summary_statistics"][field]
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_empty_report_whose_top_findings_claim_a_blocker_exits_2(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report()
+        data["top_findings"] = _valid_report(self._blocker())["top_findings"]
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_remediation_citing_a_missing_finding_exits_2(self, tmp_path, monkeypatch):
+        data = _valid_report()
+        data["remediation"] = _valid_report(self._blocker())["remediation"]
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_top_finding_misstating_its_finding_exits_2(self, tmp_path, monkeypatch):
+        data = _valid_report(self._blocker())
+        data["top_findings"][0]["merge_class"] = "non_blocking"
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_wrong_critical_count_exits_2(self, tmp_path, monkeypatch):
+        data = _valid_report(_finding("SEC-001", 5, "src/a.py:12"))
+        data["summary_statistics"]["critical_count"] = 0
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    @pytest.mark.parametrize("field", ["top_findings", "remediation"])
+    @pytest.mark.parametrize("emptied", [False, True])
+    def test_dropped_derived_section_exits_2(
+        self, field, emptied, tmp_path, monkeypatch
+    ):
+        data = _valid_report(self._blocker())
+        if emptied:
+            data[field] = []
+        else:
+            del data[field]
+        self._assert_rejected(data, tmp_path, monkeypatch)
+
+    def test_absent_derived_sections_pass_when_nothing_is_derived(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report()
+        data.pop("top_findings", None)
+        data.pop("remediation", None)
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(data))
+        monkeypatch.setattr(ppr, "GhCli", FakeGh)
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 0
+
+    def test_curated_overrides_citing_real_findings_are_accepted(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report(self._blocker(), _finding("SEC-002", 5, "src/a.py:13"))
+        data["top_findings"] = data["top_findings"][1:]  # curated subset
+        data["remediation"] = [
+            {
+                "label": "Now",
+                "count": 2,
+                "priority": "before_merge",
+                "finding_ids": ["SEC-002", "SEC-001"],
+            }
+        ]
+        data["summary_statistics"]["critical_count"] = 1
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(data))
+        monkeypatch.setattr(ppr, "GhCli", FakeGh)
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 0
 
     def test_cli_subprocess_no_traceback(self, tmp_path):
         report = tmp_path / "report.json"
@@ -917,12 +1086,12 @@ class TestReportValidation:
 
     def test_missing_gh_binary_is_clean_api_error(self, tmp_path):
         report = tmp_path / "report.json"
-        report.write_text(VALID_REPORT.read_text())
+        report.write_text(json.dumps(_fixture_report()))
         proc = subprocess.run(
             [sys.executable, str(Path(ppr.__file__)), "o/r", "7", str(report)],
             capture_output=True,
             text=True,
-            env={"PATH": "/nonexistent"},
+            env={"PATH": "/nonexistent", "GITHUB_REPOSITORY": "o/r"},
         )
         assert proc.returncode == 1 and "Traceback" not in proc.stderr
         assert "gh" in proc.stderr
@@ -1217,3 +1386,471 @@ class TestSanitizeStructure:
         out = ppr._fit("@a" * 50000, ppr.GITHUB_TEXT_LIMIT)
         assert len(out) <= ppr.GITHUB_TEXT_LIMIT
         assert ppr.sanitize(out) == out
+
+
+# ---------------------------------------------------------------------------
+# hardening: mention evasion, dedup round-trip, --body-file
+# ---------------------------------------------------------------------------
+class TestMentionEvasion:
+    @pytest.mark.parametrize(
+        "text", ["_@octocat_", "__@octocat__", "x_@octocat", "é@octocat"]
+    )
+    def test_non_alphanumeric_prefix_does_not_exempt_a_mention(self, text):
+        assert "@octocat" not in ppr.sanitize(text)
+
+    @pytest.mark.parametrize("text", ["a@b.io", "Z9@b.io"])
+    def test_alphanumeric_prefixed_email_is_kept(self, text):
+        assert ppr.sanitize(text) == text
+
+
+class TestDedupRoundTrip:
+    @pytest.mark.parametrize(
+        "title", ["Option<T> unwrap panics", "Ping @octocat on <details> leak"]
+    )
+    def test_posted_comment_covers_the_same_finding_on_rerun(self, title):
+        report = _report(_finding("SEC-001", 4, "src/a.py:12", title=title))
+        first = FakeGh()
+        _run(report, first)
+        [comment] = first.posted[0]["comments"]
+        assert "​" in comment["body"]  # sanitization did alter the title
+        rerun = FakeGh(
+            threads=[_thread(comment["path"], comment["line"], comment["body"])]
+        )
+        result = _run(report, rerun)
+        assert result.covered == ["SEC-001"]
+        assert rerun.posted[0]["comments"] == []
+
+    def test_zero_width_space_in_title_phrase_is_not_a_word_bridge(self):
+        # Stripping ZWSP must not merge words into a false whole-phrase match.
+        assert not ppr._cites("Unchecked​parser error", "unchecked parser error")
+
+
+class TestBodyFile:
+    def _argv(self, tmp_path: Path, *extra: str) -> list[str]:
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(_valid_report()))
+        return ["o/r", "7", str(report), "--dry-run", *extra]
+
+    def test_body_file_is_used_verbatim(self, tmp_path, capsys, monkeypatch):
+        body = tmp_path / "body.md"
+        body.write_text("Costs $HOME and `$(id)` nothing.\n", encoding="utf-8")
+        monkeypatch.setattr(ppr, "GhCli", FakeGh)
+        assert ppr.main(self._argv(tmp_path, "--body-file", str(body))) == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["payload"]["body"].startswith("Costs $HOME and `$(id)` nothing.")
+
+    def test_body_and_body_file_are_mutually_exclusive(self, tmp_path):
+        body = tmp_path / "body.md"
+        body.write_text("x")
+        argv = self._argv(tmp_path, "--body", "y", "--body-file", str(body))
+        with pytest.raises(SystemExit) as exc:
+            ppr.main(argv)
+        assert exc.value.code == 2
+
+    def test_unreadable_body_file_exits_2_without_calls(self, tmp_path, monkeypatch):
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        argv = self._argv(tmp_path, "--body-file", str(tmp_path / "missing.md"))
+        assert ppr.main(argv) == 2
+        assert gh.calls == []
+
+
+# ---------------------------------------------------------------------------
+# PR #99 hardening follow-ups
+# ---------------------------------------------------------------------------
+def _cli(data: dict[str, Any], tmp_path: Path, monkeypatch, *extra: str):
+    """Run the CLI in --dry-run on ``data``; return (exit code, FakeGh)."""
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps(data))
+    gh = FakeGh()
+    monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+    return ppr.main(["o/r", "7", str(report), "--dry-run", *extra]), gh
+
+
+class TestSeverityAgreesWithFloats:
+    @pytest.mark.parametrize(
+        "tamper",
+        [
+            # SEC-001 repro: shows CRITICAL, floats (and APPROVE) say INFO
+            {"severity": 5, "overall_severity": 0.95, "likelihood": 0.0, "impact": 0.0},
+            {"severity": 5},
+            {"overall_severity": 0.95},
+        ],
+    )
+    def test_derived_severity_contradicting_floats_exits_2(
+        self, tamper, tmp_path, monkeypatch
+    ):
+        data = _valid_report(_finding("SEC-001", 1, "src/a.py:12"))
+        data["findings"][0]["findings"][0].update(tamper)
+        cr.regenerate_derived(data)  # stats follow the floats, as in the repro
+        code, gh = _cli(data, tmp_path, monkeypatch)
+        assert code == 2 and gh.calls == []
+
+    def test_top_finding_without_merge_class_is_accepted(self, tmp_path, monkeypatch):
+        data = _valid_report(_finding("SEC-001", 4, "src/a.py:12"))
+        del data["top_findings"][0]["merge_class"]
+        assert _cli(data, tmp_path, monkeypatch)[0] == 0
+
+    def test_top_finding_without_merge_class_still_checks_severity(
+        self, tmp_path, monkeypatch
+    ):
+        data = _valid_report(_finding("SEC-001", 4, "src/a.py:12"))
+        del data["top_findings"][0]["merge_class"]
+        data["top_findings"][0]["severity"] = 2
+        assert _cli(data, tmp_path, monkeypatch)[0] == 2
+
+    def test_finalize_top_findings_override_posts_end_to_end(
+        self, tmp_path, monkeypatch
+    ):
+        agent = tmp_path / "security.json"
+        section = {
+            "title": "Sec",
+            "category": "security",
+            "findings": [
+                {
+                    "id": "SEC-001",
+                    "likelihood": 0.8,
+                    "impact": 0.8,
+                    "relevance": 0.5,
+                    "title": "Title SEC-001",
+                    "location": "src/a.py:12",
+                    "description": "D.",
+                    "recommendation": "R.",
+                }
+            ],
+        }
+        agent.write_text(json.dumps([section]))
+        intermediate = tmp_path / "intermediate.json"
+        assert (
+            cr.main(
+                [
+                    "prepare",
+                    f"security:{agent}",
+                    "--repo-root",
+                    str(tmp_path),
+                    "--output",
+                    str(intermediate),
+                    "--metadata",
+                    json.dumps({"project": "p", "date": "2026-09-23"}),
+                ]
+            )
+            == 0
+        )
+        decisions = tmp_path / "merge-decisions.json"
+        override = {
+            "id": "SEC-001",
+            "severity": 4,
+            "title": "Title SEC-001",
+            "location": "src/a.py:12",
+        }
+        decisions.write_text(
+            json.dumps(
+                {
+                    "executive_summary": {"overall_assessment": "Needs work."},
+                    "finding_updates": {
+                        "security:SEC-001": {"merge_class": "non_blocking"}
+                    },
+                    "top_findings_override": [override],
+                }
+            )
+        )
+        out = tmp_path / "out" / "report.json"
+        argv = ["finalize", "--input", str(intermediate), "--decisions", str(decisions)]
+        assert cr.main([*argv, "--output", str(out)]) == 0
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(out), "--dry-run"]) == 0
+        assert gh.posted == []
+
+
+class TestBodyFileConfinement:
+    def _argv(self, tmp_path: Path, body: Path) -> list[str]:
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(_valid_report()))
+        return ["o/r", "7", str(report), "--dry-run", "--body-file", str(body)]
+
+    def _assert_refused(self, argv, monkeypatch) -> None:
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(argv) == 2
+        assert gh.calls == []
+
+    def test_symlink_is_refused(self, tmp_path, monkeypatch):
+        target = tmp_path / "real.md"
+        target.write_text("ok")
+        link = tmp_path / "body.md"
+        link.symlink_to(target)
+        self._assert_refused(self._argv(tmp_path, link), monkeypatch)
+
+    def test_file_outside_cwd_and_report_dir_is_refused(self, tmp_path, monkeypatch):
+        (tmp_path / "r").mkdir()
+        (tmp_path / "elsewhere").mkdir()
+        body = tmp_path / "elsewhere" / "body.md"
+        body.write_text("ok")
+        monkeypatch.chdir(tmp_path / "r")
+        self._assert_refused(self._argv(tmp_path / "r", body), monkeypatch)
+
+    def test_git_dir_file_is_refused(self, tmp_path, monkeypatch):
+        (tmp_path / ".git").mkdir()
+        config = tmp_path / ".git" / "config"
+        config.write_text("[core]\n")
+        self._assert_refused(self._argv(tmp_path, config), monkeypatch)
+
+    def test_fifo_is_refused_without_blocking(self, tmp_path, monkeypatch):
+        fifo = tmp_path / "body.md"
+        os.mkfifo(fifo)
+        self._assert_refused(self._argv(tmp_path, fifo), monkeypatch)
+
+    def test_proc_file_is_refused(self, tmp_path, monkeypatch):
+        monkeypatch.chdir("/")
+        argv = self._argv(tmp_path, Path("/proc/self/environ"))
+        self._assert_refused(argv, monkeypatch)
+
+    def test_file_under_cwd_is_accepted(self, tmp_path, monkeypatch, capsys):
+        (tmp_path / "r").mkdir()
+        body = tmp_path / "body.md"
+        body.write_text("Verdict.")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(ppr, "GhCli", FakeGh)
+        assert ppr.main(self._argv(tmp_path / "r", Path("body.md"))) == 0
+        assert json.loads(capsys.readouterr().out)["payload"]["body"].startswith(
+            "Verdict."
+        )
+
+
+_SECRETS = [
+    "ghp_" + "A1" * 18,
+    "ghs_" + "b" * 40,
+    "gho_" + "0" * 36,
+    "github_pat_" + "Ab_9" * 6,
+    "sk-ant-api03-" + "x-Y_" * 6,
+    "https://x-access-token:" + "Tok_9" * 5 + "@github.com/o/r",
+    "X-Access-Token:" + "z" * 20,
+]
+
+
+class TestSecretsAreNeverPosted:
+    @pytest.mark.parametrize("secret", _SECRETS)
+    def test_secret_in_body_exits_2_without_echo(
+        self, secret, tmp_path, monkeypatch, caplog
+    ):
+        code, gh = _cli(_valid_report(), tmp_path, monkeypatch, "--body", secret)
+        assert code == 2 and gh.calls == []
+        assert secret not in caplog.text
+
+    @pytest.mark.parametrize("secret", _SECRETS[:2])
+    def test_secret_in_comment_map_exits_2(self, secret, tmp_path, monkeypatch):
+        comments = tmp_path / "c.json"
+        comments.write_text(json.dumps({"SEC-001": f"leak {secret}"}))
+        data = _valid_report(_finding("SEC-001", 4, "src/a.py:12"))
+        code, gh = _cli(data, tmp_path, monkeypatch, "--comments", str(comments))
+        assert code == 2 and gh.calls == []
+
+    @pytest.mark.parametrize("field", ["description", "title", "recommendation"])
+    def test_secret_in_finding_exits_2(self, field, tmp_path, monkeypatch, caplog):
+        finding = _finding("SEC-001", 4, "src/a.py:12")
+        finding[field] = f"token {_SECRETS[0]} here"
+        code, gh = _cli(_valid_report(finding), tmp_path, monkeypatch)
+        assert code == 2 and gh.calls == []
+        assert _SECRETS[0] not in caplog.text
+
+    def test_secret_in_comment_map_key_exits_2_without_echo(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        comments = tmp_path / "c.json"
+        comments.write_text(json.dumps({_SECRETS[1]: "text"}))
+        data = _valid_report(_finding("SEC-001", 4, "src/a.py:12"))
+        code, gh = _cli(data, tmp_path, monkeypatch, "--comments", str(comments))
+        assert code == 2 and gh.calls == []
+        assert _SECRETS[1] not in caplog.text
+
+    def test_unknown_comment_id_warning_never_echoes_the_key(self, caplog):
+        bogus = "leaked-" + "q" * 30
+        report = _report(_finding("SEC-001", 4, "src/a.py:12"))
+        options = ppr.ReviewOptions(repo="o/r", pr=7, comments={bogus: "x"})
+        ppr.build_review(report, options, {}, [])
+        assert "1 comment map ID" in caplog.text
+        assert bogus not in caplog.text
+
+    @pytest.mark.parametrize(
+        "tamper",
+        [
+            # schema-invalid value: jsonschema quotes it in its message
+            lambda d: d["metadata"].update(commit=_SECRETS[1]),
+            # schema-invalid key: "additional properties ... were unexpected"
+            lambda d: d["metadata"].update({_SECRETS[1]: 1}),
+            # check_derived names the offending top_findings id
+            lambda d: d["top_findings"][0].update(id=_SECRETS[1]),
+        ],
+    )
+    def test_secret_in_invalid_report_is_never_logged(
+        self, tamper, tmp_path, monkeypatch, caplog
+    ):
+        data = _valid_report(_finding("SEC-001", 4, "src/a.py:12"))
+        tamper(data)
+        code, gh = _cli(data, tmp_path, monkeypatch)
+        assert code == 2 and gh.calls == []
+        assert _SECRETS[1] not in caplog.text
+
+    def test_schema_error_message_carries_no_value(self):
+        data = _valid_report()
+        data["metadata"]["commit"] = "not-a-sha-but-a-canary"
+        with pytest.raises(ppr.ReportError) as error:
+            ppr.check_schema(data)
+        assert "canary" not in str(error.value)
+        assert "metadata.commit" in str(error.value)
+
+    @pytest.mark.parametrize(
+        "encoded",
+        [
+            "gh&#x70;_" + "A1" * 18,  # hex entity
+            "gh&#112;_" + "A1" * 18,  # decimal entity
+            "&#X67;&#x68;p_" + "A1" * 18,  # uppercase X, several entities
+            "ghp&lowbar;" + "A1" * 18,  # named entity
+            "X-Access-Token&colon;" + "z" * 20,
+        ],
+    )
+    @pytest.mark.parametrize("where", ["body", "finding"])
+    def test_entity_encoded_secret_exits_2_without_echo(
+        self, encoded, where, tmp_path, monkeypatch, caplog
+    ):
+        finding = _finding("SEC-001", 4, "src/a.py:12")
+        extra: tuple[str, ...] = ()
+        if where == "body":
+            extra = ("--body", f"see {encoded}")
+        else:
+            finding["description"] = f"see {encoded}"
+        code, gh = _cli(_valid_report(finding), tmp_path, monkeypatch, *extra)
+        assert code == 2 and gh.calls == []
+        assert encoded not in caplog.text
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            ("--commit", _SECRETS[1]),
+            ("--min-severity", _SECRETS[1]),
+        ],
+    )
+    def test_secret_in_cli_option_is_never_echoed(
+        self, extra, tmp_path, monkeypatch, caplog, capsys
+    ):
+        with pytest.raises(SystemExit) as exc:
+            _cli(_valid_report(), tmp_path, monkeypatch, *extra)
+        assert exc.value.code == 2
+        captured = capsys.readouterr()
+        assert _SECRETS[1] not in caplog.text + captured.out + captured.err
+
+    def test_secret_shaped_repo_exits_2_without_echo(
+        self, tmp_path, monkeypatch, caplog, capsys
+    ):
+        repo = _SECRETS[1] + "/r"
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(_valid_report()))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main([repo, "7", str(report), "--dry-run"]) == 2
+        assert gh.calls == []
+        captured = capsys.readouterr()
+        assert _SECRETS[1] not in caplog.text + captured.out + captured.err
+
+    def test_secret_in_explicit_commit_is_rejected_value_free(self):
+        report = _report()
+        del report["metadata"]["commit"]
+        with pytest.raises(ppr.ReportError) as error:
+            _run(report, FakeGh(), commit=_SECRETS[1])
+        assert _SECRETS[1] not in str(error.value)
+
+    def test_described_credential_prefix_is_posted(self, tmp_path, monkeypatch):
+        finding = _finding("SEC-001", 4, "src/a.py:12")
+        finding["description"] = "Remote embeds x-access-token:ghs_… in the URL."
+        code, gh = _cli(_valid_report(finding), tmp_path, monkeypatch)
+        assert code == 0
+
+    def test_near_miss_is_posted(self, tmp_path, monkeypatch):
+        body = "ghp_short and github_pat_ and sk-ant- are fine"
+        assert _cli(_valid_report(), tmp_path, monkeypatch, "--body", body)[0] == 0
+
+
+class TestTargetRepoBinding:
+    @staticmethod
+    def _git_repo(path: Path, url: str) -> None:
+        subprocess.run(["git", "init", "-q", str(path)], check=True)
+        subprocess.run(
+            ["git", "-C", str(path), "remote", "add", "origin", url], check=True
+        )
+
+    def test_repo_other_than_github_repository_exits_2(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("GITHUB_REPOSITORY", "victim/other")
+        code, gh = _cli(_valid_report(), tmp_path, monkeypatch)
+        assert code == 2 and gh.calls == []
+
+    def test_github_repository_compares_case_insensitively(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("GITHUB_REPOSITORY", "O/R")
+        assert _cli(_valid_report(), tmp_path, monkeypatch)[0] == 0
+
+    def test_origin_remote_is_used_without_env(self, tmp_path, monkeypatch, caplog):
+        monkeypatch.delenv("GITHUB_REPOSITORY")
+        self._git_repo(tmp_path, "HTTPS://x-access-token:ghs_tok@GitHub.com/O/r.git")
+        monkeypatch.chdir(tmp_path)
+        assert _cli(_valid_report(), tmp_path, monkeypatch)[0] == 0
+        assert "ghs_tok" not in caplog.text
+
+    def test_origin_mismatch_exits_2(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GITHUB_REPOSITORY")
+        self._git_repo(tmp_path, "https://github.com/someone/else.git")
+        monkeypatch.chdir(tmp_path)
+        code, gh = _cli(_valid_report(), tmp_path, monkeypatch)
+        assert code == 2 and gh.calls == []
+
+    def test_undeterminable_repo_exits_2(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GITHUB_REPOSITORY")
+        monkeypatch.chdir(tmp_path)  # not a git checkout
+        code, gh = _cli(_valid_report(), tmp_path, monkeypatch)
+        assert code == 2 and gh.calls == []
+
+
+class TestDisputedNeedsAVerdict:
+    @pytest.mark.parametrize("verdict", [None, "valid", "needs_investigation"])
+    def test_disputed_without_invalid_verdict_holds_approval(self, verdict):
+        extra = {"ai_verdict": verdict} if verdict else {}
+        report = _report(
+            _finding("SEC-001", 5, "src/a.py:11", merge_class="disputed", **extra)
+        )
+        gh = FakeGh()
+        result = _run(report, gh)
+        assert result.event == "COMMENT" and result.inline == ["SEC-001"]
+
+    @pytest.mark.parametrize("verdict", ["false_positive", "duplicate"])
+    def test_disputed_invalid_finding_is_exempt(self, verdict):
+        report = _report(
+            _finding(
+                "SEC-001", 5, "src/a.py:11", merge_class="disputed", ai_verdict=verdict
+            )
+        )
+        result = _run(report, FakeGh())
+        assert result.event == "APPROVE" and result.inline == []
+
+
+class TestEntityMentions:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "&#64;octocat",
+            "&#064;octocat",
+            "&#x40;octocat",
+            "&#X0040;octocat",
+            "&commat;octocat",
+            "&CommAt;octocat",
+            "&#64octocat",
+            "cc_&#64;octocat",
+        ],
+    )
+    def test_entity_mentions_are_neutralized(self, text):
+        out = ppr.sanitize(text)
+        assert "octocat" in out
+        assert re.search(r"(?i)&(?:#0*64;?|#x0*40;?|commat;)octocat", out) is None
+        assert ppr.sanitize(out) == out
+
+    def test_other_entities_are_untouched(self):
+        text = "&#640; &amp; &#x401; &lt;"
+        assert ppr.sanitize(text) == text

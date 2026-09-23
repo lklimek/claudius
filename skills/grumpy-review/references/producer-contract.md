@@ -84,9 +84,10 @@ silently overwrite another session's output.
 ## Bash hygiene
 
 Restricted allowlists (e.g. CI) deny anything else, and each denial wastes a round: one
-simple allowlisted command per call — no `$VAR`/`$(…)`, loops, pipes, `>` redirects, `cd`, or
-`&&` chains; `python3 -c` and ad-hoc scripts are denied. Create files with the Write tool.
-Prefer Read/Grep/Glob on the checked-out tree over `git show`/`cat`.
+simple allowlisted command per call — no `$VAR`/`$(…)`, loops, pipes, `>` redirects, `cd`,
+`git -C`, or `&&` chains; `python3 -c` and ad-hoc scripts are denied. Create files with the Write tool.
+Prefer Read/Grep/Glob on the checked-out tree over `git show`/`cat`; read plugin files with
+Read — Bash `ls`/`find` outside the working directory is sandbox-blocked.
 
 ## Process rules
 

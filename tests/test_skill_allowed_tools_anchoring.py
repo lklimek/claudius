@@ -1,0 +1,128 @@
+"""Regression guard: headless-CI review skills grant plugin scripts via anchored rules only.
+
+Claude Code substitutes ``${CLAUDE_PLUGIN_ROOT}`` in a plugin skill's body AND in its
+``allowed-tools`` Bash rules, and matches Bash rules as a literal prefix: a body
+invocation spelled ``${CLAUDE_SKILL_DIR}/../../scripts/x.py`` is NOT normalized and never
+matches an anchored ``${CLAUDE_PLUGIN_ROOT}/scripts/x.py`` rule. So the rule and every
+body invocation must change in lockstep — this test pins that, plus "no unanchored
+``*x.py *`` script globs" (they match the same name anywhere on disk).
+"""
+
+from __future__ import annotations
+
+import re
+from fnmatch import fnmatchcase
+from pathlib import Path
+
+import pytest
+import yaml
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+ANCHORED_SKILLS = ("grumpy-review", "review-pr", "check-pr-comments")
+ROOT = "${CLAUDE_PLUGIN_ROOT}/scripts/"
+SCRIPT_INVOCATION = re.compile(
+    r"(?:python3 )?\$\{CLAUDE_(?:SKILL_DIR|PLUGIN_ROOT)\}[^\s`\"]*?scripts/[\w.-]+\.(?:py|sh)[^`\n]*"
+)
+
+
+def _split(path: Path) -> tuple[dict, str]:
+    _, front, body = path.read_text(encoding="utf-8").split("---", 2)
+    return yaml.safe_load(front), body
+
+
+def _bash_rules(front: dict) -> list[str]:
+    tools = front.get("allowed-tools", "")
+    items = tools if isinstance(tools, list) else re.split(r",\s*(?![^()]*\))", tools)
+    return [t.strip()[5:-1] for t in items if t.strip().startswith("Bash(")]
+
+
+@pytest.mark.parametrize("skill", ANCHORED_SKILLS)
+def test_script_rules_are_anchored(skill: str) -> None:
+    front, _ = _split(REPO_ROOT / "skills" / skill / "SKILL.md")
+    for rule in _bash_rules(front):
+        if re.search(r"\.(py|sh)\b", rule):
+            assert ROOT in rule and not rule.startswith("*"), (
+                f"{skill}: unanchored {rule!r}"
+            )
+            script = rule.split(ROOT, 1)[1].split()[0]
+            assert (REPO_ROOT / "scripts" / script).is_file(), (
+                f"{skill}: missing {script}"
+            )
+
+
+@pytest.mark.parametrize("skill", ANCHORED_SKILLS)
+def test_body_invocations_match_a_rule(skill: str) -> None:
+    front, body = _split(REPO_ROOT / "skills" / skill / "SKILL.md")
+    rules = _bash_rules(front)
+    invocations = [m.group(0).strip() for m in SCRIPT_INVOCATION.finditer(body)]
+    assert invocations, f"{skill}: no script invocations found — regex broken?"
+    for cmd in invocations:
+        assert "CLAUDE_SKILL_DIR" not in cmd, (
+            f"{skill}: use {ROOT}, not SKILL_DIR/../..: {cmd!r}"
+        )
+        assert any(fnmatchcase(cmd, r) for r in rules), (
+            f"{skill}: no allowed-tools rule matches {cmd!r}"
+        )
+
+
+def test_references_do_not_use_plugin_root_placeholder() -> None:
+    """References are read via Read, unsubstituted: use a `<plugin-root>` placeholder there."""
+    offenders = [
+        str(p.relative_to(REPO_ROOT))
+        for p in REPO_ROOT.glob("skills/*/references/**/*.md")
+        if "${CLAUDE_PLUGIN_ROOT}" in p.read_text(encoding="utf-8")
+    ]
+    assert not offenders, f"unsubstituted ${{CLAUDE_PLUGIN_ROOT}} in: {offenders}"
+
+
+FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
+PLAIN_GH_GIT = re.compile(r"^\s*(?:ghsudo )?(?:gh|git) ")
+
+
+@pytest.mark.parametrize(
+    "skill", (*ANCHORED_SKILLS, "ci-dance", "merge-base", "review-dependency")
+)
+def test_fenced_gh_and_git_commands_match_a_rule(skill: str) -> None:
+    """A fenced command the skill tells the model to run must be pre-approved."""
+    front, body = _split(REPO_ROOT / "skills" / skill / "SKILL.md")
+    rules = _bash_rules(front)
+    for block in FENCE.findall(body):
+        for line in block.splitlines():
+            if not PLAIN_GH_GIT.match(line):
+                continue
+            cmd = line.split("  #", 1)[0].strip()
+            assert any(fnmatchcase(cmd, r) for r in rules), (
+                f"{skill}: no allowed-tools rule matches {cmd!r}"
+            )
+
+
+# Commands that run arbitrary code or load repo-controlled config, grammars or
+# plugins. Rules are matched as globs (``*`` spans spaces), so a wildcard grant
+# such as ``git *`` pre-approves these too: never let any skill rule match one.
+UNSAFE_COMMANDS = (
+    "git pull --upload-pack=x",
+    "git fetch --upload-pack=x origin",
+    "git clone --depth=1 --upload-pack=x --config core.hooksPath=/dev/null -- u d",
+    "git -c core.pager=x log",
+    "git -C d -c core.pager=x log",
+    "git config core.pager x",
+    "git submodule foreach x",
+    "ctags -f x",
+    "global -u",
+    "gtags x",
+    "tree-sitter parse x",
+)
+
+
+@pytest.mark.parametrize(
+    "path", sorted(REPO_ROOT.glob("skills/*/SKILL.md")), ids=lambda p: p.parent.name
+)
+def test_no_skill_grants_code_exec_or_repo_config_loading(path: Path) -> None:
+    front, _ = _split(path)
+    unsafe = [
+        (rule, cmd)
+        for rule in _bash_rules(front)
+        for cmd in UNSAFE_COMMANDS
+        if fnmatchcase(cmd, rule)
+    ]
+    assert not unsafe, f"{path.parent.name}: unsafe Bash grants {unsafe}"

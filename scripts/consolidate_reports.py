@@ -239,12 +239,30 @@ def parse_location(location: str) -> tuple[str, int | None, int | None]:
 # ---------------------------------------------------------------------------
 # Git-derived metadata (permalink construction)
 # ---------------------------------------------------------------------------
+# Matched against _redact_remote() output, which has no userinfo ("git@" too).
+# Scheme and host are case-insensitive (RFC 3986); owner/repo keep their case.
 _GITHUB_REMOTE_RE = re.compile(
-    r"\A(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+    r"\A(?i:https://github\.com/|ssh://github\.com/|github\.com:)"
     r"(?P<owner>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"/(?P<repo>[A-Za-z0-9][A-Za-z0-9._-]*?)(?:\.git)?/?\Z"
 )
 _FULL_SHA_RE = re.compile(r"\A[0-9a-f]{40}\Z")
+_URL_SCHEME_RE = re.compile(r"\A[A-Za-z][A-Za-z0-9+.-]*://")
+
+
+def _redact_remote(url: str) -> str:
+    """Drop query, fragment, then userinfo from a git remote URL.
+
+    CI checkouts embed credentials (``https://x-access-token:ghs_…@github.com/…``).
+    Query/fragment go first so an ``@`` inside them cannot pick the "host";
+    then everything up to the last ``@`` goes (GitHub owner/repo names never
+    contain one). Only for matching: userinfo without an ``@`` survives, so the
+    result must never be logged or emitted.
+    """
+    url = re.split(r"[?#]", url, maxsplit=1)[0]
+    scheme = _URL_SCHEME_RE.match(url)
+    prefix = scheme.group(0) if scheme else ""
+    return prefix + url[len(prefix) :].rpartition("@")[2]
 
 
 def _derive_metadata_repository(repo_root: str) -> dict[str, str] | None:
@@ -265,10 +283,11 @@ def _derive_metadata_repository(repo_root: str) -> dict[str, str] | None:
     if result.returncode != 0:
         log.info("git remote get-url origin returned non-zero in %s", repo_root)
         return None
-    url = result.stdout.strip()
+    url = _redact_remote(result.stdout.strip())
     match = _GITHUB_REMOTE_RE.match(url)
     if not match:
-        log.info("non-GitHub or unrecognized remote URL %r — skipping", url)
+        # Never log the URL: an unrecognized one may still carry credentials.
+        log.info("origin is not a recognized GitHub remote URL — skipping")
         return None
     return {"owner": match["owner"], "repo": match["repo"]}
 

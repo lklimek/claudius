@@ -1,6 +1,6 @@
 # PR Review Operations
 
-All operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`. `${CLAUDE_SKILL_DIR}` is not substituted in reference files: the caller writes the absolute `<plugin-root>` (the loading skill's `${CLAUDE_SKILL_DIR}/../..`) into each command.
+All operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`. Placeholders are not substituted in reference files: the caller writes the absolute `<plugin-root>` its SKILL.md defines (the plugin directory itself, never a `…/skills/<name>/../..` form — anchored `allowed-tools` rules match the literal prefix) into each command.
 
 ## Get PR Context
 
@@ -58,7 +58,7 @@ selection, diff-bounds mapping, open-thread dedup, off-diff findings, the event,
 rejected-APPROVE fallbacks (details: script docstring):
 
 ```bash
-python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> --body "<one-line verdict>" [--comments <comments.json>] [--min-severity MEDIUM] [--draft] [--dry-run]
+python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> --body-file <report-dir>/verdict.md [--comments <comments.json>] [--min-severity MEDIUM] [--draft] [--dry-run]
 ```
 
 - `--comments`: optional JSON `{"<final_id>": "comment text" | null}` written with the Write
@@ -74,10 +74,15 @@ python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> 
   current lines and the exact title as a whole, case-insensitive phrase in its first comment.
   IDs alone never establish coverage. Incomplete thread pagination exits 1 without posting.
 - Without `--draft` it publishes COMMENT, or APPROVE only with `metadata.commit`, when nothing
-  is posted, no unresolved thread remains and no non-disputed finding is blocking or MEDIUM+.
+  is posted, no unresolved thread remains and no non-disputed finding is blocking or MEDIUM+
+  (`disputed` counts only with `ai_verdict` `false_positive`/`duplicate`).
   `--dry-run` prints the payload without posting. Input must be a schema-valid assembled
   `report.json`; otherwise exit 2.
-- @mentions and raw HTML (tags, comment openers) are neutralized everywhere, code included, after clipping; the script appends the attribution footer itself. `summary_statistics` contradicting the findings exits 2.
+- Exits 2 before any GitHub call when `<owner/repo>` is not `GITHUB_REPOSITORY` (else the
+  cwd's `origin`), when `--body-file` is a symlink, outside the cwd/report directory, or in
+  `.git`, `/proc`, `/sys`, or when any body/comment/finding text carries a token value (GitHub/Anthropic,
+  `x-access-token:<token>`; a bare prefix is fine).
+- @mentions (entity-encoded too) and raw HTML (tags, comment openers) are neutralized everywhere, code included, after clipping; the script appends the attribution footer itself. `summary_statistics` contradicting the findings, or a `severity`/`overall_severity` contradicting its floats, exits 2.
 - Prints `{url, event, inline, in_body, omitted, covered_by_open_threads, skipped}`; `omitted`
   = findings that overflowed GitHub's size limit (named in the body, not posted).
 

@@ -2,14 +2,17 @@
 """Build and post a GitHub PR review from a consolidated report.json.
 
 Deterministic half of review posting: the caller (an LLM coordinator) supplies
-only a one-line ``--body`` and an optional ``{final_id: comment text | null}``
-map; this script selects the findings, maps each ``location`` onto the RIGHT
-side of the PR diff, skips findings already raised in an open review thread,
-routes off-diff findings into the review body (never dropping them), picks
-APPROVE vs COMMENT, and posts with fallbacks.
+only a one-line verdict (``--body`` or ``--body-file``) and an optional
+``{final_id: comment text | null}`` map; this script selects the findings, maps
+each ``location`` onto the RIGHT side of the PR diff, skips findings already
+raised in an open review thread, routes off-diff findings into the review body
+(never dropping them), picks APPROVE vs COMMENT, and posts with fallbacks.
 
 Input must be an assembled report (``schema_version``, ``summary_statistics``
-and ``findings`` sections whose findings carry final IDs); anything else exits 2.
+and ``findings`` sections whose findings carry final IDs), schema-valid, with
+derived fields (stats, top findings, remediation) agreeing with the findings;
+anything else exits 2. Each finding's ``severity``/``overall_severity`` must be
+what its likelihood/impact floats derive (as assemble computes them).
 ``metadata.commit`` and an explicit ``--commit`` must match the current PR head.
 The head is checked before and after fetching the diff and threads; posting uses
 that SHA. ``metadata.base_commit``, when present, must equal the PR's current
@@ -17,7 +20,9 @@ merge-base (compare API, read after the diff and threads). A stale report or a
 changed diff scope exits 2 and must be regenerated.
 
 Selection: severity >= ``--min-severity`` (default MEDIUM) or
-``merge_class == "blocking"``; ``disputed`` findings are never posted and
+``merge_class == "blocking"``; ``disputed`` findings whose ``ai_verdict`` is
+``false_positive``/``duplicate`` are never posted (any other ``disputed`` counts
+as undisputed) and
 ``out_of_scope_follow_up`` ones go to the body, not inline. A ``null`` map
 entry skips that finding. A finding counts as covered (listed in one body
 line, not re-posted) only when an unresolved RIGHT-side thread overlaps a current
@@ -34,15 +39,22 @@ Limits: every comment and the body stay within GitHub's 65536 characters;
 body entries that do not fit are named in an "N more finding(s)" line and
 reported as ``omitted``. Each finding's one-line heading (ID, severity, title;
 location in the body; each part capped) stays outside the clipped text. Posted
-text is clipped first, then has @mentions and HTML comment openers neutralized
-everywhere, code included.
+text is clipped first, then has @mentions (entity-encoded too) and HTML comment
+openers neutralized everywhere, code included.
+
+Input safety: ``<owner/repo>`` must equal ``GITHUB_REPOSITORY`` when set, else
+the cwd checkout's ``origin`` (case-insensitive). ``--body-file`` must be a
+regular, non-symlink file under the cwd or the report's directory, outside any
+``.git`` directory, ``/proc`` and ``/sys``. Any body, comment or finding text
+carrying a credential value (GitHub/Anthropic token, ``x-access-token:<token>``)
+exits 2 before any GitHub call, without echoing it.
 
 Fallbacks: HTTP 422 with inline comments -> move them into the body and retry;
 APPROVE rejected (403/422) -> retry as COMMENT. Only reads retry via ``ghsudo``.
 
 Usage:
     python3 scripts/post_pr_review.py <owner/repo> <pr> <report.json> \\
-        [--comments comments.json] [--body "One-line verdict."] \\
+        [--comments comments.json] [--body "Verdict." | --body-file body.md] \\
         [--min-severity MEDIUM] [--draft] [--commit SHA] [--dry-run]
 
 Prints one JSON object: the review URL, event, and inline/in_body/omitted/
@@ -54,17 +66,29 @@ Exit codes: 0 posted (or dry run), 1 GitHub API failure, 2 bad input.
 from __future__ import annotations
 
 import argparse
+import copy
+import html
 import json
 import logging
+import math
+import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from severity_util import SEV_LABELS, effective_severity, load_json_strict
+from consolidate_reports import _derive_metadata_repository, regenerate_derived
+from severity_util import (
+    SEV_LABELS,
+    derive_overall,
+    derive_severity_int,
+    effective_severity,
+    load_json_strict,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -74,9 +98,12 @@ _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
 _LOCATION_RE = re.compile(r":(\d+)(?:-(\d+))?(?::\d+)?$")  # optional :col
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _WHITESPACE_RE = re.compile(r"\s+")
-_MENTION_RE = re.compile(r"(?<!\w)@(?=[A-Za-z0-9])")
+# Only an ASCII alphanumeric before "@" exempts it (an email): GitHub still
+# links "_@user_" (emphasis) and "é@user" (non-ASCII is a non-word there).
+_MENTION_RE = re.compile(r"(?<![A-Za-z0-9])@(?=[A-Za-z0-9])")
 _HTTP_STATUS_RE = re.compile(r"HTTP (\d{3})")
 _REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+_COMMIT_RE = re.compile(r"\A[0-9a-fA-F]{7,40}\Z")
 _FILES_PER_PAGE = 100
 _MAX_FILE_PAGES = 30  # the API lists at most 3000 files per PR
 _MAX_THREAD_PAGES = 50
@@ -91,6 +118,18 @@ _OMITTED_LINE_LIMIT = 4000
 _HEADING_PART_LIMIT = 300  # per id/title/location; heading stays well under 1000
 _DEFAULT_MIN_SEVERITY = SEVERITY_BY_LABEL["MEDIUM"]
 _MAX_POST_ATTEMPTS = 3
+# ai_verdict values that make a finding invalid (skills/severity § 5): only
+# those let merge_class "disputed" exempt it from posting and from APPROVE.
+_INVALID_VERDICTS = frozenset({"false_positive", "duplicate"})
+_SECRET_PATTERNS = {
+    "GitHub token": re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}"),
+    "GitHub fine-grained token": re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
+    "Anthropic API key": re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),
+    "git credential URL": re.compile(
+        r"x-access-token:[A-Za-z0-9_]{20,}", re.IGNORECASE
+    ),
+}
+_BODY_FILE_DENIED_ROOTS = (Path("/proc"), Path("/sys"))
 
 _THREADS_QUERY = """
 query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
@@ -317,12 +356,16 @@ def fetch_open_threads(gh: Any, repo: str, pr: int) -> list[OpenThread]:
 
 
 def _cites(body: str, phrase: str) -> bool:
-    """True when ``phrase`` occurs in ``body`` as a whole, case-insensitive phrase."""
+    """True when ``phrase`` occurs in ``body`` as a whole, case-insensitive phrase.
+
+    Zero-width spaces are dropped from ``body`` first: sanitize() inserts them,
+    so a comment this script posted must still cite its own finding's title.
+    """
     words = phrase.split()
     if not words:
         return False
     pattern = r"(?<!\w)" + r"\s+".join(map(re.escape, words)) + r"(?!\w)"
-    return re.search(pattern, body, re.IGNORECASE) is not None
+    return re.search(pattern, body.replace("\u200b", ""), re.IGNORECASE) is not None
 
 
 def is_covered(finding: dict[str, Any], threads: list[OpenThread]) -> bool:
@@ -420,38 +463,150 @@ def check_schema(report: dict[str, Any]) -> None:
     if errors:
         first = errors[0]
         where = ".".join(str(p) for p in first.absolute_path) or "(root)"
+        # Keyword only: jsonschema's message quotes the offending value.
         raise ReportError(
             f"fails review-report schema ({len(errors)} error(s); first at "
-            f"{where}: {first.message})"
+            f"{where}: violates {first.validator!r})"
         )
 
 
-def check_consistency(report: dict[str, Any], findings: list[dict[str, Any]]) -> None:
-    """Raise ReportError when summary_statistics contradict the findings array.
+def check_derived(report: dict[str, Any], findings: list[dict[str, Any]]) -> None:
+    """Raise ReportError when a finding-derived field contradicts the findings.
 
-    A report whose findings were lost but whose stats still count them must
-    not reach APPROVE on an empty list.
+    Recomputes every derived field on a copy (``regenerate_derived``): a report
+    whose findings were lost while its stats, top findings or remediation still
+    claim blockers must not reach APPROVE. ``summary_statistics`` must match
+    exactly; ``top_findings``/``remediation`` may differ only as a curated
+    override (finalize's ``*_override``) citing real findings faithfully.
     """
-    stats = report.get("summary_statistics")
-    if not isinstance(stats, dict):
-        return  # shape errors are check_schema's job
-    if stats.get("total_findings") != len(findings):
+    expected = copy.deepcopy(report)
+    regenerate_derived(expected)
+    stats, want = report["summary_statistics"], expected["summary_statistics"]
+    if "critical_count" in stats:  # legacy optional key, never regenerated
+        want["critical_count"] = want["severity_counts"].get("CRITICAL", 0)
+    stale = sorted(k for k in set(stats) | set(want) if stats.get(k) != want.get(k))
+    if stale:
         raise ReportError(
-            f"summary_statistics.total_findings={stats.get('total_findings')!r} "
-            f"but the report holds {len(findings)} finding(s)"
+            f"summary_statistics ({', '.join(stale)}) contradict the findings;"
+            " re-run consolidate_reports.py finalize or regenerate"
         )
-    counts = stats.get("severity_counts")
-    if isinstance(counts, dict):
-        actual: dict[str, int] = {}
-        for finding in findings:
-            label = SEV_LABELS.get(finding.get("severity", 1), "INFO")
-            actual[label] = actual.get(label, 0) + 1
-        for label in set(counts) | set(actual):
-            if counts.get(label, 0) != actual.get(label, 0):
+    for finding in findings:
+        _check_severity_derivation(finding)
+    # Finalize omits a section only when it cites nothing (remediation always
+    # has its three buckets); dropping one that cites findings hides blockers.
+    cited = {
+        "top_findings": len(expected["top_findings"]),
+        "remediation": sum(b["count"] for b in expected["remediation"]),
+    }
+    for key, count in cited.items():
+        if count and not report.get(key):
+            raise ReportError(
+                f"{key} is missing but {count} finding(s) belong in it;"
+                " re-run consolidate_reports.py finalize or regenerate"
+            )
+    by_id = {finding["id"]: finding for finding in findings}
+    for entry in report.get("top_findings") or []:
+        finding = by_id.get(entry.get("id"))
+        if (
+            finding is None
+            or entry.get("severity") != effective_severity(finding)
+            # merge_class is optional in a top_findings entry (curated override)
+            or (
+                "merge_class" in entry
+                and entry["merge_class"] != finding.get("merge_class")
+            )
+        ):
+            raise ReportError(
+                f"top_findings entry {entry.get('id')!r} does not match a finding"
+            )
+    for bucket in report.get("remediation") or []:
+        ids = bucket.get("finding_ids", [])
+        unknown = [fid for fid in ids if fid not in by_id]
+        if unknown or bucket.get("count") != len(ids):
+            raise ReportError(
+                f"remediation bucket {bucket.get('priority')!r} does not match "
+                f"its findings (unknown: {unknown}, count: {bucket.get('count')})"
+            )
+
+
+def _check_severity_derivation(finding: dict[str, Any]) -> None:
+    """Raise ReportError unless ``severity``/``overall_severity`` match the floats.
+
+    APPROVE reads the floats while the rendered report shows ``severity``: a
+    report claiming CRITICAL over INFO floats must not be approvable. Same
+    derivation as consolidate_reports' assemble; absent fields cannot disagree.
+    """
+    overall = derive_overall(finding)
+    if overall is None:  # schema requires both floats; effective_severity copes
+        return
+    stored = finding.get("overall_severity", overall)
+    if (
+        not isinstance(stored, (int, float))
+        or isinstance(stored, bool)
+        or not math.isclose(stored, overall, abs_tol=1e-9)
+        or finding.get("severity", derive_severity_int(overall))
+        != derive_severity_int(overall)
+    ):
+        raise ReportError(
+            f"finding {finding.get('id')!r}: severity/overall_severity contradict "
+            "its likelihood/impact; re-run consolidate_reports.py finalize"
+        )
+
+
+def _strings(value: Any):
+    """Yield every string nested in ``value`` (dict keys and values, list items)."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from _strings(key)
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+
+
+def _secret_kind(text: str) -> Optional[str]:
+    """Name of the first credential pattern found in ``text``, or None.
+
+    Also checks the entity-decoded form: GitHub renders ``gh&#x70;_…`` as a
+    live ``ghp_…``. One decode pass only, since ``&amp;#x70;`` renders as a
+    literal entity; percent-encoding is not decoded in rendered text.
+    """
+    decoded = html.unescape(text)
+    for kind, pattern in _SECRET_PATTERNS.items():
+        if pattern.search(text) or pattern.search(decoded):
+            return kind
+    return None
+
+
+def check_secrets(report: Any, options: "ReviewOptions") -> None:
+    """Raise ReportError if any input string or key looks like a credential.
+
+    Scans the body, the comment map and the whole report (posted or not: fail
+    closed) before anything else may quote them in an error or log. The error
+    names where by position, never by a value or key that could be the match.
+    """
+    sources: list[tuple[str, Any]] = [
+        ("repo argument", options.repo),
+        ("--commit", options.commit or ""),
+        ("review body", options.body),
+        ("comment map", options.comments),
+    ]
+    sections = report.get("findings") if isinstance(report, dict) else None
+    if isinstance(sections, list):
+        for i, section in enumerate(sections):
+            items = section.get("findings") if isinstance(section, dict) else None
+            for j, finding in enumerate(items if isinstance(items, list) else []):
+                sources.append((f"findings[{i}].findings[{j}]", finding))
+    sources.append(("report", report))  # everything, incl. keys (re-scan is cheap)
+    for where, value in sources:
+        for text in _strings(value):
+            kind = _secret_kind(text)
+            if kind:
                 raise ReportError(
-                    f"summary_statistics.severity_counts[{label}]="
-                    f"{counts.get(label, 0)} but the findings hold "
-                    f"{actual.get(label, 0)}"
+                    f"{where} contains what looks like a {kind}; redact it, "
+                    "nothing was posted"
                 )
 
 
@@ -508,15 +663,22 @@ def _iter_report_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(validate_report(report), key=lambda f: -effective_severity(f))
 
 
+def _is_disputed(finding: dict[str, Any]) -> bool:
+    """``disputed`` backed by an invalid-finding ``ai_verdict``; nothing else exempts."""
+    return (
+        finding.get("merge_class") == "disputed"
+        and finding.get("ai_verdict") in _INVALID_VERDICTS
+    )
+
+
 def _holds_approval(finding: dict[str, Any]) -> bool:
     """A non-disputed finding that is blocking or at/above the default threshold.
 
     Such a finding forbids APPROVE even when unposted (null map entry, a raised
     ``--min-severity``): approval must not outrank what the report says.
     """
-    merge_class = finding.get("merge_class")
-    return merge_class != "disputed" and (
-        merge_class == "blocking"
+    return not _is_disputed(finding) and (
+        finding.get("merge_class") == "blocking"
         or effective_severity(finding) >= _DEFAULT_MIN_SEVERITY
     )
 
@@ -597,15 +759,22 @@ def _clip(text: str, limit: int) -> str:
 
 
 _HTML_OPEN_RE = re.compile(r"<(?=[A-Za-z/!?])")
+# "@" spelled as a character reference; a numeric one may omit its ";" when no
+# further digit follows (HTML5 legacy parsing).
+_ENTITY_AT_RE = re.compile(
+    r"&(?:#0*64(?:;|(?![0-9]))|#x0*40(?:;|(?![0-9a-f]))|commat;)(?=[A-Za-z0-9])",
+    re.IGNORECASE,
+)
 
 
 def _neutralize(line: str) -> str:
-    """Break @mentions and raw HTML (tags, ``<!--``) with a zero-width space.
+    """Break @mentions (literal or entity) and raw HTML with a zero-width space.
 
     A ``<`` followed by a zero-width space cannot start an HTML tag, so report
     text can neither hide later findings (``<!--``, ``<details>``) nor inject
     markup. Idempotent: the inserted character stops a second match.
     """
+    line = _ENTITY_AT_RE.sub(lambda m: m.group(0) + "\u200b", line)
     return _HTML_OPEN_RE.sub("<\u200b", _MENTION_RE.sub("@\u200b", line))
 
 
@@ -728,7 +897,7 @@ def build_review(
     for finding in _iter_report_findings(report):
         fid = str(finding.get("id", "?"))
         seen.add(fid)
-        if finding.get("merge_class") == "disputed":
+        if _is_disputed(finding):
             continue
         if (
             effective_severity(finding) < options.min_severity
@@ -750,9 +919,9 @@ def build_review(
         )
         item = _Item(finding, text, anchor)
         (inline if item.anchor else off_diff).append(item)
-    unknown = sorted(set(options.comments) - seen)
-    if unknown:
-        log.warning("Comment map IDs not in the report (ignored): %s", unknown)
+    unknown = set(options.comments) - seen
+    if unknown:  # count only: an untrusted key must never reach the log
+        log.warning("%d comment map ID(s) not in the report (ignored)", len(unknown))
     return inline, off_diff, covered, skipped
 
 
@@ -813,7 +982,9 @@ def post_review(
     gh: Any, report: dict[str, Any], options: ReviewOptions, *, dry_run: bool = False
 ) -> PostResult:
     """Build the review from ``report`` and post it (unless ``dry_run``)."""
-    held = any(_holds_approval(f) for f in validate_report(report))
+    check_secrets(report, options)
+    findings = validate_report(report)
+    held = any(_holds_approval(f) for f in findings)
     pr_path = f"repos/{options.repo}/pulls/{options.pr}"
     head = gh.request("GET", pr_path)["head"]["sha"]
     metadata = report.get("metadata", {})
@@ -900,6 +1071,22 @@ def _repo_arg(value: str) -> str:
     return value
 
 
+def _commit_arg(value: str) -> str:
+    # argparse echoes the value only for ValueError/TypeError, not this error.
+    if not _COMMIT_RE.match(value):
+        raise argparse.ArgumentTypeError("expected a 7-40 hex digit commit SHA")
+    return value
+
+
+def _severity_arg(value: str) -> str:
+    # Replaces argparse's "invalid choice: <value>", which echoes the input.
+    if value not in SEVERITY_BY_LABEL:
+        raise argparse.ArgumentTypeError(
+            f"expected one of {', '.join(SEVERITY_BY_LABEL)}"
+        )
+    return value
+
+
 def _pr_arg(value: str) -> int:
     if not value.isdigit() or int(value) < 1:
         raise argparse.ArgumentTypeError("expected a positive PR number")
@@ -919,21 +1106,68 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         type=Path,
         help="JSON {final_id: comment text | null}; null skips the finding",
     )
-    parser.add_argument("--body", default="", help="One-line review verdict")
+    body = parser.add_mutually_exclusive_group()
+    body.add_argument("--body", default="", help="One-line review verdict")
+    body.add_argument(
+        "--body-file",
+        type=Path,
+        help="Read the verdict from a UTF-8 file (safe for $ and backticks)",
+    )
     parser.add_argument(
         "--min-severity",
-        choices=list(SEVERITY_BY_LABEL),
+        type=_severity_arg,
+        metavar="{" + ",".join(SEVERITY_BY_LABEL) + "}",
         default="MEDIUM",
         help="Lowest band posted (blocking findings always are)",
     )
     parser.add_argument(
         "--draft", action="store_true", help="Create a pending (draft) review"
     )
-    parser.add_argument("--commit", help="Commit SHA (must match report and PR head)")
+    parser.add_argument(
+        "--commit", type=_commit_arg, help="Commit SHA (must match report and PR head)"
+    )
     parser.add_argument(
         "--dry-run", action="store_true", help="Print the payload, do not post"
     )
     return parser.parse_args(argv)
+
+
+def _read_body_file(path: Path, report: Path) -> str:
+    """Read ``--body-file``, confined so it cannot publish credentials or state.
+
+    Only a regular, non-symlink file under the cwd or the report's directory,
+    outside any ``.git`` directory and ``/proc``/``/sys``: an argument such as
+    ``.git/config`` (token-bearing remote URL) or ``/proc/self/environ`` must
+    not become a public review body.
+    """
+    if path.is_symlink():
+        raise ValueError(f"--body-file {path}: symlinks are refused")
+    resolved = path.resolve(strict=True)
+    roots = (Path.cwd().resolve(), report.resolve().parent)
+    if (
+        ".git" in resolved.parts
+        or any(resolved.is_relative_to(d) for d in _BODY_FILE_DENIED_ROOTS)
+        or not any(resolved.is_relative_to(r) for r in roots)
+    ):
+        raise ValueError(
+            f"--body-file {path}: must be under the cwd or the report's directory,"
+            " outside .git, /proc and /sys"
+        )
+    # O_NONBLOCK: a FIFO would otherwise block open(); fstat then rejects it.
+    fd = os.open(resolved, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, encoding="utf-8") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise ValueError(f"--body-file {path}: not a regular file")
+        return handle.read()
+
+
+def _expected_repo() -> Optional[str]:
+    """The only repo this run may post to: ``GITHUB_REPOSITORY``, else ``origin``."""
+    env = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    if env:
+        return env
+    origin = _derive_metadata_repository(os.getcwd())
+    return f"{origin['owner']}/{origin['repo']}" if origin else None
 
 
 def _load_comments(path: Optional[Path]) -> dict[str, Optional[str]]:
@@ -953,22 +1187,37 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
     try:
         report = load_json_strict(args.report.read_text(encoding="utf-8"))
-        check_consistency(report, validate_report(report))
-        check_schema(report)
         options = ReviewOptions(
             repo=args.repo,
             pr=args.pr,
-            body=args.body,
+            body=(
+                _read_body_file(args.body_file, args.report)
+                if args.body_file
+                else args.body
+            ),
             comments=_load_comments(args.comments),
             min_severity=SEVERITY_BY_LABEL[args.min_severity],
             draft=args.draft,
             commit=args.commit,
         )
+        # Before validation: its errors may quote report values and keys.
+        check_secrets(report, options)
+        findings = validate_report(report)
+        check_schema(report)
+        check_derived(report, findings)
     except ReportError as error:
         log.error("%s: %s", args.report, error)
         return 2
     except (OSError, ValueError) as error:
         log.error("%s", error)
+        return 2
+    expected = _expected_repo()
+    if expected is None or expected.casefold() != args.repo.casefold():
+        log.error(
+            "refusing to post to %s: this checkout is %s (GITHUB_REPOSITORY or origin)",
+            args.repo,
+            expected or "unknown",
+        )
         return 2
 
     try:
