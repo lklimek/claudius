@@ -47,9 +47,6 @@ jobs:
       - name: Watchdog GONE detection (e2e, real tmux)
         run: ./tests/test_minion_monitoring_gone.sh
 
-      - name: block-github-writes hook fixtures
-        run: ./tests/test_block_github_writes.sh
-
       - name: cargo-discipline hook fixtures
         run: ./tests/test_cargo_discipline.sh
 

@@ -19,7 +19,7 @@ A [Claude Code](https://claude.ai/code) plugin for automated development workflo
 **Dependencies** -- I'm worth it:
 
 - **Host tools** -- Git and Python are required; Rust, Node.js/Codex CLI, tmux, and other tools are workflow-specific. See [Host Tools](SETUP.md#host-tools) for the consolidated install commands and fallbacks.
-- **`GH_TOKEN`** -- a GitHub [Personal Access Token](https://github.com/settings/personal-access-tokens/new) for PR, issue, and CI access. Set it in `~/.claude/settings.json` or your shell profile.
+- **[`gh` CLI](https://cli.github.com/)** -- authenticated via `gh auth login`; all PR, issue, and CI access goes through it. See [GitHub CLI Authentication](SETUP.md#github-cli-authentication).
 - **[memcan](https://github.com/lklimek/memcan)** -- persistent memory across sessions. Requires **Docker Compose** for Qdrant (vector DB).
 - **[ghsudo](https://github.com/lklimek/ghsudo)** *(optional)* -- two-token GitHub model with GUI approval for write operations. `pip install ghsudo`.
 

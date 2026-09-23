@@ -79,6 +79,8 @@ Populated downstream; producers must NOT set:
 
 `description`, `impact_description`, `recommendation`, `ai_assessment`, `executive_summary.summary_text` / `.verdict_text` are **Markdown** (CommonMark — blank line before lists, code blocks, headings); single-line fields (`title`, `category`, `location`, …) are plain text. Reference renderer: `scripts/generate_review_report.py` (HTML via `markdown` + `nh3`, PDF via ReportLab).
 
+Coordinator/standalone-producer concerns (envelope wrapping, pipeline scripts) — not a fan-out producer's job — are in [references/coordinator-envelope.md](references/coordinator-envelope.md).
+
 ## File Output
 
 Write findings files with the Write tool — never `cat > file`, `tee`, heredocs, or inline `python3`; Bash file writes are typically blocked by tool allowlists.
@@ -112,41 +114,4 @@ Agents may add context to `description` and `tags` per their domain:
 - **security-engineer**: OWASP category and CWE in `tags`; CVE references and evidence in `description`
 - **qa-engineer**: requirement reference, expected vs actual behavior in `description`
 - **check-pr-comments**: `reviewer`, `comment_id`, `comment_url`, `thread_id`, `verdict` fields (schema-defined)
-- **review-pr Pass C (pr_promises)**: `location` is a synthetic string (no file:line) — use `PR-title`, `PR-body:summary-bullet-N`, or `PR-body:out-of-scope-item-N`. Renderers leave it as plain text (no permalink). Example:
-
-```json
-{
-  "id": "PPM-001",
-  "likelihood": 0.6, "impact": 0.5, "relevance": 1.0,
-  "title": "Title claims PDF fix, diff is gRPC tests",
-  "location": "PR-title",
-  "description": "Title says `fix: PDF rendering` but diff touches only `tests/grpc/`.",
-  "recommendation": "Rename to `test(grpc): add coverage for retry path` or move the gRPC changes to a separate PR."
-}
-```
-
-Rationale: no commit-relative file:line target exists, hence the synthetic `location`. `relevance: 1.0` — a title/body mismatch is inherently about this PR.
-
-## Report Pipeline Tools
-
-`scripts/validate_report.py report.json` (schema validation); `scripts/consolidate_reports.py prepare`/`assemble` (merge + dedup — `grumpy-review` §5a/§5c); `scripts/generate_review_report.py --format {md,html,triage,pdf}` (`grumpy-review` §5e). All under `${CLAUDE_SKILL_DIR}/../../scripts/`.
-
-## Full Report Envelope
-
-For complete reports (grumpy-review, check-pr-comments), wrap finding sections in:
-
-```json
-{
-  "schema_version": "4.0.0",
-  "metadata": {
-    "project": "claudius",
-    "date": "YYYY-MM-DD",
-    "commit": "<full 40-char SHA from `git rev-parse @{u}` (fall back to `git rev-parse HEAD` when the branch has no upstream)>"
-  },
-  "executive_summary": { "overall_assessment": "..." },
-  "summary_statistics": { "total_findings": 0, "severity_counts": {} },
-  "findings": []
-}
-```
-
-`metadata.commit` is a full 40-character SHA when present (permalinks are built from it); `metadata.commit` and `metadata.repository` are optional — omit for non-git directories and permalinks are skipped. Complete envelope: `schemas/review-report.schema.json`.
+- **review-pr Pass C (pr_promises)**: `location` is a synthetic string (no file:line) — use `PR-title`, `PR-body:summary-bullet-N`, or `PR-body:out-of-scope-item-N`. Renderers leave it as plain text (no permalink); `relevance: 1.0` — a title/body mismatch is inherently about this PR. Full worked example with `merge_class`/`intent_basis`: `review-pr` § Finding emit template.

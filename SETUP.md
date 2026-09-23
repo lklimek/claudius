@@ -32,8 +32,8 @@ sudo apt-get install -y gh jq pipx
 pipx install ghsudo
 ```
 
-- `gh` is the fallback when the GitHub MCP server is unavailable; `ghsudo` handles approved retries after 403/404 failures.
-- `jq` is optional for the cargo/session hooks, which fail open, but `hooks/block-github-writes.sh` fails closed without it and denies subagent GitHub MCP calls.
+- `gh` handles all GitHub API access (see [GitHub CLI Authentication](#github-cli-authentication)); `ghsudo` handles approved retries after 403/404 failures.
+- `jq` is optional for the cargo/session hooks, which fail open without it.
 
 #### Rust projects
 
@@ -179,51 +179,28 @@ sudo apt-get install -y pipx
 pipx install poetry
 ```
 
-### GH_TOKEN -- GitHub Personal Access Token
+### GitHub CLI Authentication
 
-All agents connect to the [GitHub MCP server](https://github.com/github/github-mcp-server) for direct GitHub API access (issues, PRs, code search, actions, etc.). This requires a GitHub Personal Access Token set as `GH_TOKEN`.
+All GitHub access (issues, PRs, reviews, Actions, code search) goes through the `gh` CLI. Authenticate it once:
 
-**Step 1 -- Create a fine-grained PAT:**
+```bash
+gh auth login      # GitHub.com -> HTTPS
+gh auth setup-git  # git credential helper for HTTPS remotes
+```
 
-[-> Create a new fine-grained PAT with pre-selected permissions](https://github.com/settings/personal-access-tokens/new?name=Claudius+GitHub+MCP&actions=write&contents=write&discussions=read&issues=write&metadata=read&pull_requests=write)
-
-The link above pre-fills these **repository permissions**:
+For full autonomy, use a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new?name=Claudius&actions=write&contents=write&issues=write&metadata=read&pull_requests=write) with these **repository permissions**:
 
 | Permission | Access | Used for |
 |---|---|---|
 | **Actions** | Read and write | View workflow runs and logs, trigger workflows |
 | **Contents** | Read and write | Read code, push to branches |
-| **Discussions** | Read-only | Read repository discussions |
 | **Issues** | Read and write | Create issues, add comments |
 | **Metadata** | Read-only | Basic repository metadata (always required) |
 | **Pull requests** | Read and write | Create PRs, review, comment, resolve threads |
 
-Set the token expiration and repository access scope as needed, then create the token.
+For a read-only default token with approved write escalation, see [ghsudo](#ghsudo----elevated-github-access-optional).
 
-> **Tip:** The GitHub MCP server auto-detects your token's permissions and hides tools you don't have access to. Start with the permissions above and add more if needed.
-
-**Step 2 -- Configure the token:**
-
-Add `GH_TOKEN` to your Claude Code settings:
-
-```json
-// ~/.claude/settings.json
-{
-  "env": {
-    "GH_TOKEN": "github_pat_..."
-  }
-}
-```
-
-Or export it in your shell profile (`~/.bashrc`, `~/.zshrc`):
-
-```bash
-export GH_TOKEN="github_pat_..."
-```
-
-**Step 3 -- Verify:**
-
-Restart Claude Code and run `/mcp` -- the `github` server should appear as connected.
+Verify with `gh auth status`.
 
 ### Docker Compose for memcan
 
@@ -259,13 +236,9 @@ Some agents delegate to skills from external plugins for specialized capabilitie
 
 > **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
 
-## GitHub MCP Server
-
-All agents connect to the [GitHub MCP server](https://github.com/github/github-mcp-server) for direct GitHub API access (issues, PRs, code search, actions, etc.). This requires a GitHub Personal Access Token -- see [Prerequisites](#gh_token----github-personal-access-token) above.
-
 ## ghsudo -- Elevated GitHub Access (Optional)
 
-**What this does:** ghsudo adds a **two-token model** for GitHub access: your default `gh` token is read-only, and write operations require explicit human approval via a GUI dialog. This is **optional** -- by default, Claudius uses your `gh` token directly for all operations, and the GitHub MCP server uses `GH_TOKEN`. Install ghsudo only if you want an extra approval gate on write operations.
+**What this does:** ghsudo adds a **two-token model** for GitHub access: your default `gh` token is read-only, and write operations require explicit human approval via a GUI dialog. This is **optional** -- by default, Claudius uses your `gh` token directly for all operations. Install ghsudo only if you want an extra approval gate on write operations.
 
 **How it works:**
 
@@ -368,7 +341,6 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `triage` | Reproduce and root-cause GitHub issues, assess severity, and post status |
 | `triage-findings` | Interactive finding triage -- classify in browser, decisions feed back to Claude |
 | `validate-findings` | LLM validation pass for consolidated review findings |
-| `workflow-feature` | Full workflow for new features or major refactoring |
 | `workflow-simplified` | Single-agent plan/TDD/implement/self-review loop for bug fixes or small-to-medium changes (≤1000 LOC) |
 
 ## Evaluated Skills

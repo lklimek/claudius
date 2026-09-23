@@ -5,7 +5,7 @@ description: "This skill should be used when running git or gh commands, interac
 
 # GitHub Workflow
 
-**Tooling**: `git` for repository operations; GitHub MCP tools (`mcp__plugin_claudius_github__*`) for GitHub API operations (PRs, issues, reviews, Actions, checks, branches, releases, security alerts). No MCP → [gh-cli-fallback.md](references/gh-cli-fallback.md). Bare coordinator sessions typically lack the MCP tools and go straight to the CLI fallback; spawned agents whose frontmatter lists them prefer MCP.
+**Tooling**: `git` for repository operations; `gh` CLI and the `scripts/gh-*.sh` wrappers for all GitHub API operations (PRs, issues, reviews, Actions, checks, branches, releases, security alerts) — see [gh-cli.md](references/gh-cli.md).
 
 **Attribution**: every commit, PR, issue, and comment posted to GitHub **must** include this footer (blank line before it):
 
@@ -47,7 +47,7 @@ Edit `CHANGELOG.md` per [Keep a Changelog](https://keepachangelog.com/) format.
 
 ## Pushing
 
-On 403 / "Resource not accessible", retry through `ghsudo` if installed (see [Elevated Permissions](#elevated-permissions-ghsudo----optional-fallback)). Who may push, and where: Safety Rules #1.
+On 403 / "Resource not accessible", retry through `ghsudo` if installed (see [Elevated Permissions](#elevated-permissions-ghsudo----optional)). Who may push, and where: Safety Rules #1.
 
 ## Pull Requests
 
@@ -67,9 +67,9 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 ### Reviewing a PR
 
-**Never submit a final review (approve/request-changes). Always create draft/pending reviews** — the user publishes them. With MCP, omit the `event` field in `pull_request_review_write` to create a pending review.
+**Never submit a final review (approve/request-changes). Always create draft/pending reviews** — the user publishes them.
 
-See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR context, deduplication, diff-bounds verification, posting inline comments, and the `add_comment_to_pending_review` parameter-casing requirement.
+See [pr-review.md](references/pr-review.md) for the full procedure: fetching PR context, deduplication, diff-bounds verification, and posting inline comments.
 
 ### Issues
 
@@ -86,24 +86,20 @@ Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a
 5. **Never skip hooks** (`--no-verify`) unless explicitly requested
 6. **Check for `.env`, credentials, or secret files** before staging — warn if found
 7. **Check for PR/issue templates** before creating — use them if they exist
-8. **Avoid `gh api`** — prefer MCP tools or high-level `gh` subcommands. Use `gh api` only for read-only queries with no subcommand/MCP equivalent; never for writes. Exception: `gh api graphql` for mutations with no MCP/CLI equivalent (e.g., thread resolution).
-9. **Never fork repositories** — on access denied (403/404), use `ghsudo` or ask the user. Forking creates a separate repo and breaks the workflow. Applies to both `gh repo fork` and the `fork_repository` MCP tool.
-10. **Sandbox and `gh`/`ghsudo` CLI** — these need network access to `api.github.com`. Preferred fix: add `"api.github.com"` to `sandbox.network.allowedDomains` in `settings.json` — `gh` then works inside the sandbox. If unconfigured and `gh` fails with network errors, fall back to `dangerouslyDisableSandbox: true` on the Bash call. MCP tools bypass the sandbox and are unaffected.
+8. **Avoid `gh api`** — prefer high-level `gh` subcommands and the wrapper scripts. Use `gh api` only for read-only queries with no subcommand equivalent; never for writes. Exception: `gh api graphql` for mutations with no CLI equivalent (e.g., thread resolution).
+9. **Never fork repositories** — on access denied (403/404), use `ghsudo` or ask the user. Forking creates a separate repo and breaks the workflow.
+10. **Sandbox and `gh`/`ghsudo` CLI** — these need network access to `api.github.com`. Preferred fix: add `"api.github.com"` to `sandbox.network.allowedDomains` in `settings.json` — `gh` then works inside the sandbox. If unconfigured and `gh` fails with network errors, fall back to `dangerouslyDisableSandbox: true` on the Bash call.
 
-## Context Management — Large MCP Responses
+## Context Management — Large GitHub Responses
 
-GitHub MCP tools can return 10k+ tokens (file lists, diffs, review threads, CI logs). Delegate unbounded calls — `pull_request_read` with `get_files`/`get_diff`/`get_review_comments`, `get_job_logs`, `list_*`/`search_*` with many results — to a disposable subagent that returns a concise summary (`Explore` for read-only extraction, `general-purpose` when writes are needed). Bounded calls (single PR `get`, single issue, branch list, single commit) are fine directly.
+`gh` output can run 10k+ tokens (file lists, diffs, review threads, CI logs). Delegate unbounded calls — `gh pr diff`, `gh pr view --json files`, `gh-fetch-review-comments.sh`, `gh run view --log`, `gh * list`/`gh search *` with many results — to a disposable subagent that returns a concise summary (`Explore` for read-only extraction, `general-purpose` when writes are needed). Bounded calls (single `gh pr view`/`gh issue view` with selected `--json` fields, single commit) are fine directly.
 
-Tell the subagent exactly what to extract and in what format: `Agent(subagent_type="Explore", prompt="Fetch changed files for PR #123 in owner/repo via pull_request_read (get_files). Return only file paths with +/- line counts and total stats.")`
+Tell the subagent exactly what to extract and in what format: `Agent(subagent_type="Explore", prompt="Fetch changed files for PR #123 in owner/repo via `gh pr view 123 -R owner/repo --json files`. Return only file paths with +/- line counts and total stats.")`
 
 ## Escaping and Formatting
 
 - Use HEREDOCs (`<<'EOF'`) for multi-line bodies
 - With `gh api` (read-only only), prefer `--jq` over `| jq` — processed internally by `gh`, avoiding shell expansion issues (`!` triggers history expansion)
-
-### GitHub MCP PR Body Formatting
-
-Pass `body` to `create_pull_request` / `update_pull_request` as an actual multi-line string — NOT `\n` escapes on a single line. MCP passes the string straight to the API; `\n` renders as literal backslash-n on GitHub.
 
 ## Requesting Reviewers
 
@@ -115,6 +111,6 @@ ${CLAUDE_SKILL_DIR}/../../scripts/gh-request-reviewer.sh <owner/repo> <pr_number
 
 `@copilot` requires `gh` ≥ 2.88.0 — on failure, check `gh --version` and escalate to the user if an upgrade is needed.
 
-## Elevated Permissions (ghsudo) -- Optional Fallback
+## Elevated Permissions (ghsudo) -- Optional
 
-If a `gh` or `git` command fails with 403/404 or "Resource not accessible", retry via [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`). **Never fork the repository as a workaround.** See [gh-cli-fallback.md](references/gh-cli-fallback.md) for full usage and exit codes.
+If a `gh` or `git` command fails with 403/404 or "Resource not accessible", retry via [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`). **Never fork the repository as a workaround.** See [gh-cli.md](references/gh-cli.md) for full usage and exit codes.

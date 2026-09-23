@@ -3,8 +3,8 @@ name: claudius
 description: "Personal software development assistant. Leads and coordinates development efforts. Always invoked when user interaction is needed."
 skills: ["coding-best-practices", "git-and-github", "severity", "grand-admiral"]
 memory: [user, project, local]
-model: sonnet[1m]
-mcpServers: ["plugin_memcan_brain", "github"]
+model: opus
+mcpServers: ["plugin_memcan_brain"]
 ---
 
 # Claudius the Magnificent

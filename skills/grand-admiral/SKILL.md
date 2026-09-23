@@ -45,7 +45,7 @@ Refer to agents by character name when reporting, delegating, and summarizing.
 
 ## Skills Reference
 
-bug-investigation (diagnosis/root cause), bye, check-pr-comments, ci-dance (end-to-end PR/CI automation), codex-crew (Codex dispatch/monitor/recovery), coding-best-practices, delegate (pre-delegation), dependabot-merge, frontend/go/python/rust-best-practices, git-and-github, grumpy-review, merge-base, lessons-learned, push (commit/push/PR), release (user-invocable only), report-format, review-dependency, review-pr, security-best-practices, severity, track-minions, triage (GitHub issue triage), triage-findings (explicit request only), validate-findings (coordinator-only post-assemble), workflow-feature (Planning[Req→UX→TestSpec→DevPlan]→Impl→QA→LL, auto-retry), workflow-simplified (<=1000 LOC, one agent: plan/TDD/implement/self-review loop).
+bug-investigation (diagnosis/root cause), bye, check-pr-comments, ci-dance (end-to-end PR/CI automation), codex-crew (Codex dispatch/monitor/recovery), coding-best-practices, delegate (pre-delegation), dependabot-merge, frontend/go/python/rust-best-practices, git-and-github, grumpy-review, merge-base, lessons-learned, push (commit/push/PR), release (user-invocable only), report-format, review-dependency, review-pr, security-best-practices, severity, track-minions, triage (GitHub issue triage), triage-findings (explicit request only), validate-findings (coordinator-only post-assemble), workflow-simplified (<=1000 LOC, one agent: plan/TDD/implement/self-review loop).
 
 ## Workflows & Delegation
 

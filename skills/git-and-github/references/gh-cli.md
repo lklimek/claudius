@@ -1,6 +1,6 @@
-# GitHub CLI Fallback
+# GitHub CLI
 
-Use when the GitHub MCP server (`mcp__plugin_claudius_github__*`) is unavailable — all GitHub API operations fall back to the `gh` CLI and wrapper scripts.
+All GitHub API operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`.
 
 Full `gh` reference: <https://cli.github.com/manual/>
 
@@ -22,7 +22,7 @@ gh pr create --draft --title "<type>: <description>" --body-file /path/to/filled
 
 ## Reviewing a PR
 
-See [pr-review.md](pr-review.md) for the full procedure: fetching PR context, deduplication, diff verification, and posting draft reviews (MCP-first, CLI fallback).
+See [pr-review.md](pr-review.md) for the full procedure: fetching PR context, deduplication, diff verification, and posting draft reviews.
 
 ## Using `gh api`
 
@@ -46,7 +46,7 @@ If none exists, fill in the skeleton from [issue-body-template.md](issue-body-te
 gh issue create --title "<title>" --body-file /path/to/filled-in-issue-body.md
 ```
 
-## Elevated Permissions (ghsudo) -- Optional Fallback
+## Elevated Permissions (ghsudo) -- Optional
 
 If using a **read-only default token** with `gh`, install [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) for write operations. When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo. **Never fork the repository** — forking creates a separate repo and breaks push/PR workflows. GitHub may return 404 instead of 403 for private resources when the token lacks permissions.
 
