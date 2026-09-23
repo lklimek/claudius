@@ -1601,8 +1601,8 @@ _SECRETS = [
     "gho_" + "0" * 36,
     "github_pat_" + "Ab_9" * 6,
     "sk-ant-api03-" + "x-Y_" * 6,
-    "https://x-access-token:abc@github.com/o/r",
-    "X-Access-Token:abc",
+    "https://x-access-token:" + "Tok_9" * 5 + "@github.com/o/r",
+    "X-Access-Token:" + "z" * 20,
 ]
 
 
@@ -1630,6 +1630,12 @@ class TestSecretsAreNeverPosted:
         code, gh = _cli(_valid_report(finding), tmp_path, monkeypatch)
         assert code == 2 and gh.calls == []
         assert _SECRETS[0] not in caplog.text
+
+    def test_described_credential_prefix_is_posted(self, tmp_path, monkeypatch):
+        finding = _finding("SEC-001", 4, "src/a.py:12")
+        finding["description"] = "Remote embeds x-access-token:ghs_… in the URL."
+        code, gh = _cli(_valid_report(finding), tmp_path, monkeypatch)
+        assert code == 0
 
     def test_near_miss_is_posted(self, tmp_path, monkeypatch):
         body = "ghp_short and github_pat_ and sk-ant- are fine"

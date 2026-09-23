@@ -24,7 +24,7 @@ Headless-CI hardening follow-ups to 8.1.0.
 - `post_pr_review.py` input safety (exit 2, before any GitHub call): `severity`/`overall_severity`
   must match the floats; `<owner/repo>` must equal `GITHUB_REPOSITORY` (else `origin`);
   `--body-file` confined to a regular non-symlink file under cwd/report dir, outside `.git`,
-  `/proc`, `/sys`; credential-looking text (GitHub/Anthropic tokens, `x-access-token:`) refused.
+  `/proc`, `/sys`; text carrying a token value (GitHub/Anthropic, `x-access-token:<token>`) refused.
   `disputed` exempts a finding from APPROVE only with `ai_verdict` `false_positive`/`duplicate`.
 - `check-pr-comments`: dropped `ctags`/`global`/`gtags`/`tree-sitter`/`which` grants (they load
   repo-controlled config/grammars → RCE on PR content); call-tree walks use Grep/Read only.

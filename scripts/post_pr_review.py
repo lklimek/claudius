@@ -46,7 +46,7 @@ Input safety: ``<owner/repo>`` must equal ``GITHUB_REPOSITORY`` when set, else
 the cwd checkout's ``origin`` (case-insensitive). ``--body-file`` must be a
 regular, non-symlink file under the cwd or the report's directory, outside any
 ``.git`` directory, ``/proc`` and ``/sys``. Any body, comment or finding text
-that looks like a credential (GitHub/Anthropic token, ``x-access-token:``)
+carrying a credential value (GitHub/Anthropic token, ``x-access-token:<token>``)
 exits 2 before any GitHub call, without echoing it.
 
 Fallbacks: HTTP 422 with inline comments -> move them into the body and retry;
@@ -123,7 +123,9 @@ _SECRET_PATTERNS = {
     "GitHub token": re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}"),
     "GitHub fine-grained token": re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
     "Anthropic API key": re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),
-    "git credential URL": re.compile(r"x-access-token:", re.IGNORECASE),
+    "git credential URL": re.compile(
+        r"x-access-token:[A-Za-z0-9_]{20,}", re.IGNORECASE
+    ),
 }
 _BODY_FILE_DENIED_ROOTS = (Path("/proc"), Path("/sys"))
 

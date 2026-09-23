@@ -80,7 +80,8 @@ python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> 
   `report.json`; otherwise exit 2.
 - Exits 2 before any GitHub call when `<owner/repo>` is not `GITHUB_REPOSITORY` (else the
   cwd's `origin`), when `--body-file` is a symlink, outside the cwd/report directory, or in
-  `.git`, `/proc`, `/sys`, or when any body/comment/finding text looks like a credential.
+  `.git`, `/proc`, `/sys`, or when any body/comment/finding text carries a token value (GitHub/Anthropic,
+  `x-access-token:<token>`; a bare prefix is fine).
 - @mentions (entity-encoded too) and raw HTML (tags, comment openers) are neutralized everywhere, code included, after clipping; the script appends the attribution footer itself. `summary_statistics` contradicting the findings, or a `severity`/`overall_severity` contradicting its floats, exits 2.
 - Prints `{url, event, inline, in_body, omitted, covered_by_open_threads, skipped}`; `omitted`
   = findings that overflowed GitHub's size limit (named in the body, not posted).
