@@ -239,12 +239,28 @@ def parse_location(location: str) -> tuple[str, int | None, int | None]:
 # ---------------------------------------------------------------------------
 # Git-derived metadata (permalink construction)
 # ---------------------------------------------------------------------------
+# Matched against _redact_remote() output, which has no userinfo ("git@" too).
 _GITHUB_REMOTE_RE = re.compile(
-    r"\A(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+    r"\A(?:https://github\.com/|ssh://github\.com/|github\.com:)"
     r"(?P<owner>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"/(?P<repo>[A-Za-z0-9][A-Za-z0-9._-]*?)(?:\.git)?/?\Z"
 )
 _FULL_SHA_RE = re.compile(r"\A[0-9a-f]{40}\Z")
+_URL_SCHEME_RE = re.compile(r"\A[A-Za-z][A-Za-z0-9+.-]*://")
+
+
+def _redact_remote(url: str) -> str:
+    """Drop userinfo, query and fragment from a git remote URL.
+
+    CI checkouts embed credentials (``https://x-access-token:ghs_…@github.com/…``);
+    nothing derived from the URL may carry them into logs or output. Everything
+    up to the last ``@`` goes (GitHub owner/repo names never contain one), so a
+    malformed authority fails closed instead of leaking.
+    """
+    scheme = _URL_SCHEME_RE.match(url)
+    prefix = scheme.group(0) if scheme else ""
+    rest = url[len(prefix) :].rpartition("@")[2]
+    return prefix + re.split(r"[?#]", rest, maxsplit=1)[0]
 
 
 def _derive_metadata_repository(repo_root: str) -> dict[str, str] | None:
@@ -265,7 +281,7 @@ def _derive_metadata_repository(repo_root: str) -> dict[str, str] | None:
     if result.returncode != 0:
         log.info("git remote get-url origin returned non-zero in %s", repo_root)
         return None
-    url = result.stdout.strip()
+    url = _redact_remote(result.stdout.strip())
     match = _GITHUB_REMOTE_RE.match(url)
     if not match:
         log.info("non-GitHub or unrecognized remote URL %r — skipping", url)
