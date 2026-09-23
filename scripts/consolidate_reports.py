@@ -240,8 +240,9 @@ def parse_location(location: str) -> tuple[str, int | None, int | None]:
 # Git-derived metadata (permalink construction)
 # ---------------------------------------------------------------------------
 # Matched against _redact_remote() output, which has no userinfo ("git@" too).
+# Scheme and host are case-insensitive (RFC 3986); owner/repo keep their case.
 _GITHUB_REMOTE_RE = re.compile(
-    r"\A(?:https://github\.com/|ssh://github\.com/|github\.com:)"
+    r"\A(?i:https://github\.com/|ssh://github\.com/|github\.com:)"
     r"(?P<owner>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"/(?P<repo>[A-Za-z0-9][A-Za-z0-9._-]*?)(?:\.git)?/?\Z"
 )

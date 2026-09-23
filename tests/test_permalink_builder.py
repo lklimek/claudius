@@ -54,6 +54,16 @@ class TestDeriveMetadataRepository:
             "repo": "widgets",
         }
 
+    @pytest.mark.parametrize(
+        "url", ["HTTPS://GitHub.com/octo/widgets.git", "git@GITHUB.COM:octo/widgets"]
+    )
+    def test_scheme_and_host_are_case_insensitive(self, tmp_path, url):
+        self._init_repo(tmp_path, url)
+        assert cr._derive_metadata_repository(str(tmp_path)) == {
+            "owner": "octo",
+            "repo": "widgets",
+        }
+
     def test_non_git_directory_returns_none(self, tmp_path):
         assert cr._derive_metadata_repository(str(tmp_path)) is None
 
