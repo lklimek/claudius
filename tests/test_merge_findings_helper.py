@@ -158,6 +158,9 @@ def test_main_applies_decisions_and_writes_output(tmp_path):
                         "updates": {"description": "Merged description."},
                     }
                 ],
+                "finding_updates": {
+                    "security:SEC-001": {"merge_class": "non_blocking"}
+                },
             }
         )
     )
@@ -179,3 +182,154 @@ def test_main_applies_decisions_and_writes_output(tmp_path):
     assert output["findings"][0]["findings"][0]["description"] == (
         "Merged description."
     )
+
+
+# ---------------------------------------------------------------------------
+# finding_updates: per-finding merge_class / float overrides
+# ---------------------------------------------------------------------------
+def test_resolve_findings_applies_per_finding_updates():
+    raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
+    resolved = helper.resolve_findings(
+        raw,
+        {
+            "finding_updates": {
+                "security:SEC-001": {
+                    "merge_class": "blocking",
+                    "intent_basis": "G-SECRET: token logged at src/example.py:10",
+                    "likelihood": 0.9,
+                },
+                "qa:QA-003": {"merge_class": "non_blocking", "relevance": 0.4},
+            }
+        },
+    )
+    assert resolved[0]["merge_class"] == "blocking"
+    assert resolved[0]["intent_basis"].startswith("G-SECRET:")
+    assert resolved[0]["likelihood"] == 0.9
+    assert resolved[1]["merge_class"] == "non_blocking"
+    assert resolved[1]["relevance"] == 0.4
+    assert "merge_class" not in raw[0]
+
+
+def test_resolve_findings_applies_updates_before_cluster_merge():
+    raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
+    resolved = helper.resolve_findings(
+        raw,
+        {
+            "merges": [
+                {
+                    "reason": "Same bug.",
+                    "members": [
+                        {"agent": "security", "original_id": "SEC-001"},
+                        {"agent": "qa", "original_id": "QA-003"},
+                    ],
+                    "base": {"agent": "security", "original_id": "SEC-001"},
+                    "updates": {"description": "Merged."},
+                }
+            ],
+            "finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}},
+        },
+    )
+    assert len(resolved) == 1
+    assert resolved[0]["merge_class"] == "non_blocking"
+    assert resolved[0]["description"] == "Merged."
+
+
+def test_finding_update_on_merged_away_member_is_rejected():
+    raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
+    with pytest.raises(ValueError, match="qa:QA-003.*merged away"):
+        helper.resolve_findings(
+            raw,
+            {
+                "merges": [
+                    {
+                        "reason": "Same bug.",
+                        "members": [
+                            {"agent": "security", "original_id": "SEC-001"},
+                            {"agent": "qa", "original_id": "QA-003"},
+                        ],
+                        "base": {"agent": "security", "original_id": "SEC-001"},
+                        "updates": {},
+                    }
+                ],
+                "finding_updates": {"qa:QA-003": {"merge_class": "blocking"}},
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"nobody:X-1": {"merge_class": "blocking"}}, "unknown finding"),
+        ({"SEC-001": {"merge_class": "blocking"}}, "<agent>:<original_id>"),
+        ({"security:SEC-001": {"title": "x"}}, "unsupported field"),
+        ({"security:SEC-001": {"merge_class": "maybe"}}, "merge_class"),
+        ({"security:SEC-001": {"likelihood": 1.5}}, "likelihood"),
+        ({"security:SEC-001": {"impact": True}}, "impact"),
+        ({"security:SEC-001": {"intent_basis": 3}}, "intent_basis"),
+        ({"security:SEC-001": "blocking"}, "must be an object"),
+    ],
+)
+def test_invalid_finding_updates_are_rejected(updates, message):
+    with pytest.raises(ValueError, match=message):
+        helper.resolve_findings(
+            [_finding("security", "SEC-001")], {"finding_updates": updates}
+        )
+
+
+def test_original_id_containing_colon_is_addressable():
+    resolved = helper.resolve_findings(
+        [_finding("security", "SEC:001")],
+        {"finding_updates": {"security:SEC:001": {"merge_class": "disputed"}}},
+    )
+    assert resolved[0]["merge_class"] == "disputed"
+
+
+def test_find_missing_merge_class_lists_every_unclassified_finding():
+    findings = [
+        _finding("security", "SEC-001", merge_class="blocking"),
+        _finding("qa", "QA-003"),
+        _finding("project", "PROJ-002"),
+    ]
+    assert helper.find_missing_merge_class(findings) == [
+        "qa:QA-003",
+        "project:PROJ-002",
+    ]
+
+
+def test_main_fails_listing_findings_without_merge_class(tmp_path, caplog):
+    intermediate_path = tmp_path / "intermediate.json"
+    decisions_path = tmp_path / "merge-decisions.json"
+    output_path = tmp_path / "merged-findings.json"
+    intermediate_path.write_text(
+        json.dumps(
+            {
+                "metadata": {"project": "claudius", "date": "2026-07-28"},
+                "raw_findings": [
+                    _finding("security", "SEC-001"),
+                    _finding("qa", "QA-003"),
+                ],
+            }
+        )
+    )
+    decisions_path.write_text(
+        json.dumps(
+            {"finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}}}
+        )
+    )
+
+    result = helper.main(
+        [
+            "--input",
+            str(intermediate_path),
+            "--decisions",
+            str(decisions_path),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert result == 1
+    [missing] = [r.message for r in caplog.records if "lack merge_class" in r.message]
+    assert "qa:QA-003" in missing
+    assert "security:SEC-001" not in missing
+    assert not output_path.exists()

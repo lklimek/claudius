@@ -2,8 +2,10 @@
 """Build merged-findings.json from prepare output and manual merge decisions.
 
 The decisions file keeps duplicate resolution review-specific while this helper
-handles copying untouched findings, applying each hand-authored cluster update,
-grouping findings into sections, and preserving prepare's agent statistics.
+handles copying untouched findings, applying per-finding overrides
+(``finding_updates``) and each hand-authored cluster update, grouping findings
+into sections, and preserving prepare's agent statistics. The CLI refuses to
+write output while any finding still lacks ``merge_class``.
 
 Usage:
     python3 scripts/merge_findings_helper.py \
@@ -17,17 +19,22 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import sys
 from pathlib import Path
 from typing import Any
 
-from severity_util import load_json_strict
+from severity_util import MERGE_CLASS_ORDER, load_json_strict
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 FindingKey = tuple[str, str]
 _INTERMEDIATE_ONLY_FIELDS = {"agent", "category", "section_title", "positives"}
+_FLOAT_FIELDS = ("likelihood", "impact", "relevance")
+# The per-finding override table carries judgment only — classification and
+# re-rated floats. Text edits belong to a cluster merge's ``updates``.
+_FINDING_UPDATE_FIELDS = frozenset({"merge_class", "intent_basis", *_FLOAT_FIELDS})
 
 
 def _load_json(path: Path) -> Any:
@@ -184,6 +191,120 @@ def apply_merge_decisions(
     return merged
 
 
+def _key_label(key: FindingKey) -> str:
+    """Render a finding key in the ``<agent>:<original_id>`` form used in files."""
+    return f"{key[0]}:{key[1]}"
+
+
+def _parse_update_key(label: Any) -> FindingKey:
+    """Parse an ``<agent>:<original_id>`` label; the ID may itself contain ':'."""
+    agent, sep, original_id = (label if isinstance(label, str) else "").partition(":")
+    if not sep or not agent or not original_id:
+        raise ValueError(
+            f"finding_updates key {label!r} must be '<agent>:<original_id>'"
+        )
+    return agent, original_id
+
+
+def _validate_finding_update(label: str, update: Any) -> dict[str, Any]:
+    """Check one finding_updates entry against the allowed fields and types."""
+    if not isinstance(update, dict):
+        raise ValueError(f"finding_updates[{label!r}] must be an object")
+    unsupported = sorted(set(update) - _FINDING_UPDATE_FIELDS)
+    if unsupported:
+        raise ValueError(
+            f"finding_updates[{label!r}]: unsupported field(s) "
+            f"{', '.join(unsupported)}; allowed: "
+            f"{', '.join(sorted(_FINDING_UPDATE_FIELDS))}"
+        )
+    merge_class = update.get("merge_class")
+    if "merge_class" in update and merge_class not in MERGE_CLASS_ORDER:
+        raise ValueError(
+            f"finding_updates[{label!r}]: merge_class must be one of "
+            f"{', '.join(MERGE_CLASS_ORDER)}"
+        )
+    intent_basis = update.get("intent_basis")
+    if intent_basis is not None and not isinstance(intent_basis, str):
+        raise ValueError(
+            f"finding_updates[{label!r}]: intent_basis must be a string or null"
+        )
+    for field in _FLOAT_FIELDS:
+        if field not in update:
+            continue
+        value = update[field]
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+            or not 0.0 <= value <= 1.0
+        ):
+            raise ValueError(
+                f"finding_updates[{label!r}]: {field} must be a number in [0, 1]"
+            )
+    return update
+
+
+def resolve_findings(
+    findings: list[dict[str, Any]], decisions: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Apply ``finding_updates`` then cluster ``merges`` to copies of findings.
+
+    Per-finding updates land first so a cluster's hand-authored ``updates``
+    win on conflict. Updating a non-base cluster member is an error: that
+    finding is dropped by the merge, so the judgment would silently vanish.
+    """
+    updates_value = decisions.get("finding_updates", {})
+    if not isinstance(updates_value, dict):
+        raise ValueError("finding_updates must be an object")
+    merges = decisions.get("merges", [])
+    if not isinstance(merges, list):
+        raise ValueError("merges must be an array")
+
+    copies = [dict(finding) for finding in findings]
+    by_key = {
+        _finding_key(finding, context=f"raw finding #{index}"): finding
+        for index, finding in enumerate(copies)
+    }
+    merged_away: set[FindingKey] = set()
+    for decision in merges:
+        if not isinstance(decision, dict):
+            continue  # apply_merge_decisions reports the malformed entry
+        base = decision.get("base")
+        base_key = (
+            (base.get("agent"), base.get("original_id"))
+            if isinstance(base, dict)
+            else None
+        )
+        for member in decision.get("members") or []:
+            if isinstance(member, dict):
+                key = (member.get("agent"), member.get("original_id"))
+                if key != base_key:
+                    merged_away.add(key)
+
+    for label, update in updates_value.items():
+        key = _parse_update_key(label)
+        _validate_finding_update(label, update)
+        if key not in by_key:
+            raise ValueError(f"finding_updates: unknown finding {label!r}")
+        if key in merged_away:
+            raise ValueError(
+                f"finding_updates: {label!r} is merged away by a cluster merge; "
+                "update the cluster base instead"
+            )
+        by_key[key].update(update)
+
+    return apply_merge_decisions(copies, merges)
+
+
+def find_missing_merge_class(findings: list[dict[str, Any]]) -> list[str]:
+    """Return ``<agent>:<original_id>`` for every finding lacking merge_class."""
+    return [
+        _key_label(_finding_key(finding, context="finding"))
+        for finding in findings
+        if finding.get("merge_class") not in MERGE_CLASS_ORDER
+    ]
+
+
 def _section_positives(intermediate: dict[str, Any]) -> dict[str, str]:
     """Combine unique positive observations by finding category."""
     combined: dict[str, list[str]] = {}
@@ -287,9 +408,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         intermediate = load_intermediate(Path(args.input))
         decisions = load_decisions(Path(args.decisions))
-        findings = apply_merge_decisions(
-            load_raw_findings(intermediate), decisions.get("merges", [])
-        )
+        findings = resolve_findings(load_raw_findings(intermediate), decisions)
+        missing = find_missing_merge_class(findings)
+        if missing:
+            log.error(
+                "%d finding(s) lack merge_class — add them to finding_updates: %s",
+                len(missing),
+                ", ".join(missing),
+            )
+            return 1
         document = build_merged_document(
             intermediate,
             findings,

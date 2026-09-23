@@ -46,6 +46,10 @@
           "enum": ["code_review", "comment_check", "pr_audit"],
           "description": "Type of report. Defaults to code_review if omitted."
         },
+        "plugin_version": {
+          "type": "string",
+          "description": "claudius plugin version that produced the report (from .claude-plugin/plugin.json). Auto-filled by consolidate_reports.py prepare."
+        },
         "pr_number": {
           "type": "integer",
           "minimum": 1,

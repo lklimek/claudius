@@ -1,0 +1,307 @@
+"""Tests for the round-saving consolidate_reports.py commands: gate, digest, finalize."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import consolidate_reports as cr  # noqa: E402
+
+PLUGIN_JSON = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
+
+
+def _f(fid: str, likelihood: float, impact: float, **extra: Any) -> dict[str, Any]:
+    finding: dict[str, Any] = {
+        "id": fid,
+        "likelihood": likelihood,
+        "impact": impact,
+        "relevance": 0.5,
+        "title": f"Title {fid}",
+        "location": f"src/{fid.lower()}.py:10-12",
+        "description": f"Description of {fid}.",
+        "recommendation": "Fix it.",
+    }
+    finding.update(extra)
+    return finding
+
+
+def _write(path: Path, data: Any) -> Path:
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+# ---------------------------------------------------------------------------
+# gate
+# ---------------------------------------------------------------------------
+class TestGate:
+    def test_reports_max_band_candidates_and_counts(self, tmp_path, capsys):
+        path = _write(
+            tmp_path / "qa-findings.json",
+            [
+                {
+                    "title": "QA",
+                    "category": "code_quality",
+                    "findings": [
+                        _f("QA-001", 0.8, 0.8),  # HIGH
+                        _f("QA-002", 0.5, 0.5),  # MEDIUM
+                        _f("QA-003", 0.05, 0.05),  # INFO
+                    ],
+                }
+            ],
+        )
+        assert cr.main(["gate", str(path)]) == 0
+        out = capsys.readouterr().out.splitlines()
+        assert out[0] == "MAX: HIGH BLOCKING: no"
+        assert out[1] == "CANDIDATES: QA-001 (HIGH)"
+        assert out[2] == "COUNTS: CRITICAL=0 HIGH=1 MEDIUM=1 LOW=0 INFO=1 TOTAL=3"
+
+    def test_gate_citation_makes_low_finding_a_blocking_candidate(
+        self, tmp_path, capsys
+    ):
+        path = _write(
+            tmp_path / "sec.json",
+            [
+                {
+                    "title": "Sec",
+                    "category": "security",
+                    "findings": [
+                        _f("SEC-001", 0.2, 0.2, tags=["CWE-532", "G-SECRET"]),
+                        _f(
+                            "SEC-002",
+                            0.2,
+                            0.2,
+                            merge_class="blocking",
+                            intent_basis="G-INTENT: contradicts the PR goal",
+                        ),
+                    ],
+                }
+            ],
+        )
+        assert cr.main(["gate", str(path)]) == 0
+        out = capsys.readouterr().out.splitlines()
+        assert out[0] == "MAX: LOW BLOCKING: yes"
+        assert out[1] == "CANDIDATES: SEC-001 (G-SECRET), SEC-002 (G-INTENT)"
+
+    def test_empty_array_reports_none(self, tmp_path, capsys):
+        path = _write(tmp_path / "empty.json", [])
+        assert cr.main(["gate", str(path)]) == 0
+        out = capsys.readouterr().out.splitlines()
+        assert out[0] == "MAX: NONE BLOCKING: no"
+        assert out[1] == "CANDIDATES: none"
+
+    def test_flags_findings_prepare_would_drop(self, tmp_path, capsys):
+        bad = _f("QA-002", 0.9, 0.9)
+        del bad["recommendation"]
+        path = _write(
+            tmp_path / "qa.json",
+            [{"title": "QA", "category": "code_quality", "findings": [bad]}],
+        )
+        assert cr.main(["gate", str(path)]) == 1
+        out = capsys.readouterr().out
+        assert "INVALID: 1 finding(s) would be dropped by prepare" in out
+
+    def test_envelope_object_is_rejected_with_fix_hint(self, tmp_path, capsys):
+        path = _write(tmp_path / "env.json", {"findings": [_f("QA-001", 0.5, 0.5)]})
+        assert cr.main(["gate", str(path)]) == 2
+        assert "bare JSON array" in capsys.readouterr().out
+
+    def test_missing_file_is_a_file_error(self, tmp_path):
+        assert cr.main(["gate", str(tmp_path / "nope.json")]) == 2
+
+
+# ---------------------------------------------------------------------------
+# prepare: plugin_version + --digest
+# ---------------------------------------------------------------------------
+def _prepare(tmp_path: Path, *, digest: bool, reports: dict[str, Any]) -> Path:
+    specs = [
+        f"{agent}:{_write(tmp_path / f'{agent}.json', data)}"
+        for agent, data in reports.items()
+    ]
+    out = tmp_path / "intermediate.json"
+    args = argparse.Namespace(
+        agent_reports=specs,
+        repo_root=str(tmp_path),
+        output=str(out),
+        metadata=json.dumps({"project": "p", "date": "2026-09-23"}),
+        digest=digest,
+    )
+    assert cr.cmd_prepare(args) == 0
+    return out
+
+
+def _dup_reports() -> dict[str, Any]:
+    long_desc = "x" * 1000
+    return {
+        "security": [
+            {
+                "title": "Sec",
+                "category": "security",
+                "findings": [
+                    _f("SEC-001", 0.8, 0.8, location="src/a.py:10"),
+                    _f("SEC-002", 0.2, 0.2, location="src/b.py:3"),
+                ],
+            }
+        ],
+        "qa": [
+            {
+                "title": "QA",
+                "category": "code_quality",
+                "findings": [
+                    _f(
+                        "QA-001",
+                        0.5,
+                        0.5,
+                        title="Title SEC-001",
+                        location="src/a.py:10",
+                        description=long_desc,
+                    )
+                ],
+            }
+        ],
+    }
+
+
+class TestPrepare:
+    def test_records_plugin_version_in_metadata(self, tmp_path):
+        out = _prepare(tmp_path, digest=False, reports={"qa": []})
+        expected = json.loads(PLUGIN_JSON.read_text())["version"]
+        assert json.loads(out.read_text())["metadata"]["plugin_version"] == expected
+
+    def test_explicit_plugin_version_is_not_overwritten(self, tmp_path):
+        rep = _write(tmp_path / "qa.json", [])
+        out = tmp_path / "intermediate.json"
+        args = argparse.Namespace(
+            agent_reports=[f"qa:{rep}"],
+            repo_root=str(tmp_path),
+            output=str(out),
+            metadata=json.dumps(
+                {"project": "p", "date": "2026-09-23", "plugin_version": "1.2.3"}
+            ),
+        )
+        assert cr.cmd_prepare(args) == 0
+        assert json.loads(out.read_text())["metadata"]["plugin_version"] == "1.2.3"
+
+    def test_digest_is_written_and_printed(self, tmp_path, capsys):
+        out = _prepare(tmp_path, digest=True, reports=_dup_reports())
+        digest_path = out.parent / "digest.md"
+        assert digest_path.is_file()
+        text = digest_path.read_text()
+        assert capsys.readouterr().out.strip() == text.strip()
+
+        assert "3 raw findings" in text
+        assert "`security:SEC-001` HIGH (L0.80 I0.80 R0.50)" in text
+        assert "`src/a.py:10`" in text
+        # most severe first
+        assert text.index("security:SEC-001") < text.index("qa:QA-001")
+        assert text.index("qa:QA-001") < text.index("security:SEC-002")
+        # description truncated to ~300 chars
+        assert "x" * 300 not in text
+        assert "x" * 290 in text
+        # duplicate group lists keys, not indices
+        dup_line = next(line for line in text.splitlines() if line.startswith("- G1"))
+        assert "security:SEC-001" in dup_line and "qa:QA-001" in dup_line
+
+    def test_digest_is_far_smaller_than_intermediate(self, tmp_path, capsys):
+        out = _prepare(tmp_path, digest=True, reports=_dup_reports())
+        capsys.readouterr()
+        assert (out.parent / "digest.md").stat().st_size < out.stat().st_size / 2
+
+    def test_no_digest_by_default(self, tmp_path):
+        out = _prepare(tmp_path, digest=False, reports={"qa": []})
+        assert not (out.parent / "digest.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# finalize
+# ---------------------------------------------------------------------------
+class TestFinalize:
+    def _run(self, tmp_path: Path, decisions: dict[str, Any], *fmt: str) -> int:
+        intermediate = _prepare(tmp_path, digest=False, reports=_dup_reports())
+        decisions_path = _write(tmp_path / "merge-decisions.json", decisions)
+        argv = [
+            "finalize",
+            "--input",
+            str(intermediate),
+            "--decisions",
+            str(decisions_path),
+            "--output",
+            str(tmp_path / "out" / "report.json"),
+        ]
+        for f in fmt:
+            argv += ["--format", f]
+        return cr.main(argv)
+
+    @staticmethod
+    def _decisions(**extra: Any) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "executive_summary": {"overall_assessment": "Needs work."},
+            "merges": [
+                {
+                    "reason": "Same issue.",
+                    "members": [
+                        {"agent": "security", "original_id": "SEC-001"},
+                        {"agent": "qa", "original_id": "QA-001"},
+                    ],
+                    "base": {"agent": "security", "original_id": "SEC-001"},
+                    "updates": {},
+                }
+            ],
+            "finding_updates": {
+                "security:SEC-001": {"merge_class": "non_blocking"},
+                "security:SEC-002": {"merge_class": "out_of_scope_follow_up"},
+            },
+        }
+        data.update(extra)
+        return data
+
+    def test_merges_assembles_validates_and_renders(self, tmp_path):
+        assert self._run(tmp_path, self._decisions(), "md", "html") == 0
+        report = json.loads((tmp_path / "out" / "report.json").read_text())
+        ids = [f["id"] for s in report["findings"] for f in s["findings"]]
+        assert sorted(ids) == ["SEC-001", "SEC-002"]
+        assert report["metadata"]["plugin_version"]
+        assert (tmp_path / "out" / "report.md").is_file()
+        assert (tmp_path / "out" / "report.html").is_file()
+        # the merged intermediate is kept next to the decisions for auditability
+        assert (tmp_path / "merged-findings.json").is_file()
+
+    def test_default_format_is_markdown(self, tmp_path):
+        assert self._run(tmp_path, self._decisions()) == 0
+        assert (tmp_path / "out" / "report.md").is_file()
+        assert not (tmp_path / "out" / "report.html").exists()
+
+    def test_missing_merge_class_blocks_output(self, tmp_path, caplog):
+        decisions = self._decisions(finding_updates={})
+        assert self._run(tmp_path, decisions) == 1
+        assert "security:SEC-001" in caplog.text
+        assert not (tmp_path / "out" / "report.json").exists()
+
+    def test_schema_failure_blocks_output(self, tmp_path):
+        decisions = self._decisions(executive_summary={"verdict_text": "no summary"})
+        assert self._run(tmp_path, decisions) == 1
+        assert not (tmp_path / "out" / "report.json").exists()
+
+    def test_empty_review_still_writes_report(self, tmp_path):
+        intermediate = _prepare(tmp_path, digest=False, reports={"qa": []})
+        decisions_path = _write(
+            tmp_path / "merge-decisions.json",
+            {"executive_summary": {"overall_assessment": "Clean."}},
+        )
+        out = tmp_path / "report.json"
+        argv = ["finalize", "--input", str(intermediate)]
+        argv += ["--decisions", str(decisions_path), "--output", str(out)]
+        assert cr.main(argv) == 0
+        assert json.loads(out.read_text())["summary_statistics"]["total_findings"] == 0
+
+
+@pytest.mark.parametrize("command", ["gate", "finalize"])
+def test_new_commands_are_registered(command):
+    with pytest.raises(SystemExit) as exc:
+        cr.parse_args([command, "--help"])
+    assert exc.value.code == 0
