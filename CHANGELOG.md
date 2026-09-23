@@ -16,17 +16,24 @@ hand-transcription and denied shell idioms with single allowlisted script calls.
 ### Added
 
 - `scripts/post_pr_review.py`: builds and posts a PR review from a schema-valid `report.json` (anything else
-  exits 2). It selects MEDIUM+ or blocking findings, skips ones an open thread on an
-  overlapping current line already cites by final ID or exact title, and maps locations onto
-  the diff's RIGHT side. Off-diff and deferred findings go into the body. It APPROVEs only
-  when no blocking or MEDIUM+ finding exists, posted or not (`--draft` for pending), keeps
-  within GitHub's size limits (overflow named, never dropped silently), neutralizes @mentions,
+  exits 2). Posting is bound to `metadata.commit` matching the PR head; an explicit `--commit`
+  must match both, and head changes during diff/thread reads abort. Stale reports exit 2;
+  missing reviewed SHA forces COMMENT with a warning. It selects MEDIUM+ or blocking findings,
+  skips ones an unresolved RIGHT-side thread on the same path and overlapping current line
+  cites by exact whole title (case-insensitive, never ID alone), and maps locations onto the
+  diff's RIGHT side. Thread pagination fails closed at its cap. Off-diff and deferred findings
+  go into the body. It APPROVEs only with a reviewed SHA, no posted findings or unresolved
+  threads, and no non-disputed blocking or MEDIUM+ finding (`--draft` for pending), keeps
+  within GitHub's size limits (overflow named, never dropped silently), neutralizes @mentions
+  and HTML comment openers outside code with CommonMark/GFM-correct fence handling,
   and falls back on HTTP 422 and a rejected APPROVE. Only reads retry via `ghsudo`.
   The caller supplies only a one-line body and an optional `{final_id: text}` map. Documented
   in `git-and-github/references/pr-review.md`; used by `review-pr` Part B.
 - `consolidate_reports.py gate <findings.json>`: prints the max severity band, `BLOCKING`, and
   the HIGH+/blocker-gate candidate IDs (bands derived from the floats, as in assemble), and
-  flags with exit 1 whatever prepare or finalize would reject. Producers end their reply with it, so the coordinator's
+  flags with exit 1 whatever prepare or finalize would reject, including `blocking` without
+  a nonempty `intent_basis`. `gate` and `prepare` turn all report read errors into exit 2 with
+  an ERROR line and no traceback. Producers end their reply with it, so the coordinator's
   early-stop check never reads findings files.
 - `consolidate_reports.py finalize`: runs merge decisions → assemble → schema validation →
   render in one call, all-or-nothing (a failure leaves no report, render or merged file; outputs of an earlier run, and on success renders of unrequested formats, are renamed `*.stale`).

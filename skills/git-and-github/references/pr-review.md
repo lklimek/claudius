@@ -63,9 +63,21 @@ python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> 
 
 - `--comments`: optional JSON `{"<final_id>": "comment text" | null}` written with the Write
   tool; omitted IDs get text built from the finding, `null` skips one.
-- Without `--draft` it publishes COMMENT, or APPROVE only when nothing is posted, no unresolved
-  thread remains and no non-disputed finding is blocking or MEDIUM+. `--dry-run` prints the
-  payload without posting. Exit 2: the input is not a schema-valid assembled `report.json`.
+- `metadata.commit` must match the current PR head; `--commit`, when supplied, must match
+  both. The head is checked before and after fetching the diff and threads, and posting uses
+  that SHA. A mismatch exits 2: re-run the review. Without `metadata.commit`, it warns and
+  publishes COMMENT instead of APPROVE.
+- Coverage requires an unresolved RIGHT-side thread on the same path with overlapping
+  current lines and the exact title as a whole, case-insensitive phrase in its first comment.
+  IDs alone never establish coverage. Incomplete thread pagination exits 1 without posting.
+- Without `--draft` it publishes COMMENT, or APPROVE only with `metadata.commit`, when nothing
+  is posted, no unresolved thread remains and no non-disputed finding is blocking or MEDIUM+.
+  `--dry-run` prints the payload without posting. Input must be a schema-valid assembled
+  `report.json`; otherwise exit 2.
+- Outside code, @mentions and HTML comment openers are neutralized. Fences follow CommonMark/GFM:
+  up to three spaces of indent, at least three matching backticks or tildes, no backticks in
+  backtick-fence info strings; closing fences use the same character, are at least as long,
+  and allow only trailing spaces or tabs. Invalid fences are sanitized as normal text.
 - Prints `{url, event, inline, in_body, omitted, covered_by_open_threads, skipped}`; `omitted`
   = findings that overflowed GitHub's size limit (named in the body, not posted).
 

@@ -1079,6 +1079,8 @@ def load_agent_report(path_str: str) -> list[Any]:
         data = _load_json_file(Path(path_str))
     except FileNotFoundError:
         raise AgentReportError(f"Report not found: {path_str}") from None
+    except OSError as e:
+        raise AgentReportError(f"Cannot read report {path_str}: {e}") from e
     except ValueError as e:
         raise AgentReportError(str(e)) from e
 
@@ -1403,6 +1405,13 @@ def _gate_problems(raw: list[dict[str, Any]]) -> list[str]:
         if axes:
             bad_floats.append(f"{fid or '?'} ({', '.join(axes)})")
         fields = _schema_field_problems(f)
+        basis = f.get("intent_basis")
+        if (
+            f.get("merge_class") == "blocking"
+            and not (isinstance(basis, str) and basis.strip())
+            and "intent_basis" not in fields
+        ):
+            fields.append("intent_basis (required for blocking)")
         if fields:
             bad_fields.append(f"{fid or '?'} ({', '.join(fields)})")
     problems = []

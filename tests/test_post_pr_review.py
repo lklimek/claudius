@@ -37,6 +37,7 @@ def _finding(fid: str, sev: int, location: str, **extra: Any) -> dict[str, Any]:
 def _report(*findings: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "4.0.0",
+        "metadata": {"commit": HEAD},
         "summary_statistics": {"total_findings": len(findings)},
         "findings": [
             {"title": "S", "category": "security", "findings": list(findings)}
@@ -105,6 +106,8 @@ def _thread(path: str, line: int | None, body: str, resolved: bool = False, **kw
         "path": path,
         "line": line,
         "startLine": kw.get("start"),
+        "diffSide": kw.get("side", "RIGHT"),
+        "startDiffSide": kw.get("start_side", "RIGHT" if kw.get("start") else None),
         "originalLine": kw.get("original"),
         "originalStartLine": None,
         "comments": {"nodes": [{"body": body}]},
@@ -225,16 +228,16 @@ class TestBuildAndPost:
         assert gh.posted[0]["comments"] == []
         assert result.skipped == ["SEC-001"]
 
-    def test_thread_citing_final_id_on_overlapping_line_covers(self):
+    def test_thread_citing_exact_title_on_overlapping_line_covers(self):
         report = _report(
             _finding("SEC-001", 4, "src/a.py:11-12"),
             _finding("SEC-002", 4, "src/a.py:50", title="Unchecked parser error"),
             _finding("SEC-003", 4, "src/a.py:13"),  # only a resolved thread here
         )
         threads = [
-            _thread("src/a.py", 12, "**SEC-001** · HIGH\n\nstill open"),
+            _thread("src/a.py", 12, "**SEC-001** · HIGH\n\nTitle SEC-001"),
             _thread("src/a.py", 51, "Re: unchecked parser error.", start=50),
-            _thread("src/a.py", 13, "SEC-003", resolved=True),
+            _thread("src/a.py", 13, "Title SEC-003", resolved=True),
         ]
         gh = FakeGh(threads=threads)
         result = _run(report, gh)
@@ -242,6 +245,68 @@ class TestBuildAndPost:
         assert [c["line"] for c in gh.posted[0]["comments"]] == [13]
         assert "SEC-001" in gh.posted[0]["body"]  # one-line mention
         assert gh.posted[0]["event"] == "COMMENT"
+
+    def test_reassigned_id_alone_does_not_cover(self):
+        thread = _thread("src/a.py", 11, "**SEC-001** · HIGH\n\nOld unrelated title")
+        report = _report(_finding("SEC-001", 4, "src/a.py:11", title="New issue"))
+        result = _run(report, FakeGh(threads=[thread]))
+        assert result.covered == []
+        assert result.inline == ["SEC-001"]
+
+    @pytest.mark.parametrize(
+        ("side", "start_side", "start", "covered"),
+        [
+            ("LEFT", None, None, False),
+            ("LEFT", "LEFT", 10, False),
+            ("RIGHT", "LEFT", 10, False),
+            (None, None, None, False),
+            ("RIGHT", "RIGHT", 10, True),
+            ("RIGHT", None, None, True),
+        ],
+    )
+    def test_coverage_requires_right_side_thread(
+        self, side, start_side, start, covered
+    ):
+        thread = _thread(
+            "src/a.py",
+            12,
+            "Title SEC-001",
+            side=side,
+            start_side=start_side,
+            start=start,
+        )
+        result = _run(
+            _report(_finding("SEC-001", 4, "src/a.py:12")), FakeGh(threads=[thread])
+        )
+        assert result.covered == (["SEC-001"] if covered else [])
+        assert result.inline == ([] if covered else ["SEC-001"])
+
+    def test_thread_query_fetches_and_retains_diff_sides(self):
+        class QueryGh(FakeGh):
+            def request(self, method, path, payload=None):
+                if path == "graphql":
+                    assert "diffSide" in payload["query"]
+                    assert "startDiffSide" in payload["query"]
+                return super().request(method, path, payload)
+
+        gh = QueryGh(
+            threads=[
+                _thread(
+                    "src/a.py", 12, "Title", side="LEFT", start=10, start_side="LEFT"
+                )
+            ]
+        )
+        [thread] = ppr.fetch_open_threads(gh, "o/r", 7)
+        assert thread.diff_side == "LEFT"
+        assert thread.start_diff_side == "LEFT"
+
+    def test_exact_title_on_other_path_does_not_cover(self):
+        thread = _thread("src/other.py", 11, "Title SEC-001")
+        result = _run(
+            _report(_finding("SEC-001", 4, "src/a.py:11")), FakeGh(threads=[thread])
+        )
+        assert result.covered == []
+        assert result.inline == ["SEC-001"]
 
     def test_unrelated_thread_on_overlapping_lines_does_not_cover(self):
         thread = _thread("src/a.py", 14, "nit: typo in variable name", start=10)
@@ -271,7 +336,7 @@ class TestBuildAndPost:
         assert result.covered == []
 
     def test_thread_on_other_lines_does_not_cover(self):
-        thread = _thread("src/a.py", 50, "SEC-001")
+        thread = _thread("src/a.py", 50, "Title SEC-001")
         result = _run(
             _report(_finding("SEC-001", 4, "src/a.py:11")), FakeGh(threads=[thread])
         )
@@ -295,11 +360,11 @@ class TestBuildAndPost:
         _run(_report(_finding("SEC-001", 4, "src/a.py:12")), gh, draft=True)
         assert "event" not in gh.posted[0]
 
-    def test_explicit_commit_skips_pr_lookup(self):
+    def test_explicit_commit_checks_pr_head(self):
         gh = FakeGh()
-        _run(_report(), gh, commit="b" * 40)
-        assert gh.posted[0]["commit_id"] == "b" * 40
-        assert ("GET", "repos/o/r/pulls/7") not in gh.calls
+        _run(_report(), gh, commit=HEAD)
+        assert gh.posted[0]["commit_id"] == HEAD
+        assert ("GET", "repos/o/r/pulls/7") in gh.calls
 
     def test_file_without_patch_sends_findings_to_body(self):
         gh = FakeGh(files=[{"filename": "src/a.py"}])
@@ -322,6 +387,44 @@ class TestBuildAndPost:
 # ---------------------------------------------------------------------------
 # fallbacks
 # ---------------------------------------------------------------------------
+class TestThreadPagination:
+    @pytest.mark.parametrize("has_more", [True, False])
+    def test_page_cap_requires_complete_thread_list(
+        self, has_more, tmp_path, monkeypatch, caplog
+    ):
+        class PagedGh(FakeGh):
+            def __init__(self):
+                super().__init__()
+                self.cursors = []
+
+            def request(self, method, path, payload=None):
+                result = super().request(method, path, payload)
+                if path == "graphql":
+                    self.cursors.append(payload["variables"]["cursor"])
+                    page = len(self.cursors)
+                    conn = result["data"]["repository"]["pullRequest"]["reviewThreads"]
+                    conn["pageInfo"] = {
+                        "hasNextPage": page < 2 or has_more,
+                        "endCursor": f"page-{page}",
+                    }
+                return result
+
+        gh = PagedGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        monkeypatch.setattr(ppr, "_MAX_THREAD_PAGES", 2)
+        report = _valid_report()
+        report["metadata"]["commit"] = HEAD
+        path = tmp_path / "report.json"
+        path.write_text(json.dumps(report))
+        assert ppr.main(["o/r", "7", str(path)]) == (1 if has_more else 0)
+        assert gh.cursors == [None, "page-1"]
+        if has_more:
+            assert gh.posted == []
+            assert "pagination" in caplog.text
+        else:
+            assert gh.posted[0]["event"] == "APPROVE"
+
+
 class TestFallbacks:
     def test_422_moves_inline_comments_into_body(self):
         gh = FakeGh(post_errors=[ppr.GhApiError(422, "Line could not be resolved")])
@@ -531,6 +634,61 @@ class TestCli:
 # approval safety
 # ---------------------------------------------------------------------------
 class TestApprovalSafety:
+    @pytest.mark.parametrize("explicit_commit", [None, HEAD, "b" * 40])
+    def test_stale_report_exits_2_without_posting(
+        self, explicit_commit, tmp_path, monkeypatch, caplog
+    ):
+        report = _valid_report()
+        report["metadata"]["commit"] = "b" * 40
+        path = tmp_path / "report.json"
+        path.write_text(json.dumps(report))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        argv = ["o/r", "7", str(path)]
+        if explicit_commit:
+            argv += ["--commit", explicit_commit]
+        assert ppr.main(argv) == 2
+        assert gh.posted == []
+        assert (
+            f"report is for {'b' * 40}, PR head is {HEAD}; re-run the review"
+            in caplog.text
+        )
+
+    def test_explicit_commit_must_match_report(self):
+        gh = FakeGh()
+        with pytest.raises(ppr.ReportError, match="--commit.*metadata.commit"):
+            _run(_report(), gh, commit="b" * 40)
+        assert gh.posted == []
+
+    @pytest.mark.parametrize("explicit_commit", [None, HEAD])
+    def test_missing_reviewed_sha_downgrades_to_comment(self, explicit_commit, caplog):
+        report = _report()
+        del report["metadata"]["commit"]
+        result = _run(report, FakeGh(), commit=explicit_commit)
+        assert result.event == "COMMENT"
+        assert "metadata.commit" in caplog.text and "COMMENT" in caplog.text
+
+    def test_explicit_commit_without_metadata_must_match_diff_head(self):
+        report = _report()
+        del report["metadata"]
+        gh = FakeGh()
+        with pytest.raises(ppr.ReportError, match="PR head"):
+            _run(report, gh, commit="b" * 40)
+        assert gh.posted == []
+
+    def test_head_change_during_diff_fetch_refuses_posting(self):
+        class MovingHeadGh(FakeGh):
+            def request(self, method, path, payload=None):
+                result = super().request(method, path, payload)
+                if path == "repos/o/r/pulls/7" and len(self.calls) > 1:
+                    result["head"]["sha"] = "b" * 40
+                return result
+
+        gh = MovingHeadGh()
+        with pytest.raises(ppr.ReportError, match="re-run the review"):
+            _run(_report(), gh)
+        assert gh.posted == []
+
     def test_null_comment_on_blocking_finding_does_not_approve(self):
         report = _report(_finding("SEC-001", 5, "src/a.py:11", merge_class="blocking"))
         result = _run(report, FakeGh(), comments={"SEC-001": None})
@@ -619,7 +777,7 @@ class TestReportValidation:
         "content",
         [
             '{"schema_version": "4.0.0", "summary_statistics": {}, "findings": []}',
-            json.dumps(_report()),  # shape-valid but lacks metadata etc.
+            json.dumps(_report()),  # shape-valid but lacks executive_summary etc.
         ],
     )
     def test_cli_schema_invalid_report_exits_2_without_posting(
@@ -667,6 +825,50 @@ class TestReportValidation:
 # GitHub size limits and text safety
 # ---------------------------------------------------------------------------
 class TestLimitsAndSanitizing:
+    @pytest.mark.parametrize(
+        "opening", ["```bad`info", "   ```bad`info", "    ```", "``", "~~", "`~~"]
+    )
+    def test_invalid_fence_is_sanitized_as_prose(self, opening):
+        out = ppr.sanitize(f"{opening}\n<!--\n@team\n")
+        assert "<!--" not in out
+        assert "@team" not in out
+
+    @pytest.mark.parametrize(
+        ("opening", "closing"),
+        [
+            ("```python", "```"),
+            ("   ````python", "  ````` \t"),
+            ("~~~bad`info", "~~~~"),
+        ],
+    )
+    def test_valid_fences_preserve_code_and_sanitize_following_prose(
+        self, opening, closing
+    ):
+        code = "<!-- @inside\n"
+        out = ppr.sanitize(f"{opening}\n{code}{closing}\n<!-- @outside")
+        assert code in out
+        assert out.endswith("&lt;!-- @\u200boutside")
+
+    @pytest.mark.parametrize(
+        "false_close",
+        ["```info", "``` <!-- @team", "~~~", "``", "    ```", "```\u00a0"],
+    )
+    def test_invalid_closing_fence_keeps_block_open(self, false_close):
+        text = f"```python\n{false_close}\n<!-- @inside\n"
+        out = ppr.sanitize(text)
+        assert out == text + "\n```"
+
+    def test_invalid_info_string_cannot_hide_later_off_diff_finding(self):
+        report = _report(
+            _finding("QA-001", 4, "other.py:1", description="```bad`info\n<!--\n"),
+            _finding("QA-002", 4, "other.py:2", title="Second visible finding"),
+        )
+        result = _run(report, FakeGh())
+        body = result.payload["body"]
+        assert "<!--" not in body
+        assert "**Second visible finding**" in body
+        assert result.in_body == ["QA-001", "QA-002"]
+
     def test_body_overflow_lists_omitted_ids_and_in_body_is_truthful(self):
         findings = [
             _finding(f"QA-{i:03d}", 4, f"other/f{i}.py:1", description="x" * 3000)

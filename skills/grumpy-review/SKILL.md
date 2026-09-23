@@ -113,7 +113,7 @@ Deployed peers (all already live; do not ask whether they are running):
 Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json, then run `python3 <RESOLVED_ABS_PATH>/../../scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
 ```
 
-`gate` prints `MAX: <band|NONE> BLOCKING: <yes|no>`, the HIGH+/blocker-gate candidate IDs, and band counts; exit 1 (`INVALID:`) means prepare or finalize would reject a finding (missing or wrongly typed field, id or floats; duplicate id), exit 2 means the file is unreadable or not a bare array of section objects. Producers end their reply with its output, so the coordinator never opens a findings file to check for an early stop.
+`gate` prints `MAX: <band|NONE> BLOCKING: <yes|no>`, the HIGH+/blocker-gate candidate IDs, and band counts; exit 1 (`INVALID:`) means prepare or finalize would reject a finding (missing or wrongly typed field, id or floats; duplicate id; `blocking` without a nonempty `intent_basis`). Exit 2 (`ERROR:`) means the file is unreadable or not a bare array of section objects; `gate` and `prepare` report read errors, including directories and permission failures, without a traceback. Producers end their reply with its output, so the coordinator never opens a findings file to check for an early stop.
 
 ### Call-tree inspection
 

@@ -10,23 +10,28 @@ APPROVE vs COMMENT, and posts with fallbacks.
 
 Input must be an assembled report (``schema_version``, ``summary_statistics``
 and ``findings`` sections whose findings carry final IDs); anything else exits 2.
+``metadata.commit`` and an explicit ``--commit`` must match the current PR head.
+The head is checked before and after fetching the diff and threads; posting uses
+that SHA. A stale report exits 2 and must be regenerated.
 
 Selection: severity >= ``--min-severity`` (default MEDIUM) or
 ``merge_class == "blocking"``; ``disputed`` findings are never posted and
 ``out_of_scope_follow_up`` ones go to the body, not inline. A ``null`` map
 entry skips that finding. A finding counts as covered (listed in one body
-line, not re-posted) only when an unresolved thread sits on an overlapping
-current line of the same file and its first comment cites the finding's final
-ID or exact title.
+line, not re-posted) only when an unresolved RIGHT-side thread overlaps a current
+line of the same file and its first comment cites the finding's exact title as a
+whole, case-insensitive phrase.
 
-Event: APPROVE only when nothing is posted, no unresolved thread remains and no
-non-disputed finding is blocking or MEDIUM+; otherwise COMMENT. ``--draft``
-omits the event (pending review).
+Event: APPROVE only with ``metadata.commit``, when nothing is posted, no unresolved
+thread remains and no non-disputed finding is blocking or MEDIUM+; otherwise
+COMMENT. ``--draft`` omits the event (pending review). Missing ``metadata.commit``
+forces COMMENT with a warning. Incomplete thread pagination fails without posting.
 
 Limits: every comment and the body stay within GitHub's 65536 characters;
 body entries that do not fit are named in an "N more finding(s)" line and
-reported as ``omitted``. Posted text has @mentions (outside code) and HTML
-comment openers neutralized.
+reported as ``omitted``. Posted text has @mentions and HTML
+comment openers neutralized outside code. Fence handling follows CommonMark:
+backtick info strings cannot contain backticks; closing fences have no info string.
 
 Fallbacks: HTTP 422 with inline comments -> move them into the body and retry;
 APPROVE rejected (403/422) -> retry as COMMENT. Only reads retry via ``ghsudo``.
@@ -86,7 +91,7 @@ query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
       reviewThreads(first: 100, after: $cursor) {
         pageInfo { hasNextPage endCursor }
         nodes {
-          isResolved path line startLine
+          isResolved path line startLine diffSide startDiffSide
           comments(first: 1) { nodes { body } }
         }
       }
@@ -259,6 +264,8 @@ class OpenThread:
     start: Optional[int]
     end: Optional[int]
     body: str
+    diff_side: Optional[str]
+    start_diff_side: Optional[str]
 
 
 def fetch_open_threads(gh: Any, repo: str, pr: int) -> list[OpenThread]:
@@ -279,7 +286,7 @@ def fetch_open_threads(gh: Any, repo: str, pr: int) -> list[OpenThread]:
             # Outdated threads have no current line; originalLine numbers an
             # older commit, so they never anchor coverage.
             end = node.get("line")
-            start = node.get("startLine") or end
+            start = node.get("startLine")
             comments = node.get("comments", {}).get("nodes") or [{}]
             threads.append(
                 OpenThread(
@@ -287,11 +294,17 @@ def fetch_open_threads(gh: Any, repo: str, pr: int) -> list[OpenThread]:
                     start=start,
                     end=end,
                     body=comments[0].get("body") or "",
+                    diff_side=node.get("diffSide"),
+                    start_diff_side=node.get("startDiffSide"),
                 )
             )
         if not conn["pageInfo"]["hasNextPage"]:
             break
         cursor = conn["pageInfo"]["endCursor"]
+    else:
+        raise GhApiError(
+            None, "Review thread pagination limit reached; refusing partial thread list"
+        )
     return threads
 
 
@@ -307,21 +320,24 @@ def _cites(body: str, phrase: str) -> bool:
 def is_covered(finding: dict[str, Any], threads: list[OpenThread]) -> bool:
     """True when an open thread already raises this very finding.
 
-    Requires both an overlapping current line on the same file and a first
-    comment citing the finding's final ID or its exact title.
+    Requires an overlapping current RIGHT-side line on the same file and a first
+    comment citing the finding's exact title as a whole, case-insensitive phrase.
     """
     path, start, end = _parse_location(finding.get("location", ""))
     if start is None or end is None:
         return False
     for thread in threads:
-        if thread.path != path or thread.end is None:
+        if (
+            thread.path != path
+            or thread.end is None
+            or thread.diff_side != "RIGHT"
+            or (thread.start is not None and thread.start_diff_side != "RIGHT")
+        ):
             continue
         thread_start = thread.start or thread.end
         if not (start <= thread.end and thread_start <= end):
             continue
-        if _cites(thread.body, str(finding.get("id", ""))) or _cites(
-            thread.body, str(finding.get("title", ""))
-        ):
+        if _cites(thread.body, str(finding.get("title", ""))):
             return True
     return False
 
@@ -487,9 +503,16 @@ def _next_fence(fence: Optional[str], line: str) -> Optional[str]:
     if not match:
         return fence
     marker = match.group(1)
+    tail = line[match.end() :]
     if fence is None:
+        if marker[0] == "`" and "`" in tail:
+            return None
         return marker
-    closes = marker[0] == fence[0] and len(marker) >= len(fence)
+    closes = (
+        marker[0] == fence[0]
+        and len(marker) >= len(fence)
+        and not tail.strip(" \t\r\n")
+    )
     return None if closes else fence
 
 
@@ -694,18 +717,33 @@ def post_review(
 ) -> PostResult:
     """Build the review from ``report`` and post it (unless ``dry_run``)."""
     held = any(_holds_approval(f) for f in validate_report(report))
-    commit = (
-        options.commit
-        or gh.request("GET", f"repos/{options.repo}/pulls/{options.pr}")["head"]["sha"]
-    )
+    pr_path = f"repos/{options.repo}/pulls/{options.pr}"
+    head = gh.request("GET", pr_path)["head"]["sha"]
+    reviewed = report.get("metadata", {}).get("commit")
+    if reviewed and reviewed != head:
+        raise ReportError(
+            f"report is for {reviewed}, PR head is {head}; re-run the review"
+        )
+    if options.commit and reviewed and options.commit != reviewed:
+        raise ReportError("--commit must equal metadata.commit")
+    commit = reviewed or options.commit or head
+    if commit != head:
+        raise ReportError(f"--commit is {commit}, PR head is {head}; re-run the review")
     hunks = fetch_diff_hunks(gh, options.repo, options.pr)
     threads = fetch_open_threads(gh, options.repo, options.pr)
+    current_head = gh.request("GET", pr_path)["head"]["sha"]
+    if current_head != commit:
+        raise ReportError(
+            f"PR head changed from {commit} to {current_head}; re-run the review"
+        )
     inline, off_diff, covered, skipped = build_review(report, options, hunks, threads)
 
     event: Optional[str] = None
     if not options.draft:
         clean = not inline and not off_diff and not threads and not held
-        event = "APPROVE" if clean else "COMMENT"
+        event = "APPROVE" if clean and reviewed else "COMMENT"
+        if not reviewed:
+            log.warning("No metadata.commit: cannot APPROVE; using COMMENT")
 
     def result(url: Optional[str] = None) -> PostResult:
         payload, body = _payload(options, commit, event, inline, off_diff, covered)
@@ -786,7 +824,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--draft", action="store_true", help="Create a pending (draft) review"
     )
-    parser.add_argument("--commit", help="Commit SHA (default: PR head)")
+    parser.add_argument("--commit", help="Commit SHA (must match report and PR head)")
     parser.add_argument(
         "--dry-run", action="store_true", help="Print the payload, do not post"
     )
@@ -830,6 +868,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     try:
         result = post_review(GhCli(), report, options, dry_run=args.dry_run)
+    except ReportError as error:
+        log.error("%s", error)
+        return 2
     except GhApiError as error:
         log.error("GitHub API failure (HTTP %s): %s", error.status, error)
         return 1

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,45 @@ def _f(fid: str, likelihood: float, impact: float, **extra: Any) -> dict[str, An
 def _write(path: Path, data: Any) -> Path:
     path.write_text(json.dumps(data), encoding="utf-8")
     return path
+
+
+@pytest.mark.parametrize("command", ["gate", "prepare"])
+def test_directory_report_exits_2_without_traceback(command, tmp_path):
+    argv = [command, str(tmp_path)]
+    if command == "prepare":
+        argv = [command, f"qa:{tmp_path}", "--output", str(tmp_path / "i.json")]
+        argv += ["--repo-root", str(tmp_path)]
+    proc = subprocess.run(
+        [sys.executable, str(Path(cr.__file__)), *argv],
+        capture_output=True,
+        text=True,
+    )
+    output = proc.stdout + proc.stderr
+    assert proc.returncode == 2
+    assert "ERROR:" in output and "Traceback" not in output
+    assert str(tmp_path) in output
+    assert not (tmp_path / "i.json").exists()
+
+
+@pytest.mark.parametrize("command", ["gate", "prepare"])
+@pytest.mark.parametrize("error_type", [PermissionError, OSError])
+def test_report_read_oserror_is_clean(
+    command, error_type, tmp_path, monkeypatch, capsys, caplog
+):
+    path = _write(tmp_path / "qa.json", [])
+
+    def fail_read(*args, **kwargs):
+        raise error_type("cannot read producer report")
+
+    monkeypatch.setattr(Path, "read_text", fail_read)
+    argv = [command, str(path)]
+    if command == "prepare":
+        argv = [command, f"qa:{path}", "--output", str(tmp_path / "i.json")]
+        argv += ["--repo-root", str(tmp_path)]
+    assert cr.main(argv) == 2
+    output = capsys.readouterr().out + caplog.text
+    assert "ERROR" in output and "cannot read producer report" in output
+    assert not (tmp_path / "i.json").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +129,14 @@ class TestGate:
         assert out[1] == "CANDIDATES: SEC-001 (G-SECRET), SEC-002 (G-INTENT)"
 
     def test_blocking_without_gate_citation_is_a_candidate(self, tmp_path, capsys):
-        finding = _f("QA-001", 0.2, 0.2, merge_class="blocking", tags=[{"x": 1}])
+        finding = _f(
+            "QA-001",
+            0.2,
+            0.2,
+            merge_class="blocking",
+            intent_basis="Breaks the requested behavior",
+            tags=[{"x": 1}],
+        )
         path = _write(
             tmp_path / "qa.json",
             [{"title": "QA", "category": "code_quality", "findings": [finding]}],
@@ -132,6 +179,31 @@ class TestGate:
             [{"title": "QA", "category": "code_quality", "findings": findings}],
         )
         return cr.main(["gate", str(path)])
+
+    @pytest.mark.parametrize(
+        "basis",
+        [{}, {"intent_basis": None}, {"intent_basis": ""}, {"intent_basis": " \t\n"}],
+    )
+    def test_blocking_requires_nonempty_intent_basis(self, tmp_path, capsys, basis):
+        finding = _f("QA-001", 0.2, 0.2, merge_class="blocking", **basis)
+        assert self._gate(tmp_path, [finding]) == 1
+        lines = capsys.readouterr().out.splitlines()
+        assert any(
+            line.startswith("INVALID:") and "QA-001" in line and "intent_basis" in line
+            for line in lines
+        )
+        assert "CANDIDATES: QA-001 (blocking)" in lines
+
+    def test_blocking_with_intent_basis_passes_gate(self, tmp_path, capsys):
+        finding = _f(
+            "QA-001",
+            0.2,
+            0.2,
+            merge_class="blocking",
+            intent_basis="Breaks the requested behavior",
+        )
+        assert self._gate(tmp_path, [finding]) == 0
+        assert "CANDIDATES: QA-001 (blocking)" in capsys.readouterr().out
 
     def test_band_comes_from_floats_not_producer_severity(self, tmp_path, capsys):
         assert self._gate(tmp_path, [_f("QA-001", 1.0, 0.9, severity=2)]) == 0
