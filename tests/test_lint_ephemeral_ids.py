@@ -294,6 +294,18 @@ def _lint_range(tmp_path: Path, *extra: str, env=None):
     )
 
 
+def test_range_that_names_a_file_is_not_a_path_filter(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "a.md"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert result.returncode == 2
+
+
 def test_range_mode_runs_git_diff_itself(tmp_path: Path) -> None:
     """--range avoids a `git diff | python3` pipe (denied by CI allowlists)."""
     _git_repo(tmp_path)

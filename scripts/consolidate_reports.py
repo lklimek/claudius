@@ -1684,6 +1684,10 @@ def cmd_finalize(args: argparse.Namespace) -> int:
     On failure, outputs left by an earlier run are renamed to ``*.stale`` so
     no consumer mistakes them for this run's result.
     """
+    if Path(args.output).suffix != ".json":
+        # renders land at <output>.with_suffix(.<fmt>) and would overwrite it
+        log.error("--output must be a .json path, got %s", args.output)
+        return 2
     try:
         code = _finalize(args)
     except Exception as e:  # noqa: BLE001 - any failure must still set aside outputs

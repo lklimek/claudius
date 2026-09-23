@@ -612,6 +612,15 @@ class TestFinalize:
         assert not (tmp_path / "out" / "report.json").exists()
         assert (tmp_path / "out" / "report.json.stale").is_file()
 
+    @pytest.mark.parametrize("name", ["report.md", "report.html", "report"])
+    def test_non_json_output_is_rejected_up_front(self, tmp_path, name):
+        intermediate = _prepare(tmp_path, digest=False, reports={"qa": []})
+        decisions = _write(tmp_path / "merge-decisions.json", {})
+        argv = ["finalize", "--input", str(intermediate), "--decisions", str(decisions)]
+        argv += ["--output", str(tmp_path / "out" / name)]
+        assert cr.main(argv) == 2
+        assert not (tmp_path / "out").exists()
+
     def test_success_leaves_no_stale_files(self, tmp_path):
         assert self._run(tmp_path, self._decisions()) == 0
         assert self._run(tmp_path, self._decisions()) == 0

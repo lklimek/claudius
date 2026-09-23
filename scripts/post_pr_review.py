@@ -81,6 +81,10 @@ _FILES_PER_PAGE = 100
 _MAX_FILE_PAGES = 30  # the API lists at most 3000 files per PR
 _MAX_THREAD_PAGES = 50
 GITHUB_TEXT_LIMIT = 65536  # per review body and per review comment
+ATTRIBUTION = (
+    "\n\n<sub>🤖 Co-authored by [Claudius the Magnificent]"
+    "(https://github.com/lklimek/claudius) AI Agent</sub>"
+)
 _BODY_ITEM_LIMIT = 2000
 _LEAD_LIMIT = 4000
 _OMITTED_LINE_LIMIT = 4000
@@ -422,6 +426,35 @@ def check_schema(report: dict[str, Any]) -> None:
         )
 
 
+def check_consistency(report: dict[str, Any], findings: list[dict[str, Any]]) -> None:
+    """Raise ReportError when summary_statistics contradict the findings array.
+
+    A report whose findings were lost but whose stats still count them must
+    not reach APPROVE on an empty list.
+    """
+    stats = report.get("summary_statistics")
+    if not isinstance(stats, dict):
+        return  # shape errors are check_schema's job
+    if stats.get("total_findings") != len(findings):
+        raise ReportError(
+            f"summary_statistics.total_findings={stats.get('total_findings')!r} "
+            f"but the report holds {len(findings)} finding(s)"
+        )
+    counts = stats.get("severity_counts")
+    if isinstance(counts, dict):
+        actual: dict[str, int] = {}
+        for finding in findings:
+            label = SEV_LABELS.get(finding.get("severity", 1), "INFO")
+            actual[label] = actual.get(label, 0) + 1
+        for label in set(counts) | set(actual):
+            if counts.get(label, 0) != actual.get(label, 0):
+                raise ReportError(
+                    f"summary_statistics.severity_counts[{label}]="
+                    f"{counts.get(label, 0)} but the findings hold "
+                    f"{actual.get(label, 0)}"
+                )
+
+
 @dataclass
 class ReviewOptions:
     """Caller-supplied review parameters."""
@@ -563,9 +596,17 @@ def _clip(text: str, limit: int) -> str:
     return cut + (f"\n{fence}" if fence else "") + marker
 
 
+_HTML_OPEN_RE = re.compile(r"<(?=[A-Za-z/!?])")
+
+
 def _neutralize(line: str) -> str:
-    """Break @mentions and ``<!--`` with a zero-width space (idempotent)."""
-    return _MENTION_RE.sub("@\u200b", line).replace("<!--", "<\u200b!--")
+    """Break @mentions and raw HTML (tags, ``<!--``) with a zero-width space.
+
+    A ``<`` followed by a zero-width space cannot start an HTML tag, so report
+    text can neither hide later findings (``<!--``, ``<details>``) nor inject
+    markup. Idempotent: the inserted character stops a second match.
+    """
+    return _HTML_OPEN_RE.sub("<\u200b", _MENTION_RE.sub("@\u200b", line))
 
 
 def sanitize(text: str) -> str:
@@ -666,8 +707,10 @@ def _render_body(
             ),
         ]
     # Safety net: every fragment is already sanitized, so this is a no-op unless
-    # composition somehow re-opened a construct.
-    return _Body(_fit("\n".join(lines), GITHUB_TEXT_LIMIT), posted, omitted)
+    # composition somehow re-opened a construct. The trusted footer is appended
+    # after sanitizing, so its markup survives.
+    text = _fit("\n".join(lines), GITHUB_TEXT_LIMIT - len(ATTRIBUTION))
+    return _Body(text + ATTRIBUTION, posted, omitted)
 
 
 def build_review(
@@ -910,7 +953,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
     try:
         report = load_json_strict(args.report.read_text(encoding="utf-8"))
-        validate_report(report)
+        check_consistency(report, validate_report(report))
         check_schema(report)
         options = ReviewOptions(
             repo=args.repo,

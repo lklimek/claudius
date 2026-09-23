@@ -240,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
                     *_GIT_DIFF_ARGS,
                     "--end-of-options",
                     args.range,
+                    "--",  # a range naming a file must not become a path filter
                 ],
                 capture_output=True,
                 encoding="utf-8",

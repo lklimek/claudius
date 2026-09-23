@@ -28,7 +28,7 @@ hand-transcription and denied shell idioms with single allowlisted script calls.
   threads, and no non-disputed blocking or MEDIUM+ finding (`--draft` for pending), keeps
   within GitHub's size limits (overflow named, never dropped silently; each finding's ID,
   severity, title and location stay outside clipped text), neutralizes @mentions
-  and HTML comment openers everywhere, code included (after clipping, within the size cap),
+  and raw HTML everywhere, code included (after clipping, within the size cap), rejects stats that contradict the findings,
   and falls back on HTTP 422 and a rejected APPROVE. Only reads retry via `ghsudo`.
   The caller supplies only a one-line body and an optional `{final_id: text}` map. Documented
   in `git-and-github/references/pr-review.md`; used by `review-pr` Part B.

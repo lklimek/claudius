@@ -53,6 +53,10 @@ def _valid_report(*findings: dict[str, Any]) -> dict[str, Any]:
     floats = {"likelihood": 0.6, "impact": 0.6, "relevance": 0.5}
     report["findings"][0]["findings"] = [{**floats, **f} for f in findings]
     report["summary_statistics"]["total_findings"] = len(findings)
+    counts = dict.fromkeys(("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"), 0)
+    for f in findings:
+        counts[ppr.SEV_LABELS.get(f.get("severity", 1), "INFO")] += 1
+    report["summary_statistics"]["severity_counts"] = counts
     return report
 
 
@@ -879,6 +883,26 @@ class TestReportValidation:
         monkeypatch.setattr(ppr, "GhCli", FakeGh)
         assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 0
 
+    @pytest.mark.parametrize(
+        "stats",
+        [
+            {"total_findings": 1, "severity_counts": {"HIGH": 1}},
+            {"total_findings": 0, "severity_counts": {"HIGH": 1}},
+            {"total_findings": 1, "severity_counts": {}},
+        ],
+    )
+    def test_cli_stats_contradicting_findings_exit_2(
+        self, stats, tmp_path, monkeypatch
+    ):
+        data = _valid_report()
+        data["summary_statistics"] = stats
+        report = tmp_path / "report.json"
+        report.write_text(json.dumps(data))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(report)]) == 2
+        assert gh.calls == []
+
     def test_cli_subprocess_no_traceback(self, tmp_path):
         report = tmp_path / "report.json"
         report.write_text('{"findings": null}')
@@ -1133,6 +1157,29 @@ class TestSanitizeStructure:
         out = ppr.sanitize("```python\n@decorator\n<!-- x -->\n```\n")
         assert out.startswith("```python\n") and out.endswith("```\n")
         assert "@decorator" not in out and "<!--" not in out
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "<details><summary>x</summary>",
+            "</details>",
+            "<pre>",
+            "<!-- c",
+            "<a href=x>",
+        ],
+    )
+    def test_raw_html_tags_are_neutralized(self, text):
+        out = ppr.sanitize(text)
+        assert "<\u200b" in out and ppr.sanitize(out) == out
+
+    def test_review_body_ends_with_trusted_attribution(self):
+        result = _run(_report(_finding("QA-001", 4, "other.py:1")), FakeGh())
+        body = result.payload["body"]
+        assert body.endswith(ppr.ATTRIBUTION) and "<sub>" in body
+        assert len(body) <= ppr.GITHUB_TEXT_LIMIT
+
+    def test_comparisons_are_not_touched(self):
+        assert ppr.sanitize("a < b and x<3 and <= 2") == "a < b and x<3 and <= 2"
 
     def test_html_pre_block_cannot_fool_fence_detection(self):
         out = ppr.sanitize("<pre>\n```\n</pre>\n<!--")
