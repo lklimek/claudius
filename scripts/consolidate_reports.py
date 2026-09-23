@@ -1365,6 +1365,9 @@ def gate_lines(sections: list[Any], source: str = "gate") -> tuple[list[str], in
         + f" TOTAL={len(raw)}",
     ]
     problems = _gate_problems(raw)
+    bad_sections = _section_problems(sections)
+    if bad_sections:
+        problems.append("invalid section field(s): " + ", ".join(bad_sections))
     dropped = _count_emitted_findings(sections) - len(raw)
     if dropped > 0:
         problems.insert(
@@ -1427,21 +1430,57 @@ _GATE_SKIPPED_FIELDS = frozenset(
 
 
 @functools.cache
-def _finding_validator() -> Any:
-    """Validator for one schema ``finding``, or None when unavailable."""
+def _def_validator(name: str) -> Any:
+    """Validator for one schema ``$defs`` entry, or None when unavailable."""
     if not _HAS_JSONSCHEMA:
         return None
     try:
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
         defs = schema["$defs"]
+        defs[name]["properties"]
     except (OSError, ValueError, KeyError, TypeError):
         return None
-    return jsonschema.Draft202012Validator({"$ref": "#/$defs/finding", "$defs": defs})
+    return jsonschema.Draft202012Validator({"$ref": f"#/$defs/{name}", "$defs": defs})
+
+
+def _error_fields(validator: Any, instance: dict[str, Any]) -> list[str]:
+    """Top-level field names ``validator`` rejects in ``instance``."""
+    fields: set[str] = set()
+    for error in validator.iter_errors(instance):
+        if error.absolute_path:
+            fields.add(str(error.absolute_path[0]))
+        elif error.validator == "required":
+            fields.update(k for k in error.validator_value if k not in instance)
+        else:
+            fields.add(error.validator)
+    return sorted(fields)
+
+
+def _section_problems(sections: list[Any]) -> list[str]:
+    """Name section-level fields (title, category, positives, …) finalize rejects.
+
+    Bare findings (no ``findings`` key) are skipped: prepare rescues them into
+    a synthesized section.
+    """
+    validator = _def_validator("finding_section")
+    if validator is None:
+        return []
+    known = validator.schema["$defs"]["finding_section"]["properties"]
+    problems = []
+    for index, section in enumerate(sections):
+        if not isinstance(section, dict) or "findings" not in section:
+            continue
+        projected = {k: v for k, v in section.items() if k in known}
+        projected["findings"] = []
+        fields = _error_fields(validator, projected)
+        if fields:
+            problems.append(f"section #{index} ({', '.join(fields)})")
+    return problems
 
 
 def _schema_field_problems(finding: dict[str, Any]) -> list[str]:
     """Name the finding fields the report schema would reject after assembly."""
-    validator = _finding_validator()
+    validator = _def_validator("finding")
     if validator is None:
         return []
     known = validator.schema["$defs"]["finding"]["properties"]
@@ -1451,15 +1490,7 @@ def _schema_field_problems(finding: dict[str, Any]) -> list[str]:
     projected.update(
         {"id": "QA-001", "likelihood": 0.5, "impact": 0.5, "relevance": 0.5}
     )
-    fields: set[str] = set()
-    for error in validator.iter_errors(projected):
-        if error.absolute_path:
-            fields.add(str(error.absolute_path[0]))
-        elif error.validator == "required":
-            fields.update(k for k in error.validator_value if k not in projected)
-        else:
-            fields.add(error.validator)
-    return sorted(fields)
+    return _error_fields(validator, projected)
 
 
 def _is_unit_float(value: Any) -> bool:

@@ -302,7 +302,27 @@ def resolve_findings(
             )
         _apply_finding_update(by_key[key], label, update)
 
-    return apply_merge_decisions(copies, merges)
+    resolved = apply_merge_decisions(copies, merges)
+    for finding in resolved:
+        _check_classification(finding)
+    return resolved
+
+
+def _check_classification(finding: dict[str, Any]) -> None:
+    """Re-check classification and rating fields after cluster ``updates``.
+
+    Cluster updates may set any field, so the finding_updates rules are
+    re-applied to the result: valid merge_class and floats, and ``blocking``
+    only with an intent_basis.
+    """
+    label = f"{finding.get('agent')}:{finding.get('original_id')}"
+    rated = {k: finding[k] for k in _FINDING_UPDATE_FIELDS if k in finding}
+    _validate_finding_update(label, rated)
+    basis = finding.get("intent_basis")
+    if finding.get("merge_class") == "blocking" and not (
+        isinstance(basis, str) and basis.strip()
+    ):
+        raise ValueError(f"{label}: merge_class blocking requires an intent_basis")
 
 
 def _apply_finding_update(

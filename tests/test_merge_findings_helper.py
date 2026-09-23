@@ -439,3 +439,50 @@ def test_main_invalid_decision_exits_1_like_finalize(tmp_path):
 def test_main_unreadable_input_exits_2_like_finalize(tmp_path):
     _, decisions = _write_cli_inputs(tmp_path, {})
     assert _run_cli(tmp_path / "nope.json", decisions, tmp_path / "m.json") == 2
+
+
+@pytest.mark.parametrize(
+    "cluster_update",
+    [
+        {"merge_class": "blocking"},
+        {"merge_class": "nonsense"},
+        {"likelihood": 2.0},
+    ],
+)
+def test_cluster_updates_cannot_bypass_classification_rules(cluster_update):
+    findings = [_finding("security", "SEC-001"), _finding("qa", "QA-001")]
+    decisions = {
+        "finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}},
+        "merges": [
+            {
+                "reason": "Same issue.",
+                "members": [
+                    {"agent": "security", "original_id": "SEC-001"},
+                    {"agent": "qa", "original_id": "QA-001"},
+                ],
+                "base": {"agent": "security", "original_id": "SEC-001"},
+                "updates": cluster_update,
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="security:SEC-001"):
+        helper.resolve_findings(findings, decisions)
+
+
+def test_cluster_update_to_blocking_with_intent_basis_is_accepted():
+    findings = [_finding("security", "SEC-001"), _finding("qa", "QA-001")]
+    decisions = {
+        "merges": [
+            {
+                "reason": "Same issue.",
+                "members": [
+                    {"agent": "security", "original_id": "SEC-001"},
+                    {"agent": "qa", "original_id": "QA-001"},
+                ],
+                "base": {"agent": "security", "original_id": "SEC-001"},
+                "updates": {"merge_class": "blocking", "intent_basis": "G-DATA: x"},
+            }
+        ],
+    }
+    [merged] = helper.resolve_findings(findings, decisions)
+    assert merged["merge_class"] == "blocking"

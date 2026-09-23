@@ -1,7 +1,7 @@
 ---
 name: validate-findings
 description: "This skill should be used when a coordinator performs the LLM validation pass on a consolidated v4 findings report. It adds ai_assessment, ai_verdict, and ai_verdict_confidence and, in the rare partial-producer case, re-estimates missing likelihood, impact, and relevance. Coordinator-only."
-allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(*consolidate_reports.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
+allowed-tools: Read, Edit, Bash(*validate_report.py *), Bash(*consolidate_reports.py *), Bash(*generate_review_report.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
 model: inherit
 ---
 
@@ -59,6 +59,11 @@ Write changes back with the `Edit` tool — single JSON file, in place. No `Writ
    ```
 
 3. **Re-sort** `findings[].findings` by `overall_severity` desc (then integer `severity` desc, then `id` asc) so the highest-impact items surface first after re-estimation.
+4. **Re-render** — `finalize` rendered before this pass, so every `report.md`/`.html`/`.pdf` next to the report is now stale. Re-render each one present:
+
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py "$ARGUMENTS" --format <md|html|pdf>
+   ```
 
 ## Scope and boundaries
 

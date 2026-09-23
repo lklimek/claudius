@@ -174,6 +174,31 @@ class TestGate:
         assert "INVALID" in out and needle in out
 
     @pytest.mark.parametrize(
+        ("section", "needle"),
+        [
+            ({"title": "QA", "category": "securty"}, "category"),
+            ({"title": 7, "category": "code_quality"}, "title"),
+            (
+                {"title": "QA", "category": "code_quality", "positives": ["x"]},
+                "positives",
+            ),
+        ],
+    )
+    def test_flags_invalid_section_fields(self, tmp_path, capsys, section, needle):
+        path = _write(
+            tmp_path / "qa.json", [{**section, "findings": [_f("QA-001", 0.5, 0.5)]}]
+        )
+        assert cr.main(["gate", str(path)]) == 1
+        out = capsys.readouterr().out
+        assert any(
+            line.startswith("INVALID") and needle in line for line in out.splitlines()
+        )
+
+    def test_rescued_bare_findings_are_not_section_errors(self, tmp_path, capsys):
+        path = _write(tmp_path / "qa.json", [_f("QA-001", 0.5, 0.5)])
+        assert cr.main(["gate", str(path)]) == 0
+
+    @pytest.mark.parametrize(
         "data",
         [
             ["oops"],
