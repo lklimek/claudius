@@ -6,6 +6,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [8.2.0] - 2026-09-23
+
+Headless-CI hardening follow-ups to 8.1.0.
+
+### Changed
+
+- `grumpy-review`, `review-pr`, `check-pr-comments`: `allowed-tools` script rules anchored to
+  `${CLAUDE_PLUGIN_ROOT}/scripts/<name>` (body invocations match exactly); dropped grants the
+  coordinator turn never uses (`rg`, `mv`, `Edit`, audit tools, `gh pr checkout`, `git fetch|pull`, …).
+  Note: model-invoked skill grants don't apply under `claude -p`; CI allowlists must cover these calls.
+- `grumpy-review`: reviewers spawn in one message, foreground only; the turn never ends before
+  `report.json` is written (fixes CI runs ending with no report). Invoker-supplied scratch dir
+  honored; base ref resolves `origin/<base>` first; shutdown only for persistent teammates.
+- `post_pr_review.py`: recomputes all derived report fields and exits 2 on any mismatch
+  (curated `top_findings`/`remediation` overrides must cite real findings); `--body-file`.
+
+### Fixed
+
+- `consolidate_reports.py`: origin URL credentials (e.g. `x-access-token:ghs_…`) never logged or
+  emitted; token-bearing remotes resolve `repository` metadata again.
+- `post_pr_review.py`: `_@user` / non-ASCII-prefixed mentions neutralized; own ZWSP-sanitized
+  threads dedup on rerun.
+- `merge_findings_helper.py`: cluster updates leaving `blocking` drop the stale `intent_basis`.
+
 ## [8.1.0] - 2026-09-23
 
 Cuts `grumpy-review` coordinator rounds under restricted headless-CI Bash allowlists
