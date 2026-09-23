@@ -15,7 +15,8 @@ Usage:
     python3 scripts/consolidate_reports.py prepare \\
         agent1:path/to/report1.json agent2:path/to/report2.json \\
         --repo-root /path/to/repo --output intermediate.json \\
-        [--metadata '{"project":"X","date":"2026-03-05"}'] [--digest]
+        [--metadata '{"project":"X","date":"2026-03-05"}'] [--digest] \\
+        [--base-ref origin/main]
 
     # Phase 2
     python3 scripts/consolidate_reports.py assemble \\
@@ -272,6 +273,25 @@ def _derive_metadata_repository(repo_root: str) -> dict[str, str] | None:
     return {"owner": match["owner"], "repo": match["repo"]}
 
 
+def _git_sha(repo_root: str, *args: str) -> str | None:
+    """Run ``git -C repo_root <args>``; return its output if a full SHA, else None."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_root, *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        log.info("git %s failed in %s: %s", " ".join(args), repo_root, e)
+        return None
+    full = result.stdout.strip()
+    if result.returncode != 0 or not _FULL_SHA_RE.match(full):
+        log.info("git %s could not resolve a SHA in %s", " ".join(args), repo_root)
+        return None
+    return full
+
+
 def _full_sha(commit: str | None, repo_root: str) -> str | None:
     """Expand a commit ref to full 40-char SHA via `git rev-parse`.
 
@@ -281,21 +301,14 @@ def _full_sha(commit: str | None, repo_root: str) -> str | None:
         return None
     if _FULL_SHA_RE.match(commit):
         return commit
-    try:
-        result = subprocess.run(
-            ["git", "-C", repo_root, "rev-parse", commit],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        log.info("git rev-parse failed for %r in %s: %s", commit, repo_root, e)
+    return _git_sha(repo_root, "rev-parse", "--verify", "--end-of-options", commit)
+
+
+def _merge_base(base_ref: str, commit: str | None, repo_root: str) -> str | None:
+    """Merge-base of ``base_ref`` and the reviewed ``commit`` (the reviewed diff's base)."""
+    if not commit:
         return None
-    if result.returncode != 0:
-        log.info("git rev-parse could not resolve %r in %s", commit, repo_root)
-        return None
-    full = result.stdout.strip()
-    return full if _FULL_SHA_RE.match(full) else None
+    return _git_sha(repo_root, "merge-base", "--end-of-options", base_ref, commit)
 
 
 def _build_permalink(
@@ -1182,11 +1195,24 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         repository = _derive_metadata_repository(args.repo_root)
         if repository is not None:
             metadata["repository"] = repository
-        full = _full_sha(metadata.get("commit"), args.repo_root)
-        if full is not None:
-            metadata["commit"] = full
-        elif "commit" in metadata:
-            metadata.pop("commit")
+        for key in ("commit", "base_commit"):
+            full = _full_sha(metadata.get(key), args.repo_root)
+            if full is not None:
+                metadata[key] = full
+            else:
+                metadata.pop(key, None)
+        base_ref = getattr(args, "base_ref", None)
+        if base_ref:
+            merge_base = _merge_base(base_ref, metadata.get("commit"), args.repo_root)
+            if merge_base is not None:
+                metadata["base_commit"] = merge_base
+            else:
+                metadata.pop("base_commit", None)
+                log.warning(
+                    "No merge-base of --base-ref %s and metadata.commit; omitting "
+                    "metadata.base_commit (post_pr_review.py will not APPROVE)",
+                    base_ref,
+                )
 
     output = {
         "metadata": metadata,
@@ -1818,6 +1844,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output", required=True, help="Output intermediate JSON path"
     )
     p_prepare.add_argument("--metadata", default=None, help="JSON metadata string")
+    p_prepare.add_argument(
+        "--base-ref",
+        default=None,
+        help="Base ref of the reviewed diff; records metadata.base_commit as its "
+        "merge-base with metadata.commit",
+    )
     p_prepare.add_argument(
         "--digest",
         action="store_true",

@@ -25,6 +25,11 @@
           "pattern": "^[0-9a-f]{40}$",
           "description": "Full 40-char SHA, used for permalink construction. Omit when not in a git repo."
         },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full 40-char merge-base SHA of the reviewed diff (base...commit). post_pr_review.py APPROVEs only when it equals the PR's current merge-base."
+        },
         "repository": {
           "type": "object",
           "required": ["owner", "repo"],

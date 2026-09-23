@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import post_pr_review as ppr  # noqa: E402
 
 HEAD = "a" * 40
+BASE_TIP = "c" * 40
+MERGE_BASE = "d" * 40
 
 VALID_REPORT = Path(__file__).parent / "fixtures" / "reports" / "v4-minimal.json"
 
@@ -37,7 +39,7 @@ def _finding(fid: str, sev: int, location: str, **extra: Any) -> dict[str, Any]:
 def _report(*findings: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "4.0.0",
-        "metadata": {"commit": HEAD},
+        "metadata": {"commit": HEAD, "base_commit": MERGE_BASE},
         "summary_statistics": {"total_findings": len(findings)},
         "findings": [
             {"title": "S", "category": "security", "findings": list(findings)}
@@ -63,12 +65,16 @@ class FakeGh:
         files: list[dict[str, Any]] | None = None,
         threads: list[dict[str, Any]] | None = None,
         post_errors: list[ppr.GhApiError] | None = None,
+        merge_bases: dict[str, Any] | None = None,
     ) -> None:
         self.files = (
             files if files is not None else [{"filename": "src/a.py", "patch": PATCH_A}]
         )
         self.threads = threads or []
         self.post_errors = list(post_errors or [])
+        # base.sha -> merge-base SHA, or a GhApiError to raise, or None (no field)
+        self.merge_bases = merge_bases or {BASE_TIP: MERGE_BASE}
+        self.base_tip = BASE_TIP
         self.posted: list[dict[str, Any]] = []
         self.calls: list[tuple[str, str]] = []
 
@@ -95,8 +101,17 @@ class FakeGh:
         if "/files" in path:
             page = int(path.rsplit("page=", 1)[1])
             return self.files if page == 1 else []
+        if path.startswith("repos/o/r/compare/"):
+            base, rest = path[len("repos/o/r/compare/") :].split("...", 1)
+            assert rest == f"{HEAD}?per_page=1", path
+            merge_base = self.merge_bases[base]
+            if isinstance(merge_base, Exception):
+                raise merge_base
+            return (
+                {} if merge_base is None else {"merge_base_commit": {"sha": merge_base}}
+            )
         if path.startswith("repos/o/r/pulls/7"):
-            return {"head": {"sha": HEAD}}
+            return {"head": {"sha": HEAD}, "base": {"sha": self.base_tip}}
         raise AssertionError(f"unexpected request {method} {path}")
 
 
@@ -413,7 +428,7 @@ class TestThreadPagination:
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
         monkeypatch.setattr(ppr, "_MAX_THREAD_PAGES", 2)
         report = _valid_report()
-        report["metadata"]["commit"] = HEAD
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
         path = tmp_path / "report.json"
         path.write_text(json.dumps(report))
         assert ppr.main(["o/r", "7", str(path)]) == (1 if has_more else 0)
@@ -719,6 +734,74 @@ class TestApprovalSafety:
         )
 
 
+class TestDiffScopeBinding:
+    """APPROVE is bound to the reviewed merge-base, not only the head SHA."""
+
+    def test_matching_merge_base_approves_via_compare_api(self):
+        gh = FakeGh()
+        assert _run(_report(), gh).event == "APPROVE"
+        assert ("GET", f"repos/o/r/compare/{BASE_TIP}...{HEAD}?per_page=1") in gh.calls
+
+    @pytest.mark.parametrize("findings", [(), (_finding("SEC-001", 4, "src/a.py:11"),)])
+    def test_retargeted_base_exits_without_posting(self, findings):
+        # Reviewed A...H; PR retargeted to an older base O: O...H is unreviewed.
+        gh = FakeGh(merge_bases={BASE_TIP: "e" * 40})
+        with pytest.raises(ppr.ReportError, match="diff scope changed"):
+            _run(_report(*findings), gh)
+        assert gh.posted == []
+
+    def test_retarget_during_reads_is_caught(self):
+        class RetargetingGh(FakeGh):
+            def request(self, method, path, payload=None):
+                if "/files" in path:
+                    self.base_tip = "f" * 40
+                return super().request(method, path, payload)
+
+        gh = RetargetingGh(merge_bases={BASE_TIP: MERGE_BASE, "f" * 40: "e" * 40})
+        with pytest.raises(ppr.ReportError, match="diff scope changed"):
+            _run(_report(), gh)
+        assert gh.posted == []
+
+    def test_missing_base_commit_downgrades_to_comment(self, caplog):
+        report = _report()
+        del report["metadata"]["base_commit"]
+        gh = FakeGh()
+        assert _run(report, gh).event == "COMMENT"
+        assert "metadata.base_commit" in caplog.text
+        assert gh.posted[0]["event"] == "COMMENT"
+
+    @pytest.mark.parametrize(
+        "merge_base", [ppr.GhApiError(500, "boom"), ppr.GhApiError(404, "gone"), None]
+    )
+    def test_unverifiable_merge_base_posts_comment_not_failure(
+        self, merge_base, caplog
+    ):
+        gh = FakeGh(merge_bases={BASE_TIP: merge_base})
+        result = _run(_report(_finding("SEC-001", 4, "src/a.py:11")), gh)
+        assert result.event == "COMMENT" and gh.posted[0]["event"] == "COMMENT"
+        assert "merge-base" in caplog.text
+        clean = _run(_report(), FakeGh(merge_bases={BASE_TIP: merge_base}))
+        assert clean.event == "COMMENT"
+
+    def test_cli_scope_mismatch_exits_2(self, tmp_path, monkeypatch, caplog):
+        report = _valid_report()
+        report["metadata"].update(commit=HEAD, base_commit="e" * 40)
+        path = tmp_path / "report.json"
+        path.write_text(json.dumps(report))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(path)]) == 2
+        assert gh.posted == [] and "re-run the review" in caplog.text
+
+    def test_schema_accepts_base_commit_and_rejects_short_sha(self):
+        report = _valid_report()
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
+        ppr.check_schema(report)
+        report["metadata"]["base_commit"] = "abc123"
+        with pytest.raises(ppr.ReportError, match="base_commit"):
+            ppr.check_schema(report)
+
+
 # ---------------------------------------------------------------------------
 # report validation
 # ---------------------------------------------------------------------------
@@ -928,6 +1011,72 @@ class TestLimitsAndSanitizing:
         posted = json.dumps(gh.posted[0])
         assert "@team" not in posted and "@boss" not in posted
         assert "<!--" not in posted
+
+
+class TestHeadingSurvivesClipping:
+    """A finding reported as posted must be identifiable in the posted text."""
+
+    FENCE = "`" * 2100
+
+    def test_long_fence_in_body_keeps_id_title_and_location(self):
+        report = _report(
+            _finding(
+                "QA-001", 4, "other.py:3", title="Fence bomb", description=self.FENCE
+            )
+        )
+        result = _run(report, FakeGh(), dry_run=True)
+        body = result.payload["body"]
+        assert result.in_body == ["QA-001"]
+        assert "**QA-001**" in body and "Fence bomb" in body and "other.py:3" in body
+
+    def test_long_fence_inline_keeps_id_and_title(self):
+        report = _report(
+            _finding("QA-001", 4, "src/a.py:11", title="Big", description="`" * 70000)
+        )
+        result = _run(report, FakeGh(), dry_run=True)
+        [comment] = result.payload["comments"]
+        assert len(comment["body"]) <= ppr.GITHUB_TEXT_LIMIT
+        assert "**QA-001**" in comment["body"] and "Big" in comment["body"]
+
+    def test_clip_reserve_comes_from_retained_prefix(self):
+        text = "keep me\n" + "x" * 3000 + "\n" + self.FENCE
+        clipped = ppr._clip(text, 2000)
+        assert len(clipped) <= 2000
+        assert clipped.startswith("keep me\n" + "x" * 1500)
+
+    @pytest.mark.parametrize("limit", [0, 5, 20, 2000])
+    def test_clip_never_exceeds_limit_on_fence_only_text(self, limit):
+        clipped = ppr._clip(self.FENCE, limit)
+        assert len(clipped) <= max(limit, len("\n\n…(truncated)"))
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {"description": FENCE},
+            {"description": "~" * 5000 + "\n@team <!--"},
+            {"description": "y" * 70000},
+            {"title": "T" * 5000},
+            {"title": "@team <!-- `x`", "description": "```\n" + "z" * 3000},
+            {"recommendation": "`" * 3000},
+        ],
+    )
+    def test_every_posted_id_appears_in_posted_text(self, extra):
+        report = _report(
+            _finding("QA-001", 4, "src/a.py:11", **extra),
+            _finding("QA-002", 4, "other.py:1", **extra),
+            _finding("QA-003", 4, "other.py:2", **extra),
+        )
+        result = _run(report, FakeGh(), dry_run=True)
+        comments = {c["body"] for c in result.payload["comments"]}
+        body = result.payload["body"]
+        assert result.inline == ["QA-001"]
+        for fid in result.inline:
+            assert any(f"**{fid}**" in c for c in comments)
+        assert result.in_body
+        for fid in result.in_body:
+            assert f"**{fid}**" in body
+        assert len(body) <= ppr.GITHUB_TEXT_LIMIT
+        assert all(len(c) <= ppr.GITHUB_TEXT_LIMIT for c in comments)
 
 
 class TestSanitizeStructure:

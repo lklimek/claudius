@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import consolidate_reports as cr
 
@@ -98,6 +100,67 @@ class TestPrepareMetadataDerivation:
         data = json.loads(out.read_text())
         assert data["metadata"]["repository"] == {"owner": "octo", "repo": "widgets"}
         assert data["metadata"]["commit"] == sha
+
+    def _prepare_with_base(self, tmp_path, metadata, base_ref=None):
+        rep = tmp_path / "agent.json"
+        rep.write_text(json.dumps([{"category": "x", "title": "X", "findings": []}]))
+        out = tmp_path / "intermediate.json"
+        args = argparse.Namespace(
+            agent_reports=[f"agent:{rep}"],
+            repo_root=str(tmp_path / "repo"),
+            output=str(out),
+            metadata=json.dumps({"project": "p", "date": "2026-05-26", **metadata}),
+            base_ref=base_ref,
+        )
+        assert cr.cmd_prepare(args) == 0
+        return json.loads(out.read_text())["metadata"]
+
+    def _branched_repo(self, tmp_path):
+        """main: M; feature: M -> H. Returns (M, H)."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        base = _init_repo(repo, commit=True)
+        git = ["git", "-C", str(repo)]
+        subprocess.run([*git, "branch", "-q", "-M", "main"], check=True)
+        subprocess.run([*git, "checkout", "-q", "-b", "feature"], check=True)
+        (repo / "f.txt").write_text("x\n")
+        subprocess.run([*git, "add", "f.txt"], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "feat"], check=True)
+        head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+        return base, head
+
+    def test_base_ref_derives_merge_base_of_reviewed_commit(self, tmp_path):
+        base, head = self._branched_repo(tmp_path)
+        meta = self._prepare_with_base(tmp_path, {"commit": head}, base_ref="main")
+        assert meta["commit"] == head and meta["base_commit"] == base
+
+    @pytest.mark.parametrize(
+        ("metadata", "base_ref"),
+        [
+            ({"commit": "HEAD"}, "no-such-ref"),  # unresolvable ref
+            ({}, "main"),  # no reviewed commit to anchor the merge-base
+            ({"commit": "HEAD", "base_commit": "deadbeef"}, None),  # bogus SHA
+        ],
+    )
+    def test_unresolvable_base_is_omitted(self, tmp_path, caplog, metadata, base_ref):
+        self._branched_repo(tmp_path)
+        meta = self._prepare_with_base(tmp_path, metadata, base_ref=base_ref)
+        assert "base_commit" not in meta
+        assert ("will not APPROVE" in caplog.text) == bool(base_ref)
+
+    def test_explicit_short_base_commit_is_expanded(self, tmp_path):
+        base, head = self._branched_repo(tmp_path)
+        meta = self._prepare_with_base(
+            tmp_path, {"commit": head, "base_commit": base[:8]}
+        )
+        assert meta["base_commit"] == base
+
+    def test_base_ref_flag_is_parsed(self):
+        args = cr.parse_args(
+            ["prepare", "a:x.json", "--repo-root", ".", "--output", "o.json"]
+            + ["--base-ref", "origin/main"]
+        )
+        assert args.base_ref == "origin/main"
 
     def test_non_git_directory_omits_repository_and_commit(self, tmp_path):
         sections = [{"category": "code_quality", "title": "CQ", "findings": []}]

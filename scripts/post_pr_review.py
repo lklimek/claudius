@@ -12,7 +12,9 @@ Input must be an assembled report (``schema_version``, ``summary_statistics``
 and ``findings`` sections whose findings carry final IDs); anything else exits 2.
 ``metadata.commit`` and an explicit ``--commit`` must match the current PR head.
 The head is checked before and after fetching the diff and threads; posting uses
-that SHA. A stale report exits 2 and must be regenerated.
+that SHA. ``metadata.base_commit``, when present, must equal the PR's current
+merge-base (compare API, read after the diff and threads). A stale report or a
+changed diff scope exits 2 and must be regenerated.
 
 Selection: severity >= ``--min-severity`` (default MEDIUM) or
 ``merge_class == "blocking"``; ``disputed`` findings are never posted and
@@ -22,16 +24,18 @@ line, not re-posted) only when an unresolved RIGHT-side thread overlaps a curren
 line of the same file and its first comment cites the finding's exact title as a
 whole, case-insensitive phrase.
 
-Event: APPROVE only with ``metadata.commit``, when nothing is posted, no unresolved
-thread remains and no non-disputed finding is blocking or MEDIUM+; otherwise
-COMMENT. ``--draft`` omits the event (pending review). Missing ``metadata.commit``
-forces COMMENT with a warning. Incomplete thread pagination fails without posting.
+Event: APPROVE only with ``metadata.commit`` and a verified ``metadata.base_commit``,
+when nothing is posted, no unresolved thread remains and no non-disputed finding
+is blocking or MEDIUM+; otherwise COMMENT. ``--draft`` omits the event (pending
+review). A missing ``commit``/``base_commit`` or an unreadable merge-base forces
+COMMENT with a warning. Incomplete thread pagination fails without posting.
 
 Limits: every comment and the body stay within GitHub's 65536 characters;
 body entries that do not fit are named in an "N more finding(s)" line and
-reported as ``omitted``. Posted text is clipped first, then has @mentions and
-HTML comment openers neutralized everywhere outside valid GFM fenced code blocks
-(inline code spans included); locations and titles are collapsed to one line.
+reported as ``omitted``. Each finding's one-line heading (ID, severity, title;
+location in the body; each part capped) stays outside the clipped text. Posted
+text is clipped first, then has @mentions and HTML comment openers neutralized
+everywhere, code included.
 
 Fallbacks: HTTP 422 with inline comments -> move them into the body and retry;
 APPROVE rejected (403/422) -> retry as COMMENT. Only reads retry via ``ghsudo``.
@@ -80,6 +84,7 @@ GITHUB_TEXT_LIMIT = 65536  # per review body and per review comment
 _BODY_ITEM_LIMIT = 2000
 _LEAD_LIMIT = 4000
 _OMITTED_LINE_LIMIT = 4000
+_HEADING_PART_LIMIT = 300  # per id/title/location; heading stays well under 1000
 _DEFAULT_MIN_SEVERITY = SEVERITY_BY_LABEL["MEDIUM"]
 _MAX_POST_ATTEMPTS = 3
 
@@ -488,15 +493,30 @@ def _one_line(value: Any) -> str:
     return _WHITESPACE_RE.sub(" ", str(value)).strip()
 
 
-def _heading(finding: dict[str, Any]) -> str:
+def _short(value: Any, limit: int = _HEADING_PART_LIMIT) -> str:
+    """One line of at most ``limit`` characters."""
+    text = _one_line(value)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _heading(finding: dict[str, Any], *, with_location: bool = False) -> str:
+    """One line naming the finding: ID, severity, title (and location).
+
+    Kept outside the clipped text, so a posted finding is always identifiable.
+    """
     label = SEV_LABELS.get(effective_severity(finding), "?")
     blocking = " · BLOCKING" if finding.get("merge_class") == "blocking" else ""
-    return f"**{_one_line(finding.get('id', '?'))}** · {label}{blocking}"
+    parts = [f"**{_short(finding.get('id', '?'))}** · {label}{blocking}"]
+    title = _short(finding.get("title", ""))
+    if title:
+        parts.append(f"**{title}**")
+    if with_location:
+        parts.append(f"`{_short(finding.get('location', '')).replace('`', '')}`")
+    return " — ".join(parts)
 
 
 def _default_text(finding: dict[str, Any]) -> str:
-    title = _one_line(finding.get("title", ""))
-    parts = [f"**{title}**" if title else "", str(finding.get("description", ""))]
+    parts = [str(finding.get("description", ""))]
     if finding.get("recommendation"):
         parts.append(f"**Recommendation:** {finding['recommendation']}")
     return "\n\n".join(p for p in parts if p.strip())
@@ -534,10 +554,12 @@ def _clip(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     marker = "\n\n…(truncated)"
-    fences = [m.group(1) for m in map(_FENCE_RE.match, text.splitlines()) if m]
-    reserve = len(marker) + (1 + max(map(len, fences)) if fences else 0)
-    cut = text[: max(limit - reserve, 0)]
-    fence = _open_fence(cut)
+    room = max(limit - len(marker), 0)
+    cut = text[:room]
+    # Reserve room to close only the fence the kept prefix leaves open; shrinking
+    # strictly shortens ``cut`` (the closer is non-empty), so this terminates.
+    while (fence := _open_fence(cut)) and len(cut) + 1 + len(fence) > room:
+        cut = cut[: max(room - 1 - len(fence), 0)]
     return cut + (f"\n{fence}" if fence else "") + marker
 
 
@@ -579,6 +601,14 @@ def _fit(text: str, limit: int) -> str:
         budget -= len(out) - limit
 
 
+def _compose(heading: str, text: str, limit: int) -> str:
+    """Sanitized ``heading`` kept whole, then ``text`` fitted into what remains."""
+    head = sanitize(heading)
+    if not text.strip():
+        return head
+    return f"{head}\n\n{_fit(text, max(limit - len(head) - 2, 0))}"
+
+
 @dataclass
 class _Body:
     text: str
@@ -600,17 +630,11 @@ def _render_body(
             )
         )
     blocks = [
-        _fit(
-            "\n".join(
-                [
-                    "",
-                    f"- {_heading(item.finding)} — "
-                    f"`{_one_line(item.finding.get('location', '')).replace('`', '')}`",
-                    "",
-                    item.text,
-                ]
-            ),
-            _BODY_ITEM_LIMIT,
+        "\n"
+        + _compose(
+            f"- {_heading(item.finding, with_location=True)}",
+            item.text,
+            _BODY_ITEM_LIMIT - 1,
         )
         for item in off_diff
     ]
@@ -704,9 +728,7 @@ def _payload(
         "comments": [
             {
                 **item.anchor,
-                "body": _fit(
-                    f"{_heading(item.finding)}\n\n{item.text}", GITHUB_TEXT_LIMIT
-                ),
+                "body": _compose(_heading(item.finding), item.text, GITHUB_TEXT_LIMIT),
             }
             for item in inline
             if item.anchor
@@ -717,6 +739,33 @@ def _payload(
     return payload, body
 
 
+def verify_diff_scope(
+    gh: Any, repo: str, pr: dict[str, Any], reviewed_base: str
+) -> bool:
+    """True when ``reviewed_base`` is the PR's current merge-base.
+
+    A retargeted or rebased base changes the diff GitHub reviews, so a mismatch
+    raises ReportError. A failed or malformed compare read only returns False
+    (no APPROVE): it must not stop a COMMENT from posting.
+    """
+    try:
+        base, head = pr["base"]["sha"], pr["head"]["sha"]
+        data = gh.request("GET", f"repos/{repo}/compare/{base}...{head}?per_page=1")
+        current = data["merge_base_commit"]["sha"]
+    except (GhApiError, KeyError, TypeError) as error:
+        log.warning("Cannot read the PR merge-base (%s); using COMMENT", error)
+        return False
+    if not isinstance(current, str):
+        log.warning("Malformed PR merge-base %r; using COMMENT", current)
+        return False
+    if current != reviewed_base:
+        raise ReportError(
+            f"reviewed diff scope changed: merge-base was {reviewed_base}, "
+            f"is {current}; re-run the review"
+        )
+    return True
+
+
 def post_review(
     gh: Any, report: dict[str, Any], options: ReviewOptions, *, dry_run: bool = False
 ) -> PostResult:
@@ -724,7 +773,9 @@ def post_review(
     held = any(_holds_approval(f) for f in validate_report(report))
     pr_path = f"repos/{options.repo}/pulls/{options.pr}"
     head = gh.request("GET", pr_path)["head"]["sha"]
-    reviewed = report.get("metadata", {}).get("commit")
+    metadata = report.get("metadata", {})
+    reviewed = metadata.get("commit")
+    reviewed_base = metadata.get("base_commit")
     if reviewed and reviewed != head:
         raise ReportError(
             f"report is for {reviewed}, PR head is {head}; re-run the review"
@@ -736,19 +787,25 @@ def post_review(
         raise ReportError(f"--commit is {commit}, PR head is {head}; re-run the review")
     hunks = fetch_diff_hunks(gh, options.repo, options.pr)
     threads = fetch_open_threads(gh, options.repo, options.pr)
-    current_head = gh.request("GET", pr_path)["head"]["sha"]
+    pr = gh.request("GET", pr_path)
+    current_head = pr["head"]["sha"]
     if current_head != commit:
         raise ReportError(
             f"PR head changed from {commit} to {current_head}; re-run the review"
         )
+    scope_verified = reviewed_base is not None and verify_diff_scope(
+        gh, options.repo, pr, reviewed_base
+    )
     inline, off_diff, covered, skipped = build_review(report, options, hunks, threads)
 
     event: Optional[str] = None
     if not options.draft:
         clean = not inline and not off_diff and not threads and not held
-        event = "APPROVE" if clean and reviewed else "COMMENT"
+        event = "APPROVE" if clean and reviewed and scope_verified else "COMMENT"
         if not reviewed:
             log.warning("No metadata.commit: cannot APPROVE; using COMMENT")
+        if not reviewed_base:
+            log.warning("No metadata.base_commit: cannot APPROVE; using COMMENT")
 
     def result(url: Optional[str] = None) -> PostResult:
         payload, body = _payload(options, commit, event, inline, off_diff, covered)

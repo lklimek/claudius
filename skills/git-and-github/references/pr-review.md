@@ -67,6 +67,9 @@ python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> 
   both. The head is checked before and after fetching the diff and threads, and posting uses
   that SHA. A mismatch exits 2: re-run the review. Without `metadata.commit`, it warns and
   publishes COMMENT instead of APPROVE.
+- `metadata.base_commit` (the reviewed diff's merge-base) must equal the PR's current
+  merge-base (compare API), or it exits 2: the diff scope changed (e.g. retargeted base).
+  Absent, or the merge-base unreadable: it warns and publishes COMMENT instead of APPROVE.
 - Coverage requires an unresolved RIGHT-side thread on the same path with overlapping
   current lines and the exact title as a whole, case-insensitive phrase in its first comment.
   IDs alone never establish coverage. Incomplete thread pagination exits 1 without posting.

@@ -18,13 +18,16 @@ hand-transcription and denied shell idioms with single allowlisted script calls.
 - `scripts/post_pr_review.py`: builds and posts a PR review from a schema-valid `report.json` (anything else
   exits 2). Posting is bound to `metadata.commit` matching the PR head; an explicit `--commit`
   must match both, and head changes during diff/thread reads abort. Stale reports exit 2;
-  missing reviewed SHA forces COMMENT with a warning. It selects MEDIUM+ or blocking findings,
+  missing reviewed SHA forces COMMENT with a warning. APPROVE also needs `metadata.base_commit`
+  (recorded by `consolidate_reports.py prepare --base-ref <ref>`) to equal the PR's current
+  merge-base; a changed diff scope (e.g. retargeted base) exits 2. It selects MEDIUM+ or blocking findings,
   skips ones an unresolved RIGHT-side thread on the same path and overlapping current line
   cites by exact whole title (case-insensitive, never ID alone), and maps locations onto the
   diff's RIGHT side. Thread pagination fails closed at its cap. Off-diff and deferred findings
   go into the body. It APPROVEs only with a reviewed SHA, no posted findings or unresolved
   threads, and no non-disputed blocking or MEDIUM+ finding (`--draft` for pending), keeps
-  within GitHub's size limits (overflow named, never dropped silently), neutralizes @mentions
+  within GitHub's size limits (overflow named, never dropped silently; each finding's ID,
+  severity, title and location stay outside clipped text), neutralizes @mentions
   and HTML comment openers everywhere, code included (after clipping, within the size cap),
   and falls back on HTTP 422 and a rejected APPROVE. Only reads retry via `ghsudo`.
   The caller supplies only a one-line body and an optional `{final_id: text}` map. Documented
