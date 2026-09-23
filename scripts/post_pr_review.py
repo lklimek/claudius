@@ -371,6 +371,37 @@ def validate_report(report: Any) -> list[dict[str, Any]]:
     return findings
 
 
+SCHEMA_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
+)
+
+
+def check_schema(report: dict[str, Any]) -> None:
+    """Raise ReportError unless ``report`` validates against the report schema.
+
+    Fails closed: without jsonschema or the schema file, nothing can APPROVE.
+    """
+    try:
+        import jsonschema
+    except ImportError as error:
+        raise ReportError("python3-jsonschema is required to validate") from error
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ReportError(f"cannot load {SCHEMA_PATH}: {error}") from error
+    validator = jsonschema.Draft202012Validator(schema)
+    errors = sorted(
+        validator.iter_errors(report), key=lambda e: [str(p) for p in e.absolute_path]
+    )
+    if errors:
+        first = errors[0]
+        where = ".".join(str(p) for p in first.absolute_path) or "(root)"
+        raise ReportError(
+            f"fails review-report schema ({len(errors)} error(s); first at "
+            f"{where}: {first.message})"
+        )
+
+
 @dataclass
 class ReviewOptions:
     """Caller-supplied review parameters."""
@@ -780,6 +811,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         report = load_json_strict(args.report.read_text(encoding="utf-8"))
         validate_report(report)
+        check_schema(report)
         options = ReviewOptions(
             repo=args.repo,
             pr=args.pr,

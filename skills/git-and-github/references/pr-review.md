@@ -65,7 +65,7 @@ python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> 
   tool; omitted IDs get text built from the finding, `null` skips one.
 - Without `--draft` it publishes COMMENT, or APPROVE only when nothing is posted, no unresolved
   thread remains and no non-disputed finding is blocking or MEDIUM+. `--dry-run` prints the
-  payload without posting. Exit 2: the input is not an assembled `report.json`.
+  payload without posting. Exit 2: the input is not a schema-valid assembled `report.json`.
 - Prints `{url, event, inline, in_body, omitted, covered_by_open_threads, skipped}`; `omitted`
   = findings that overflowed GitHub's size limit (named in the body, not posted).
 

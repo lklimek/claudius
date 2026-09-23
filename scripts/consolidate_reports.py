@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import functools
 import json
 import logging
 import os
@@ -1166,6 +1167,9 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         except ValueError as e:
             log.error("Invalid metadata JSON: %s", e)
             return 2
+        if not isinstance(metadata, dict):
+            log.error("--metadata must be a JSON object")
+            return 2
 
     if "plugin_version" not in metadata:
         version = _plugin_version()
@@ -1379,6 +1383,7 @@ def _gate_problems(raw: list[dict[str, Any]]) -> list[str]:
     seen: set[str] = set()
     duplicates: list[str] = []
     bad_floats: list[str] = []
+    bad_fields: list[str] = []
     for f in raw:
         fid = f.get("original_id")
         if not isinstance(fid, str) or not fid.strip():
@@ -1394,6 +1399,9 @@ def _gate_problems(raw: list[dict[str, Any]]) -> list[str]:
         ]
         if axes:
             bad_floats.append(f"{fid or '?'} ({', '.join(axes)})")
+        fields = _schema_field_problems(f)
+        if fields:
+            bad_fields.append(f"{fid or '?'} ({', '.join(fields)})")
     problems = []
     if unnamed:
         problems.append(f"finding(s) without an id: {', '.join(unnamed)}")
@@ -1404,7 +1412,54 @@ def _gate_problems(raw: list[dict[str, Any]]) -> list[str]:
             "missing or out-of-range floats (need numbers in [0, 1]): "
             + ", ".join(bad_floats)
         )
+    if bad_fields:
+        problems.append(
+            "missing or wrongly typed schema fields: " + ", ".join(bad_fields)
+        )
     return problems
+
+
+# Set by assemble (id comes from original_id) or checked separately (floats).
+_GATE_SKIPPED_FIELDS = frozenset(
+    {"id", "severity", "overall_severity", "location_permalink"}
+    | {"likelihood", "impact", "relevance"}
+)
+
+
+@functools.cache
+def _finding_validator() -> Any:
+    """Validator for one schema ``finding``, or None when unavailable."""
+    if not _HAS_JSONSCHEMA:
+        return None
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        defs = schema["$defs"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return jsonschema.Draft202012Validator({"$ref": "#/$defs/finding", "$defs": defs})
+
+
+def _schema_field_problems(finding: dict[str, Any]) -> list[str]:
+    """Name the finding fields the report schema would reject after assembly."""
+    validator = _finding_validator()
+    if validator is None:
+        return []
+    known = validator.schema["$defs"]["finding"]["properties"]
+    projected = {
+        k: v for k, v in finding.items() if k in known and k not in _GATE_SKIPPED_FIELDS
+    }
+    projected.update(
+        {"id": "QA-001", "likelihood": 0.5, "impact": 0.5, "relevance": 0.5}
+    )
+    fields: set[str] = set()
+    for error in validator.iter_errors(projected):
+        if error.absolute_path:
+            fields.add(str(error.absolute_path[0]))
+        elif error.validator == "required":
+            fields.update(k for k in error.validator_value if k not in projected)
+        else:
+            fields.add(error.validator)
+    return sorted(fields)
 
 
 def _is_unit_float(value: Any) -> bool:
@@ -1572,10 +1627,15 @@ def _set_aside_stale_outputs(args: argparse.Namespace) -> None:
     candidates += [out_path.with_suffix(f".{fmt}") for fmt in _RENDER_FORMATS]
     candidates.append(Path(args.decisions).parent / "merged-findings.json")
     for path in candidates:
-        if path.is_file():
-            stale = path.with_name(f"{path.name}.stale")
-            os.replace(path, stale)
-            log.warning("Moved stale %s from an earlier run to %s", path, stale)
+        _set_aside(path)
+
+
+def _set_aside(path: Path) -> None:
+    """Rename an earlier run's output to ``<name>.stale`` if it exists."""
+    if path.is_file():
+        stale = path.with_name(f"{path.name}.stale")
+        os.replace(path, stale)
+        log.warning("Moved stale %s from an earlier run to %s", path, stale)
 
 
 def _finalize(args: argparse.Namespace) -> int:
@@ -1627,13 +1687,22 @@ def _finalize(args: argparse.Namespace) -> int:
                     result.returncode,
                 )
                 return 1
-        # report.json last: its presence implies the renders are in place.
-        for item in sorted(Path(tmp).iterdir(), key=lambda p: p == staged):
-            os.replace(item, out_path.parent / item.name)
-            log.info("Wrote %s", out_path.parent / item.name)
-    mfh.write_merged_findings(
-        decisions_path.parent / "merged-findings.json", audit_copy
-    )
+        audit_path = decisions_path.parent / "merged-findings.json"
+        audit_staged = audit_path.with_name(f".{audit_path.name}.tmp")
+        try:
+            mfh.write_merged_findings(audit_staged, audit_copy)
+            os.replace(audit_staged, audit_path)
+            requested = set(args.format or ["md"])
+            for fmt in set(_RENDER_FORMATS) - requested:
+                _set_aside(out_path.with_suffix(f".{fmt}"))
+            # report.json last: its presence implies the renders are in place.
+            for item in sorted(Path(tmp).iterdir(), key=lambda p: p == staged):
+                os.replace(item, out_path.parent / item.name)
+                log.info("Wrote %s", out_path.parent / item.name)
+        except OSError as e:
+            log.error("Publishing the report failed: %s", e)
+            audit_staged.unlink(missing_ok=True)
+            return 1
     return 0
 
 

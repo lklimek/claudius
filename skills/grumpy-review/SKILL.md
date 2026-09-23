@@ -113,7 +113,7 @@ Deployed peers (all already live; do not ask whether they are running):
 Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json, then run `python3 <RESOLVED_ABS_PATH>/../../scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
 ```
 
-`gate` prints `MAX: <band|NONE> BLOCKING: <yes|no>`, the HIGH+/blocker-gate candidate IDs, and band counts; exit 1 (`INVALID:`) means prepare or finalize would reject a finding (missing field/id/floats, duplicate id), exit 2 means the file is unreadable or not a bare array of section objects. Producers end their reply with its output, so the coordinator never opens a findings file to check for an early stop.
+`gate` prints `MAX: <band|NONE> BLOCKING: <yes|no>`, the HIGH+/blocker-gate candidate IDs, and band counts; exit 1 (`INVALID:`) means prepare or finalize would reject a finding (missing or wrongly typed field, id or floats; duplicate id), exit 2 means the file is unreadable or not a bare array of section objects. Producers end their reply with its output, so the coordinator never opens a findings file to check for an early stop.
 
 ### Call-tree inspection
 
@@ -197,7 +197,7 @@ Record all of it in one Write of `<SCRATCH_DIR>/merge-decisions.json` — the on
 python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py finalize --input <SCRATCH_DIR>/intermediate.json --decisions <SCRATCH_DIR>/merge-decisions.json --output <REPORT_DIR>/report.json --format md
 ```
 
-Applies the decisions (writing `<SCRATCH_DIR>/merged-findings.json` for audit), assigns sequential IDs by category, computes `summary_statistics`/`top_findings`/`remediation`, validates against the schema, and renders one file per `--format` (repeatable: `md`, `html`, `pdf`; default `md`) next to `report.json`. All-or-nothing: on failure no report, render or `merged-findings.json` is written, and any left by an earlier run are renamed to `*.stale`. Exit 1 names each finding lacking `merge_class`, each invalid decision (e.g. `blocking` without `intent_basis`), each schema error, or a failed render — fix `merge-decisions.json` (or the format) and re-run; exit 2 means an input file is missing or unparseable. After hand-editing `report.json`, re-validate with `validate_report.py <REPORT_DIR>/report.json`.
+Applies the decisions (writing `<SCRATCH_DIR>/merged-findings.json` for audit), assigns sequential IDs by category, computes `summary_statistics`/`top_findings`/`remediation`, validates against the schema, and renders one file per `--format` (repeatable: `md`, `html`, `pdf`; default `md`) next to `report.json`. All-or-nothing: on failure no report, render or `merged-findings.json` is written, and any left by an earlier run are renamed to `*.stale`; on success, renders of formats not requested this time are renamed `*.stale` too. Exit 1 names each finding lacking `merge_class`, each invalid decision (e.g. `blocking` without `intent_basis`), each schema error, or a failed render — fix `merge-decisions.json` (or the format) and re-run; exit 2 means an input file is missing or unparseable. After hand-editing `report.json`, re-validate with `validate_report.py <REPORT_DIR>/report.json`.
 
 When presenting results, filter the consolidated findings for `merge_class == "out_of_scope_follow_up"` and name that list to the user as deferral candidates — nothing files them, so an unmentioned deferral is an invisible one (`claudius:severity` § `out_of_scope_follow_up`).
 

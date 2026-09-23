@@ -94,9 +94,11 @@ class TestGate:
             tmp_path / "qa.json",
             [{"title": "QA", "category": "code_quality", "findings": [finding]}],
         )
-        assert cr.main(["gate", str(path)]) == 0
+        # non-string tags do not crash gate; the schema rejects them, so INVALID
+        assert cr.main(["gate", str(path)]) == 1
         out = capsys.readouterr().out.splitlines()
         assert out[:2] == ["MAX: LOW BLOCKING: yes", "CANDIDATES: QA-001 (blocking)"]
+        assert any(line.startswith("INVALID") and "tags" in line for line in out)
 
     def test_empty_array_reports_none(self, tmp_path, capsys):
         path = _write(tmp_path / "empty.json", [])
@@ -158,6 +160,12 @@ class TestGate:
                 "likelihood",
             ),
             ([_f("QA-001", 0.5, 0.5, relevance=None)], "relevance"),
+            ([_f("QA-001", 0.5, 0.5, title=7)], "title"),
+            ([_f("QA-001", 0.5, 0.5, recommendation=["x"])], "recommendation"),
+            (
+                [{k: v for k, v in _f("QA-001", 0.5, 0.5).items() if k != "location"}],
+                "location",
+            ),
         ],
     )
     def test_flags_what_finalize_would_reject(self, tmp_path, capsys, findings, needle):
@@ -204,6 +212,19 @@ def _prepare(tmp_path: Path, *, digest: bool, reports: dict[str, Any]) -> Path:
     )
     assert cr.cmd_prepare(args) == 0
     return out
+
+
+@pytest.mark.parametrize("metadata", ["[]", '"x"', "7", "null"])
+def test_prepare_non_object_metadata_exits_2(tmp_path, metadata):
+    args = argparse.Namespace(
+        agent_reports=[f"qa:{_write(tmp_path / 'qa.json', [])}"],
+        repo_root=str(tmp_path),
+        output=str(tmp_path / "intermediate.json"),
+        metadata=metadata,
+        digest=False,
+    )
+    assert cr.cmd_prepare(args) == 2
+    assert not (tmp_path / "intermediate.json").exists()
 
 
 def _dup_reports() -> dict[str, Any]:
@@ -447,6 +468,27 @@ class TestFinalize:
         assert cr.main(argv) == 2
         assert not (tmp_path / "out" / "report.json").exists()
         assert (tmp_path / "out" / "report.json.stale").is_file()
+
+    def test_success_retires_renders_of_unrequested_formats(self, tmp_path):
+        assert self._run(tmp_path, self._decisions(), "html") == 0
+        assert self._run(tmp_path, self._decisions(), "md") == 0
+        out_dir = tmp_path / "out"
+        assert (out_dir / "report.md").is_file()
+        assert not (out_dir / "report.html").exists()
+        assert (out_dir / "report.html.stale").is_file()
+
+    def test_audit_copy_failure_publishes_nothing(self, tmp_path, monkeypatch):
+        assert self._run(tmp_path, self._decisions()) == 0
+
+        def boom(*_args, **_kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(cr.mfh, "write_merged_findings", boom)
+        assert self._run(tmp_path, self._decisions()) == 1
+        out_dir = tmp_path / "out"
+        assert not (out_dir / "report.json").exists()
+        assert (out_dir / "report.json.stale").is_file()
+        assert not list(out_dir.glob(".finalize-*"))
 
     def test_success_leaves_no_stale_files(self, tmp_path):
         assert self._run(tmp_path, self._decisions()) == 0

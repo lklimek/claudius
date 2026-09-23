@@ -15,6 +15,8 @@ import post_pr_review as ppr  # noqa: E402
 
 HEAD = "a" * 40
 
+VALID_REPORT = Path(__file__).parent / "fixtures" / "reports" / "v4-minimal.json"
+
 PATCH_A = "@@ -1,3 +10,5 @@ def f():\n ctx\n+add\n+add\n ctx\n ctx\n@@ -40,2 +50,2 @@\n x\n+y\n"
 
 
@@ -40,6 +42,15 @@ def _report(*findings: dict[str, Any]) -> dict[str, Any]:
             {"title": "S", "category": "security", "findings": list(findings)}
         ],
     }
+
+
+def _valid_report(*findings: dict[str, Any]) -> dict[str, Any]:
+    """Schema-valid report (the CLI validates) holding ``findings``."""
+    report = json.loads(VALID_REPORT.read_text())
+    floats = {"likelihood": 0.6, "impact": 0.6, "relevance": 0.5}
+    report["findings"][0]["findings"] = [{**floats, **f} for f in findings]
+    report["summary_statistics"]["total_findings"] = len(findings)
+    return report
 
 
 class FakeGh:
@@ -469,9 +480,10 @@ class TestGhCli:
 class TestCli:
     def test_dry_run_prints_payload(self, tmp_path, capsys, monkeypatch):
         report = tmp_path / "report.json"
-        report.write_text(json.dumps(_report(_finding("SEC-001", 4, "src/a.py:12"))))
+        finding = _finding("CODE-001", 4, "src/a.py:12")
+        report.write_text(json.dumps(_valid_report(finding)))
         comments = tmp_path / "comments.json"
-        comments.write_text(json.dumps({"SEC-001": "Look here."}))
+        comments.write_text(json.dumps({"CODE-001": "Look here."}))
         gh = FakeGh()
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
         code = ppr.main(
@@ -509,7 +521,7 @@ class TestCli:
 
     def test_api_failure_exits_1(self, tmp_path, monkeypatch):
         report = tmp_path / "report.json"
-        report.write_text(json.dumps(_report()))
+        report.write_text(VALID_REPORT.read_text())
         gh = FakeGh(post_errors=[ppr.GhApiError(500, "boom")])
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
         assert ppr.main(["o/r", "7", str(report)]) == 1
@@ -603,6 +615,29 @@ class TestReportValidation:
         assert ppr.main(["o/r", "7", str(report)]) == 2
         assert gh.calls == []
 
+    @pytest.mark.parametrize(
+        "content",
+        [
+            '{"schema_version": "4.0.0", "summary_statistics": {}, "findings": []}',
+            json.dumps(_report()),  # shape-valid but lacks metadata etc.
+        ],
+    )
+    def test_cli_schema_invalid_report_exits_2_without_posting(
+        self, content, tmp_path, monkeypatch
+    ):
+        report = tmp_path / "report.json"
+        report.write_text(content)
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(report)]) == 2
+        assert gh.calls == []
+
+    def test_cli_accepts_schema_valid_report(self, tmp_path, monkeypatch):
+        report = tmp_path / "report.json"
+        report.write_text(VALID_REPORT.read_text())
+        monkeypatch.setattr(ppr, "GhCli", FakeGh)
+        assert ppr.main(["o/r", "7", str(report), "--dry-run"]) == 0
+
     def test_cli_subprocess_no_traceback(self, tmp_path):
         report = tmp_path / "report.json"
         report.write_text('{"findings": null}')
@@ -617,7 +652,7 @@ class TestReportValidation:
 
     def test_missing_gh_binary_is_clean_api_error(self, tmp_path):
         report = tmp_path / "report.json"
-        report.write_text(json.dumps(_report()))
+        report.write_text(VALID_REPORT.read_text())
         proc = subprocess.run(
             [sys.executable, str(Path(ppr.__file__)), "o/r", "7", str(report)],
             capture_output=True,
