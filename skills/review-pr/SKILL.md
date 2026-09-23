@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness."
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage, mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__issue_read, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_review_write, mcp__plugin_claudius_github__add_comment_to_pending_review
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage
 ---
 
 # PR Audit Workflow
@@ -10,7 +10,7 @@ Runs inline (not forked) so it — and the `/claudius:grumpy-review` it invokes 
 
 ## 1. Gather PR Context
 
-Load `/claudius:git-and-github`. Fetch PR metadata via `pull_request_read`: `get` (title, body, URL, base/head, number), `get_files`, `get_diff` — the latter two via the subagent pattern in `git-and-github` § Context Management. Local git for commit history and detailed diffs. No MCP → [pr-review.md](../git-and-github/references/pr-review.md).
+Load `/claudius:git-and-github`. Fetch PR metadata, changed files, and diff per [pr-review.md](../git-and-github/references/pr-review.md) § Get PR Context — files and diff via the subagent pattern in `git-and-github` § Context Management. Local git for commit history and detailed diffs.
 
 ### Context Digest
 
@@ -29,7 +29,7 @@ Architecture rationale / UX-DX priorities: <relevant prior decisions — MemCan,
 Source priority for every field:
 
 1. Explicit user/session requirements, acceptance criteria, and statements the coordinator already holds
-2. Linked issues (`closes`/`fixes #N` refs in the body — fetch via `issue_read`; `gh issue view` as CLI fallback) and PR body — including its `## Operational context` and `## Non-goals` sections (§2's extraction heuristics)
+2. Linked issues (`closes`/`fixes #N` refs in the body — fetch via `gh issue view`) and PR body — including its `## Operational context` and `## Non-goals` sections (§2's extraction heuristics)
 3. MemCan architecture decisions for the repo
 4. Code evidence — the call-tree/entry-point walk
 

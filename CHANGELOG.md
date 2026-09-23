@@ -16,6 +16,19 @@ Same evidentiary standard as the `[6.0.0]` `review-loop`/`workflow-trivial` remo
 
 ### Removed
 
+- **GitHub MCP server integration**: all GitHub access goes through the `gh` CLI and the
+  `scripts/gh-*.sh` wrappers — a single path instead of MCP-first with a CLI fallback that
+  coordinator sessions (which typically lacked the MCP tools) used anyway. Removed
+  `.claude-plugin/.mcp.json` and `plugin.json`'s `mcpServers` field; the
+  `block-github-writes.sh` PreToolUse hook (and its coordinator-vs-subagent access tiering)
+  with its tests and CI step; every `mcp__plugin_claudius_github__*` tool and the `github`
+  `mcpServers` entry from agent frontmatter and skill `allowed-tools`. `check-pr-comments`,
+  `review-pr`, `ci-dance`, `dependabot-merge`, and `git-and-github` (+ `pr-review.md`) now
+  document `gh`/wrapper commands only; `git-and-github/references/gh-cli-fallback.md` renamed
+  to `gh-cli.md`, and the pointer-only `gh-cli-fallback.md` copies in `check-pr-comments`
+  (reply wrapper folded into step 8) and `review-pr` deleted. `SETUP.md`/`README.md`: the
+  MCP `GH_TOKEN` setup replaced by `gh auth login`. **Migration**: authenticate `gh`; drop
+  any `GH_TOKEN` exported solely for the MCP server.
 - **`workflow-feature` skill**: zero invocations (model-triggered or user slash) across 675
   transcripts despite a broad trigger ("build a new project", "add a feature", "major
   refactoring") — feature work in practice goes through `grand-admiral` + `delegate` (+ Codex)

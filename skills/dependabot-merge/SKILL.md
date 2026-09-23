@@ -2,7 +2,7 @@
 name: dependabot-merge
 description: "This skill should be used when the user asks to \"merge dependabot PRs\", \"process dependency bumps\", \"auto-merge bot PRs\", or \"handle the dependabot backlog\". It audits each dependency, comments findings, merges when CI is green, and requests rebases for conflicts or CI failures."
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Bash(gh pr *), Bash(gh run *), Bash(git log *), Bash(git branch *), Bash(git status *), Bash(ghsudo *), mcp__plugin_claudius_github__search_pull_requests, mcp__plugin_claudius_github__add_issue_comment, mcp__plugin_claudius_github__pull_request_read, Agent, Skill
+allowed-tools: Read, Grep, Glob, Bash(gh pr *), Bash(gh run *), Bash(git log *), Bash(git branch *), Bash(git status *), Bash(ghsudo *), Agent, Skill
 ---
 
 # Dependabot PR Bulk Processor
@@ -13,7 +13,7 @@ Audit, comment, and merge open dependabot PRs. Each PR gets a security review vi
 
 ## Prerequisites
 
-`ghsudo` (`pip install ghsudo`) for write operations; GitHub MCP tools; `review-dependency` skill.
+`ghsudo` (`pip install ghsudo`) for write operations; `review-dependency` skill.
 
 ## Workflow
 
@@ -59,7 +59,7 @@ Set `model` per spawn: **opus** for every dependency bump — a bump pulls in th
 2. CI status — green or red, which checks failed
 3. Mergeable state
 4. Instruction to invoke `review-dependency` skill with the PR number as argument
-5. Instruction to post a comment with findings via `mcp__plugin_claudius_github__add_issue_comment` (include attribution footer), and to report back either "confirmed posted: `<comment URL>`" or "NOT posted: `<reason>`" — never a bare "published"/"done", which has been observed meaning only "returned the text to you"
+5. Instruction to post a comment with findings via `gh pr comment <number> --repo <owner>/<repo> --body-file <file>` (include attribution footer; `ghsudo` on 403), and to report back either "confirmed posted: `<comment URL>`" or "NOT posted: `<reason>`" — never a bare "published"/"done", which has been observed meaning only "returned the text to you"
 6. **If Green**: merge via `ghsudo gh pr merge <number> --repo <owner>/<repo> --squash`
 7. **If Red or Conflicting**: do NOT merge; post `@dependabot rebase`, then enter **Rebase Watch Loop** (step 5a)
 
@@ -67,7 +67,7 @@ Spawn **all agents in a single message** for maximum parallelism.
 
 ### 5. Collect Results and Handle Write Blocks
 
-**Never trust a "posted"/"published" self-report** — confirmed: an agent reported a comment published when the PR had zero comments, and stated unverified claims (signature checks, release immutability) as fact. Verify with `gh pr view <number> --json comments` (or MCP) for an actual comment from this run, and re-read the agent's reasoning for anything phrased as fact it did not check. Where an agent was blocked from GitHub writes by hooks, or verification fails: post the comment and execute the merge/rebase/watch loop yourself.
+**Never trust a "posted"/"published" self-report** — confirmed: an agent reported a comment published when the PR had zero comments, and stated unverified claims (signature checks, release immutability) as fact. Verify with `gh pr view <number> --json comments` for an actual comment from this run, and re-read the agent's reasoning for anything phrased as fact it did not check. Where an agent's GitHub write failed or verification fails: post the comment and execute the merge/rebase/watch loop yourself.
 
 ### 5a. Rebase Watch Loop
 

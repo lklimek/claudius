@@ -1,27 +1,19 @@
 # PR Review Operations
 
-Prefer GitHub MCP (`mcp__plugin_claudius_github__*`) for all API operations; fall back to the wrapper scripts at `<plugin-root>/scripts/` when MCP is unavailable.
+All operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`.
 
 ## Get PR Context
 
-**MCP (preferred)**:
-- `pull_request_read` with `method: "get"` — title, body, URL, base/head branches, number
-- `pull_request_read` with `method: "get_files"` — changed files with stats
-- `pull_request_read` with `method: "get_diff"` — full diff
-
-**Note**: `get_files` and `get_diff` may return large responses — see the parent skill's § Context Management for the subagent delegation pattern.
-
-**CLI fallback**:
 ```bash
-gh pr view --json number,title,body,url,baseRefName
-gh pr view --json baseRefName -q .baseRefName
+gh pr view <number> --json number,title,body,url,baseRefName,headRefName
+gh pr view <number> --json files --jq '.files[] | {path, additions, deletions}'
+gh pr diff <number>
 ```
+
+`files` and `gh pr diff` may return large responses — see the parent skill's § Context Management for the subagent delegation pattern.
 
 ## PR-Level Comments
 
-**MCP**: `add_issue_comment` to post; `pull_request_read` with `method: "get"` to read.
-
-**CLI fallback**:
 ```bash
 gh pr comment <number> --body "<markdown>"
 gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body, url}'
@@ -31,17 +23,15 @@ gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, 
 
 Fetch before posting to avoid duplicates: drop any finding already covered by an existing review (match by file:line and substance, not exact wording).
 
-**MCP (preferred)**:
-- `pull_request_read` with `method: "get_reviews"` — existing reviews
-- `pull_request_read` with `method: "get_review_comments"` — inline comment threads with resolution status
-
-**CLI fallback**:
 ```bash
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-reviews.sh <owner/repo> <pr>
 # -> [{id, state, submitted_at, body, user}]
 
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-review-comments.sh <owner/repo> <pr>
 # -> {id, path, line, original_line, body, user, in_reply_to_id, html_url}
+
+${CLAUDE_SKILL_DIR}/../../scripts/gh-list-review-threads.sh <owner/repo> <pr>
+# -> {id, isResolved, comments: [{databaseId, path, body}]}  (thread resolution status)
 ```
 
 ## Verify Lines Are Within the Diff
@@ -63,11 +53,7 @@ GitHub rejects inline comments on lines outside the diff (HTTP 422). Before post
 
 ## Post Draft Review
 
-**MCP (preferred)**: `pull_request_review_write` — omit the `event` field to create a pending (draft) review.
-
-For `add_comment_to_pending_review`, pass camelCase `subjectType` with uppercase `LINE` or `FILE`; `subject_type` and lowercase values are invalid.
-
-**CLI fallback** (`gh-post-review.sh` strips `event` automatically — reviews always post as drafts):
+`gh-post-review.sh` strips `event` automatically — reviews always post as drafts:
 ```bash
 SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/XXXXXX)
 cat > "$SESSION_DIR/pr-review.json" << 'ENDJSON'

@@ -7,6 +7,5 @@
     "url": "https://github.com/lklimek"
   },
   "repository": "https://github.com/lklimek/claudius",
-  "license": "GPL-3.0",
-  "mcpServers": "./.claude-plugin/.mcp.json"
+  "license": "GPL-3.0"
 }

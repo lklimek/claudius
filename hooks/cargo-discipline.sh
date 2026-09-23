@@ -4,8 +4,7 @@
 # FAIL-OPEN by design. This is an EFFICIENCY gate, not a security gate: a missed
 # dedup wastes a compile cycle, but a false block wedges an agent. So any internal
 # error (missing jq, unparseable stdin, failed target-dir resolution) ALLOWS the
-# command. This is the DELIBERATE OPPOSITE of hooks/block-github-writes.sh, which
-# fails CLOSED because it guards a real capability. Do not "harmonize" the two.
+# command. Do not "harden" it into a fail-closed gate.
 #
 # Quoting/escaping bypasses (e.g. `cargo "test"`, backslash-continued `cargo\
 # test`, CLAUDIUS_FORCE=1 appearing anywhere rather than command-leading) are

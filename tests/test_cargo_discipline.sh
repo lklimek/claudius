@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # Unit test: cargo-discipline.sh PreToolUse gate must FAIL OPEN.
 #
-# The DELIBERATE MIRROR of test_block_github_writes.sh: that hook guards a real
-# capability and fails CLOSED (missing jq -> DENY); this hook is an efficiency
-# gate and fails OPEN (missing jq -> ALLOW). Both stances are intentional — see
-# D1 below, which contrasts explicitly with block-github's C15.
+# This hook is an efficiency gate, not a security gate, so it fails OPEN
+# (missing jq -> ALLOW) — see D1 below.
 #
 #   D0  non-cargo command                       -> ALLOW (fast path)
-#   D1  cargo check + jq absent from PATH        -> ALLOW (fail-open, vs C15 deny)
+#   D1  cargo check + jq absent from PATH        -> ALLOW (fail-open)          
 #   D2  bare `cargo check`                       -> DENY  (Rule 1)
 #   D3  `cargo +stable check` (toolchain)        -> DENY  (Rule 1, toolchain form)
 #   D4  CLAUDIUS_FORCE=1 cargo check             -> ALLOW (escape hatch)
@@ -92,9 +90,9 @@ assert_allow() {  # $1=desc $2=stdin $3=optional-PATH
 # Build a PreToolUse Bash payload with the given command string (JSON-escaped via jq).
 payload() { jq -cn --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}'; }
 
-echo "=== fast path + fail-open (mirror of block-github fail-closed) ==="
+echo "=== fast path + fail-open ==="
 assert_allow "D0 non-cargo command allowed"                "$(payload 'ls -la /tmp')"
-# Contrast with block-github's C15: there missing jq DENIES; here it ALLOWS.
+# Missing jq ALLOWS (fail-open).
 FAKEBIN="$(mktemp -d)"; trap 'rm -rf "$STUBDIR" "$FAKEBIN"' EXIT
 ln -s "$(command -v cat)" "$FAKEBIN/cat" 2>/dev/null || true
 assert_allow "D1 cargo check + jq absent allowed (fail-open)" "$(payload 'cargo check')" "$FAKEBIN"

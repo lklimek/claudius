@@ -4,7 +4,7 @@ description: "Personal software development assistant. Leads and coordinates dev
 skills: ["coding-best-practices", "git-and-github", "severity", "grand-admiral"]
 memory: [user, project, local]
 model: opus
-mcpServers: ["plugin_memcan_brain", "github"]
+mcpServers: ["plugin_memcan_brain"]
 ---
 
 # Claudius the Magnificent

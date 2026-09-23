@@ -1,7 +1,7 @@
 ---
 name: check-pr-comments
 description: "This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(git pull *), Bash(git fetch *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(*gh-post-review-reply.sh *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), mcp__plugin_claudius_github__pull_request_read, mcp__plugin_claudius_github__add_reply_to_pull_request_comment, mcp__plugin_claudius_github__add_issue_comment
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr checkout *), Bash(gh pr view *), Bash(gh pr comment *), Bash(git pull *), Bash(git fetch *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(*validate_report.py *), Bash(*generate_review_report.py *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(*gh-list-review-threads.sh *), Bash(*gh-resolve-review-threads.sh *), Bash(*gh-post-review-reply.sh *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*)
 ---
 
 # Check PR Comments Workflow
@@ -10,9 +10,16 @@ Workflow for checking/triaging/verifying existing PR review comments.
 
 ## 1. Fetch All Comments
 
-**ALWAYS fetch fresh comments on every invocation** — never assume none are new. Bare coordinator sessions typically lack `mcp__plugin_claudius_github__*` → [gh CLI fallback](references/gh-cli-fallback.md); agents whose frontmatter lists the tools prefer MCP.
+**ALWAYS fetch fresh comments on every invocation** — never assume none are new. Script usage and output shapes: `git-and-github` [pr-review.md](../git-and-github/references/pr-review.md).
 
-Via `pull_request_read`: **review threads** `get_review_comments` (carry `isResolved` forward per thread — step 3 skips already-resolved ones), **review summaries** `get_reviews`, **PR-level comments** `get_comments`. Paginate to the end (`perPage` + `page`, or `perPage` + `after` cursor for review comments).
+```bash
+${CLAUDE_SKILL_DIR}/../../scripts/gh-list-review-threads.sh <owner/repo> <pr>     # review threads + isResolved
+${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-review-comments.sh <owner/repo> <pr>   # inline comments (path, line, body, html_url)
+${CLAUDE_SKILL_DIR}/../../scripts/gh-fetch-reviews.sh <owner/repo> <pr>           # review summaries
+gh pr view <pr> -R <owner/repo> --json comments     # PR-level comments
+```
+
+Carry `isResolved` forward per thread — step 3 skips already-resolved ones. The wrappers paginate to the end.
 
 ## 2. Checkout and Pull the PR Branch
 
@@ -127,7 +134,7 @@ Each review comment becomes one finding:
 
 - **Resolved** comments: `likelihood=0.0, impact=0.0, relevance=0.0` — the Informational floor (`claudius:severity` § 3), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted via `isResolved: true` (step 3), state it was already resolved on GitHub rather than inventing an unverified fix description. The coordinator derives `severity = 1` (INFO) from the floats.
 - **Unresolved** comments: assess `likelihood` and `impact` per `claudius:severity` (blast radius folds into `impact`, capped by the finding's backstop zone). Rate `relevance` as PR-goal fit, not blast radius: the comment addresses the PR's core change ≈ `1.0`; adjacent/tangential suggestion ≈ `0.5`; pre-existing concern unrelated to this PR's diff ≈ `0.1` — do NOT default to `1.0`. The coordinator derives the integer `severity` band; never hand-type a label. Set `verdict: "UNRESOLVED"`; `recommendation` describes what remains.
-- `thread_id`: from `pull_request_read` `get_review_comments` (or `gh-list-review-threads.sh` fallback). Needed for step 8.
+- `thread_id`: from `gh-list-review-threads.sh`. Needed for step 8.
 - **Merge class** (coordinator-inline producer exception — see `claudius:report-format`): RESOLVED comments omit `merge_class` (informational carve-out). Classify UNRESOLVED per `claudius:severity` § Merge Classification — `blocking` only when the concern trips a blocker gate (`intent_basis` names the gate ID plus the reviewer's request as evidence); otherwise `non_blocking` (in/adjacent to the change) or `out_of_scope_follow_up` — the latter is reported for the user's attention, never filed anywhere by this skill (`claudius:severity` § `out_of_scope_follow_up`).
 
 **Do NOT emit** (coordinator/validator-owned): `overall_severity`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `likelihood`/`impact`/`relevance` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
@@ -175,8 +182,8 @@ Apply the matrix **without asking for confirmation**, except where noted:
 **NEVER auto-resolve human-created threads** without explicit per-invocation permission (e.g. "resolve all fixed threads", "resolve human threads too"). Even when fully fixed, the human reviewer resolves their own threads.
 
 **Posting replies:**
-- Inline thread replies: `mcp__plugin_claudius_github__add_reply_to_pull_request_comment` (`comment_id` = thread's first comment)
-- PR-level replies: `mcp__plugin_claudius_github__add_issue_comment`
+- Inline thread replies: `${CLAUDE_SKILL_DIR}/../../scripts/gh-post-review-reply.sh <owner/repo> <pr> <comment_id> <body_file>` — `comment_id` = databaseId of the thread's first comment; body read from a Markdown file (no inline form); retries once via `ghsudo` on 403; outputs the reply's html_url
+- PR-level replies: `gh pr comment <pr> -R <owner/repo> --body-file <file>`
 - Keep replies concise: what was done, what remains, relevant commit reference
 
 **Resolving bot threads** (fixed only) via the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
@@ -185,10 +192,10 @@ Apply the matrix **without asking for confirmation**, except where noted:
 # GraphQL node IDs (PRRT_*) — pass directly:
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <PRRT_id> [PRRT_id ...]
 
-# REST IDs from pull_request_read (discussion_r* or numeric databaseId) — use enhanced mode:
+# REST IDs (discussion_r* or numeric databaseId) — use enhanced mode:
 ${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh <owner/repo> <pr_number> --id discussion_r123 --id 456 [...]
 ```
 
-Thread resolution has no MCP equivalent — the wrapper uses a GraphQL mutation directly. The `--id` form auto-converts `discussion_r*`/numeric IDs to thread node IDs; mix freely with `PRRT_*` in one invocation. Never resolve partially-addressed threads.
+The wrapper uses a GraphQL mutation directly. The `--id` form auto-converts `discussion_r*`/numeric IDs to thread node IDs; mix freely with `PRRT_*` in one invocation. Never resolve partially-addressed threads.
 
 With a triage-role token, wrap the entire script invocation in `ghsudo` per the standing fallback convention; ambient bot auth commonly returns 403 for `ResolveReviewThread`.
