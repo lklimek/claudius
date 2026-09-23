@@ -39,8 +39,8 @@ Limits: every comment and the body stay within GitHub's 65536 characters;
 body entries that do not fit are named in an "N more finding(s)" line and
 reported as ``omitted``. Each finding's one-line heading (ID, severity, title;
 location in the body; each part capped) stays outside the clipped text. Posted
-text is clipped first, then has @mentions and HTML comment openers neutralized
-everywhere, code included.
+text is clipped first, then has @mentions (entity-encoded too) and HTML comment
+openers neutralized everywhere, code included.
 
 Input safety: ``<owner/repo>`` must equal ``GITHUB_REPOSITORY`` when set, else
 the cwd checkout's ``origin`` (case-insensitive). ``--body-file`` must be a
@@ -1101,7 +1101,8 @@ def _read_body_file(path: Path, report: Path) -> str:
             f"--body-file {path}: must be under the cwd or the report's directory,"
             " outside .git, /proc and /sys"
         )
-    fd = os.open(resolved, os.O_RDONLY | os.O_NOFOLLOW)
+    # O_NONBLOCK: a FIFO would otherwise block open(); fstat then rejects it.
+    fd = os.open(resolved, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, encoding="utf-8") as handle:
         if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
             raise ValueError(f"--body-file {path}: not a regular file")

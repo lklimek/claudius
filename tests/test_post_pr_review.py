@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -1571,6 +1572,11 @@ class TestBodyFileConfinement:
         config = tmp_path / ".git" / "config"
         config.write_text("[core]\n")
         self._assert_refused(self._argv(tmp_path, config), monkeypatch)
+
+    def test_fifo_is_refused_without_blocking(self, tmp_path, monkeypatch):
+        fifo = tmp_path / "body.md"
+        os.mkfifo(fifo)
+        self._assert_refused(self._argv(tmp_path, fifo), monkeypatch)
 
     def test_proc_file_is_refused(self, tmp_path, monkeypatch):
         monkeypatch.chdir("/")
