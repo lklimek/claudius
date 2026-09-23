@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness."
-allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(*gh-post-review.sh *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(*gh-post-review.sh *), Bash(*post_pr_review.py *), Bash(*gh-pr-base-sha.sh *), Bash(*gh-fetch-review-comments.sh *), Bash(*gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *), Bash(govulncheck *), Bash(*lint_ephemeral_ids.py *), Bash(*consolidate_reports.py *), Bash(which *), Bash(rg *), Bash(ctags *), Bash(global *), Bash(gtags *), Bash(tree-sitter *), Bash(gh search code*), Agent, SendMessage
 ---
 
 # PR Audit Workflow
@@ -162,7 +162,7 @@ EOF
 
 ### Part B: Inline comments (draft review)
 
-Inline on specific diff lines, **only actionable findings**: everything `blocking` (any severity — a blocking LOW is still a blocker) plus actionable `non_blocking` (CRITICAL–LOW). `disputed`, `out_of_scope_follow_up`, and INFO stay in Part A. Draft review, so the user submits manually; ```suggestion``` blocks for trivial fixes. Diff-bounds verification, deduplication, and posting with `gh-post-review.sh`: [pr-review.md](../git-and-github/references/pr-review.md). `body` can be minimal — the detail lives in Part A.
+Inline on specific diff lines, **only actionable findings**: everything `blocking` (any severity — a blocking LOW is still a blocker) plus actionable `non_blocking` (CRITICAL–LOW). `disputed`, `out_of_scope_follow_up`, and INFO stay in Part A. Draft review, so the user submits manually; ```suggestion``` blocks for trivial fixes. Post with `post_pr_review.py … --draft --min-severity LOW` (handles diff bounds and thread dedup; pass `--comments` for suggestion blocks) per [pr-review.md](../git-and-github/references/pr-review.md) § Post a Review from report.json. `body` can be minimal — the detail lives in Part A.
 
 ## 5. Cleanup
 

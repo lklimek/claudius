@@ -9,8 +9,9 @@ routes off-diff findings into the review body (never dropping them), picks
 APPROVE vs COMMENT, and posts with fallbacks.
 
 Selection: severity >= ``--min-severity`` (default MEDIUM) or
-``merge_class == "blocking"``; ``disputed`` findings are never posted. A
-``null`` map entry skips that finding.
+``merge_class == "blocking"``; ``disputed`` findings are never posted and
+``out_of_scope_follow_up`` ones go to the body, not inline. A ``null`` map
+entry skips that finding.
 
 Event: APPROVE when nothing is posted and no unresolved thread remains,
 otherwise COMMENT; ``--draft`` omits the event (pending review).
@@ -367,7 +368,7 @@ def _render_body(
     if covered:
         lines.append(f"Already raised in open threads: {', '.join(covered)}.")
     if off_diff:
-        lines += ["", "### Findings outside the diff"]
+        lines += ["", "### Findings outside the diff or deferred"]
         for item in off_diff:
             lines += [
                 "",
@@ -410,7 +411,13 @@ def build_review(
             covered.append(fid)
             continue
         text = options.comments.get(fid) or _default_text(finding)
-        item = _Item(finding, text, anchor_for(finding.get("location", ""), hunks))
+        # Deferred follow-ups are listed, not anchored: they are not asks on this diff.
+        anchor = (
+            None
+            if finding.get("merge_class") == "out_of_scope_follow_up"
+            else anchor_for(finding.get("location", ""), hunks)
+        )
+        item = _Item(finding, text, anchor)
         (inline if item.anchor else off_diff).append(item)
     unknown = sorted(set(options.comments) - seen)
     if unknown:

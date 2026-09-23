@@ -7,13 +7,13 @@ model: inherit
 
 # Validate Findings
 
-Opt-in coordinator-only LLM validation pass over a consolidated v4 report: adds AI assessment, verdict, and confidence per finding. Floats stay untouched unless the consolidator left them absent (partial producer output). NOT part of the automatic pipeline — invoke after `consolidate_reports.py assemble` when a triage-quality pass is wanted.
+Opt-in coordinator-only LLM validation pass over a consolidated v4 report: adds AI assessment, verdict, and confidence per finding. Floats stay untouched unless the consolidator left them absent (partial producer output). NOT part of the automatic pipeline — invoke after `consolidate_reports.py finalize` (or `assemble`) when a triage-quality pass is wanted.
 
 **Argument**: `$ARGUMENTS` — path to the consolidated `report.json`. Edited in place.
 
 ## Inputs
 
-- A consolidated v4 report on disk (output of `consolidate_reports.py assemble`).
+- A consolidated v4 report on disk (output of `consolidate_reports.py finalize` or `assemble`).
 - The producer commit (when `metadata.commit` is present) for best-effort source lookup via `git show`.
 
 ## Per-finding loop

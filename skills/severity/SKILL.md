@@ -183,7 +183,7 @@ Other pre-existing issues block only when the PR relies on them, worsens them, o
 
 🔴 Deferral is not a plan — nothing files these findings (summary-only, never inline: review-pr § Part B), so they have a **low probability of ever being actioned**. Read the class as **"acceptable to never fix"**:
 
-- Deferrals MUST be surfaced by name when presenting results (grumpy-review §5e) — a user cannot accept a risk they never saw.
+- Deferrals MUST be surfaced by name when presenting results (grumpy-review §5c) — a user cannot accept a risk they never saw.
 - Deferring *because* someone will presumably pick it up later is a mis-classification. A finding that must be fixed is classified for fixing now: `blocking` when a gate trips, `non_blocking` otherwise.
 - Correct only where permanent non-fix is acceptable: unrelated pre-existing nits, speculative hardening, taste. The bias toward larger PRs is deliberate — better than laundering real defects into a backlog that does not exist.
 

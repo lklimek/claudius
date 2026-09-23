@@ -23,10 +23,14 @@ come straight from ``CATEGORY_PREFIX`` and ``CODE_QUALITY_PREFIXES``.
     # and report only added (`+`) lines.
     git diff $BASE...HEAD | python3 lint_ephemeral_ids.py --diff
 
+    # Range mode: run `git diff <range>` itself (no pipe; allowlist-friendly)
+    python3 lint_ephemeral_ids.py --range origin/main...HEAD
+
     # Text output for human eyeballing
     python3 lint_ephemeral_ids.py --format text path/to/file.md
 
-The script ALWAYS exits 0 — this is advisory. Reviewer skills decide whether
+The script exits 0 on every scan — this is advisory (exit 2 only when
+``--range`` cannot run ``git diff``). Reviewer skills decide whether
 each hit is a genuine violation or an in-skill example block that demonstrates
 the rule. The intentional false positives in the lint's own docstrings and in
 the skill files demonstrating this rule are by design: keep the lint dumb.
@@ -37,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -173,6 +178,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Read a unified diff from stdin and report only added (`+`) lines.",
     )
     parser.add_argument(
+        "--range",
+        metavar="REV_RANGE",
+        help="Run `git diff REV_RANGE` in the cwd and scan its added lines.",
+    )
+    parser.add_argument(
         "--format",
         choices=("json", "text"),
         default="json",
@@ -185,7 +195,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     hits: list[dict] = []
 
-    if args.diff:
+    if args.range:
+        result = subprocess.run(
+            ["git", "diff", "--end-of-options", args.range],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            sys.stderr.write(f"git diff {args.range} failed: {result.stderr}")
+            return 2
+        hits = scan_diff(result.stdout)
+    elif args.diff:
         diff_text = sys.stdin.read()
         hits = scan_diff(diff_text)
     else:

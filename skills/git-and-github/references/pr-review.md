@@ -51,7 +51,23 @@ GitHub rejects inline comments on lines outside the diff (HTTP 422). Before post
 
 3. If a finding's line is outside the diff, post it in the summary comment instead.
 
-## Post Draft Review
+## Post a Review from report.json
+
+For a consolidated `report.json` (`grumpy-review`), post with one command — the script handles
+selection, diff-bounds mapping, open-thread dedup, off-diff findings, the event, and 422 /
+rejected-APPROVE fallbacks (details: script docstring):
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/post_pr_review.py <owner/repo> <pr> <report.json> --body "<one-line verdict>" [--comments <comments.json>] [--min-severity MEDIUM] [--draft] [--dry-run]
+```
+
+- `--comments`: optional JSON `{"<final_id>": "comment text" | null}` written with the Write
+  tool; omitted IDs get text built from the finding, `null` skips one.
+- Without `--draft` it publishes: APPROVE when nothing is posted and no unresolved thread
+  remains, else COMMENT. `--dry-run` prints the payload without posting.
+- Prints `{url, event, inline, in_body, covered_by_open_threads, skipped}`.
+
+## Post Draft Review (hand-built payload)
 
 `gh-post-review.sh` strips `event` automatically — reviews always post as drafts:
 ```bash
@@ -82,6 +98,9 @@ gh-fetch-reviews.sh <owner/repo> <pr>
 
 gh-post-review.sh <owner/repo> <pr> <json_file>
   -> Posts draft review. Input: {commit_id, body, comments: [{path, line, side, body}]}
+
+post_pr_review.py <owner/repo> <pr> <report.json> [options]
+  -> Builds + posts a review from report.json (see § Post a Review from report.json).
 
 gh-request-reviewer.sh <owner/repo> <pr> <reviewer> [reviewer ...]
 

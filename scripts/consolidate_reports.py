@@ -1261,7 +1261,9 @@ def build_digest(intermediate: dict[str, Any]) -> str:
     for hit in intentional:
         idx = hit.get("finding_index")
         key = (
-            _finding_label(raw[idx]) if isinstance(idx, int) and idx < len(raw) else "?"
+            _finding_label(raw[idx])
+            if isinstance(idx, int) and 0 <= idx < len(raw)
+            else "?"
         )
         lines.append(
             f"- `{key}` near `{hit.get('source_line')}`: "
@@ -1281,7 +1283,9 @@ _HIGH_BAND = 4
 
 def _cited_gates(finding: dict[str, Any]) -> list[str]:
     """Return blocker-gate IDs a finding cites via tags or intent_basis."""
-    gates = [t for t in finding.get("tags", []) if t in _GATE_ID_SET]
+    gates = [
+        t for t in finding.get("tags", []) if isinstance(t, str) and t in _GATE_ID_SET
+    ]
     basis = finding.get("intent_basis")
     match = GATE_CITATION_RE.match(basis) if isinstance(basis, str) else None
     if match and match.group(1) in _GATE_ID_SET and match.group(1) not in gates:
@@ -1303,13 +1307,13 @@ def _count_emitted_findings(sections: list[Any]) -> int:
     return total
 
 
-def gate_lines(sections: list[Any]) -> tuple[list[str], int]:
+def gate_lines(sections: list[Any], source: str = "gate") -> tuple[list[str], int]:
     """Summarize a producer file for the coordinator's early-stop check.
 
     Returns the output lines and the exit code: 1 when prepare would drop some
     finding (so the producer fixes it now), else 0.
     """
-    raw, _positives = _flatten_agent_report("gate", sections)
+    raw, _positives = _flatten_agent_report(source, sections)
     counts = {label: 0 for label in SEV_ORDER}
     max_band = 0
     blocking = False
@@ -1322,6 +1326,8 @@ def gate_lines(sections: list[Any]) -> tuple[list[str], int]:
         if f.get("merge_class") == "blocking" or gates:
             blocking = True
         reasons = ([SEV_LABELS[band]] if band >= _HIGH_BAND else []) + gates
+        if f.get("merge_class") == "blocking" and not gates:
+            reasons.append("blocking")
         if reasons:
             candidates.append(f"{f.get('original_id') or '?'} ({', '.join(reasons)})")
 
@@ -1351,7 +1357,7 @@ def cmd_gate(args: argparse.Namespace) -> int:
     except AgentReportError as e:
         print(f"ERROR: {e}")
         return 2
-    lines, code = gate_lines(sections)
+    lines, code = gate_lines(sections, args.findings)
     print("\n".join(lines))
     return code
 

@@ -88,6 +88,16 @@ class TestGate:
         assert out[0] == "MAX: LOW BLOCKING: yes"
         assert out[1] == "CANDIDATES: SEC-001 (G-SECRET), SEC-002 (G-INTENT)"
 
+    def test_blocking_without_gate_citation_is_a_candidate(self, tmp_path, capsys):
+        finding = _f("QA-001", 0.2, 0.2, merge_class="blocking", tags=[{"x": 1}])
+        path = _write(
+            tmp_path / "qa.json",
+            [{"title": "QA", "category": "code_quality", "findings": [finding]}],
+        )
+        assert cr.main(["gate", str(path)]) == 0
+        out = capsys.readouterr().out.splitlines()
+        assert out[:2] == ["MAX: LOW BLOCKING: yes", "CANDIDATES: QA-001 (blocking)"]
+
     def test_empty_array_reports_none(self, tmp_path, capsys):
         path = _write(tmp_path / "empty.json", [])
         assert cr.main(["gate", str(path)]) == 0

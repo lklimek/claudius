@@ -192,6 +192,16 @@ class TestBuildAndPost:
         assert "SEC-001" in payload and "BLOCKING" in payload
         assert "SEC-002" not in payload
 
+    def test_out_of_scope_follow_up_goes_to_body_not_inline(self):
+        report = _report(
+            _finding("SEC-001", 4, "src/a.py:12", merge_class="out_of_scope_follow_up")
+        )
+        gh = FakeGh()
+        result = _run(report, gh)
+        assert gh.posted[0]["comments"] == []
+        assert "SEC-001" in gh.posted[0]["body"]
+        assert result.in_body == ["SEC-001"]
+
     def test_null_comment_entry_skips_finding(self):
         report = _report(_finding("SEC-001", 4, "src/a.py:12"))
         gh = FakeGh()

@@ -86,6 +86,7 @@
       "Bash(*gh-resolve-review-threads.sh *)",
       "Bash(*gh-request-reviewer.sh *)",
       "Bash(*gh-post-review.sh *)",
+      "Bash(*post_pr_review.py *)",
       "Bash(*gh-pr-base-sha.sh *)",
       "Bash(*diff-anchors.py *)",
       "Bash(*validate_report.py *)",

@@ -16,28 +16,22 @@ Claudius/Skippy persona with extra grumpiness about the code — complain, disbe
 
 ## Report Is Mandatory, Even Empty
 
-This skill MUST end with a written `report.json` (and whichever rendered format was requested) — every time, regardless of what reviewers found. Zero findings is a valid, successful outcome (`findings: []`, a positive `executive_summary`), never a reason to skip §5 or leave the report unwritten. Callers such as `claudius-review-action` treat a missing `report.json` as a hard CI failure with no findings posted, independent of whether any exist. This binds every path: the TRIVIAL single-agent path (§2), every spawned producer (§3 — always write your findings file, even a bare `[]`), and the coordinator's consolidation pipeline (§5 — run prepare → merge → assemble → render unconditionally, never short-circuit because every producer came back empty).
+This skill MUST end with a written `report.json` (and whichever rendered format was requested) — every time, regardless of what reviewers found. Zero findings is a valid, successful outcome (`findings: []`, a positive `executive_summary`), never a reason to skip §5 or leave the report unwritten. Callers such as `claudius-review-action` treat a missing `report.json` as a hard CI failure with no findings posted, independent of whether any exist. This binds every path: the TRIVIAL single-agent path (§2), every spawned producer (§3 — always write your findings file, even a bare `[]`), and the coordinator's consolidation pipeline (§5 — run prepare → finalize unconditionally, never short-circuit because every producer came back empty).
 
 ## 1. Scope the Review
 
-```bash
-# If reviewing a branch
-BASE_BRANCH=<main-branch>
-git rev-parse --verify "$BASE_BRANCH" >/dev/null 2>&1 || BASE_BRANCH="origin/$BASE_BRANCH"
-git log "${BASE_BRANCH}..HEAD" --oneline
-git diff "${BASE_BRANCH}...HEAD" --stat
+Commands below use `<PLACEHOLDER>`s: substitute literal values, one plain command per call — no shell variables, `$(…)`, pipes, or redirects (restricted CI allowlists deny them, costing a round each).
 
-# If reviewing specific paths
-git diff "${BASE_BRANCH}...HEAD" -- <paths>
+```bash
+git rev-parse --verify <BASE>          # <BASE> = main branch; use origin/<main> if this fails
+git log <BASE>..HEAD --oneline
+git diff <BASE>...HEAD --stat          # append `-- <paths>` to scope
 ```
 
 Before spawning reviewers, choose one collision-resistant scratch directory for all producer and intermediate output. Include a session-specific suffix even when the PR number is known; two coordinators may review the same PR concurrently:
 
 ```bash
-REVIEW_KEY=<PR-number-or-branch>
-SESSION_FRAGMENT=<current-session-id-fragment>
-SCRATCH_DIR="/data/tmp/grumpy-${REVIEW_KEY}-${SESSION_FRAGMENT}"
-mkdir -p "$SCRATCH_DIR"
+mkdir -p /data/tmp/grumpy-<PR-number-or-branch>-<session-id-fragment>   # = <SCRATCH_DIR>
 ```
 
 Assess scale:
@@ -75,9 +69,9 @@ All three are ALWAYS included for any non-trivial review — no per-language con
 
 ### Other conditional agents
 
-| Condition | Agent (`subagent_type`) | Focus |
-|---|---|---|
-| Documentation changes | `claudius:technical-writer-trillian` | Accuracy, completeness, API docs, changelog |
+| Condition | Agent (`subagent_type`) | Model | Focus |
+|---|---|---|---|
+| Documentation changes | `claudius:technical-writer-trillian` | sonnet | Accuracy, completeness, API docs, changelog |
 
 For crypto-heavy code or significant dependency changes, expand the single security-engineer's prompt to include crypto soundness and dependency audit — do NOT spawn a second instance.
 
@@ -95,7 +89,7 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 4. **BP preload**: every spawned reviewer (`security-engineer-smythe`, `project-reviewer-adams`, `qa-engineer-marvin`, `technical-writer-trillian`, etc.) MUST preload `coding-best-practices` so its Cross-Cutting Rules govern every finding — state this explicitly in each spawn prompt
 5. **UX/DX lens**: assess how findings affect end-user workflows and developer experience, not just code correctness
 6. **CI context**: when MemCan/WebSearch are unavailable (e.g., CI), instruct: "Do not use memcan tools or WebSearch/WebFetch."
-7. **File output**: use the Write tool for creating files — never `cat > file` or heredoc redirections
+7. **File output & Bash hygiene**: Write tool for files; one simple allowlisted command per call — no `$VAR`, loops, pipes, redirects, `cd`, or `python3 -c` (producer-contract § Bash hygiene)
 8. **Full roster**: list every teammate name, role/focus, and file scope in this fan-out, including conditional and scaled reviewers; state that all listed peers are already live so agents do not pause to ask or spawn duplicates
 9. **Cross-domain hints**: passively report any issue noticed in a peer's primary domain rather than hunting outside the assigned scope, silently duplicating it, or omitting it; tag the finding with `cross_domain_hint: "<peer-role>"` so consolidation can weigh the overlap
 10. **UI-text scan**: scan the diff's user-visible strings — labels, buttons, toasts, dialogs, error messages — for raw exception text, stack traces, error codes, internal jargon, or alarming wording on a benign condition; these trip `G-UI-TEXT` (`claudius:severity`)
@@ -107,19 +101,19 @@ Beyond the general agent prompt requirements, every review agent prompt MUST inc
 
 Producers write a bare JSON array of `finding_section` objects — the exact shape, required/optional fields, the producers-must-NOT-emit list, and the ID-prefix table are in [references/producer-contract.md](references/producer-contract.md) (mirrors `report-format`). Metadata is coordinator-owned: the coordinator resolves the full 40-character commit SHA (`git rev-parse @{u}`, falling back to `git rev-parse HEAD` without an upstream) and supplies commit/date/branch/project through `prepare --metadata`; `prepare` derives repository metadata from `--repo-root`.
 
-**Hoist the invariant part into a file, don't restate it per spawn.** Items 2–13 above are identical across every producer in a fan-out; with N producers, retyping them N times costs the coordinator real output tokens for zero variable content (measured: ~2500 lines across 5 producers on one large review). Before spawning, copy [references/producer-contract.md](references/producer-contract.md) to `<SCRATCH_DIR>/producer-contract.md` unmodified — it already contains the finding-format JSON contract, the producers-must-NOT-emit list, the ID-prefix table, the call-tree/UI-text/UX-DX/collision/process rules, and the terse report-back instruction (everything below that has no per-agent variable). Then each spawn prompt carries only what actually varies:
+**Point at the invariant part, don't restate it per spawn.** Items 2–13 above are identical across every producer in a fan-out; with N producers, retyping them N times costs the coordinator real output tokens for zero variable content (measured: ~2500 lines across 5 producers on one large review). [references/producer-contract.md](references/producer-contract.md) already holds the finding-format JSON contract, the producers-must-NOT-emit list, the ID-prefix table, the call-tree/UI-text/UX-DX/collision/Bash-hygiene/process rules, and the report-back instruction. Producers read it in place — no copy; `report.json`'s `metadata.plugin_version` pins which version applied. Each spawn prompt carries only what varies (paste the paths below as the resolved absolute paths):
 
 ```text
-Read <SCRATCH_DIR>/producer-contract.md and <SCRATCH_DIR>/context-digest.md (if present) before emitting anything — both apply to your output.
+Read ${CLAUDE_SKILL_DIR}/references/producer-contract.md and <SCRATCH_DIR>/context-digest.md (if present) before emitting anything — both apply to your output.
 
 Deployed peers (all already live; do not ask whether they are running):
 - <teammate-name> — <reviewer role/focus> — <file scope>
 - <teammate-name> — <reviewer role/focus> — <file scope>
 
-Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json.
+Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json, then run `python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
 ```
 
-Archive `producer-contract.md` next to `report.json` (like `context-digest.md`) so the fan-out is auditable after the fact.
+`gate` prints `MAX: <band|NONE> BLOCKING: <yes|no>`, the HIGH+/blocker-gate candidate IDs, and band counts; exit 1 (`INVALID:`) means prepare would drop a finding, exit 2 means the file is unreadable or not a bare array. Producers end their reply with its output, so the coordinator never opens a findings file to check for an early stop.
 
 ### Call-tree inspection
 
@@ -130,7 +124,7 @@ When the diff modifies or removes any function/method declaration, every code-qu
 After each agent emits findings, run the dumb ephemeral-ID lint against the diff:
 
 ```bash
-git diff "${BASE_BRANCH}...HEAD" | python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --diff
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/lint_ephemeral_ids.py --range <BASE>...HEAD
 ```
 
 For each hit, judge genuine violation vs quoted/escaped example (a code fence demonstrating the rule, a test fixture asserting it, this lint's own docstring). Dismiss in-skill examples; promote genuine violations to `code_quality` findings with `tags: ["ephemeral-id-reference"]` and ID prefix `CODE-` (coordinator-assigned). The lint always exits 0 — judgement is yours.
@@ -153,123 +147,61 @@ Agent(subagent_type="claudius:qa-engineer-marvin", model="sonnet", prompt="...",
 
 ## 5. Consolidate Findings
 
-After all agents complete, the two-phase consolidation script does the mechanical work (flattening, duplicate detection, ID assignment, statistics); judgment calls (dedup merging, severity re-assessment, executive summary) are yours. Run this pipeline through to §5e even when every producer's file is `[]` — an all-empty `intermediate.json` (0 raw findings, 0 duplicate groups) is not an early-exit signal, it's the expected shape of a clean review; `assemble` and the renderers already handle it (0 findings, all-zero severity counts).
+After all agents complete, scripts do the mechanical work (flattening, duplicate detection, ID assignment, statistics, validation, rendering); judgment calls (dedup merging, severity re-assessment, merge classification, executive summary) are yours. Run the pipeline through §5c even when every producer's file is `[]` — 0 raw findings is the expected shape of a clean review, not an early exit; every step handles it. `<REPORT_DIR>` defaults to the current directory.
 
-### 5a. Phase 1 — Prepare
+### 5a. Prepare
 
-Flatten all agent reports, detect duplicate candidates, scan for INTENTIONAL comments:
+Flatten all agent reports, detect duplicate candidates, scan for INTENTIONAL comments (`<REPO_ROOT>` from `git rev-parse --show-toplevel`):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py prepare \
-    security-engineer:"$SCRATCH_DIR"/security-findings.json \
-    project-reviewer:"$SCRATCH_DIR"/project-findings.json \
-    qa-engineer:"$SCRATCH_DIR"/qa-findings.json \
-    --repo-root $(git rev-parse --show-toplevel) \
-    --output "$SCRATCH_DIR"/intermediate.json \
-    --metadata '{"project":"...","date":"...","branch":"...","commit":"..."}'
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py prepare security-engineer:<SCRATCH_DIR>/security-findings.json project-reviewer:<SCRATCH_DIR>/project-findings.json qa-engineer:<SCRATCH_DIR>/qa-findings.json --repo-root <REPO_ROOT> --output <SCRATCH_DIR>/intermediate.json --digest --metadata '{"project":"...","date":"...","branch":"...","commit":"..."}'
 ```
 
-Produces `intermediate.json`: flattened `raw_findings` (with agent attribution), `duplicate_groups` (candidate clusters with overlap reasons), `intentional_downgrades` (findings near INTENTIONAL comments), and `section_positives`.
+Writes `intermediate.json` (full `raw_findings`, `duplicate_groups`, `intentional_downgrades`, `section_positives`, `agent_stats`; `metadata.plugin_version` auto-filled) and prints `digest.md` — every finding's `<agent>:<original_id>` key, band, floats, location and clipped description, plus duplicate groups and INTENTIONAL hits by key. Decide from the digest (re-read `<SCRATCH_DIR>/digest.md` if the output was truncated); open `intermediate.json` only when a finding's full text matters.
 
-### 5b. Review and merge (LLM judgment)
+### 5b. Decide (LLM judgment)
 
-Read `intermediate.json` and decide:
-
-1. **Duplicate resolution**: per `duplicate_groups` entry, merge (keep the most detailed description, union tags) or keep separate. Remove redundant findings.
-2. **INTENTIONAL downgrade**: downgrade each `intentional_downgrades` finding to `INFO` — deliberate engineering decisions from previous triage.
+1. **Duplicate resolution**: per duplicate group, merge (keep the most detailed description, union tags) or keep separate.
+2. **INTENTIONAL downgrade**: downgrade each INTENTIONAL hit to `INFO` (lower its floats) — deliberate engineering decisions from previous triage.
 3. **Severity re-evaluation**: load the `severity` skill (`/severity`), then re-assess every finding strictly against its criteria — agents often over-inflate.
-4. **Merge classification**: assign `merge_class` per `severity` skill § Merge Classification — `blocking` only when a blocker gate trips, with `intent_basis` naming the gate ID plus one line of evidence. Use the Context Digest when the invoker supplied one (`review-pr` § Context Digest) for `G-INTENT` judgment; with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Apply the digest as a coordinator-side backstop too: re-check any finding whose floats ignore an evidenced operational-profile claim a producer plainly didn't have (`severity` skill § `likelihood`). Severity never determines `merge_class`. Escalate to the human explicitly (never silently defer) any pre-existing finding tripping `G-FUNDS`/`G-SECRET`/`G-CRYPTO`/`G-DATA`.
-5. **Merge sections**: combine same-category agent sections into unified sections.
-6. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding. Zero raw findings is not a reason to stop here — write a short positive summary (e.g. "No issues found across N reviewers — clean PR.") and continue to §5c; the report still gets written.
-7. **Agent stats**: copy `intermediate.json`'s `agent_stats` array verbatim into `merged-findings.json` — `prepare` already computes it; do not hand-author or reshape it.
+4. **Merge classification**: assign `merge_class` to EVERY finding per `severity` skill § Merge Classification — `blocking` only when a blocker gate trips, with `intent_basis` naming the gate ID plus one line of evidence. Use the Context Digest when the invoker supplied one (`review-pr` § Context Digest) for `G-INTENT` judgment; with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Apply the digest as a coordinator-side backstop too: re-check any finding whose floats ignore an evidenced operational-profile claim a producer plainly didn't have (`severity` skill § `likelihood`). Severity never determines `merge_class`. Escalate to the human explicitly (never silently defer) any pre-existing finding tripping `G-FUNDS`/`G-SECRET`/`G-CRYPTO`/`G-DATA`.
+5. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` — LLM-authored, but it must not contradict the merge classification; reflect every valid `blocking` finding. Zero findings still gets a short positive summary (e.g. "No issues found across N reviewers — clean PR.").
 
-For reviews above roughly 30 raw findings, use the ready-to-run merge helper instead of transcribing the entire document by hand. Record the review-specific judgment in `"$SCRATCH_DIR"/merge-decisions.json`: each true duplicate cluster names its members by `agent` + `original_id`, selects one member as the base, records a `reason`, and supplies only the hand-authored merged fields in `updates`. Include the step 6 `executive_summary` in the same file. Do not list candidate clusters you decide to keep separate.
+Record all of it in one Write of `<SCRATCH_DIR>/merge-decisions.json` — the only merge path; never hand-transcribe findings:
 
 ```json
 {
-  "executive_summary": {
-    "overall_assessment": "...",
-    "summary_text": "...",
-    "verdict_text": "...",
-    "verdict_action": "..."
-  },
+  "executive_summary": { "overall_assessment": "...", "summary_text": "...", "verdict_text": "...", "verdict_action": "..." },
   "merges": [
     {
       "reason": "Both findings describe the same unchecked parser failure.",
-      "members": [
-        { "agent": "security", "original_id": "SEC-001" },
-        { "agent": "qa", "original_id": "QA-003" }
-      ],
+      "members": [ { "agent": "security", "original_id": "SEC-001" }, { "agent": "qa", "original_id": "QA-003" } ],
       "base": { "agent": "security", "original_id": "SEC-001" },
-      "updates": {
-        "description": "Hand-authored merged text.",
-        "tags": ["..."],
-        "code_snippets": [
-          { "language": "...", "content": "..." }
-        ]
-      }
+      "updates": { "description": "Hand-authored merged text.", "tags": ["..."] }
     }
-  ]
+  ],
+  "finding_updates": {
+    "security:SEC-001": { "merge_class": "blocking", "intent_basis": "G-SECRET: token logged at src/auth.rs:88" },
+    "project:PROJ-002": { "merge_class": "non_blocking", "likelihood": 0.2, "impact": 0.1 }
+  }
 }
 ```
 
-For every field combined from peers, put the complete merged value in `updates` (for example, the union of `tags` or `code_snippets`). The helper does not decide which findings overlap. It shallow-copies untouched findings, applies only the declared cluster merges, combines same-category sections, and copies `metadata`, `section_positives`, and `agent_stats` from `intermediate.json`:
+- `merges`: true duplicate clusters only (omit candidates kept separate); `updates` carries the complete merged value of every combined field (e.g. the union of `tags`/`code_snippets`).
+- `finding_updates`: keyed `<agent>:<original_id>`; only `merge_class`, `intent_basis`, `likelihood`, `impact`, `relevance`. Every surviving finding needs a `merge_class` (from here or from its producer); target a merged cluster's base, never a merged-away member.
+- Optional `top_findings_override`/`remediation_override`: a JSON array replaces auto-generation.
+
+### 5c. Finalize
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/merge_findings_helper.py \
-    --input "$SCRATCH_DIR"/intermediate.json \
-    --decisions "$SCRATCH_DIR"/merge-decisions.json \
-    --output "$SCRATCH_DIR"/merged-findings.json
+python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py finalize --input <SCRATCH_DIR>/intermediate.json --decisions <SCRATCH_DIR>/merge-decisions.json --output <REPORT_DIR>/report.json --format md
 ```
 
-Before assembly, finish the per-finding edits required by steps 2–4, verify the combined sections and executive summary from steps 5–6, and keep `merge-decisions.json` in the scratch directory so each merge remains auditable.
-
-Write the result as `"$SCRATCH_DIR"/merged-findings.json`. Its `agent_stats` value is the unchanged array copied from `intermediate.json`:
-
-```json
-{
-  "metadata": { "project": "...", "date": "...", ... },
-  "executive_summary": { "overall_assessment": "...", ... },
-  "findings": [ { "title": "...", "category": "...", "findings": [...], "positives": "..." } ],
-  "agent_stats": [ { "agent": "...", "unique": N, "redundant": N } ],
-  "top_findings_override": null,
-  "remediation_override": null
-}
-```
-
-Findings do NOT need `id` fields — phase 2 assigns them. Set `top_findings_override`/`remediation_override` to a JSON array to override auto-generation, or `null` to auto-generate.
-
-### 5c. Phase 2 — Assemble
-
-```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/consolidate_reports.py assemble \
-    --input "$SCRATCH_DIR"/merged-findings.json \
-    --output ${REPORT_DIR:-.}/report.json
-```
-
-Assigns sequential IDs by category (SEC-001, PROJ-001, RUST-001, etc.), computes `summary_statistics` (severity counts, category matrix, redundancy ratio), generates `top_findings` from CRITICAL/HIGH items, and creates `remediation` priority buckets. Validates against the schema and REFUSES to write output on failure (exit 1) — validation is mandatory; jsonschema is a hard requirement.
-
-### 5d. Validate report against schema
-
-Assemble already validates and blocks output, but re-validate manually after hand-editing the report:
-
-```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py report.json
-```
-
-If validation fails, fix `merged-findings.json` and re-run assemble. Do NOT skip validation.
-
-### 5e. Render markdown report
-
-```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format md
-```
-
-Produces `report.md` next to the JSON file.
+Applies the decisions (writing `<SCRATCH_DIR>/merged-findings.json` for audit), assigns sequential IDs by category, computes `summary_statistics`/`top_findings`/`remediation`, validates against the schema, and renders one file per `--format` (repeatable: `md`, `html`, `pdf`; default `md`) next to `report.json`. Exit 1 writes no report: it names each finding lacking `merge_class`, or each schema error — fix `merge-decisions.json` and re-run. After hand-editing `report.json`, re-validate with `validate_report.py <REPORT_DIR>/report.json`.
 
 When presenting results, filter the consolidated findings for `merge_class == "out_of_scope_follow_up"` and name that list to the user as deferral candidates — nothing files them, so an unmentioned deferral is an invisible one (`claudius:severity` § `out_of_scope_follow_up`).
 
-### 5f. Stop reviewer processes
+### 5d. Stop reviewer processes
 
 After every reviewer output has been read and consolidation is complete, send `SendMessage({type: "shutdown_request"})` to each spawned teammate, including ones already marked inactive (`grand-admiral` § Terminating Teammates — `TaskStop` cannot address a named teammate). Agent completion does not reliably tear down the tmux-backed process: sweep orphaned panes per `grand-admiral`'s `references/stall-watchdog.md` § Orphaned Panes and Processes.
 
@@ -279,14 +211,7 @@ If the initial review reveals areas needing deeper investigation: spawn addition
 
 ## 7. Additional Report Formats (Optional)
 
-If the user requests HTML or PDF:
-
-```bash
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format html
-python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py ${REPORT_DIR:-.}/report.json --format pdf
-```
-
-For interactive triage, use the `claudius:triage-findings` skill with the `${REPORT_DIR:-.}/report.json` path.
+Request HTML/PDF via `finalize --format`; to re-render an existing report: `python3 ${CLAUDE_SKILL_DIR}/../../scripts/generate_review_report.py <REPORT_DIR>/report.json --format html` (or `pdf`). For interactive triage, use the `claudius:triage-findings` skill with the `<REPORT_DIR>/report.json` path.
 
 ## CI Log Retrieval
 

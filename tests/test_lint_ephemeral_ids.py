@@ -265,3 +265,44 @@ def test_pattern_built_from_prefixes() -> None:
     for prefix in lint.PREFIXES:
         stem = prefix.rstrip("-")
         assert stem in lint.PATTERN.pattern, f"Stem {stem!r} missing from regex"
+
+
+def test_range_mode_runs_git_diff_itself(tmp_path: Path) -> None:
+    """--range avoids a `git diff | python3` pipe (denied by CI allowlists)."""
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True)
+
+    git("init", "-q")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "T")
+    (tmp_path / "a.md").write_text("clean\n")
+    git("add", "a.md")
+    git("commit", "-q", "-m", "base")
+    git("branch", "base")
+    (tmp_path / "a.md").write_text("clean\nsee SEC-014\n")
+    git("commit", "-q", "-am", "head")
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "base...HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert result.returncode == 0
+    hits = json.loads(result.stdout)
+    assert [(h["file"], h["line"], h["matched_id"]) for h in hits] == [
+        ("a.md", 2, "SEC-014")
+    ]
+
+
+def test_range_mode_git_failure_exits_2(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--range", "nope...HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert result.returncode == 2
