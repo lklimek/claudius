@@ -373,3 +373,33 @@ def test_main_fails_listing_findings_without_merge_class(tmp_path, caplog):
     assert "qa:QA-003" in missing
     assert "security:SEC-001" not in missing
     assert not output_path.exists()
+
+
+@pytest.mark.parametrize("bad", [["X"], {"k": 1}, 7, None])
+def test_malformed_merge_member_keys_are_value_errors(bad):
+    raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
+    decisions = {
+        "merges": [
+            {
+                "reason": "Same bug.",
+                "members": [
+                    {"agent": "security", "original_id": "SEC-001"},
+                    {"agent": "qa", "original_id": bad},
+                ],
+                "base": {"agent": bad, "original_id": "SEC-001"},
+                "updates": {},
+            }
+        ],
+        "finding_updates": {"security:SEC-001": {"merge_class": "non_blocking"}},
+    }
+    with pytest.raises(ValueError):
+        helper.resolve_findings(raw, decisions)
+
+
+@pytest.mark.parametrize("key", ["", ":", "security:", ":SEC-001", "SEC-001"])
+def test_malformed_finding_update_keys_are_value_errors(key):
+    with pytest.raises(ValueError, match="<agent>:<original_id>"):
+        helper.resolve_findings(
+            [_finding("security", "SEC-001")],
+            {"finding_updates": {key: {"merge_class": "non_blocking"}}},
+        )

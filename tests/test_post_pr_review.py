@@ -133,6 +133,7 @@ class TestHunks:
             ("src/a.py:8-11", {"start_line": 10, "line": 11}),  # clamped into hunk
             ("src/a.py:14-60", {"line": 14}),  # first hunk hit, clamped to one line
             ("./src/a.py:50", {"line": 50}),
+            ("src/a.py:11:5", {"line": 11}),  # path:line:col
         ],
     )
     def test_anchor_in_diff(self, location, anchor):
@@ -335,6 +336,21 @@ class TestFallbacks:
         gh = FakeGh(post_errors=[ppr.GhApiError(500, "boom")])
         with pytest.raises(ppr.GhApiError):
             _run(_report(_finding("SEC-001", 4, "src/a.py:12")), gh)
+
+    @pytest.mark.parametrize(
+        ("report", "status"),
+        [
+            (_report(), 403),  # APPROVE rejected, then COMMENT rejected
+            (_report(), 422),
+            (_report(_finding("SEC-001", 4, "src/a.py:12")), 422),
+        ],
+    )
+    def test_post_attempts_are_bounded(self, report, status):
+        errors = [ppr.GhApiError(status, "nope") for _ in range(10)]
+        gh = FakeGh(post_errors=errors)
+        with pytest.raises(ppr.GhApiError):
+            _run(report, gh)
+        assert 1 <= len(gh.posted) <= 3
 
     def test_persistent_422_gives_up(self):
         errors = [ppr.GhApiError(422, "nope") for _ in range(5)]

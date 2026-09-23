@@ -246,6 +246,16 @@ def _validate_finding_update(label: str, update: Any) -> dict[str, Any]:
     return update
 
 
+def _key_or_none(ref: Any) -> FindingKey | None:
+    """Return ``(agent, original_id)`` when both are strings, else None."""
+    if not isinstance(ref, dict):
+        return None
+    agent, original_id = ref.get("agent"), ref.get("original_id")
+    if isinstance(agent, str) and isinstance(original_id, str):
+        return agent, original_id
+    return None
+
+
 def resolve_findings(
     findings: list[dict[str, Any]], decisions: dict[str, Any]
 ) -> list[dict[str, Any]]:
@@ -267,21 +277,18 @@ def resolve_findings(
         _finding_key(finding, context=f"raw finding #{index}"): finding
         for index, finding in enumerate(copies)
     }
+    # Pre-scan only; apply_merge_decisions validates and reports malformed
+    # entries, so skip anything that is not a well-formed key here.
     merged_away: set[FindingKey] = set()
     for decision in merges:
         if not isinstance(decision, dict):
-            continue  # apply_merge_decisions reports the malformed entry
-        base = decision.get("base")
-        base_key = (
-            (base.get("agent"), base.get("original_id"))
-            if isinstance(base, dict)
-            else None
-        )
-        for member in decision.get("members") or []:
-            if isinstance(member, dict):
-                key = (member.get("agent"), member.get("original_id"))
-                if key != base_key:
-                    merged_away.add(key)
+            continue
+        base_key = _key_or_none(decision.get("base"))
+        members = decision.get("members")
+        for member in members if isinstance(members, list) else []:
+            key = _key_or_none(member)
+            if key is not None and key != base_key:
+                merged_away.add(key)
 
     for label, update in updates_value.items():
         key = _parse_update_key(label)

@@ -62,7 +62,7 @@ log = logging.getLogger(__name__)
 
 SEVERITY_BY_LABEL = {label: level for level, label in SEV_LABELS.items()}
 _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
-_LOCATION_RE = re.compile(r":(\d+)(?:-(\d+))?$")
+_LOCATION_RE = re.compile(r":(\d+)(?:-(\d+))?(?::\d+)?$")  # optional :col
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _CODE_SPAN_RE = re.compile(r"(`+)(?:(?!\1).)+?\1", re.DOTALL)
 _PARAGRAPH_BREAK_RE = re.compile(r"(\n[ \t]*\n)")
@@ -200,7 +200,7 @@ def parse_patch_hunks(patch: str) -> list[Hunk]:
 
 
 def _parse_location(location: str) -> tuple[str, Optional[int], Optional[int]]:
-    """Split ``path:start[-end]`` into (normalized path, start, end)."""
+    """Split ``path:start[-end][:col]`` into (normalized path, start, end)."""
     match = _LOCATION_RE.search(location or "")
     path = location[: match.start()] if match else (location or "")
     path = path.strip()
