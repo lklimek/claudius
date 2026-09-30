@@ -113,7 +113,7 @@ Deployed peers (all already live; do not ask whether they are running):
 - <teammate-name> — <reviewer role/focus> — <file scope>
 - <teammate-name> — <reviewer role/focus> — <file scope>
 
-Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json and, in the same message after the Write, run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
+Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json. After the Write result confirms success, run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
 ```
 
 Include the bracketed context-digest part only when that file was written this run.

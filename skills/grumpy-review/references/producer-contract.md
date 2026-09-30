@@ -103,10 +103,7 @@ Read — Bash `ls`/`find` outside the working directory is sandbox-blocked.
 
 ## Report back tersely
 
-Your findings file is the report. Write it and run the `gate` command from your spawn prompt
-in ONE message, Write first (they run in order). If the Write failed, gate checked an older
-file or none: re-Write, then re-run gate. On `INVALID:` or `ERROR:` fix the file (re-Write
-it whole if Edit is unavailable) and re-run gate. Then reply with your output file
+Your findings file is the report. Write it, wait for the Write result, then run the `gate` command from your spawn prompt. If the Write failed, re-Write before running gate. On `INVALID:` or `ERROR:` fix the file (re-Write it whole if Edit is unavailable) and re-run gate. Then reply with your output file
 path, your candy tally, and the `gate` output verbatim as the last lines (its `MAX:` line is
 the coordinator's early-stop signal). Found nothing? `[]` gives `MAX: NONE` — a complete,
 successful report. Do not restate findings in prose; the coordinator reads the JSON directly.
