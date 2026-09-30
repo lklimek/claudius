@@ -26,7 +26,10 @@ This skill MUST end with a written `report.json` (and whichever rendered format 
 git rev-parse --verify origin/<BASE>   # <BASE> = base branch; CI checkouts often lack a local copy — try plain <BASE> only if this fails
 git log <BASE_REF>..HEAD --oneline     # <BASE_REF> = the ref that verified (e.g. origin/main); use it wherever a base ref is needed below
 git diff <BASE_REF>...HEAD --stat      # append `-- <paths>` to scope
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD   # §3 Ephemeral-ID lint
 ```
+
+Once `<BASE_REF>` is verified, run the other three in one message.
 
 Before spawning reviewers, fix one `<SCRATCH_DIR>` for all producer and intermediate output. If the invoker supplied one (e.g. `claudius-review-action` passes a dir inside the CI sandbox, where `/data/tmp` is blocked), use it verbatim and skip `mkdir`. Otherwise create a collision-resistant one, with a session-specific suffix even when the PR number is known — two coordinators may review the same PR concurrently:
 
@@ -104,14 +107,16 @@ Producers write a bare JSON array of `finding_section` objects — the exact sha
 **Point at the invariant part, don't restate it per spawn.** Items 2–13 above are identical across every producer in a fan-out; with N producers, retyping them N times costs the coordinator real output tokens for zero variable content (measured: ~2500 lines across 5 producers on one large review). [references/producer-contract.md](references/producer-contract.md) already holds the finding-format JSON contract, the producers-must-NOT-emit list, the ID-prefix table, the call-tree/UI-text/UX-DX/collision/Bash-hygiene/process rules, and the report-back instruction. Producers read it in place — no copy; `report.json`'s `metadata.plugin_version` pins which version applied. Each spawn prompt carries only what varies; copy the template's paths exactly as they appear here (already resolved to absolute paths — producers never see the placeholders):
 
 ```text
-Read ${CLAUDE_SKILL_DIR}/references/producer-contract.md and <SCRATCH_DIR>/context-digest.md (if present) before emitting anything — both apply to your output.
+In your first message, Read ${CLAUDE_SKILL_DIR}/references/producer-contract.md[ and <SCRATCH_DIR>/context-digest.md] together with your first inputs; it applies to your output.
 
 Deployed peers (all already live; do not ask whether they are running):
 - <teammate-name> — <reviewer role/focus> — <file scope>
 - <teammate-name> — <reviewer role/focus> — <file scope>
 
-Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json, then run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
+Your role: <role>. Your file scope: <scope>. Write your findings to <SCRATCH_DIR>/<role>-findings.json and, in the same message after the Write, run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py gate <SCRATCH_DIR>/<role>-findings.json`.
 ```
+
+Include the bracketed context-digest part only when that file was written this run.
 
 `gate` prints `MAX: <band|NONE> BLOCKING: <yes|no>`, the HIGH+/blocker-gate candidate IDs, and band counts; exit 1 (`INVALID:`) means prepare or finalize would reject a finding (missing or wrongly typed field, id or floats; duplicate id; `blocking` without a nonempty `intent_basis`). Exit 2 (`ERROR:`) means the file is unreadable or not a bare array of section objects; `gate` and `prepare` report read errors, including directories and permission failures, without a traceback. Producers end their reply with its output, so the coordinator never opens a findings file to check for an early stop.
 
@@ -121,13 +126,7 @@ When the diff modifies or removes any function/method declaration, every code-qu
 
 ### Ephemeral-ID lint
 
-After each agent emits findings, run the dumb ephemeral-ID lint against the diff:
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD
-```
-
-For each hit, judge genuine violation vs quoted/escaped example (a code fence demonstrating the rule, a test fixture asserting it, this lint's own docstring). Dismiss in-skill examples; promote genuine violations to `code_quality` findings with `tags: ["ephemeral-id-reference"]` and ID prefix `CODE-` (coordinator-assigned). Scans exit 0 whatever they find (exit 2 only if `git diff` fails) — judgement is yours.
+It scans the diff, not findings: run it once before the fan-out, batched with the §1 scope commands. For each hit, judge genuine violation vs quoted/escaped example (a code fence demonstrating the rule, a test fixture asserting it, this lint's own docstring). Dismiss in-skill examples; promote genuine violations to `code_quality` findings with `tags: ["ephemeral-id-reference"]` and ID prefix `CODE-` (coordinator-assigned). Scans exit 0 whatever they find (exit 2 only if `git diff` fails) — judgement is yours. Write promoted hits as their own producer file (e.g. `<SCRATCH_DIR>/lint-findings.json`) and pass it to `prepare`.
 
 ## 4. Spawn Agents
 
@@ -156,8 +155,10 @@ After all agents complete, scripts do the mechanical work (flattening, duplicate
 Flatten all agent reports, detect duplicate candidates, scan for INTENTIONAL comments (`<REPO_ROOT>` from `git rev-parse --show-toplevel`):
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py prepare security-engineer:<SCRATCH_DIR>/security-findings.json project-reviewer:<SCRATCH_DIR>/project-findings.json qa-engineer:<SCRATCH_DIR>/qa-findings.json --repo-root <REPO_ROOT> --base-ref <BASE_REF> --output <SCRATCH_DIR>/intermediate.json --digest --metadata '{"project":"...","date":"...","branch":"...","commit":"..."}'
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py prepare security-engineer:<SCRATCH_DIR>/security-findings.json project-reviewer:<SCRATCH_DIR>/project-findings.json qa-engineer:<SCRATCH_DIR>/qa-findings.json --repo-root <REPO_ROOT> --base-ref <BASE_REF> --output <SCRATCH_DIR>/intermediate.json --digest --commit <COMMIT> --branch <BRANCH>
 ```
+
+Metadata goes in plain flags (`--commit`, `--branch`, `--project`, `--date`), never JSON on the command line; `project` defaults to the GitHub `owner/repo`, `date` to today (UTC), `--branch` is optional. Make prepare the first call after reviewers return, in the same message as `Skill(claudius:severity)` (§5b).
 
 Writes `intermediate.json` (full `raw_findings`, `duplicate_groups`, `intentional_downgrades`, `section_positives`, `agent_stats`; `metadata.plugin_version` auto-filled) and prints `digest.md` — every finding's `<agent>:<original_id>` key, band, floats, location and clipped description, plus duplicate groups and INTENTIONAL hits by key. Decide from the digest (re-read `<SCRATCH_DIR>/digest.md` if the output was truncated); open `intermediate.json` only when a finding's full text matters.
 
@@ -192,6 +193,7 @@ Record all of it in one Write of `<SCRATCH_DIR>/merge-decisions.json` — the on
 - `merges`: true duplicate clusters only (omit candidates kept separate); `updates` carries the complete merged value of every combined field (e.g. the union of `tags`/`code_snippets`).
 - `finding_updates`: keyed `<agent>:<original_id>`; only `merge_class`, `intent_basis`, `likelihood`, `impact`, `relevance`. Every surviving finding needs a `merge_class` (from here or from its producer); target a merged cluster's base, never a merged-away member.
 - Optional `top_findings_override`/`remediation_override`: a JSON array replaces auto-generation.
+- Optional `pr_comments` (`{"<agent>:<original_id>": "text" | null}`; a merged-away member's key targets its cluster base) and `pr_review_body` (string): finalize writes them as `<REPORT_DIR>/comments.json` keyed by final IDs and `<REPORT_DIR>/body.md` — `post_pr_review.py`'s `--comments`/`--body-file` inputs — so no one reads `report.json` for final IDs.
 
 ### 5c. Finalize
 
@@ -199,7 +201,7 @@ Record all of it in one Write of `<SCRATCH_DIR>/merge-decisions.json` — the on
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py finalize --input <SCRATCH_DIR>/intermediate.json --decisions <SCRATCH_DIR>/merge-decisions.json --output <REPORT_DIR>/report.json --format md
 ```
 
-Applies the decisions (writing `<SCRATCH_DIR>/merged-findings.json` for audit), assigns sequential IDs by category, computes `summary_statistics`/`top_findings`/`remediation`, validates against the schema, and renders one file per `--format` (repeatable: `md`, `html`, `pdf`; default `md`) next to `report.json`. All-or-nothing: on failure no report, render or `merged-findings.json` is written, and any left by an earlier run are renamed to `*.stale`; on success, renders of formats not requested this time are renamed `*.stale` too. Exit 1 names each finding lacking `merge_class`, each invalid decision (e.g. `blocking` without `intent_basis`), each schema error, or a failed render — fix `merge-decisions.json` (or the format) and re-run; exit 2 means an input file is missing or unparseable. After hand-editing `report.json`, re-validate with `validate_report.py <REPORT_DIR>/report.json`.
+Applies the decisions (writing `<SCRATCH_DIR>/merged-findings.json` for audit), assigns sequential IDs by category, computes `summary_statistics`/`top_findings`/`remediation`, validates against the schema, and renders one file per `--format` (repeatable: `md`, `html`, `pdf`; default `md`) next to `report.json`. All-or-nothing: on failure no report, render, `comments.json`/`body.md` or `merged-findings.json` is written, and any left by an earlier run are renamed to `*.stale`; on success, renders of formats not requested this time are renamed `*.stale` too. Exit 1 names each finding lacking `merge_class`, each invalid decision (e.g. `blocking` without `intent_basis`), each schema error, or a failed render — fix `merge-decisions.json` (or the format) and re-run; exit 2 means an input file is missing or unparseable. After hand-editing `report.json`, re-validate with `validate_report.py <REPORT_DIR>/report.json`.
 
 When presenting results, filter the consolidated findings for `merge_class == "out_of_scope_follow_up"` and name that list to the user as deferral candidates — nothing files them, so an unmentioned deferral is an invisible one (`claudius:severity` § `out_of_scope_follow_up`).
 
