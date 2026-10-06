@@ -1,6 +1,6 @@
 ---
 name: lessons-learned
-description: "This skill should be used when extracting learnings, saving lessons, or capturing reusable knowledge from a session. It is also appropriate before presenting a plan, after notable events such as bugs or corrected approaches, and as the final task when work is complete."
+description: "Extracts reusable knowledge from the current session, filters it through a quality gate, and saves it to persistent memory (MemCan). This skill should be used when extracting learnings, saving lessons, or capturing reusable knowledge from a session. It is also appropriate before presenting a plan, after notable events such as bugs or corrected approaches, and as the final task when work is complete."
 ---
 
 # Lessons Learned

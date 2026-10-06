@@ -1,13 +1,13 @@
 ---
 name: codex-crew
-description: "This skill should be used when preparing to dispatch work to Codex Astra, deciding whether to route coding to Codex, dispatching directly via codex-companion.mjs rather than the codex:codex-rescue subagent, handling a Codex job that fails to write or commit, monitoring a running Codex job, or recovering a stale Codex broker. The coordinator reads its pre-flight guidance once before the first Codex dispatch of a session."
+description: "Pre-flight guide for enlisting Codex agents: model routing, direct dispatch via codex-companion.mjs, sandbox and worktree rules, job monitoring, broker recovery. This skill should be used when preparing to dispatch work to Codex Astra, deciding whether to route coding to Codex, dispatching directly via codex-companion.mjs rather than the codex:codex-rescue subagent, handling a Codex job that fails to write or commit, monitoring a running Codex job, or recovering a stale Codex broker. The coordinator reads its pre-flight guidance once before the first Codex dispatch of a session."
 ---
 
 # Codex Crew — Enlisting Codex Agents
 
-Codex agents (OpenAI Codex CLI via the `codex` plugin's `codex-companion.mjs` runtime) are external crew a coordinator can enlist alongside the claudius roster. Opt-in. Read once before the session's first Codex dispatch.
+Codex agents (OpenAI Codex CLI via the `codex` plugin's `codex-companion.mjs`) are opt-in external crew alongside the claudius roster. Read once before the session's first Codex dispatch.
 
-**Dispatch directly, never through `codex:codex-rescue`.** For coordinator-orchestrated work that subagent is pure overhead — one `Bash` call forwarding stdout, unreliable lifecycle signals, and no `--cwd`/`--prompt-file` (the root cause of most bugs below). Call `codex-companion.mjs task` directly (§ Direct Dispatch): nothing to spawn, track, or shut down. `codex:codex-rescue` stays for the user-typed `/codex:rescue` command, which this skill doesn't govern.
+**Dispatch directly, never through `codex:codex-rescue`.** That subagent is pure overhead — one `Bash` call forwarding stdout, unreliable lifecycle signals, and no `--cwd`/`--prompt-file` (root cause of most bugs below). Call `codex-companion.mjs task` directly (§ Direct Dispatch). `codex:codex-rescue` stays for the user-typed `/codex:rescue`, which this skill doesn't govern.
 
 ## When to Enlist Codex
 
@@ -17,10 +17,9 @@ Codex agents (OpenAI Codex CLI via the `codex` plugin's `codex-companion.mjs` ru
 
 ## Routing — Model Selection, High Effort
 
-- **Default: Codex Astra = `--model gpt-6-astra --effort high`. Always high effort.** State both flags on every dispatch — omitting either drops to the runtime default, not Astra. Astra's rollout is gated behind OpenAI's Trusted Access Programme; confirm account access before assuming it resolves.
+- **Default: Codex Astra = `--model gpt-6-astra --effort high`. Always high effort.** State both flags on every dispatch — omitting either drops to the runtime default, not Astra.
 - **Security-related dispatch: `--model gpt-daybreak-blue-latest --effort high` instead of Astra, when available** — for Codex tasks that are themselves security work (audits/reviews, auth/crypto/secrets handling, vulnerability triage/remediation, dependency security review), not ordinary code that happens to touch an authenticated endpoint. Availability is unconfirmed: if the job record shows `status: failed` with an unknown-model or access-gate/auth error, redispatch the same prompt on Astra and tell the user. Never retry Daybreak Blue more than once per dispatch.
-- Nothing monitors, polls, or fetches results on its own — coordinator work (§ Monitoring). Codex CAN attempt a commit when instructed, but success is inconsistent; verify independently (Sandbox & Workdir rule 2).
-- The lighter `spark` alias (`gpt-5.3-codex-spark`) exists; claudius standardizes on Astra (Daybreak Blue for security) at high effort.
+- Not the lighter `spark` alias.
 
 ## Direct Dispatch
 
@@ -30,9 +29,9 @@ Resolve the installed `codex` plugin's script root once per session — version-
 CODEX_ROOT=$(find ~/.claude/plugins/cache/openai-codex/codex -maxdepth 1 -mindepth 1 -type d | sort -V | tail -1)
 ```
 
-Write the prompt to a file — never inline it as a shell argument (long prompts with nested quotes or Rust `Debug` dumps corrupt under shell quoting). `task` accepts `--prompt-file <path>` (also reads piped stdin); a relative path resolves against `--cwd`, so always pass an **absolute** path under the coordinator's configured scratch location (e.g. `/data/tmp` on this host).
+Write the prompt to a file — never inline it as a shell argument (nested quotes and Rust `Debug` dumps corrupt under shell quoting). `task` accepts `--prompt-file <path>` (also reads piped stdin); a relative path resolves against `--cwd`, so always pass an **absolute** path under the coordinator's configured scratch location (e.g. `/data/tmp` on this host).
 
-Every dispatch prompt must say near the top: **"You are a leaf worker, not a coordinator — do not load or follow grand-admiral, delegate, track-minions, report-format, or severity; those apply only to sessions that spawn/manage other agents, which you are not."**
+Every dispatch prompt must say near the top: **"You are a leaf worker, not a coordinator — do not load or follow grand-admiral, delegate, report-format, or severity; those apply only to sessions that spawn/manage other agents, which you are not."**
 
 ```bash
 node "$CODEX_ROOT/scripts/codex-companion.mjs" task \
@@ -42,85 +41,51 @@ node "$CODEX_ROOT/scripts/codex-companion.mjs" task \
   --model gpt-6-astra --effort high
 ```
 
-Security-related task: swap the model flag, same shape (`--model gpt-daybreak-blue-latest --effort high`); fall back to `gpt-6-astra` per § Routing if the job fails with an unknown-model/access-gate error.
+Security-related task: swap the model flag per § Routing (same shape; Astra fallback on unknown-model/access-gate failure).
 
-- **`--cwd <worktree-abs-path>` binds the broker/workspace slug to the intended worktree** — pass it on every dispatch; never rely on the invoking shell's cwd or on prompt text telling Codex to `cd` (prompt text has zero effect on cwd resolution — rule 3).
-- **`--write` is not implied** — without it the run is silently read-only (reports normal completion, touches zero files).
+- **`--cwd <worktree-abs-path>` binds the broker/workspace slug to the intended worktree** — pass it on every dispatch; never rely on the shell's cwd or on prompt text telling Codex to `cd` (zero effect — rule 3).
+- **`--write` is not implied** — without it the run is silently read-only (completes normally, touches zero files).
 - **`--background`** returns a job id almost instantly; the coordinator polls job state (§ Monitoring a Codex Job) rather than blocking.
 - **Continuing a thread:** `--resume-last` (= `--resume`) with the **identical** `--cwd` — threads are found by workspace, so a mismatched `--cwd` resumes nothing.
 
 ## Plan-Approval Gate
 
-**Sandbox write mode is pinned when the Codex app-server creates a thread; a resume cannot escalate it.** Reproduced twice: a thread first dispatched without `--write` stayed read-only under `--resume-last --write`, `apply_patch` rejected. Never plan without `--write` then resume with it.
+**Sandbox write mode is pinned when the Codex app-server creates a thread; a resume cannot escalate it.** A thread first dispatched without `--write` stayed read-only under `--resume-last --write` (`apply_patch` rejected). Never plan without `--write` then resume with it.
 
 For a well-scoped task that might write anything, dispatch the first turn with `--write`. For a genuine approval gate on large or risky work:
 
 1. Dispatch a read-only investigation and plan without `--write`.
 2. After approval, start a **fresh job** (never `--resume-last`) with `--write`, embedding the approved plan plus any revisions in its prompt.
 
-The fresh job rebuilds context, but is the only safe read-only-to-writable boundary. `grand-admiral` § Development-Work Delegation remains the source of truth for the coordinator's plan review.
+The fresh job rebuilds context but is the only safe read-only-to-writable boundary. `delegate` § Development-Work Delegation remains the source of truth for the coordinator's plan review.
 
 ## Sandbox & Workdir — The Load-Bearing Rules
 
-Codex runs under `sandbox_mode = "workspace-write"` (see `~/.codex/config.toml`). Three rules:
+Codex runs under `sandbox_mode = "workspace-write"` (`~/.codex/config.toml`). Three rules:
 
-1. **Write scope = cwd + the effective `writable_roots`.** Rely on the configured worktree root (`$CLAUDIUS_WORKTREE_ROOT`; see `grand-admiral` § Worktree Isolation), scratch location, and shared cargo target dir, plus `network_access = true`. Do **not** assume the configured artifacts location is writable even when config lists it; use the coordinator-owned delivery path in `references/sandbox-and-recovery.md` § `workspace-write` Config. Paths outside cwd and the effective roots are read-only. `scripts/cargo-cached.sh` handles its verification ledger itself: when the default `~/.cache/claudius/ledger` root is unreachable in-sandbox it falls back to a workspace-local dir (the script is the source of truth).
+1. **Write scope = cwd + the effective `writable_roots`.** Rely on the configured worktree root (`$CLAUDIUS_WORKTREE_ROOT`; see `grand-admiral` § Worktree Isolation), scratch location, and shared cargo target dir, plus `network_access = true`. Do **not** assume the configured artifacts location is writable even when config lists it; use the coordinator-owned delivery path in `references/sandbox-and-recovery.md` § `workspace-write` Config. Paths outside cwd and the effective roots are read-only.
 
-2. **Codex `git commit` in a linked worktree is inconsistent — confirmed both ways, same repo, same day.** One dispatch committed cleanly, no approval prompt; a later one hit the "Git metadata is read-only"/`index.lock` error and the coordinator committed instead. `writable_roots` was unchanged across both, so the gate isn't a static config value (suspected `approval_policy = "on-request"` + `trust_level = "trusted"` interaction — unconfirmed). **Coordinator-commit is the reliable default, not a fallback:** fine to instruct Codex to attempt `git add`/`git commit` as its final step (with an explicit commit message — it doesn't know your conventions), but plan for failure: verify via `git log`/`git status` in the worktree — never trust Codex's self-report — and commit yourself (unsandboxed) when it didn't land. See `references/sandbox-and-recovery.md` § Git Commit in a Linked Worktree.
+2. **Codex `git commit` in a linked worktree is inconsistent** — one dispatch commits cleanly, the next hits "Git metadata is read-only"/`index.lock`, with identical config. **Coordinator-commit is the reliable default:** tell Codex to attempt `git add`/`git commit` last (with an explicit message), then verify via `git log`/`git status` in the worktree — never trust its self-report — and commit yourself (unsandboxed) when it didn't land. Details: `references/sandbox-and-recovery.md` § Git Commit in a Linked Worktree.
 
-3. **All worktrees live at `<worktree-root>/<slug>`** (`$CLAUDIUS_WORKTREE_ROOT`; built-in default `/data/git-worktrees`, override per host; slug derived from the startup `$PWD`), pre-created by the coordinator per `grand-admiral` § Worktree Isolation. **The broker keys off `codex-companion.mjs`'s own resolved cwd, not any path in prompt text** — confirmed: a dispatch told via prompt to `cd` into a pre-created worktree still bound its broker to the coordinator's plain checkout, blocking ALL writes (even under `writable_roots`, even on the FIRST dispatch). Pass the worktree via `--cwd` instead (§ Direct Dispatch). Each dispatch's `--cwd` is self-contained, so N worktrees can be dispatched genuinely concurrently — no `EnterWorktree`/`ExitWorktree` serialization.
-
-Deep mechanics (exact sandbox modes, on-disk job-state layout, worktree-commit status and fallback) are in `references/sandbox-and-recovery.md`.
+3. **Worktrees live at `<worktree-root>/<slug>`** (`$CLAUDIUS_WORKTREE_ROOT`; default `/data/git-worktrees`; slug from the startup `$PWD`), pre-created by the coordinator per `grand-admiral` § Worktree Isolation. **The broker keys off `codex-companion.mjs`'s own resolved cwd, not any path in prompt text** — a dispatch told via prompt to `cd` into a worktree still bound to the coordinator's checkout and blocked ALL writes, even on the first dispatch. Pass the worktree via `--cwd` (§ Direct Dispatch); each `--cwd` is self-contained, so N worktrees dispatch concurrently.
 
 ### Never Dispatch Concurrently to the Same `--cwd`
 
-**Never fire dispatch N+1 at the same `--cwd` until dispatch N's job JSON shows a terminal `status`** (`completed`/`failed`). The broker/workspace slug is keyed off `--cwd`, so distinct worktree paths don't collide; the risk is two dispatches at the *same* `--cwd` (a read-only plan job then a fresh writable job, or a retry). Confirmed: same-cwd dispatches minutes apart still collided — elapsed time and a prior dispatch already having its own job-state file are NOT protective; only polling for terminal status is. A collision either strands the earlier dispatch at `status=running` forever with no completion signal (silent orphan), or instantly returns Codex's generic capabilities boilerplate with `touchedFiles: []` (looks like a trivial done, isn't). Root cause — one broker per workspace slug, not per job — lives in the `openai-codex` plugin and cannot be fixed from this repo.
-
-Mitigation: poll for terminal status before the next same-cwd dispatch (never a fixed stagger delay). `scripts/minion-monitoring.py` should eventually catch a stuck orphan as `CODEX_STALL reason=no-progress` — a detection backstop, not a substitute. After any dispatch, sanity-check the job's `workspaceRoot` matches the intended worktree and its `rawOutput` actually engages the dispatched task — a suspiciously fast, generic-sounding completion is a collision red flag, not evidence the task was trivial.
+**Never fire dispatch N+1 at the same `--cwd` until dispatch N's job JSON shows a terminal `status`** (`completed`/`failed`). One broker serves each workspace slug (keyed off `--cwd`), not each job; same-cwd dispatches collide even minutes apart — only polling for terminal status protects, never a fixed stagger delay. A collision silently strands the earlier job at `running` forever, or instantly returns generic capabilities boilerplate with `touchedFiles: []` (looks like a trivial done, isn't). After any dispatch, check the job's `workspaceRoot` matches the intended worktree and its `rawOutput` engages the dispatched task — a suspiciously fast, generic completion is a collision red flag. Detail: `references/sandbox-and-recovery.md` § Same-`--cwd` Collisions.
 
 ## Monitoring a Codex Job
 
-**Direct dispatch has no agent lifecycle to watch — by design.** A `--background` dispatch is a detached Node process with on-disk job-state files: no subagent, nothing to shut down. (If `codex:codex-rescue` is ever in play, its `idle_notification` is worthless in either direction — confirmed 4-for-4, jobs sat `completed` 40–85 minutes before the wrapper reported.)
+A `--background` dispatch is a detached Node process with on-disk job-state files — no agent lifecycle to watch, nothing to shut down. (`codex:codex-rescue` `idle_notification`s are worthless: jobs sat `completed` 40–85 min before the wrapper reported.)
 
-**Primary method: read the job's on-disk state directly** (mtime-gated, minimal-field reads — never the full blob): `references/sandbox-and-recovery.md` § On-Disk Job State for the field list, `result.rawOutput`/`result.touchedFiles`, and matching jobs to dispatches. Load-bearing, not a fallback.
-
-**Get notified, don't just poll on request.** Arm a `Bash` `run_in_background` loop on the job's own `state/<workspace-slug>-<hash>/jobs/<job-id>.json` — a job-specific completion signal needing no team/session discovery. Cross-check a populated `pid` with `ps -p <pid>` on every poll; a missing process while the record says `running` is a crash signal:
-
-```bash
-while true; do
-  read -r status pid < <(python3 -c "
-import json
-try:
-    d = json.load(open('state/<workspace-slug>-<hash>/jobs/<job-id>.json'))
-except Exception:
-    d = {}
-print(d.get('status', 'unknown'), d.get('pid') or '')
-") || { sleep 20; continue; }
-  case "$status" in
-    completed|failed|cancelled|canceled) exit 0 ;;
-  esac
-  if [ -n "$pid" ] && ! ps -p "$pid" >/dev/null; then
-    echo "Codex job <job-id> reports $status but pid $pid is not alive" >&2
-    exit 1
-  fi
-  sleep 20
-done
-```
-
-The loop is itself a backgrounded Bash call and inherits the silent-kill risk of `references/sandbox-and-recovery.md` § Harness Kills of a Backgrounded Task — periodically confirm it's alive; silence is not health.
-
-`ScheduleWakeup` is not a substitute — it's `/loop` dynamic-mode-only and errors outside that context.
-
-- The built-in stall watchdog (`grand-admiral` § Recovery → Stall Watchdog) discovers Codex jobs and emits `CODEX_*` events — **mandatory** for every dispatch, but **best-effort, layered on top of** the direct job-state check, never a substitute.
-- **Codex discovery requires `--worktrees`** at the configured worktree root — a direct dispatch is never a teammate. Without it: a one-time startup warning, then silently zero Codex monitoring. Direct discovery bypasses the session gate (every job under the root surfaces regardless of `sessionId`); only *ambient* discovery (workspace reachable solely via a team cwd) is session-gated, and `codex-companion.mjs` stamps `sessionId` from its own dispatching session, so that path can under-report.
-- Don't guess the Monitor's `--session-id`: derive `--team-dir` from a spawn's own `agent_id` per `grand-admiral`'s `references/stall-watchdog.md`.
+- **Primary method: read the job's on-disk state directly** (mtime-gated, minimal fields, never the full blob) — `references/sandbox-and-recovery.md` § On-Disk Job State.
+- **Get notified, don't wait for a user request:** arm a `Bash` `run_in_background` loop on the job's own `jobs/<job-id>.json` that exits on a terminal status or a dead `pid` (script: `references/sandbox-and-recovery.md` § Monitoring Loop). The loop can itself be silently killed — periodically confirm it's alive; silence is not health.
+- `ScheduleWakeup` is not a substitute (`/loop` dynamic-mode-only).
+- The stall watchdog (`grand-admiral` § Recovery → Stall Watchdog) emits `CODEX_*` events — **mandatory** for every dispatch, but best-effort on top of the direct job-state check, never a substitute. **Codex discovery requires `--worktrees`** at the configured worktree root (a direct dispatch is never a teammate); without it: a one-time startup warning, then silently zero Codex monitoring. Don't guess the Monitor's `--session-id`: derive `--team-dir` from a spawn's own `agent_id` per `grand-admiral`'s `references/stall-watchdog.md`.
 
 ## Recovering a Stale Broker
 
-Each worktree dispatch spins up its own broker (`app-server-broker.mjs` bound to `/tmp/cxc-<id>/broker.sock`, `--cwd` = the worktree). Removing and recreating a worktree at the **same path** while its broker still runs strands it: the next `task` dispatch against that path fails instantly (~0 s) with a misleading auth-shaped error (`failed to resolve feature override precedence` / `auth.loggedIn: false`).
-
-Recovery: find the orphaned broker PID (its `--cwd` points at the old worktree path), `kill` it, `rm -rf /tmp/cxc-<id>`, then redispatch — a fresh broker binds automatically. Exact commands: `references/sandbox-and-recovery.md` § Broker Recovery.
+Recreating a worktree at the **same path** while its broker (`app-server-broker.mjs`) still runs strands it: the next dispatch fails in ~0 s with a misleading auth-shaped error (`failed to resolve feature override precedence` / `auth.loggedIn: false`). Kill the orphaned broker, remove its `/tmp/cxc-<id>`, redispatch — commands in `references/sandbox-and-recovery.md` § Broker Recovery.
 
 ## Additional Resources
 
-- **`references/sandbox-and-recovery.md`** — sandbox modes, `workspace-write` config, on-disk job-state layout for monitoring, git-commit-in-a-worktree status (inconsistent) and its fallback, harness kills of a backgrounded task and how to resume, and copy-paste broker-recovery commands.
+- **`references/sandbox-and-recovery.md`** — sandbox modes, `workspace-write` config, on-disk job state, monitoring loop, same-`--cwd` collisions, git-commit-in-a-worktree status and fallback, harness kills of a backgrounded task, broker recovery.

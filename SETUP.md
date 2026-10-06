@@ -79,7 +79,7 @@ npm install --global eslint prettier pnpm
 
 #### Python projects
 
-Install these if you use the Python best-practices or security workflows. Each application gets its own isolated `pipx` environment; install `pipx` first if needed:
+Install these for Python projects (formatting, linting, security scanning). Each application gets its own isolated `pipx` environment; install `pipx` first if needed:
 
 ```bash
 sudo apt-get install -y pipx
@@ -315,86 +315,27 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 |------|-------------|
 | `bug-investigation` | Investigate reported bugs, reproduce symptoms, and establish root cause |
 | `bye` | End-of-session teardown -- shut down agents, remove worktrees, reconcile work |
-| `check-pr-comments` | Verify that PR review comments have been addressed |
+| `check-pr-comments` | Verify that PR review comments are addressed in code, then reply to or resolve threads; optional triage-compatible report |
 | `ci-dance` | End-to-end PR pipeline -- push, CI monitoring, parallel reviews, fix, repeat until green |
-| `codex-crew` | Route development work to Codex, monitor jobs, and recover failures |
-| `coding-best-practices` | Universal rules for TDD, self-review, quality timing, review format, security |
-| `delegate` | Choose whether, how, and at what model tier to delegate work |
+| `codex-crew` | Pre-flight guide for routing development work to Codex agents -- direct dispatch, sandbox rules, job monitoring, broker recovery |
+| `coding-best-practices` | Universal rules for TDD, self-review, quality-tool timing, comments, logging and review output, plus the Rust policy (typed errors, cargo wrapper discipline) |
+| `delegate` | Choose whether, how, and at what model tier to delegate work; agent prompt requirements, the single-agent plan/TDD/implement/self-review loop (≤1000 LOC), and durable tracking of delegated work |
 | `dependabot-merge` | Bulk-process dependabot PRs -- audit, comment, merge safe ones, rebase failures |
-| `frontend-best-practices` | Frontend best practices -- TypeScript, React/Vue/Svelte, CSS, accessibility, testing |
 | `git-and-github` | All git/gh commands, GitHub interactions, and access-denied issues |
-| `go-best-practices` | Go best practices -- idioms, error handling, concurrency, testing patterns |
 | `grand-admiral` | Multi-agent orchestration -- spawning, isolation, coordination, recovery |
 | `grumpy-review` | Multi-agent code review with consolidated severity-ranked report |
 | `lessons-learned` | Extract and save reusable learnings from the session |
 | `merge-base` | Careful merge of remote base branch into current feature branch |
 | `push` | Commit, push, and create/update PR -- auto-creates feature branch if on base |
-| `python-best-practices` | Python best practices -- PEP 8, type hints, testing, error handling |
 | `release` | Bump version (SemVer), update changelog, commit, push, and create GitHub release |
 | `report-format` | Unified review report format for all finding-producing agents |
 | `review-dependency` | Security-focused dependency update review |
 | `review-pr` | Audit and review pull requests |
-| `rust-best-practices` | Rust programming checklists (Microsoft Pragmatic + Rust API Guidelines) |
-| `security-best-practices` | OWASP-based secure programming checklists |
+| `security-best-practices` | Router to language-specific security pitfall references (Rust, Go, Python, TypeScript) beyond general OWASP knowledge; fixes the citation vocabulary for security findings |
 | `severity` | Consistent severity classification (CRITICAL-INFO) for review findings |
-| `track-minions` | Persist delegated and multi-step task state across context loss |
 | `triage` | Reproduce and root-cause GitHub issues, assess severity, and post status |
 | `triage-findings` | Interactive finding triage -- classify in browser, decisions feed back to Claude |
 | `validate-findings` | LLM validation pass for consolidated review findings |
-| `workflow-simplified` | Single-agent plan/TDD/implement/self-review loop for bug fixes or small-to-medium changes (≤1000 LOC) |
-
-## Evaluated Skills
-
-### Skill: `security-best-practices`
-
-Actionable security checklists organized by OWASP Top 10 (2021) categories. Each checklist item links to the relevant OWASP Cheat Sheet. The skill instructs the model to fetch the full cheat sheet for every item that could be relevant, ensuring detailed and up-to-date guidance.
-
-**Evaluation.** The skill was evaluated on 3 security review scenarios (Node.js auth endpoint, Django file upload API, Go HTTP proxy) across 7 expectations each. Results compare using the skill vs. relying on the model's built-in knowledge alone.
-
-| Configuration | Findings | Pass Rate | Debatable |
-|---------------|----------|-----------|-----------|
-| Opus + skill | 33 | **21/21 (100%)** | 11% |
-| Opus (no skill) | 26 | 19/21 (90%) | 24% |
-| Sonnet + skill | 24 | **21/21 (100%)** | 18% |
-| Sonnet (no skill) | 29 | 18/21 (86%) | 21% |
-
-**Precision.** 0 false positives across all 4 configurations (216 findings reviewed). The skill reduces the debatable rate: with-skill outputs average 14% debatable vs. 22% without. Debatable items are real observations where severity or relevance is subjective.
-
-**What the skill adds:**
-
-- **Consistent OWASP references**: Without the skill, both models omit cheat sheet links from their output. The skill ensures every finding includes a link to the relevant OWASP cheat sheet for follow-up reading.
-- **Targeted vulnerability coverage**: Without the skill, models occasionally miss key expectations (e.g., dangerous file type warnings, missing auth on a proxy endpoint). The skill's structured checklist guides systematic review across all OWASP Top 10 categories.
-- **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 90% and 86% respectively without it.
-- **Lower debatable rate**: With the skill, 11-18% of findings are debatable vs. 21-24% without, indicating more precisely targeted recommendations.
-
-### Skill: `rust-best-practices`
-
-Rust programming checklists from [Microsoft Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines/) and [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Each checklist item is tagged with a guideline identifier (M-prefixed for Microsoft, C-prefixed for API Guidelines) and links to detailed reference material bundled with the skill.
-
-**Evaluation.** The skill was evaluated on 3 Rust review scenarios (library API review, application code review, crate design advisory) across 7 expectations each. Results compare using the skill vs. relying on the model's built-in knowledge alone.
-
-| Configuration | Findings | Pass Rate | Debatable |
-|---------------|----------|-----------|-----------|
-| Opus + skill | 35 | **21/21 (100%)** | 15% |
-| Opus (no skill) | 25 | 18/21 (86%) | 31% |
-| Sonnet + skill | 39 | **21/21 (100%)** | 25% |
-| Sonnet (no skill) | 29 | 18/21 (86%) | 23% |
-
-**Precision.** 0 false positives with the skill loaded (74 findings reviewed). Without the skill, Sonnet produced 1 false positive across 56 findings. The skill reduces the debatable rate: with-skill outputs average 20% debatable vs. 27% without. Debatable items are real observations where severity or relevance is subjective.
-
-**What the skill adds:**
-
-- **Guideline identifiers in output**: Without the skill, neither model references M-/C- guideline codes. The skill ensures findings cite specific identifiers (e.g., M-PANIC-IS-STOP, C-STRUCT-PRIVATE) so readers can look up the authoritative source.
-- **Complete coverage of less obvious practices**: Without the skill, both models miss `Send + Sync` recommendations for async runtime compatibility. The skill's checklist ensures systematic coverage including items that are easy to overlook.
-- **100% pass rate**: Both Opus and Sonnet achieve perfect scores with the skill loaded, compared to 86% without it.
-- **Lower debatable rate**: With the skill, 15-25% of findings are debatable vs. 23-31% without, and no false positives vs. 1 without.
-
-## Sources
-
-| Skill | Source |
-|-------|--------|
-| `security-best-practices` | [OWASP Cheat Sheet Series](https://github.com/OWASP/CheatSheetSeries) |
-| `rust-best-practices` | [Microsoft Rust Guidelines](https://microsoft.github.io/rust-guidelines/) ([checklist](https://microsoft.github.io/rust-guidelines/guidelines/checklist/index.html)), [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) ([checklist](https://rust-lang.github.io/api-guidelines/checklist.html)) |
 
 ## License
 

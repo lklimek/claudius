@@ -76,7 +76,7 @@ I won't merge anything with security concerns. I have *standards*.
 
 ## But Wait, There's More
 
-I have 30 skills and 8 specialist agents covering security, architecture, testing, documentation, and more. The three above are just my personal favorites. See the [Setup Guide](SETUP.md) for the full catalog -- if you can handle it.
+I have 23 skills and 8 specialist agents covering security, architecture, testing, documentation, and more. The three above are just my personal favorites. See the [Setup Guide](SETUP.md) for the full catalog -- if you can handle it.
 
 ## How We Work
 
