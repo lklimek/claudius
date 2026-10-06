@@ -1,14 +1,14 @@
 ---
 name: ci-dance
 description: "This skill should be used when the user says 'ci-dance', 'make the PR green', 'ship this and fix CI', 'push and handle reviews', or wants end-to-end PR pipeline automation."
-argument-hint: "timeout=300"
+argument-hint: "timeout=300 bots=<name,...>"
 user-invocable: true
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bash(git branch --show-current), Bash(git status*), Bash(git log *), Bash(git diff *), Bash(git show *), Bash(git cherry-pick *), Bash(git worktree add *), Bash(git worktree list*), Bash(git worktree remove *), Bash(git worktree prune), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *)
 ---
 
 # CI Dance — Unattended PR Pipeline
 
-Autonomous loop: push, run three parallel streams (CI, grumpy-review, copilot review) that fix their own findings, merge, repeat — until done or stuck.
+Autonomous loop: push, run three parallel streams (CI, grumpy-review, review bots) that fix their own findings, merge, repeat — until done or stuck.
 
 ## Prerequisites
 
@@ -18,16 +18,17 @@ Load `claudius:git-and-github` first. Changes to push (or commits already on a r
 
 Invocation is full consent to push, fix, and re-push — no confirmations, and skip the "ask user" steps of `/push`, `/grumpy-review`, `/check-pr-comments`. **NEVER merge** — merging is the user's.
 
-## Timeout
+## Arguments
 
-`$ARGUMENTS` `timeout=N` minutes (default **300**) from invocation; check before each iteration — hard stop.
+- `timeout=N` minutes (default **300**) from invocation; check before each iteration — hard stop.
+- `bots=<name,...>` (optional) — the review bots to trigger this run; overrides discovery (Review Stream).
 
 ## Main Loop
 
 **REPEAT UNCONDITIONALLY** until Step 5 triggers an exit; log `=== CI Dance: Iteration {n} starting ===` each time. Track iteration count, `start_time`, CI/review iterations, findings fixed and claim-deferred. Stopping after one iteration is a bug.
 
 1. **Push** — `/push`
-2. **Three streams** in parallel (CI, Grumpy, Review), communicating to CLAIM findings and avoid duplicate fixes
+2. **Three streams** in parallel (CI, Grumpy, Review), communicating to CLAIM findings and avoid duplicate fixes — the Grumpy Stream starts as soon as the iteration's changes are committed, without waiting for the push
 3. **Merge** — combine the streams' fixes, sync with the PR's base branch
 4. **Resolve** — addressed bot review threads
 5. **Exit check** — unless it triggers an exit, return to Step 1
@@ -73,10 +74,18 @@ CI runs automatically on push (no trigger). Wait and collect per Watch and Colle
 
 Invoke `/grumpy-review` locally (runs inline, spawns its own reviewers, produces a severity-ranked JSON report). Read the report (findings carry severity AND `merge_class`), discard outdated/false positives, route by merge class, then the shared fix sub-step.
 
+**Fix from the local `report.json`, immediately.** The stream needs a commit to review — not the push, the PR, or CI — so spawn it first and never hold it for any of them. Never wait for the findings to appear on the PR, and never post them there as a precondition for fixing: publishing review comments is not part of this loop. Only the *push* of its fixes waits — for Step 3's merge and the next Step 1.
+
 #### Review Stream
 
-1. **Trigger**: `gh pr edit --add-reviewer @copilot || true`
-2. **Wait**: poll `${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh <owner/repo> <pr>` every 30 s, comparing review IDs to detect new ones (also any human/bot review added since last iteration). Minimum wait 5 min, maximum 20 min — proceed without if no review appears.
+1. **Trigger** every review bot this repo uses, each by its own mechanism — there is no default bot:
+   - **label** — `gh pr edit <pr> --add-label <label>`
+   - **mention** — `gh pr comment <pr> --body-file <file>` containing the bot's trigger phrase (e.g. `@<bot> please review`)
+   - **review request** — `gh pr edit <pr> --add-reviewer <bot>`
+   - **automatic on push** — nothing to do
+
+   Which bots, and which mechanism each needs: `bots=` argument → project instructions (`CLAUDE.md`) → MemCan → how recently merged PRs in this repo were reviewed (`gh pr list --state merged`, `gh pr view <n> --json reviews,labels,comments`). Unknown mechanism for a named bot → try a review request once and report it. No bot found → skip the trigger and collect whatever reviews arrive. Do not re-trigger a bot whose review of the current head is still pending.
+2. **Wait**: poll `${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh <owner/repo> <pr>` every 30 s, comparing review IDs to detect new ones (any bot or human review added since last iteration). Minimum wait 5 min, maximum 20 min — proceed without if no review appears.
 3. **Collect & classify**: fetch all review comments via `/check-pr-comments` (skip confirmations); verify each issue exists in current code, rate the floats, check for false positives; route by `merge_class` — an external reviewer's comment does not become this PR's work by virtue of being valid.
 4. Shared fix sub-step.
 
@@ -112,7 +121,7 @@ Evaluate **exactly one** outcome and log `=== CI Dance: <OUTCOME> after {n} iter
 1. **EXIT SUCCESS** — ALL three streams applied zero fixes this iteration AND CI was green AND no `blocking` findings remain, with every `non_blocking` finding fixed or explicitly carried into the Final Report (`out_of_scope_follow_up` never gates the exit — it is reported for the user). Report stats, remind the user to merge.
 2. **EXIT TIMEOUT** — elapsed time exceeds the timeout. Report current state and what remains.
 3. **EXIT STUCK** — same failure or finding persists after 2-3 fix attempts. Report what was tried.
-4. **EXIT NO-REVIEW** — Review Stream's 20-minute wait produced no bot review and CI is green: report success, noting the review was skipped.
+4. **EXIT NO-REVIEW** — no review bot is configured or the Review Stream's 20-minute wait produced no bot review, and CI is green: report success, noting the review was skipped.
 5. **CONTINUE** — any stream applied fixes, or CI was not green, or `blocking`/unhandled `non_blocking` findings remain. Log `=== CI Dance: Iteration {n} complete, continuing to iteration {n+1} ===` and **return to Step 1 now.** Do NOT stop, do NOT generate the Final Report, do NOT consider the task complete.
 
 Outcomes 1-4 proceed to the Final Report.

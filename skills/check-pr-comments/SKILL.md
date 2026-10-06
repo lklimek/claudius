@@ -35,7 +35,7 @@ For every unresolved inline comment, read the code at the referenced location (a
 - Semantic satisfaction, not syntactic; every sub-item independently — resolved only when **all** are addressed; the intended end-user/developer experience, not just technical correctness.
 - **Call-tree walk on touched functions**: if the comment references a function whose body or signature changed in the resolution commits (`git diff <RESOLUTION_BASE>...HEAD -- <file>`), run [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) first — a caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up.
 
-**Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`) or the API returns `type: "Bot"`; **Human** — all others.
+**Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`), the API returns `type: "Bot"`, or the project instructions name the account as a review bot (some run under ordinary user accounts); **Human** — all others.
 
 ## 4. Present Summary
 
@@ -59,7 +59,7 @@ Steps 5-7 run only on explicit request (e.g. "generate report", "with report"). 
 
 ## 5. Build Structured Report JSON
 
-Read [references/structured-report.md](references/structured-report.md) for the `report.json` shape, finding format, title/permalink/scoring rules. Recipe pinned here:
+The report has the same structure as a `grumpy-review` report — one definition, not a parallel one: finding shape per the `report-format` skill (load it), envelope per its [coordinator-envelope.md](../report-format/references/coordinator-envelope.md). [references/structured-report.md](references/structured-report.md) lists only what a comment check adds (comment fields, title, permalink and scoring rules). Recipe pinned here:
 
 - **Resolved** comments: `likelihood=0.0, impact=0.0, relevance=0.0` — the Informational floor (`claudius:severity` § 3), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted via `isResolved: true` (step 3), say it was already resolved on GitHub rather than inventing an unverified fix. The coordinator derives `severity = 1` (INFO).
 

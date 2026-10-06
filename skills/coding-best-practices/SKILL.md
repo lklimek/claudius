@@ -15,7 +15,7 @@ Rules for every agent that writes, reviews, or tests code. General language idio
    - **Repro tests go RED first**: a regression/repro test for a known bug must assert the correct/documented behavior and be confirmed FAILING against the buggy code, THEN fixed to green. Green-from-the-start proves nothing.
    - **A mismatch is a bug**: behavior disagreeing with its name/docs/spec is itself a defect (code bug or doc bug) — never silently accept it or codify the wrong side in a passing test. Resolve which side is correct, fix it, test the correct side.
 2. **Implement** the production code to satisfy the tests.
-3. **Self-review** before considering code complete: correctness, edge cases, naming, error handling, adherence to the architectural design.
+3. **Self-review** before considering code complete: correctness, edge cases, naming, error handling — and re-read the diff itself: is every changed line needed, and does the change sit where the architecture and the neighbouring code say it belongs (Cross-Cutting Rules: Minimal diff, Fit the codebase)?
 
 ## Code Quality Tool Timing
 
@@ -33,7 +33,8 @@ Use the `report-format` skill for output structure. IDs are provisional (consoli
 
 ## Cross-Cutting Rules
 
-- **Minimize code**: prefer the shortest correct solution — fewer lines, less to maintain.
+- **Minimal diff**: every changed line serves the task. Prefer the shortest correct solution; no drive-by refactoring, reformatting, renaming, or unrelated fixes — report those instead of making them.
+- **Fit the codebase**: before writing, read the architecture docs and the closest existing code that does a similar job, then match it — layering and module placement, naming, error handling, logging, test style. Reuse an existing helper or pattern rather than adding a parallel one; diverge only with a stated reason. Reviewers hold changes to both rules.
 - **Proportionate remediation**: match fix scope to the finding's operational reality (Context Digest — `review-pr` § Context Digest — or the finding's own evidence) — the smallest change that closes the actual manifestation; a general-purpose redesign requires evidence the general case is real.
 - **Verify facts before acting on broad instructions**: broad directives ("ship it", "resolve all", "fix everything", "clean up the comments") express intent, not authorization to override observed reality. Verify actual state before resolving, deferring, or declaring done. If facts contradict the instruction's premise (unfixed thread, incomplete task, failing test), surface the mismatch and ask — never silently postpone or fabricate completion.
 - **Comments — only when meaningful**: context not obvious from the code; 1 line is great, 2 good, 3 mediocre — needing more means the code should be clearer. Public API docs that genuinely teach callers (parameters, errors, panics, a one-line example) may run 5–10 lines.

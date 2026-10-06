@@ -55,6 +55,21 @@ sessions) and closed-book probes of what the model already knows. Skills 29 → 
   `release`, `git-and-github`, `bug-investigation` and all agent bodies: conditional detail moved
   to references, generic mechanics and duplicated rules removed. `ux-designer-diziet` targets
   WCAG 2.2.
+- **`security-engineer-smythe` reviews by tracing execution paths** through the reviewed scope —
+  entry points down to sinks, across file and diff boundaries — and reports the path as
+  evidence. Checklists supply questions along a path; they no longer bound the review (the
+  "Audit Checklist" is gone).
+- **`coding-best-practices`**: new cross-cutting rules *Minimal diff* (every changed line serves
+  the task; no drive-by changes) and *Fit the codebase* (match the architecture and the closest
+  similar code); self-review re-reads the diff against both.
+- **`ci-dance`**: the Grumpy Stream starts as soon as changes are committed and fixes straight
+  from the local report — it never waits for the push, CI, or findings appearing on the PR; only
+  the push of its fixes waits. The Review Stream triggers whichever review bots the repo uses,
+  each by its own mechanism (label, mention, review request, automatic) — no Copilot default;
+  new `bots=` argument.
+- **`check-pr-comments`** reports use the shared report structure (`report-format` +
+  `coordinator-envelope.md`, as `grumpy-review` does); its reference lists only comment-specific
+  additions. Accounts the project names as review bots count as bots.
 - `allowed-tools` anchored to `${CLAUDE_PLUGIN_ROOT}/scripts/…` in `ci-dance`, `triage-findings`,
   `validate-findings`, `report-format`; `review-dependency` cleanup narrowed to
   `/tmp/claude/dep-review-*`.

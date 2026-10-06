@@ -60,7 +60,7 @@ The single agent stands in for the entire trio — its prompt must cover securit
 
 | Agent (`subagent_type`) | Model | Focus |
 |---|---|---|
-| `claudius:security-engineer-smythe` | opus | OWASP Top 10, injection, concurrency, panics, DoS, known vulns |
+| `claudius:security-engineer-smythe` | opus | Execution paths through the reviewed scope, entry point to sink — trust boundaries, untrusted data flow, authn/authz, injection, concurrency, panics, DoS, known vulns |
 | `claudius:project-reviewer-adams` | opus | Cross-artifact consistency, convention adherence, doc accuracy, structural/idiom code quality (readability, naming, DRY, cross-file duplication, maintainability), specialist orchestration |
 | `claudius:qa-engineer-marvin` | sonnet | Adversarial/correctness code quality — actually running tests and lints, edge cases, ownership/panic/error-handling bugs, independent verification against ground truth |
 
