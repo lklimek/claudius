@@ -1,16 +1,16 @@
 ---
 name: report-format
-description: "This skill should be used when emitting or consuming review findings. It defines the unified review report format for all finding-producing agents."
-allowed-tools: ["Bash(*validate_report.py *)", "Bash(*consolidate_reports.py *)", "Bash(*generate_review_report.py *)"]
+description: "This skill should be used when emitting or consuming review findings. It defines the finding JSON shape (schema v4), the fields producers must and must not emit, and the ID prefixes, for every finding-producing agent."
+allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *)
 ---
 
 # Review Report Format
 
-Unified format for all review findings. Schema: `schemas/review-report.schema.json` (v4.0.0). **Hard cutover**: versions 1.x and 2.x are no longer accepted. `3.x` is accepted read-only for in-flight reports — legacy floats migrate to the v4.0.0 field names on load, defaulting `relevance` and requiring a re-rate (see `severity` skill). New reports MUST declare `4.0.0`.
+Unified format for all review findings. Schema: `schemas/review-report.schema.json`; new reports declare `schema_version` `4.0.0`.
 
 ## Finding Structure
 
-Agents emit a JSON array of `finding_section` objects:
+Producers emit a JSON array of `finding_section` objects:
 
 ```json
 [
@@ -24,7 +24,7 @@ Agents emit a JSON array of `finding_section` objects:
         "impact": 0.7,
         "relevance": 0.5,
         "title": "Short finding title",
-        "tags": ["A03 Injection", "CWE-79"],
+        "tags": ["A05 Injection", "CWE-79"],
         "location": "src/auth.rs:42-56",
         "description": "What the issue is and why it matters",
         "impact_description": "What could go wrong (Markdown narrative)",
@@ -39,47 +39,26 @@ Agents emit a JSON array of `finding_section` objects:
 ]
 ```
 
-Producer-emitted shape: integer `severity` and float `overall_severity` are absent — the coordinator's derive pass adds them from `likelihood`/`impact`. The example validates against the v4 schema as-is; producers may run `validate_report.py` on their own output.
+**Required per finding**: `id`, `likelihood`, `impact`, `relevance`, `title`, `location`, `description`, `recommendation`. The three floats (0.0–1.0, rated per the `severity` skill) are the single source of truth for severity — the schema rejects a finding missing any, and `validate-findings` is the only path to re-estimate them post-hoc.
 
-## Required Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | `PREFIX-NNN` -- see ID Prefixes below |
-| `likelihood` | float | 0.0–1.0, probability the defect is hit (see `severity` skill) |
-| `impact` | float | 0.0–1.0, worst plausible outcome, capped by backstop zone (see `severity` skill) |
-| `relevance` | float | 0.0–1.0, PR-goal fit — drives `merge_class`/ordering, not severity math (see `severity` skill) |
-| `title` | string | Short finding title |
-| `location` | string | Full file path with lines: `src/auth.rs:42-56` -- never bare line numbers |
-| `description` | string | What the issue is and why it matters |
-| `recommendation` | string | How to fix it |
-
-Producers MUST emit `likelihood`, `impact`, and `relevance` — the schema rejects findings missing any; the coordinator derives `overall_severity` and integer `severity` per the `severity` skill's band table. The `validate-findings` skill is the only documented path to re-estimate floats post-hoc when a producer's partial output arrives without them.
-
-**Optional**: `tags` (OWASP, CWE, etc.), `impact_description` (Markdown impact narrative; pairs with the numeric `impact` float), `code_snippets` (see below).
+- `location` — full file path with lines (`src/auth.rs:42-56`), never a bare line number.
+- `tags` (optional) — OWASP category, CWE, guideline IDs. `impact_description` (optional) — Markdown narrative paired with the `impact` float.
+- `description`, `impact_description`, `recommendation` are **Markdown** (CommonMark — blank line before lists, code blocks, headings); `title`, `category`, `location` are plain text.
+- Check your own output: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py <file>` — the producer shape above validates as-is.
 
 ### code_snippets
 
-Array of `{"language", "caption", "content"}`, only when the producer captured exact source during analysis — never invent one. `language` is a free-form tag naming the snippet's syntax for highlighting (e.g. `rust`, `python`, `diff` for a raw diff hunk); `caption` is a short `path:location` label; `content` is the literal snippet text.
-
-**Merge classification** (orthogonal to severity — see `severity` skill § Merge Classification): `merge_class` enum `blocking|non_blocking|out_of_scope_follow_up|disputed` and `intent_basis` (string|null — for `blocking`, the gate ID plus one line of evidence, e.g. `"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`). Coordinator-owned like `overall_severity`; the ONLY producers allowed to emit them are **coordinator-inline producers** (review-pr Pass C `pr_promises`, check-pr-comments, review-dependency) — same exception pattern as `location_permalink` below. `summary_statistics.merge_class_counts` (optional) carries the per-class tally.
+Array of `{"language", "caption", "content"}`, only when the producer captured exact source during analysis — never invent one. `language` is a free-form syntax tag (e.g. `rust`, `python`, `diff` for a raw diff hunk); `caption` is a short `path:location` label; `content` is the literal snippet text.
 
 ## Coordinator-derived / validator-owned fields — DO NOT emit
 
 Populated downstream; producers must NOT set:
 
-- `overall_severity` — Python-computed mean of `likelihood`/`impact` (`relevance` excluded — see `severity` skill § Derivation)
-- `location_permalink` — Python-constructed GitHub `blob/<sha>/<path>#L<n>` URL. Coordinator-derived in the standard multi-agent pipeline. **Exception — standalone producers** (a producer rendering its own final report with no coordinator derive-pass, canonically `check-pr-comments`): see `check-pr-comments/SKILL.md` § `location_permalink` for the exact emit condition.
-- `metadata.repository` — coordinator derives from `git remote get-url origin`
-- `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by the `validate-findings` skill
-- `merge_class`, `intent_basis` — coordinator-assigned during consolidation per `severity` skill § Merge Classification. **Exception**: coordinator-inline producers (review-pr Pass C, check-pr-comments, review-dependency) emit them directly.
-- Derived integer `severity` when emitting floats — the coordinator overrides
-
-## Long-Text Field Format
-
-`description`, `impact_description`, `recommendation`, `ai_assessment`, `executive_summary.summary_text` / `.verdict_text` are **Markdown** (CommonMark — blank line before lists, code blocks, headings); single-line fields (`title`, `category`, `location`, …) are plain text. Reference renderer: `scripts/generate_review_report.py` (HTML via `markdown` + `nh3`, PDF via ReportLab).
-
-Coordinator/standalone-producer concerns (envelope wrapping, pipeline scripts) — not a fan-out producer's job — are in [references/coordinator-envelope.md](references/coordinator-envelope.md).
+- integer `severity` and `overall_severity` — Python-computed from `likelihood`/`impact` (`severity` skill § Derivation)
+- `location_permalink` — coordinator-derived. Exception for a standalone producer rendering its own final report: `check-pr-comments` § `location_permalink`
+- any `metadata` field (`repository`, `commit`, `date`, `branch`)
+- `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by `validate-findings`
+- `merge_class` (`blocking|non_blocking|out_of_scope_follow_up|disputed`) and `intent_basis` (string|null — for `blocking`, the gate ID plus one line of evidence, e.g. `"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`) — coordinator-assigned per `severity` skill § Merge Classification. **Exception**: coordinator-inline producers (review-pr Pass C `pr_promises`, check-pr-comments, review-dependency) emit them directly.
 
 ## File Output
 
@@ -92,26 +71,17 @@ Write findings files with the Write tool — never `cat > file`, `tee`, heredocs
 | `SEC-` | security | security-engineer-smythe |
 | `QA-` | code_quality | qa-engineer-marvin |
 | `PROJ-` | project | project-reviewer-adams |
-| `CODE-` | code_quality | project-reviewer-adams, qa-engineer-marvin (generic) |
-| `RUST-` | code_quality | project-reviewer-adams, qa-engineer-marvin (Rust) |
-| `PY-` | code_quality | project-reviewer-adams, qa-engineer-marvin (Python) |
-| `GO-` | code_quality | project-reviewer-adams, qa-engineer-marvin (Go) |
-| `FE-` | code_quality | project-reviewer-adams, qa-engineer-marvin (frontend) |
-| `DOC-` | documentation | technical-writer-trillian |
-| `CMT-` | pr_comments | check-pr-comments |
-| `PPM-` | pr_promises | review-pr (Pass C: promise verification) |
-| `DEP-` | dependencies | review-dependency |
+| `CODE-`, `RUST-`, `PY-`, `GO-`, `FE-` | code_quality | generic / Rust / Python / Go / frontend — whichever of Adams or Marvin surfaced the finding |
 | `CALL-` | call_tree | reviewer call-tree inspection pass |
+| `DOC-` | documentation | technical-writer-trillian |
 | `ARCH-` | architecture | architect-nagatha |
 | `UX-` | ux | ux-designer-diziet |
+| `DEP-` | dependencies | review-dependency |
+| `CMT-` | pr_comments | check-pr-comments — plus `reviewer`, `comment_id`, `comment_url`, `thread_id`, `verdict` fields (schema-defined) |
+| `PPM-` | pr_promises | review-pr Pass C — `location` is a synthetic string (`PR-title`, `PR-body:summary-bullet-N`, `PR-body:out-of-scope-item-N`), rendered as plain text; `relevance: 1.0`. Worked example: `review-pr` § Finding emit template |
 
-`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-` are category prefixes, not identity-bound — whichever of `project-reviewer-adams` or `qa-engineer-marvin` surfaced the finding emits them. IDs are provisional — consolidation deduplicates and reassigns final IDs.
+IDs are provisional — consolidation deduplicates and reassigns final IDs.
 
-## Domain-Specific Fields
+## Full reports
 
-Agents may add context to `description` and `tags` per their domain:
-
-- **security-engineer**: OWASP category and CWE in `tags`; CVE references and evidence in `description`
-- **qa-engineer**: requirement reference, expected vs actual behavior in `description`
-- **check-pr-comments**: `reviewer`, `comment_id`, `comment_url`, `thread_id`, `verdict` fields (schema-defined)
-- **review-pr Pass C (pr_promises)**: `location` is a synthetic string (no file:line) — use `PR-title`, `PR-body:summary-bullet-N`, or `PR-body:out-of-scope-item-N`. Renderers leave it as plain text (no permalink); `relevance: 1.0` — a title/body mismatch is inherently about this PR. Full worked example with `merge_class`/`intent_basis`: `review-pr` § Finding emit template.
+Wrapping sections into a complete report (envelope, metadata, `summary_statistics.merge_class_counts`), the pipeline scripts, and accepted legacy schema versions are coordinator/standalone-producer concerns — a fan-out producer never needs them: [references/coordinator-envelope.md](references/coordinator-envelope.md).
