@@ -14,7 +14,7 @@ git ls-tree HEAD --name-only -r .github/ | grep -i pull_request_template
 
 If a template exists, fold its required content into the linked skeleton below. See the main skill's §Creating a PR for the rationale (plain language up top, technical detail in `Detailed discussion`).
 
-Fill in the skeleton from [pr-body-template.md](pr-body-template.md) (fenced block only, not the page's title or prose), save the completed body to a file, then create the PR as a draft via `--body-file` (not `--body` — avoids shell-escaping the skeleton inline):
+Fill in the PR-body skeleton (`git-and-github` § Creating a PR links it; fenced block only, not the page's title or prose), save the completed body to a file, then create the PR as a draft via `--body-file` (not `--body` — avoids shell-escaping the skeleton inline):
 
 ```bash
 gh pr create --draft --title "<type>: <description>" --body-file /path/to/filled-in-pr-body.md
@@ -22,7 +22,7 @@ gh pr create --draft --title "<type>: <description>" --body-file /path/to/filled
 
 ## Reviewing a PR
 
-See [pr-review.md](pr-review.md) for the full procedure: fetching PR context, deduplication, diff verification, and posting draft reviews.
+The full procedure (fetching PR context, deduplication, diff verification, posting draft reviews) is the PR-review reference that `git-and-github` § Reviewing a PR links.
 
 ## Using `gh api`
 
@@ -40,7 +40,7 @@ Check for issue templates before creating:
 git ls-tree HEAD --name-only -r .github/ | grep -i issue_template
 ```
 
-If none exists, fill in the skeleton from [issue-body-template.md](issue-body-template.md) (fenced block only; see the main skill's §Issues), save the completed body to a file, then:
+If none exists, fill in the issue-body skeleton (fenced block only; `git-and-github` § Issues links it), save the completed body to a file, then:
 
 ```bash
 gh issue create --title "<title>" --body-file /path/to/filled-in-issue-body.md

@@ -21,7 +21,7 @@ it via `Skill` if it is not in your context).
 ## Call-tree inspection
 
 When the diff modifies or removes any function/method declaration, run a deep transitive
-in-repo caller walk before emitting findings — the procedure is `call-tree-walk.md`, at the
+in-repo caller walk before emitting findings — the procedure is the call-tree walk file at the
 path your spawn prompt gives (read once per review). Finding shape: `category: "call_tree"`, ID prefix `CALL-`, `description` MUST
 start with `Walked via: <tool>`. Skip for pure additions, doc-only PRs, and test-file-only
 changes.
