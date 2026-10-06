@@ -43,8 +43,7 @@ sessions) and closed-book probes of what the model already knows. Skills 29 → 
   items, 28 → 11.5 KB) and OWASP Top 10:2025 citation vocabulary (was 2021).
 - **Preloads**: `architect-nagatha` and `qa-engineer-marvin` drop `security-best-practices`;
   `technical-writer-trillian` drops `severity`/`report-format` (loads them on demand, gains
-  `Skill`); `security-engineer-smythe` gains `Skill` and loads `security-best-practices` on demand (a
-  frontmatter preload gives the agent no path to the skill's `references/`); `claudius` drops `severity`.
+  `Skill`); `security-engineer-smythe` gains `Skill`; `claudius` drops `severity`.
 - **`severity`**: merge-classification detail and the external-reviewer map moved to
   `references/merge-classification.md`; § 5 keeps the enum, ownership and never-defer rules.
 - **`report-format`** is the one finding-shape contract (`producer-contract.md` no longer
