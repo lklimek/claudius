@@ -18,7 +18,7 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# Skills whose body runs plugin scripts: rules AND body invocations are pinned in lockstep.
+# Skills that grant plugin scripts via allowed-tools: rules AND body invocations are pinned in lockstep.
 ANCHORED_SKILLS = (
     "grumpy-review",
     "review-pr",
@@ -79,7 +79,7 @@ def test_body_invocations_match_a_rule(skill: str) -> None:
 def test_no_skill_has_unanchored_script_rule_or_skill_dir_script_path(
     path: Path,
 ) -> None:
-    """Holds for every skill, incl. those with no script today (review-dependency, git-and-github)."""
+    """Holds for every skill, incl. those granting no script rule today (review-dependency, git-and-github)."""
     front, body = _split(path)
     for rule in _bash_rules(front):
         if re.search(r"\.(py|sh)\b", rule):
