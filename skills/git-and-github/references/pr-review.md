@@ -2,6 +2,16 @@
 
 All operations use the `gh` CLI and the wrapper scripts at `<plugin-root>/scripts/`. Placeholders are not substituted in reference files: the caller writes the absolute `<plugin-root>` its SKILL.md defines (the plugin directory itself, never a `…/skills/<name>/../..` form — anchored `allowed-tools` rules match the literal prefix) into each command.
 
+## Contents
+
+- Get PR Context
+- PR-Level Comments
+- Fetch Existing Reviews and Comments
+- Verify Lines Are Within the Diff
+- Post a Review from report.json
+- Post Draft Review (hand-built payload)
+- Wrapper Scripts
+
 ## Get PR Context
 
 ```bash

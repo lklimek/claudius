@@ -7,90 +7,16 @@ disable-model-invocation: true
 
 # Release
 
-Load `claudius:git-and-github` first — all commit, push, and PR conventions come from there.
-
-## Arguments
-
-Optional: `major`, `minor`, or `patch`. If omitted, auto-detect from git history.
+Load `claudius:git-and-github` first — all commit, push, and PR conventions come from there. Optional argument: `major`, `minor`, or `patch`; if omitted, auto-detect from git history. If any step fails, stop and report — never continue with partial state.
 
 ## Steps
 
-### 0. Pre-flight
-
-1. Working tree must be clean. If dirty, stop and ask.
-2. If on a feature branch, warn and ask whether to release from here or switch to main first.
-
-### 1. Detect Project Stack
-
-Scan repo for version-carrying files:
-
-| File | Version location |
-|---|---|
-| `Cargo.toml` (root/workspace) | `[package].version` or `[workspace.package].version` |
-| `Cargo.toml` (workspace members) | each member's `[package].version` (may use `workspace = true`) |
-| `pyproject.toml` | `[project].version` or `[tool.poetry].version` |
-| `setup.py` / `setup.cfg` | `version=` kwarg or `[metadata].version` |
-| `package.json` (root + workspaces) | `"version"` field |
-| `lerna.json` | `"version"` (`"independent"` = per-package) |
-| `.claude-plugin/plugin.json` | `"version"` field |
-| `version.txt` / `VERSION` | entire file content |
-
-If no version files found, stop and ask.
-
-### 2. Validate Version Consistency
-
-Collect all detected versions:
-
-1. **All identical** — proceed.
-2. **Intentionally independent** (Cargo workspace members with explicit versions, lerna `"independent"`, npm workspaces with different versions) — list each component + version, ask user which to release.
-3. **Unexpectedly inconsistent** — stop, show mismatch table, let user decide.
-
-### 3. Determine New Version
-
-1. Get commits since last tag:
-   ```bash
-   git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --oneline --no-decorate
-   ```
-
-2. **Investigate actual diffs** — commit prefixes can be misleading. Read full diffs for commits touching public APIs, interfaces, or config formats.
-
-3. If bump type provided as argument, use it. Otherwise auto-detect:
-   - **major**: breaking changes in diffs, `BREAKING CHANGE` in body, or type suffix `!`
-   - **minor**: new features in diffs, or `feat:` commits
-   - **patch**: only fixes, refactors, docs, CI
-   - Default to `patch` if unclear
-
-4. **Ask for confirmation**: current → proposed version, commit list, key diff findings, justification, files to update. Options: proposed (recommended), alternatives, abort.
-
-### 4. Update Version Files
-
-Update all version files (within confirmed scope from Step 2). Then sync lock files:
-- `Cargo.lock` → `cargo update --workspace`
-- `package-lock.json` / `yarn.lock` / `pnpm-lock.yaml` → run matching package manager install
-- `poetry.lock` → `poetry lock`
-
-### 5. Generate Changelog Entry
-
-Prepend the entry to `CHANGELOG.md` (create if absent) per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): commit types → sections, empty sections omitted, compare link added if the file uses them.
-
-### 6. Commit and Push
-
-Stage all modified version files, lock files, and `CHANGELOG.md`. Commit as `chore: release v{new}`. Push per `git-and-github` conventions. Verify push succeeds before proceeding.
-
-### 7. Create GitHub Release
-
-Write new changelog entry (this version only) to a temp file:
-```bash
-gh release create v{new} --title "v{new}" --notes-file {changelog_temp_file}
-```
-
-### 8. Summary
-
-Print: version change, updated files, release URL, triggered workflows (if known from CI config).
-
-## Constraints
-
-- NEVER create the release before pushing — tag must reference a remote commit.
-- NEVER skip lock file sync.
-- If any step fails, stop and report. Do not continue with partial state.
-- If versions are inconsistent and user hasn't confirmed scope, do not proceed.
+1. **Pre-flight** — the working tree must be clean (dirty → stop and ask). On a feature branch, warn and ask whether to release from here or switch to the base branch first.
+2. **Detect version files** — every version-carrying file in the repo: `Cargo.toml` (root, workspace, and members), `pyproject.toml`, `setup.py`/`setup.cfg`, `package.json` (root + workspaces), `lerna.json`, `.claude-plugin/plugin.json`, `version.txt`/`VERSION`. None found → stop and ask.
+3. **Validate consistency** — all identical → proceed. Intentionally independent (workspace members with explicit versions, lerna `"independent"`) → list each component and version, ask which to release. Unexpectedly inconsistent → stop, show the mismatch table, let the user decide; do not proceed without a confirmed scope.
+4. **Determine the new version** — commits since the last tag (`git describe --tags --abbrev=0`; none → from the root commit). **Read the actual diffs** of commits touching public APIs, interfaces, or config formats — commit prefixes can mislead. Use the argument if given, else SemVer 2.0 from what the diffs show: **major** for breaking changes (also `BREAKING CHANGE` in a body or a `!` type suffix), **minor** for new features (`feat:`), **patch** for fixes/refactors/docs/CI and when unclear. **Ask for confirmation**: current → proposed version, commit list, key diff findings, justification, files to update; offer the proposal, alternatives, and abort.
+5. **Update version files** within the confirmed scope, then sync every lock file with its package manager (`cargo update --workspace`, the matching npm/yarn/pnpm install, `poetry lock`). NEVER skip lock file sync.
+6. **Changelog** — prepend the entry to `CHANGELOG.md` (create if absent) per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); add a compare link if the file uses them.
+7. **Commit and push** — version files, lock files, `CHANGELOG.md`; message `chore: release v{new}`. Verify the push succeeded before continuing.
+8. **Create the GitHub release** — only after the push, so the tag references a remote commit. Write this version's changelog entry to a temp file: `gh release create v{new} --title "v{new}" --notes-file {changelog_temp_file}`.
+9. **Summary** — version change, updated files, release URL, triggered workflows (if known from CI config).

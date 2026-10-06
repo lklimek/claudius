@@ -1,6 +1,6 @@
 ---
 name: check-pr-comments
-description: "This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
+description: "Fetches a PR's review comments, verifies each against the current code, summarizes the status, and replies to or resolves threads. This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
 allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr comment *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-list-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(ghsudo ${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh *), Bash(gh search code *)
 ---
 
@@ -35,7 +35,7 @@ For every unresolved inline comment, read the code at the referenced location (a
 - Semantic satisfaction, not syntactic; every sub-item independently — resolved only when **all** are addressed; the intended end-user/developer experience, not just technical correctness.
 - **Call-tree walk on touched functions**: if the comment references a function whose body or signature changed in the resolution commits (`git diff <RESOLUTION_BASE>...HEAD -- <file>`), run [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md) first — a caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up.
 
-**Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`) or the API returns `type: "Bot"`; **Human** — all others.
+**Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`), the API returns `type: "Bot"`, or the project instructions name the account as a review bot (some run under ordinary user accounts); **Human** — all others.
 
 ## 4. Present Summary
 
@@ -49,98 +49,19 @@ Present concisely to the user:
 - Unresolved first, then resolved
 - Author type (bot/human) and planned action (auto-resolve, reply, etc.) per comment
 
-Default end of workflow. Steps 5-7 (structured report) run only on explicit request (e.g. "generate report", "with report"). Step 8 (resolve threads) applies to both flows.
+Default end of workflow, except step 8 (resolve threads).
 
 ---
 
 ## Optional: Structured Report (on request only)
 
+Steps 5-7 run only on explicit request (e.g. "generate report", "with report"). Step 8 applies to both flows.
+
 ## 5. Build Structured Report JSON
 
-Produce `report.json` per the unified report schema (`../../schemas/review-report.schema.json` v4.0.0; `3.x` accepted read-only for legacy reports, never for new output — this skill has no coordinator derive-pass to correct a stale version).
+The report has the same structure as a `grumpy-review` report — one definition, not a parallel one: finding shape per the `report-format` skill (load it), envelope per its [coordinator-envelope.md](../report-format/references/coordinator-envelope.md). Floats and `merge_class` are this skill's to assign, so first Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` and `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (skip what this session already loaded). [references/structured-report.md](references/structured-report.md) lists only what a comment check adds (comment fields, title, permalink and scoring rules). Recipe pinned here:
 
-### Report structure
-
-```json
-{
-  "schema_version": "4.0.0",
-  "metadata": {
-    "project": "<owner>/<repo>",
-    "date": "YYYY-MM-DD",
-    "branch": "<pr-branch>",
-    "commit": "<full 40-char SHA from `git rev-parse @{u}` (fall back to `git rev-parse HEAD` when the branch has no upstream)>",
-    "scope": "PR #<number> comment verification",
-    "reviewers": ["<unique reviewer usernames>"],
-    "report_type": "comment_check",
-    "pr_number": <number>
-  },
-  "executive_summary": {
-    "overall_assessment": "X of Y review comments resolved",
-    "verdict_action": "N comments require attention"
-  },
-  "summary_statistics": {
-    "total_findings": <total>,
-    "severity_counts": { "CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0 },
-    "verdict_counts": { "RESOLVED": <n>, "UNRESOLVED": <n> }
-  },
-  "findings": [
-    {
-      "title": "PR Comment Verification",
-      "category": "pr_comments",
-      "findings": [ ... ]
-    }
-  ]
-}
-```
-
-`metadata.commit` must be the full 40-character SHA when present (omit for non-git directories). Omit `metadata.repository` — no consumer of standalone comment-check reports needs it; permalinks (below) are built from `metadata.project`.
-
-### Finding format
-
-Each review comment becomes one finding:
-
-```json
-{
-  "id": "CMT-001",
-  "likelihood": 0.1,
-  "impact": 0.1,
-  "relevance": 0.5,
-  "title": "Add fee-headroom guard to transfer_with_change_address",
-  "location": "path/to/file.rs:42-56",
-  "location_permalink": "https://github.com/<owner>/<repo>/blob/<commit>/path/to/file.rs#L42-L56",
-  "description": "What the comment asked for (multi-line OK)",
-  "recommendation": "What was done (RESOLVED) or what to do (UNRESOLVED)",
-  "reviewer": "github-username",
-  "author_type": "bot | human",
-  "comment_id": 12345678,
-  "comment_url": "https://github.com/<owner>/<repo>/pull/<number>/files#r<commentId>",
-  "thread_id": "GraphQL-node-ID-for-thread-resolution",
-  "verdict": "RESOLVED or UNRESOLVED"
-}
-```
-
-#### `title` — rules
-
-≤ 80 characters, no truncation markers; no `<username>:` prefix (the renderer shows the reviewer); no verbatim copy of the comment's first line — strip Markdown markers, emoji, and severity labels (`Suggestion:`, `Nit:`, …); an imperative or noun phrase describing the requested change. Good: `Add fee-headroom guard to transfer_with_change_address`. Bad: `thepastaclaw: **🟡 Suggestion: \`transfer_with_change_address\` skips the \`Re...`.
-
-#### `location_permalink` — rules
-
-**Emit `location_permalink` whenever `metadata.project`, `metadata.commit`, and a line-addressable `location` (`path:line` or `path:start-end`) are all present** — standalone reports never see the coordinator's derive pass. Template: `https://github.com/{owner}/{repo}/blob/{commit}/{path}{anchor}` — `{owner}/{repo}` from `metadata.project`; `{commit}` the full 40-char SHA; `{path}` = `location` minus the trailing `:line`/`:start-end` suffix (split at the LAST `:` — paths may contain `:`), URL-encoding spaces, `#`, `?`, non-ASCII; `{anchor}` = `#L{line}` or `#L{start}-L{end}`. Example: `src/auth.rs:42-56` in `octo/widgets` → `https://github.com/octo/widgets/blob/<sha>/src/auth.rs#L42-L56`.
-
-**Omit** (never an empty string) when project or commit is missing, `location` has no `:line`/`:start-end` suffix, or the suffix isn't a valid integer/range — the coordinator's `_build_permalink` rejects those too, and emitting one breaks producer/coordinator parity.
-
-- **Resolved** comments: `likelihood=0.0, impact=0.0, relevance=0.0` — the Informational floor (`claudius:severity` § 3), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted via `isResolved: true` (step 3), state it was already resolved on GitHub rather than inventing an unverified fix description. The coordinator derives `severity = 1` (INFO) from the floats.
-- **Unresolved** comments: assess `likelihood` and `impact` per `claudius:severity` (blast radius folds into `impact`, capped by the finding's backstop zone). Rate `relevance` as PR-goal fit, not blast radius: the comment addresses the PR's core change ≈ `1.0`; adjacent/tangential suggestion ≈ `0.5`; pre-existing concern unrelated to this PR's diff ≈ `0.1` — do NOT default to `1.0`. The coordinator derives the integer `severity` band; never hand-type a label. Set `verdict: "UNRESOLVED"`; `recommendation` describes what remains.
-- `thread_id`: from `gh-list-review-threads.sh`. Needed for step 8.
-- **Merge class** (coordinator-inline producer exception — see `claudius:report-format`): RESOLVED comments omit `merge_class` (informational carve-out). Classify UNRESOLVED per `claudius:severity` § Merge Classification — `blocking` only when the concern trips a blocker gate (`intent_basis` names the gate ID plus the reviewer's request as evidence); otherwise `non_blocking` (in/adjacent to the change) or `out_of_scope_follow_up` — the latter is reported for the user's attention, never filed anywhere by this skill (`claudius:severity` § `out_of_scope_follow_up`).
-
-**Do NOT emit** (coordinator/validator-owned): `overall_severity`, `metadata.repository`, `ai_assessment`, `ai_verdict`, `ai_verdict_confidence`, and the derived integer `severity` when emitting floats (the coordinator overrides). `likelihood`/`impact`/`relevance` are required on every comment — without all three the coordinator cannot derive `overall_severity` and the schema rejects the finding. The `validate-findings` skill is the only documented path to populate floats post-hoc.
-
-**Optional**: `code_snippets` — when the comment quotes source you verified, attach as `[{language, caption, content}]`; never invent one.
-
-### Numbering
-
-Sequential IDs: `CMT-001`, `CMT-002`, … Order: unresolved first (severity descending), then resolved.
+- **Resolved** comments: `likelihood=0.0, impact=0.0, relevance=0.0` — the Informational floor (`claudius:severity` § 3), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted via `isResolved: true` (step 3), say it was already resolved on GitHub rather than inventing an unverified fix. The coordinator derives `severity = 1` (INFO).
 
 ## 6. Validate Report
 
@@ -156,11 +77,7 @@ If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid d
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py report.json --format md
 ```
 
-Present the rendered markdown to the user. Optionally generate HTML (`--format html`). The user can also invoke `triage-findings report.json` for interactive browser-based triage of unresolved comments.
-
-## CI Log Retrieval
-
-See `git-and-github` skill § Context Management for the subagent delegation pattern. Always delegate `get_job_logs` fetches to a subagent that extracts the relevant failure information.
+Present the rendered markdown (optionally `--format html`). The user can also run `triage-findings report.json` for interactive triage of unresolved comments.
 
 ## 8. Resolve and Reply to Threads
 

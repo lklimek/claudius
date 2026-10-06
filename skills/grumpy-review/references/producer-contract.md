@@ -1,66 +1,29 @@
 # Producer Contract
 
 Identical for every producer in a fan-out; spawn prompts point here (by absolute plugin path)
-instead of restating it. Mirrors `grumpy-review` § Craft Agent Prompts — keep in sync.
+instead of restating it.
 
 ## Finding format (JSON)
 
 Write findings to your assigned `<SCRATCH_DIR>/<role>-findings.json` as a bare JSON array of
-`finding_section` objects — no envelope object, no metadata fields:
+`finding_section` objects — no envelope object, no metadata fields. Shape, required fields, the
+do-NOT-emit list, and ID prefixes: the `report-format` skill (preloaded on reviewer agents; load
+it via `Skill` if it is not in your context).
 
-```json
-[
-  {
-    "title": "Section Title",
-    "category": "security|project|code_quality|dependencies|documentation|call_tree",
-    "findings": [
-      {
-        "id": "PREFIX-001",
-        "likelihood": 0.6,
-        "impact": 0.7,
-        "relevance": 0.5,
-        "title": "Short finding title",
-        "tags": ["A03 Injection", "CWE-79"],
-        "location": "src/auth.rs:42-56",
-        "description": "What the issue is and why it matters",
-        "impact_description": "What could go wrong (Markdown narrative)",
-        "recommendation": "How to fix it",
-        "code_snippets": [
-          {"language": "rust", "caption": "auth.rs:42", "content": "let user = unwrap_token(&hdr);"}
-        ]
-      }
-    ],
-    "positives": "Optional positive observations"
-  }
-]
-```
-
-**Required per finding**: `id`, `likelihood`/`impact`/`relevance` (floats 0.0–1.0), `title`,
-`location` (full file path, e.g. `src/auth.rs:42-56` — never a bare line number),
-`description`, `recommendation`. Rate `relevance` as real PR-goal fit — never default to
-`1.0`. The floats are the single source of truth; never hand-type a severity label.
-
-**Optional**: `tags` (OWASP `A01`–`A10`, CWE, language best-practice IDs — required for
-security findings), `impact_description`, `code_snippets` (only from source you actually
-captured — never invent one), `cross_domain_hint` (a peer role whose primary domain owns an
-issue you noticed incidentally — passively report it, never actively search outside your
-assigned scope).
-
-**Do NOT emit** (downstream-owned): `overall_severity`, `location_permalink`, any
-`metadata`/`commit`/`repository`/`date`/`branch` field, `ai_assessment`, `ai_verdict`,
-`ai_verdict_confidence`, `merge_class`, `intent_basis`, the derived integer `severity` when
-emitting floats. Missing any of `likelihood`/`impact`/`relevance` fails schema validation.
-
-**ID prefixes**: `SEC-` security, `PROJ-` project, `QA-`/`CODE-`/`RUST-`/`PY-`/`GO-`/`FE-`
-code quality, `DOC-` docs, `CALL-` call-tree. Assign provisional sequential IDs within your
-prefix (e.g. `SEC-001`, `SEC-002`) — collisions across parallel agents are fine, consolidation
-reassigns final IDs.
+- Rate `relevance` as real PR-goal fit — never default to `1.0`. Never hand-type a severity
+  label; the floats are the single source of truth.
+- `tags` are required for security findings: the OWASP Top 10:2025 category (`A01`–`A10`; A05 is
+  Injection in 2025 — name the edition if you cite another) and the CWE.
+- `cross_domain_hint` (optional): a peer role whose primary domain owns an issue you noticed
+  incidentally — passively report it, never actively search outside your assigned scope.
+- Assign provisional sequential IDs within your prefix (`SEC-001`, `SEC-002`) — collisions
+  across parallel agents are fine, consolidation reassigns final IDs.
 
 ## Call-tree inspection
 
 When the diff modifies or removes any function/method declaration, run a deep transitive
-in-repo caller walk before emitting findings — see `references/call-tree-walk.md` (read once
-per review). Finding shape: `category: "call_tree"`, ID prefix `CALL-`, `description` MUST
+in-repo caller walk before emitting findings — the procedure is the call-tree walk file at the
+path your spawn prompt gives (read once per review). Finding shape: `category: "call_tree"`, ID prefix `CALL-`, `description` MUST
 start with `Walked via: <tool>`. Skip for pure additions, doc-only PRs, and test-file-only
 changes.
 

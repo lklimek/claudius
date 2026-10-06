@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness."
+description: "Audits a pull request end to end: verifies the PR description against the diff (Pass C), runs a multi-agent grumpy-review, and posts a summary comment plus a draft inline review. This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness."
 allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/post_pr_review.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-pr-base-sha.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Agent, SendMessage
 ---
 
@@ -53,6 +53,8 @@ Audit whether the diff **functionally delivers** what the PR's self-description 
 ### Audit axes
 
 Run all three; at most one finding per axis-trigger (per promise on Axis 2). Verification is **functional**: locate the implementing code and confirm it delivers the claimed behavior — a matching hunk is necessary, not sufficient. For large diffs, delegate per-axis (or per-promise) judgment to subagents per `git-and-github` § Context Management.
+
+**Before scoring**, Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` and `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (skip what this session already loaded) — Pass C assigns floats and `merge_class` itself, and no agent preloads those rules for the coordinator.
 
 Trigger hints give `likelihood`/`impact` float ranges — the coordinator computes `overall_severity` and the integer band from these two alone. Cross-check the rubric and band table in `claudius:severity`. Never hand-type a severity label.
 
@@ -133,31 +135,19 @@ The grumpy-review delegation inherits the deep transitive call-tree walk (`categ
 
 ## 4. Post GitHub PR Review
 
-`out_of_scope_follow_up` findings are reported, never filed (`claudius:severity` § `out_of_scope_follow_up`): they go in Part A, and when reporting back to the user, filter the consolidated findings for that class and name them as deferral candidates. Tracking one (GitHub issue, `memcan:todo`, or neither) is the user's decision, taken via `claudius:triage-findings` or by hand.
+`out_of_scope_follow_up` findings are reported, never filed (`claudius:severity` § `out_of_scope_follow_up`): when reporting back, filter the consolidated findings for that class and name them as deferral candidates. Tracking one (GitHub issue, `memcan:todo`, or neither) is the user's decision, via `claudius:triage-findings` or by hand.
 
 Ask if findings should be published as a GitHub PR review. Two parts:
 
 ### Part A: Summary comment (visible immediately)
 
-A normal PR issue comment via `gh pr comment` (draft reviews hide their body text). Include:
-- **Attribution**: "Reviewed by: Claude Code" plus team members with roles
+A normal PR issue comment (draft reviews hide their body text), titled `## Audit Summary`, written to `<SCRATCH_DIR>/summary.md` (grumpy-review's scratch dir) with the Write tool. Include:
+- **Attribution**: `**Reviewed by:** Claude Code with a N-agent team:` plus one `agent-name` (agent-type) — focus area line per member
 - Overall assessment (LLM-authored; must not contradict the merge classification — reflect every valid `blocking` finding)
 - Findings table (merge class, severity, tags, location, description) — `blocking` first
 - Deferred (`out_of_scope_follow_up`) findings, and any pre-existing finding tripping a universal gate (G-FUNDS/G-SECRET/G-CRYPTO/G-DATA) awaiting the user's disposition call
 - Pre-existing / outside-diff issues with details
 - Positive observations
-
-Write the comment to `<SCRATCH_DIR>/summary.md` (grumpy-review's scratch dir) with the Write tool, then post it:
-
-```markdown
-## Audit Summary
-
-**Reviewed by:** Claude Code with a N-agent team:
-- `agent-name` (agent-type) — focus area
-...
-
-[Summary text, findings table, pre-existing issues, positive observations]
-```
 
 ```bash
 gh pr comment <number> --body-file <SCRATCH_DIR>/summary.md

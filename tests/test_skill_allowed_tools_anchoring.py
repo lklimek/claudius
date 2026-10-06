@@ -18,7 +18,17 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ANCHORED_SKILLS = ("grumpy-review", "review-pr", "check-pr-comments")
+# Skills that grant plugin scripts via allowed-tools: rules AND body invocations are pinned in lockstep.
+ANCHORED_SKILLS = (
+    "grumpy-review",
+    "review-pr",
+    "check-pr-comments",
+    "ci-dance",
+    "triage-findings",
+    "validate-findings",
+    "report-format",
+)
+ALL_SKILL_FILES = sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
 ROOT = "${CLAUDE_PLUGIN_ROOT}/scripts/"
 SCRIPT_INVOCATION = re.compile(
     r"(?:python3 )?\$\{CLAUDE_(?:SKILL_DIR|PLUGIN_ROOT)\}[^\s`\"]*?scripts/[\w.-]+\.(?:py|sh)[^`\n]*"
@@ -65,6 +75,22 @@ def test_body_invocations_match_a_rule(skill: str) -> None:
         )
 
 
+@pytest.mark.parametrize("path", ALL_SKILL_FILES, ids=lambda p: p.parent.name)
+def test_no_skill_has_unanchored_script_rule_or_skill_dir_script_path(
+    path: Path,
+) -> None:
+    """Holds for every skill, incl. those granting no script rule today (review-dependency, git-and-github)."""
+    front, body = _split(path)
+    for rule in _bash_rules(front):
+        if re.search(r"\.(py|sh)\b", rule):
+            assert ROOT in rule and not rule.startswith("*"), (
+                f"{path.parent.name}: unanchored {rule!r}"
+            )
+    assert not re.search(r"CLAUDE_SKILL_DIR\}[^\s`]*scripts/", body), (
+        f"{path.parent.name}: script path via SKILL_DIR — use {ROOT}"
+    )
+
+
 def test_references_do_not_use_plugin_root_placeholder() -> None:
     """References are read via Read, unsubstituted: use a `<plugin-root>` placeholder there."""
     offenders = [
@@ -79,9 +105,7 @@ FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 PLAIN_GH_GIT = re.compile(r"^\s*(?:ghsudo )?(?:gh|git) ")
 
 
-@pytest.mark.parametrize(
-    "skill", (*ANCHORED_SKILLS, "ci-dance", "merge-base", "review-dependency")
-)
+@pytest.mark.parametrize("skill", (*ANCHORED_SKILLS, "merge-base", "review-dependency"))
 def test_fenced_gh_and_git_commands_match_a_rule(skill: str) -> None:
     """A fenced command the skill tells the model to run must be pre-approved."""
     front, body = _split(REPO_ROOT / "skills" / skill / "SKILL.md")

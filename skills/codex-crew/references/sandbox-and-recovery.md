@@ -1,6 +1,17 @@
 # Codex Sandbox, Job State & Recovery — Reference
 
-Deep mechanics behind `codex-crew`. Load when a Codex job misbehaves (write rejected, commit blocked, dispatch fails instantly) or when hand-monitoring a job.
+Deep mechanics behind `codex-crew`. Load when a Codex job misbehaves (write rejected, commit blocked, dispatch fails instantly, stuck at `running`), when arming a monitoring loop, or when hand-monitoring a job.
+
+## Contents
+
+- Sandbox Modes
+- `workspace-write` Config
+- Git Commit in a Linked Worktree — Status
+- On-Disk Job State (for Monitoring)
+- Monitoring Loop
+- Same-`--cwd` Collisions
+- Harness Kills of a Backgrounded Task
+- Broker Recovery
 
 ## Sandbox Modes
 
@@ -80,6 +91,43 @@ Per-job `.json` fields worth reading: `id`, `status` (`pending` | `running` | `c
 For a direct dispatch, `workspaceRoot` is exactly the `--cwd` passed to `task` — map a monitored worktree to its state dir by that path. (Only the interactive `codex:codex-rescue` path, which never passes `--cwd`, has `workspaceRoot` reflect the *dispatching session's* cwd instead — if several such dispatches share one session cwd, match each to its request by `startedAt` proximity and `result.touchedFiles`, never by `sessionId`, which each carries independently and unpredictably.) `status: failed` with an `errorMessage` is the signal to surface — exactly the class (e.g. the read-only-`.git`/`index.lock` self-commit failure above) that otherwise goes unnoticed.
 
 `codex exec --json` also emits a JSONL event stream (`thread.started`, `turn.completed`, `item.completed`, `error`) for foreground runs — an alternative progress signal outside the companion's job state.
+
+## Monitoring Loop
+
+Arm as a `Bash` `run_in_background` call on the job's own `state/<workspace-slug>-<hash>/jobs/<job-id>.json` — a job-specific completion signal needing no team/session discovery. It cross-checks a populated `pid` with `ps -p <pid>` on every poll; a missing process while the record says `running` is a crash signal:
+
+```bash
+while true; do
+  read -r status pid < <(python3 -c "
+import json
+try:
+    d = json.load(open('state/<workspace-slug>-<hash>/jobs/<job-id>.json'))
+except Exception:
+    d = {}
+print(d.get('status', 'unknown'), d.get('pid') or '')
+") || { sleep 20; continue; }
+  case "$status" in
+    completed|failed|cancelled|canceled) exit 0 ;;
+  esac
+  if [ -n "$pid" ] && ! ps -p "$pid" >/dev/null; then
+    echo "Codex job <job-id> reports $status but pid $pid is not alive" >&2
+    exit 1
+  fi
+  sleep 20
+done
+```
+
+The loop is itself a backgrounded Bash call and inherits the silent-kill risk below (§ Harness Kills of a Backgrounded Task) — periodically confirm it's alive.
+
+## Same-`--cwd` Collisions
+
+Rule (in SKILL.md): never dispatch N+1 at the same `--cwd` until dispatch N's job JSON shows a terminal `status`.
+
+Confirmed: same-cwd dispatches minutes apart still collided — elapsed time and a prior dispatch already having its own job-state file are NOT protective; only polling for terminal status is. Typical case: a read-only plan job then a fresh writable job, or a retry. Distinct worktree paths don't collide.
+
+Symptoms: the earlier dispatch is stranded at `status=running` forever with no completion signal (silent orphan), or the dispatch instantly returns Codex's generic capabilities boilerplate with `touchedFiles: []`. Root cause — one broker per workspace slug, not per job — lives in the `openai-codex` plugin and cannot be fixed from this repo.
+
+Mitigation: poll for terminal status before the next same-cwd dispatch (never a fixed stagger delay). `scripts/minion-monitoring.py` should eventually catch a stuck orphan as `CODEX_STALL reason=no-progress` — a detection backstop, not a substitute. After any dispatch, sanity-check that `workspaceRoot` matches the intended worktree and `rawOutput` engages the dispatched task.
 
 ## Harness Kills of a Backgrounded Task
 

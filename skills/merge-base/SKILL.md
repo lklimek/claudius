@@ -1,6 +1,6 @@
 ---
 name: merge-base
-description: "This skill should be used when the user asks to \"merge the base branch\", \"update this feature branch from base\", or resolve conflicts while merging base into a feature branch."
+description: "This skill should be used when the user asks to \"merge the base branch\", \"update this feature branch from base\", or resolve conflicts while merging base into a feature branch. It merges (never rebases) the remote base, gates conflict resolutions on user approval, and reports behavioral risk."
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git branch --show-current), Bash(git status*), Bash(git rev-parse *), Bash(git fetch --all --prune), Bash(git symbolic-ref refs/remotes/origin/HEAD*), Bash(git merge-base *), Bash(git log *), Bash(git diff *), Bash(git merge *), Bash(git add *), Bash(git commit --no-edit), Bash(gh pr view *)
 ---
 
@@ -8,116 +8,47 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git branch --show-current), B
 
 Merge the remote base branch into the current feature branch: pre-merge analysis, conflict resolution, behavioral change report. **Output**: summaries only — never dump raw diffs, file contents, or initial state unless asked.
 
-## Phase 1: Sync with Remote
+## 1. Sync
 
-Fetch all remotes and merge the tracked branch (never rebase, never `git pull`: its `--upload-pack` runs arbitrary code); resolve any conflicts per Phase 4 before continuing.
+`git fetch --all --prune`, then merge the branch's own upstream if it has one (`git merge --no-edit @{upstream}`). **Never rebase; never `git pull`** (its `--upload-pack` runs arbitrary code). Conflicts here are resolved per step 4.
 
-```bash
-CURRENT_BRANCH=$(git branch --show-current)
-TRACKING=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null || echo "")
+## 2. Base Branch
 
-git fetch --all --prune
-
-if [ -n "$TRACKING" ]; then
-  git merge --no-edit "$TRACKING"
-fi
-```
-
-## Phase 2: Identify the Base Branch
-
-From PR metadata, using the `git-and-github` skill:
+From PR metadata (prints the bare branch name `<base>`); fall back to the repo default branch (prints `origin/<base>` already — do not prefix it again); if neither resolves, ask the user:
 
 ```bash
-BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null)
+gh pr view --json baseRefName -q .baseRefName
+git symbolic-ref refs/remotes/origin/HEAD --short
 ```
 
-If no PR exists, fall back to the repo default branch:
+Merge from `origin/<base>` (the remote-tracking ref the fetch just updated) — never the local base branch, which may be stale.
+
+## 3. Pre-Merge Analysis
+
+Read both sides' logs and diffs since `git merge-base origin/<base> HEAD` internally. Find files modified on both sides AND **semantic overlaps** — no textual conflict, but upstream changed something local code relies on (a signature, a default, a schema). Tell the user in a few lines: what each side changed, overlapping files, semantic overlaps.
+
+## 4. Merge
 
 ```bash
-BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+git merge origin/<base> --no-edit
 ```
 
-If neither works, ask the user.
-
-Merge from `origin/$BASE_BRANCH` (the remote-tracking ref, already updated by fetch) — not the local base branch, which may be stale.
-
-## Phase 3: Pre-Merge Analysis
-
-Read diffs and logs internally to build context (no diff/source output).
-
-```bash
-MERGE_BASE=$(git merge-base origin/$BASE_BRANCH HEAD)
-
-# Our changes
-git log --oneline $MERGE_BASE..HEAD
-git diff --stat $MERGE_BASE..HEAD
-git diff $MERGE_BASE..HEAD
-
-# Their changes
-git log --oneline $MERGE_BASE..origin/$BASE_BRANCH
-git diff --stat $MERGE_BASE..origin/$BASE_BRANCH
-git diff $MERGE_BASE..origin/$BASE_BRANCH
-```
-
-### Overlap and semantic analysis
-
-Identify files modified on **both** sides:
-
-```bash
-comm -12 \
-  <(git diff --name-only $MERGE_BASE..HEAD | sort) \
-  <(git diff --name-only $MERGE_BASE..origin/$BASE_BRANCH | sort)
-```
-
-Also find **semantic overlaps** — no textual conflict but behavior changes (e.g., upstream changed a function signature or default value that local code relies on).
-
-Report a brief summary to the user:
-- What each side changed (1-2 sentences per side)
-- Overlapping files (if any)
-- Semantic overlaps identified (if any)
-
-## Phase 4: Execute the Merge
-
-```bash
-git merge origin/$BASE_BRANCH --no-edit
-```
-
-### If no conflicts
-
-The merge commits automatically. Proceed to Phase 5.
-
-### If conflicts occur
-
-For each conflicted file:
-
-1. **Read the conflict markers** — understand both sides using Phase 3 context
-2. **Resolve intelligently** — preserve both sides' intent; when ambiguous, prefer preserving existing behavior
-3. **Stage the resolution** — `git add <file>`
-4. **Present to the user** — a table summarizing the conflict, not raw source:
+On conflicts, per file: resolve preserving both sides' intent (when ambiguous, preserve existing behavior), `git add <file>`, and present a summary table — not raw source:
 
 | Area | Ours | Theirs | Resolution |
 |---|---|---|---|
 | `function_name()` | Added X | Changed Y | Combined: X + Y |
 
-Ask for approval before continuing. After all conflicts are resolved and approved:
+**Ask for approval before committing.** On rejection, apply the feedback and re-present. Once every resolution is approved: `git commit --no-edit`.
 
-```bash
-git commit --no-edit
-```
+## 5. Behavioral Change Report
 
-If the user rejects a resolution, apply their feedback and re-present.
+The key deliverable: anything in the merge result that could change runtime behavior — upstream signature changes affecting local callers, changed defaults (config, function, env fallbacks), control-flow changes in overlapping code, schema/API changes, lock files merged to incompatible versions, upstream imports shadowing local ones, tests that may now fail. Assign an overall **Risk Factor (0–100%)**, the likelihood of unintended behavioral change:
 
-## Phase 5: Behavioral Change Report
-
-The key deliverable: anything in the merge result that could change runtime behavior (read merged files internally). Assign an overall **Risk Factor (0-100%)** — likelihood of unintended behavioral change:
-- **0-20%**: routine merge, disjoint changes, no behavioral overlap
-- **21-50%**: minor touches — new defaults, added parameters (backward-compatible)
-- **51-80%**: significant — modified control flow, changed defaults affecting existing callers, schema changes
-- **81-100%**: breaking — incompatible signatures, algorithm swaps, data format changes
-
-Look for: upstream signature changes affecting local callers; changed defaults (config, function, env fallbacks); control-flow changes in overlapping code; struct/API/schema changes on either side; lock files merged with incompatible versions; upstream imports shadowing local ones; tests that may now fail. For conflicted and flagged files, identify the upstream authors whose changes caused them — not every contributor.
-
-### Report format
+- **0–20%**: routine, disjoint changes
+- **21–50%**: minor touches — new defaults, backward-compatible parameters
+- **51–80%**: significant — modified control flow, changed defaults affecting existing callers, schema changes
+- **81–100%**: breaking — incompatible signatures, algorithm swaps, data format changes
 
 ```
 ## Behavioral Change Report — Risk: <N>%
@@ -137,14 +68,8 @@ Look for: upstream signature changes affecting local callers; changed defaults (
 - [ ] <action items, if any>
 ```
 
-Safe changes first, so the user confirms routine items quickly and focuses on what matters. If clean (risk ~0%), say so in one line and skip the sections.
+Safe changes first. Contributors: only the upstream authors whose changes caused conflicts or flagged items. If clean (risk ~0%), say so in one line and skip the sections.
 
 ## Error Recovery
 
-On any mid-merge failure:
-
-```bash
-git merge --abort
-```
-
-Report what happened and let the user decide how to proceed.
+On any mid-merge failure: `git merge --abort`, report what happened, and let the user decide.

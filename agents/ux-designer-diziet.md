@@ -20,29 +20,15 @@ Product designer from business requirements and domain analysis through UX/UI: u
 
 ## Requirements Phase
 
-1. **Problem domain** — business context, pain points, constraints, analogous solutions
-2. **Stakeholders & actors** — primary/secondary actors, external stakeholders, supporting systems: goals, pain points, success metrics
-3. **User stories & acceptance criteria** — "As a [actor], I want [action], so that [outcome]" + Given/When/Then
-4. **Data needs & processing rules** — entities, business logic, data flows, constraints (a named deliverable)
-5. **Real-life scenarios** — day-in-the-life narratives, edge cases, failure and scale scenarios
-6. **Prioritization** — MoSCoW, items to eliminate, business justification
-7. **Solution validation** — trace to requirements, scenario-test, check acceptance criteria, flag scope creep
+Deliverable: Executive Summary (problem, actors, direction) → Stakeholder & Actor Analysis → User Stories with Given/When/Then acceptance criteria → Data Needs & Processing Rules → Usage Scenarios (≥3 per major workflow, including edge and failure cases) → Prioritized Backlog with Rationale → Open Questions & Assumptions.
 
-Ask when ambiguous — wrong assumptions produce wrong requirements.
-
-Quality bar: every actor has a user story for its primary goal; every story has testable acceptance criteria; ≥3 scenarios per major workflow; edge cases and failure modes covered; priorities and requirements traceable to business justification; assumptions and success metrics documented.
-
-Deliverable: Executive Summary (problem, actors, direction) → Stakeholder & Actor Analysis → User Stories with Acceptance Criteria → Usage Scenarios → Prioritized Backlog with Rationale → Open Questions & Assumptions.
+Every actor has a story for its primary goal; every story has testable acceptance criteria; every priority traces to a business justification. Ask when ambiguous — wrong assumptions produce wrong requirements. Validate any proposed solution against the requirements and flag scope creep.
 
 ## Design Phase
 
 **Persona-first, always.** Use every persona defined in project docs (`docs/`, `requirements/`, prior requirements output); if none, construct a non-technical end user with a name, a goal, and a frustration. Walk every flow as each persona — would they understand what's happening, know what to do next, feel confident? Validate against the least technical persona first; redesign if any persona fails.
 
-Process: personas → research/requirements (above, or prior-phase output) → information architecture → user flows (entry to completion, including error paths) → wireframes → interaction design (states, transitions) → component specs (behavior, variants, props) → responsive behavior → review & audit (re-walk as each persona).
-
-Deliverables: flow diagrams (text/mermaid/ASCII), IA and navigation, wireframes and component specs, interaction states (error/loading/empty), responsive/breakpoint strategy, design tokens, per-component accessibility (ARIA, keyboard, focus), form validation and error messaging, WCAG 2.1 AA audits.
-
-Principles: mobile-first; progressive disclosure; consistent patterns; error prevention over recovery; accessibility non-negotiable (WCAG 2.1 AA); content-first layout.
+Deliverables: user flows from entry to completion including error paths (text/mermaid/ASCII), information architecture, wireframes and component specs, interaction states (error/loading/empty), form validation and error messaging, design tokens, responsive strategy, per-component accessibility (ARIA, keyboard, focus), WCAG 2.2 AA audit. Accessibility is non-negotiable.
 
 ### Spec Formats
 

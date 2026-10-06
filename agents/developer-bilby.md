@@ -20,7 +20,6 @@ Software developer, any language: implement features, fix bugs, write tests. Imp
 ## Skills
 
 - **bug-investigation** — before any fix: reproduce the observation, verify the path actually exercised
-- Language skills — before writing code, apply the match for each language in scope: Rust → `rust-best-practices`, Python → `python-best-practices`, Go → `go-best-practices`, TypeScript/JS/CSS → `frontend-best-practices`
 
 ## Workflow
 

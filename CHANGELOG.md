@@ -6,6 +6,85 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [9.0.0] - 2026-10-06
+
+Context-footprint audit of every skill and agent, driven by 7 weeks of session transcripts (957
+sessions) and closed-book probes of what the model already knows. Skills 29 → 23.
+
+### Removed
+
+- **`rust-best-practices`, `python-best-practices`, `go-best-practices`, `frontend-best-practices`
+  skills.** A model recalls the Microsoft/Rust API guideline IDs and the Go/Python/frontend
+  practice lists unaided; only project policy is worth context. The Rust policy deltas moved to
+  `coding-best-practices` § Rust (below); the language→skill routing is gone from agent bodies and
+  `grumpy-review`. `hooks/cargo-discipline.sh` deny messages cite the new section.
+- **`track-minions` and `workflow-simplified` skills** — merged into `delegate`.
+- **`security-best-practices`: OWASP checklists, the bundled OWASP Cheat Sheet library (109 files,
+  2.2 MB), the ASVS 5.0 CSV and `scripts/update-cheatsheets.sh`** — read 0–2 times in 7 weeks and
+  reproducible from model knowledge.
+- `rust-best-practices/references/` guideline dumps (33 KB); `grand-admiral` § Skills Reference;
+  `review-dependency` step 4 (a second research agent — `security-engineer-smythe` owns the
+  research); `grumpy-review` § CI Log Retrieval, § Anti-Patterns, § Language best-practices preload.
+
+### Changed
+
+- **`delegate` is the single spawn-time skill**: pre-delegation checklist, model tiers, Agent
+  Prompt Requirements and MemCan Context Injection (from `grand-admiral`), Development-Work
+  Delegation with the single-agent plan/TDD/implement/self-review loop, and durable tracking.
+  Loaded before the first spawn and re-read after compaction (measured reloads: ~1 per session).
+- **`grand-admiral`** keeps the always-needed rules; conditional detail moved to
+  `references/worktree-isolation.md`, `teammates.md`, `cargo-verification.md` (absorbs
+  `cargo-isolation.md`) and `programme-management.md`.
+- **`coding-best-practices` gains § Rust** — `thiserror` typed errors everywhere (deliberate
+  deviation from M-APP-ERROR), no `debug_assert!` for invariants, `#[expect]` over `#[allow]`, no
+  `cargo check`, no chained compiles, the `cargo-cached.sh` wrapper, nextest/doctest caveat.
+  `evals/evals.json` moved here from `rust-best-practices`.
+- **`security-best-practices` is a router**: language pitfall references (pruned to non-textbook
+  items, 28 → 11.5 KB) and OWASP Top 10:2025 citation vocabulary (was 2021).
+- **Preloads**: `architect-nagatha` and `qa-engineer-marvin` drop `security-best-practices`;
+  `technical-writer-trillian` drops `severity`/`report-format` (loads them on demand, gains
+  `Skill`); `security-engineer-smythe` gains `Skill`; `claudius` drops `severity`.
+- **`severity`**: merge-classification detail and the external-reviewer map moved to
+  `references/merge-classification.md`; § 5 keeps the enum, ownership and never-defer rules.
+- **`report-format`** is the one finding-shape contract (`producer-contract.md` no longer
+  duplicates it); schema version history moved to `coordinator-envelope.md`.
+- **`grumpy-review`**: spawn prompts carry only what varies and hand reviewers the security
+  pattern and call-tree reference paths in their first Read batch; the coordinator reads
+  `merge-classification.md` in the same message as `prepare`.
+- `check-pr-comments`, `ci-dance`, `codex-crew`, `review-pr`, `review-dependency`, `merge-base`,
+  `release`, `git-and-github`, `bug-investigation` and all agent bodies: conditional detail moved
+  to references, generic mechanics and duplicated rules removed. `ux-designer-diziet` targets
+  WCAG 2.2.
+- **`security-engineer-smythe` reviews by tracing execution paths** through the reviewed scope —
+  entry points down to sinks, across file and diff boundaries — and reports the path as
+  evidence. Checklists supply questions along a path; they no longer bound the review (the
+  "Audit Checklist" is gone).
+- **`coding-best-practices`**: new cross-cutting rules *Minimal diff* (every changed line serves
+  the task; no drive-by changes) and *Fit the codebase* (match the architecture and the closest
+  similar code); self-review re-reads the diff against both.
+- **`ci-dance`**: the Grumpy Stream starts as soon as changes are committed and fixes straight
+  from the local report — it never waits for the push, CI, or findings appearing on the PR; only
+  the push of its fixes waits. The Review Stream triggers whichever review bots the repo uses,
+  each by its own mechanism (label, mention, review request, automatic) — no Copilot default;
+  new `bots=` argument.
+- **`check-pr-comments`** reports use the shared report structure (`report-format` +
+  `coordinator-envelope.md`, as `grumpy-review` does); its reference lists only comment-specific
+  additions. Accounts the project names as review bots count as bots.
+- `allowed-tools` anchored to `${CLAUDE_PLUGIN_ROOT}/scripts/…` in `ci-dance`, `triage-findings`,
+  `validate-findings`, `report-format`; `review-dependency` cleanup narrowed to
+  `/tmp/claude/dep-review-*`.
+
+### Added
+
+- `tests/test_skill_structure.py`: section citations resolve, SKILL.md ≤ 500 lines, contents list
+  in long references, no reference→reference links, no mention of removed skills.
+
+### Migration
+
+- Replace `/track-minions` and `/workflow-simplified` with `/delegate`; language skills need no
+  replacement. Callers that named `rust-best-practices` in prompts should name
+  `coding-best-practices`.
+
 ## [8.3.0] - 2026-09-30
 
 Fewer conversation rounds in headless CI reviews (measured on 8.2.0 CI transcripts).

@@ -3,7 +3,7 @@ name: triage-findings
 description: "This skill should be used when the user explicitly asks to \"triage findings\" through an interactive browser-based workflow. Only invoke when explicitly requested."
 user-invocable: true
 argument-hint: path/to/report.json
-allowed-tools: Read, Write, Edit, Bash(*validate_report.py *), Bash(*triage_server.py *), Bash(fuser -k */tcp), Glob, Grep
+allowed-tools: Read, Write, Edit, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/triage_server.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(fuser -k */tcp), Glob, Grep
 ---
 
 # Interactive Finding Triage
@@ -16,13 +16,13 @@ Start an interactive triage session: the user classifies each finding in a brows
 
 1. Validate the report JSON against the schema:
    ```bash
-   python3 ${CLAUDE_SKILL_DIR}/../../scripts/validate_report.py "$ARGUMENTS"
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py "$ARGUMENTS"
    ```
    Requires `python3-jsonschema`. Invalid → fix and re-validate; never start the server with invalid data. Non-blocking `[consistency]` warnings on stderr (label/band drift, `relevance` pinned at `1.0`) don't fail validation but must be surfaced to the user — labels derive from the floats (`claudius:severity`), so a warning means the floats need rerating.
 
 2. Start the triage server (default port 8741):
    ```bash
-   python3 ${CLAUDE_SKILL_DIR}/../../scripts/triage_server.py "$ARGUMENTS" [--port PORT]
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/triage_server.py "$ARGUMENTS" [--port PORT]
    ```
    The server auto-opens a browser; if that fails, it prints the URL for the user.
 
@@ -54,7 +54,7 @@ Replace `8741` with the actual port if `--port` was used.
 For reports with `metadata.report_type == "comment_check"` (produced by `check-pr-comments`):
 
 - Triage actions apply to unresolved PR review comments instead of code review findings
-- **accept_risk / false_positive**: after triage, resolve the associated GitHub review thread using `${CLAUDE_SKILL_DIR}/../../scripts/gh-resolve-review-threads.sh` with the finding's `thread_id`. Always ask user confirmation before resolving threads.
+- **accept_risk / false_positive**: after triage, resolve the associated GitHub review thread using `${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh <PRRT_id>` with the finding's `thread_id`. Always ask user confirmation before resolving threads.
 - **fix**: apply the fix described in `recommendation`, then resolve the thread
 - **defer**: leave the thread unresolved; add a `TODO` comment as usual
 - The triage decision's `resolve_thread` field (boolean) indicates whether thread resolution is appropriate per decision

@@ -1,7 +1,7 @@
 # Issue Body Template
 
 Canonical issue-body skeleton for `git-and-github` §Issues — same plain-language-first
-shape as [`pr-body-template.md`](pr-body-template.md). Copy only the fenced block below
+shape as the PR body (`git-and-github` § Creating a PR). Copy only the fenced block below
 into the issue body — not this page's title or prose. Drop sections/sub-sections that
 don't apply; keep the order. `TL;DR` / `User story` / `Scenario` are plain-language and
 user-facing; `Detailed discussion` is technical, for implementors and AI agents.

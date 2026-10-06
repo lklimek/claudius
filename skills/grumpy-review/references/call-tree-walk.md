@@ -2,6 +2,17 @@
 
 Authoritative recipe for deep transitive in-repo caller analysis on a PR. Referenced by `grumpy-review`, `review-pr`, and `check-pr-comments`.
 
+## Contents
+
+- Outcome · When to Run
+- Step 1 — Inventory Modified Functions
+- Step 2 — Rank and Truncate
+- Step 3 — Tooling (Regex hints)
+- Step 4 — Walk
+- Step 5 — Per-Caller Judgement (Severity rubric)
+- Step 6 — Emit Findings
+- Anti-Patterns
+
 ## Outcome
 
 For every function modified by the diff, surface every transitive in-repo caller whose assumption-set is invalidated by the new contract. Findings name the caller's `file:line`, the broken assumption, and the chain back to the modified function.
