@@ -11,7 +11,7 @@ A stall is **owning an in_progress task AND idle past threshold AND no build run
 - **Individual/background subagents** (`…/subagents/agent-*.jsonl`) — ANONYMOUS, **off by default**; enable with `--watch-subagents`. Best-effort: a finished subagent has a stale transcript by design with no reliable on-disk completion signal, and the harness already notifies on completion/death — treat any subagent STALL as an investigate prompt.
 - **Codex Companion jobs** (`jobs/*.json` below the state directory mapped from the selected team's workspaces) — session- and workspace-scoped, with an independent `CODEX_*` state machine. Detailed job records provide terminal truth; job/log mtimes provide progress; compatible launcher/broker PIDs provide corroborating liveness.
 
-Launch command: see `grand-admiral` § Recovery → Stall Watchdog (kept there so `${CLAUDE_SKILL_DIR}` substitution resolves at skill-load time).
+Launch command: see `grand-admiral` § Recovery → Stall Watchdog (kept there because path substitution only happens in `SKILL.md`).
 
 **Point `--worktrees` or exported `$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root.** The flag takes precedence over the environment, and the built-in default is `/data/git-worktrees`. The selected root carries double duty: Source C stall-tracks the worktrees it finds there, AND those same dirs are appended to the Codex Source D workspace candidate list. Without the correct root, Source D sees only the team's lead/member cwds — so an **unnamed** Codex dispatch, which contributes no member cwd, is invisible and its jobs go unmonitored. Source C matches worktree dirs under that root by this repo's `<repo-path-slug>` naming (per `grand-admiral` § Worktree Isolation), not an `agent-` prefix.
 
@@ -31,7 +31,7 @@ On a shared host, several Claude Code sessions each own a `~/.claude/teams/sessi
 
 `STALL` is a best-effort PRE-FILTER, **never an auto-kill** — a build-blocked agent writes nothing for many minutes while compiling, and a just-finished subagent can look stalled. Investigate first, then act:
 
-1. **Investigate** — read the agent's recent transcript for its last tool call; `git -C <cwd> status` shows uncommitted work; scan `/proc/[0-9]*/cwd` for pids whose cwd resolves under the agent's worktree/cwd to confirm no live build (per-agent scope — not a machine-global `pgrep`, which always fires on shared boxes). Trust file/git state over the signal (`grand-admiral` Anti-Pattern #6: stale diagnostics).
+1. **Investigate** — read the agent's recent transcript for its last tool call; `git -C <cwd> status` shows uncommitted work; scan `/proc/[0-9]*/cwd` for pids whose cwd resolves under the agent's worktree/cwd to confirm no live build (per-agent scope — not a machine-global `pgrep`, which always fires on shared boxes). Trust file/git state over the signal (`grand-admiral` § Anti-Patterns: stale diagnostics).
 2. **Live but idle on its task** — agent owns an in_progress task but lost its kickoff or is waiting on a message → `SendMessage` re-nudge restating the owned task. Context preserved, no respawn needed.
 3. **Genuinely stuck** — shut down the agent; spawn a replacement of the same type on the **same cwd/worktree** with a context brief extracted from:
    - Last N lines of the transcript (what it was doing)
