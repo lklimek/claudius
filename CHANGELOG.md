@@ -6,6 +6,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+## [8.3.0] - 2026-09-30
+
+Fewer conversation rounds in headless CI reviews (measured on 8.2.0 CI transcripts).
+
+### Added
+
+- `consolidate_reports.py prepare`: `--commit`, `--branch`, `--project`, `--date` flags (override
+  `--metadata`); `project` defaults to the GitHub `owner/repo`, `date` to today (UTC). Unquoted
+  `--metadata` JSON was denied by CI command checks in every measured run.
+- `finalize`: optional `pr_comments`/`pr_review_body` decisions → `comments.json` (keyed by final
+  IDs; merged-away member keys target their cluster base) and `body.md` next to `report.json`,
+  ready for `post_pr_review.py` without reading `report.json`. Failed finalize sets both aside as
+  `*.stale` with the report.
+- `prepare --digest`: closing `merge_class needed` checklist of unclassified keys.
+
+### Changed
+
+- `grumpy-review`: reviewers Write findings and run `gate` in one message (re-run gate after a
+  failed Write); ephemeral-ID lint runs once before the fan-out with the scope commands; prepare
+  runs first after reviewers return, batched with `Skill(severity)`; spawn template names
+  `context-digest.md` only when one was written.
+- `merge_findings_helper.key_or_none` is public (was `_key_or_none`).
+
 ## [8.2.0] - 2026-09-23
 
 Headless-CI hardening follow-ups to 8.1.0.

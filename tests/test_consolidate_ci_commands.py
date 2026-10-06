@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -408,6 +410,87 @@ class TestPrepare:
         out = _prepare(tmp_path, digest=False, reports={"qa": []})
         assert not (out.parent / "digest.md").exists()
 
+    def test_digest_lists_keys_needing_merge_class(self, tmp_path, capsys):
+        reports = _dup_reports()
+        reports["security"][0]["findings"][1]["merge_class"] = "non_blocking"
+        _prepare(tmp_path, digest=True, reports=reports)
+        text = capsys.readouterr().out
+        line = next(ln for ln in text.splitlines() if ln.startswith("merge_class"))
+        assert "`security:SEC-001`" in line and "`qa:QA-001`" in line
+        assert "SEC-002" not in line
+
+    def test_digest_omits_merge_class_line_when_all_classified(self, tmp_path, capsys):
+        reports = {
+            "qa": [
+                {
+                    "title": "QA",
+                    "category": "code_quality",
+                    "findings": [_f("QA-001", 0.5, 0.5, merge_class="non_blocking")],
+                }
+            ]
+        }
+        _prepare(tmp_path, digest=True, reports=reports)
+        assert "merge_class needed" not in capsys.readouterr().out
+
+
+class TestPrepareMetadataFlags:
+    def _run(self, tmp_path: Path, *extra: str) -> dict[str, Any]:
+        rep = _write(tmp_path / "qa.json", [])
+        out = tmp_path / "intermediate.json"
+        argv = ["prepare", f"qa:{rep}", "--repo-root", str(tmp_path)]
+        assert cr.main([*argv, "--output", str(out), *extra]) == 0
+        return json.loads(out.read_text())["metadata"]
+
+    def test_flags_override_metadata_json(self, tmp_path):
+        meta = self._run(
+            tmp_path,
+            "--metadata",
+            json.dumps({"project": "p", "date": "2026-01-01", "branch": "x"}),
+            "--project",
+            "o/r",
+            "--branch",
+            "feat/y",
+            "--date",
+            "2026-09-30",
+        )
+        assert (meta["project"], meta["branch"], meta["date"]) == (
+            "o/r",
+            "feat/y",
+            "2026-09-30",
+        )
+
+    def test_project_and_date_default_without_metadata(self, tmp_path):
+        meta = self._run(tmp_path)
+        assert meta["project"] == tmp_path.name
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", meta["date"])
+        assert "branch" not in meta
+
+    def test_project_defaults_to_github_owner_repo(self, tmp_path):
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "remote", "add", "origin"]
+            + ["https://github.com/octo/widgets.git"],
+            check=True,
+        )
+        assert self._run(tmp_path)["project"] == "octo/widgets"
+
+    def test_commit_flag_is_resolved_to_full_sha(self, tmp_path):
+        env = {
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t",
+        }
+        env["GIT_COMMITTER_EMAIL"] = "t@t"
+        git = ["git", "-C", str(tmp_path)]
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        subprocess.run(
+            [*git, "commit", "-q", "--allow-empty", "-m", "m"],
+            check=True,
+            env={**os.environ, **env},
+        )
+        sha = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+        assert self._run(tmp_path, "--commit", sha[:8])["commit"] == sha
+
 
 # ---------------------------------------------------------------------------
 # finalize
@@ -644,6 +727,71 @@ class TestFinalize:
         assert self._run(tmp_path, self._decisions()) == 0
         assert self._run(tmp_path, self._decisions()) == 0
         assert not list(tmp_path.rglob("*.stale"))
+
+    # pr_comments / pr_review_body: finalize emits post_pr_review.py inputs.
+    def test_pr_outputs_are_keyed_by_final_ids(self, tmp_path):
+        decisions = self._decisions(
+            pr_comments={"qa:QA-001": "Merged member text.", "security:SEC-002": None},
+            pr_review_body="Verdict line.",
+        )
+        assert self._run(tmp_path, decisions) == 0
+        out_dir = tmp_path / "out"
+        comments = json.loads((out_dir / "comments.json").read_text())
+        assert comments == {"SEC-001": "Merged member text.", "SEC-002": None}
+        assert (out_dir / "body.md").read_text() == "Verdict line.\n"
+
+    def test_base_comment_wins_over_merged_member(self, tmp_path, caplog):
+        decisions = self._decisions(
+            pr_comments={"qa:QA-001": "member", "security:SEC-001": "base"}
+        )
+        assert self._run(tmp_path, decisions) == 0
+        comments = json.loads((tmp_path / "out" / "comments.json").read_text())
+        assert comments == {"SEC-001": "base"}
+        assert "qa:QA-001" in caplog.text
+        assert not (tmp_path / "out" / "body.md").exists()
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {"pr_comments": {"security:SEC-999": "x"}},
+            {"pr_comments": {"SEC-001": "x"}},
+            {"pr_comments": {"security:SEC-001": 5}},
+            {"pr_comments": ["security:SEC-001"]},
+            {"pr_review_body": 7},
+        ],
+    )
+    def test_invalid_pr_outputs_block_everything(self, tmp_path, extra):
+        assert self._run(tmp_path, self._decisions(**extra)) == 1
+        out_dir = tmp_path / "out"
+        for name in ("report.json", "comments.json", "body.md"):
+            assert not (out_dir / name).exists()
+
+    def test_failed_finalize_leaves_nothing_post_can_pick_up(self, tmp_path):
+        """finalize + post_pr_review may run in one message: a failed finalize
+        must leave no report.json, comments.json or body.md behind."""
+        decisions = self._decisions(
+            pr_comments={"security:SEC-001": "x"}, pr_review_body="Verdict."
+        )
+        assert self._run(tmp_path, decisions) == 0
+        assert self._run(tmp_path, self._decisions(finding_updates={})) == 1
+        out_dir = tmp_path / "out"
+        for name in ("report.json", "comments.json", "body.md"):
+            assert not (out_dir / name).exists()
+            assert (out_dir / f"{name}.stale").is_file()
+        rc = ppr.main(
+            ["o/r", "1", str(out_dir / "report.json"), "--dry-run"]
+            + ["--comments", str(out_dir / "comments.json")]
+        )
+        assert rc == 2
+
+    def test_success_without_pr_keys_keeps_hand_written_files(self, tmp_path):
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        (out_dir / "comments.json").write_text("{}")
+        (out_dir / "body.md").write_text("hand")
+        assert self._run(tmp_path, self._decisions()) == 0
+        assert (out_dir / "comments.json").read_text() == "{}"
+        assert (out_dir / "body.md").read_text() == "hand"
 
 
 @pytest.mark.parametrize("command", ["gate", "finalize"])

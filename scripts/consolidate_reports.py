@@ -9,14 +9,16 @@ Round-saving shortcuts:
   gate: one producer file -> max severity band + HIGH+/blocker-gate candidate IDs.
   prepare --digest: also write/print a compact digest.md of intermediate.json.
   finalize: merge decisions -> assemble (validates) -> render, in one call.
+    Optional pr_comments/pr_review_body decisions also yield comments.json
+    (final-ID keyed) and body.md next to report.json for post_pr_review.py.
 
 Usage:
     # Phase 1
     python3 scripts/consolidate_reports.py prepare \\
         agent1:path/to/report1.json agent2:path/to/report2.json \\
         --repo-root /path/to/repo --output intermediate.json \\
-        [--metadata '{"project":"X","date":"2026-03-05"}'] [--digest] \\
-        [--base-ref origin/main]
+        [--commit SHA] [--branch B] [--project P] [--date YYYY-MM-DD] \\
+        [--metadata '{"project":"X"}'] [--digest] [--base-ref origin/main]
 
     # Phase 2
     python3 scripts/consolidate_reports.py assemble \\
@@ -50,6 +52,7 @@ import sys
 import tempfile
 from collections import defaultdict
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -1164,6 +1167,9 @@ def _plugin_version() -> str | None:
     return version if isinstance(version, str) and version else None
 
 
+_METADATA_FLAGS = ("project", "date", "branch", "commit")
+
+
 def cmd_prepare(args: argparse.Namespace) -> int:
     """Execute the prepare phase."""
     raw_findings: list[dict[str, Any]] = []
@@ -1205,15 +1211,32 @@ def cmd_prepare(args: argparse.Namespace) -> int:
             log.error("--metadata must be a JSON object")
             return 2
 
+    # Plain flags beat --metadata: JSON on a shell command line trips
+    # restricted-CI command checks (unquoted braces), costing a round.
+    for key in _METADATA_FLAGS:
+        value = getattr(args, key, None)
+        if value is not None:
+            metadata[key] = value
+    metadata.setdefault("date", datetime.now(timezone.utc).date().isoformat())
+
     if "plugin_version" not in metadata:
         version = _plugin_version()
         if version is not None:
             metadata["plugin_version"] = version
 
+    repository = None
     if args.repo_root:
         repository = _derive_metadata_repository(args.repo_root)
         if repository is not None:
             metadata["repository"] = repository
+    if "project" not in metadata:
+        metadata["project"] = (
+            f"{repository['owner']}/{repository['repo']}"
+            if repository
+            else Path(args.repo_root or ".").resolve().name
+        )
+
+    if args.repo_root:
         for key in ("commit", "base_commit"):
             full = _full_sha(metadata.get(key), args.repo_root)
             if full is not None:
@@ -1343,6 +1366,15 @@ def build_digest(intermediate: dict[str, Any]) -> str:
         )
     if not intentional:
         lines.append("- none")
+    unclassified = [
+        _finding_label(raw[i]) for i in order if not raw[i].get("merge_class")
+    ]
+    if unclassified:
+        lines += [
+            "",
+            "merge_class needed (finding_updates, or the cluster base): "
+            + ", ".join(f"`{key}`" for key in unclassified),
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -1692,6 +1724,11 @@ def _validate_report(report: dict[str, Any]) -> bool:
 
 
 _RENDER_FORMATS = ("md", "html", "pdf")
+# post_pr_review.py inputs finalize writes next to report.json from the
+# optional pr_comments / pr_review_body decisions.
+_PR_COMMENTS_FILE = "comments.json"
+_PR_BODY_FILE = "body.md"
+_PR_OUTPUT_FILES = (_PR_COMMENTS_FILE, _PR_BODY_FILE)
 
 
 def cmd_finalize(args: argparse.Namespace) -> int:
@@ -1725,6 +1762,7 @@ def _set_aside_stale_outputs(args: argparse.Namespace) -> None:
     out_path = Path(args.output)
     candidates = [out_path]
     candidates += [out_path.with_suffix(f".{fmt}") for fmt in _RENDER_FORMATS]
+    candidates += [out_path.parent / name for name in _PR_OUTPUT_FILES]
     candidates.append(Path(args.decisions).parent / "merged-findings.json")
     for path in candidates:
         _set_aside(path)
@@ -1755,6 +1793,7 @@ def _finalize(args: argparse.Namespace) -> int:
                 f"{len(missing)} finding(s) lack merge_class — add them to "
                 f"finding_updates: {', '.join(missing)}"
             )
+        pr_comments, pr_body = _resolve_pr_outputs(decisions, findings)
         document = mfh.build_merged_document(
             intermediate,
             findings,
@@ -1766,6 +1805,7 @@ def _finalize(args: argparse.Namespace) -> int:
         log.error("%s", e)
         return 1
     audit_copy = copy.deepcopy(document)  # assembly mutates findings in place
+    key_of = _document_finding_keys(document, findings)
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1774,6 +1814,7 @@ def _finalize(args: argparse.Namespace) -> int:
         code = _assemble_and_write(document, staged)
         if code != 0:
             return code
+        _stage_pr_outputs(Path(tmp), document, key_of, pr_comments, pr_body)
         for fmt in args.format or ["md"]:
             result = subprocess.run(
                 [sys.executable, str(RENDERER), str(staged), "--format", fmt],
@@ -1795,6 +1836,11 @@ def _finalize(args: argparse.Namespace) -> int:
             requested = set(args.format or ["md"])
             for fmt in set(_RENDER_FORMATS) - requested:
                 _set_aside(out_path.with_suffix(f".{fmt}"))
+            if pr_comments is not None or pr_body is not None:
+                # Earlier files are keyed to earlier final IDs: never mix runs.
+                for name in _PR_OUTPUT_FILES:
+                    if not (Path(tmp) / name).exists():
+                        _set_aside(out_path.parent / name)
             # report.json last: its presence implies the renders are in place.
             for item in sorted(Path(tmp).iterdir(), key=lambda p: p == staged):
                 os.replace(item, out_path.parent / item.name)
@@ -1804,6 +1850,108 @@ def _finalize(args: argparse.Namespace) -> int:
             audit_staged.unlink(missing_ok=True)
             return 1
     return 0
+
+
+def _resolve_pr_outputs(
+    decisions: dict[str, Any], findings: list[dict[str, Any]]
+) -> tuple[dict[mfh.FindingKey, str | None] | None, str | None]:
+    """Validate ``pr_comments``/``pr_review_body`` and key comments by survivor.
+
+    A merged-away member's key resolves to its cluster base; when both carry a
+    comment the base's wins (warned). Unknown keys raise ``ValueError``.
+    """
+    body = decisions.get("pr_review_body")
+    if body is not None and not isinstance(body, str):
+        raise ValueError("pr_review_body must be a string")
+    raw = decisions.get("pr_comments")
+    if raw is None:
+        return None, body
+    if not isinstance(raw, dict):
+        raise ValueError("pr_comments must be an object")
+
+    survivors = {(f.get("agent"), f.get("original_id")) for f in findings}
+    alias: dict[mfh.FindingKey, mfh.FindingKey] = {}
+    for merge in decisions.get("merges", []):
+        base = mfh.key_or_none(merge.get("base"))
+        for member in merge.get("members") or []:
+            key = mfh.key_or_none(member)
+            if key is not None and base is not None:
+                alias[key] = base
+
+    resolved: dict[mfh.FindingKey, str | None] = {}
+    source: dict[mfh.FindingKey, str] = {}
+    # Direct (surviving) keys first so a base's own comment always wins.
+    for label, text in sorted(
+        raw.items(), key=lambda kv: _pr_key(kv[0]) not in survivors
+    ):
+        if text is not None and not isinstance(text, str):
+            raise ValueError(f"pr_comments[{label!r}] must be a string or null")
+        key = _pr_key(label)
+        target = key if key in survivors else alias.get(key)
+        if target not in survivors:
+            raise ValueError(f"pr_comments: unknown finding {label!r}")
+        if target in resolved:
+            log.warning(
+                "pr_comments: %r and %r target the same merged finding; keeping %r",
+                source[target],
+                label,
+                source[target],
+            )
+            continue
+        resolved[target] = text
+        source[target] = label
+    return resolved, body
+
+
+def _pr_key(label: Any) -> mfh.FindingKey:
+    agent, sep, original_id = (label if isinstance(label, str) else "").partition(":")
+    if not sep or not agent or not original_id:
+        raise ValueError(f"pr_comments key {label!r} must be '<agent>:<original_id>'")
+    return agent, original_id
+
+
+def _document_finding_keys(
+    document: dict[str, Any], findings: list[dict[str, Any]]
+) -> dict[int, mfh.FindingKey]:
+    """Map each merged-document finding object to its ``(agent, original_id)``.
+
+    build_merged_document drops ``agent`` but keeps per-category order, and
+    assembly assigns final IDs to these same objects in place.
+    """
+    by_category: dict[str, list[mfh.FindingKey]] = defaultdict(list)
+    for f in findings:
+        by_category[f.get("category", "code_quality")].append(
+            (f.get("agent"), f.get("original_id"))
+        )
+    return {
+        id(obj): key
+        for section in document.get("findings", [])
+        for obj, key in zip(
+            section.get("findings", []), by_category[section.get("category")]
+        )
+    }
+
+
+def _stage_pr_outputs(
+    tmp: Path,
+    document: dict[str, Any],
+    key_of: dict[int, mfh.FindingKey],
+    comments: dict[mfh.FindingKey, str | None] | None,
+    body: str | None,
+) -> None:
+    """Write comments.json (final-ID keyed) and body.md into the staging dir."""
+    if comments is not None:
+        final_id = {
+            key_of[id(f)]: f["id"]
+            for _section, f in _iter_findings(document.get("findings", []))
+            if id(f) in key_of
+        }
+        mapped = {final_id[key]: text for key, text in comments.items()}
+        (tmp / _PR_COMMENTS_FILE).write_text(
+            json.dumps(mapped, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+    if body is not None:
+        (tmp / _PR_BODY_FILE).write_text(body.rstrip("\n") + "\n", encoding="utf-8")
 
 
 def cmd_regenerate(args: argparse.Namespace) -> int:
@@ -1867,6 +2015,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output", required=True, help="Output intermediate JSON path"
     )
     p_prepare.add_argument("--metadata", default=None, help="JSON metadata string")
+    for key, help_text in (
+        ("project", "metadata.project (default: GitHub owner/repo or repo dir name)"),
+        ("date", "metadata.date (default: today, UTC)"),
+        ("branch", "metadata.branch"),
+        ("commit", "metadata.commit, the reviewed commit (resolved to a full SHA)"),
+    ):
+        p_prepare.add_argument(
+            f"--{key}", default=None, help=help_text + "; overrides --metadata"
+        )
     p_prepare.add_argument(
         "--base-ref",
         default=None,

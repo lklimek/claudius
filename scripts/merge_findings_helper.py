@@ -247,7 +247,7 @@ def _validate_finding_update(label: str, update: Any) -> dict[str, Any]:
     return update
 
 
-def _key_or_none(ref: Any) -> FindingKey | None:
+def key_or_none(ref: Any) -> FindingKey | None:
     """Return ``(agent, original_id)`` when both are strings, else None."""
     if not isinstance(ref, dict):
         return None
@@ -284,10 +284,10 @@ def resolve_findings(
     for decision in merges:
         if not isinstance(decision, dict):
             continue
-        base_key = _key_or_none(decision.get("base"))
+        base_key = key_or_none(decision.get("base"))
         members = decision.get("members")
         for member in members if isinstance(members, list) else []:
-            key = _key_or_none(member)
+            key = key_or_none(member)
             if key is not None and key != base_key:
                 merged_away.add(key)
 
