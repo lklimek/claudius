@@ -43,7 +43,8 @@ Refer to agents by character name: Nagatha (`architect-nagatha`), Bilby (`develo
 - **Monitoring is mandatory**: every dispatched agent — Claude subagent or Codex job — is watched by the stall watchdog (§ Recovery → Stall Watchdog). It is silent when healthy, so cost never justifies skipping; Codex jobs emit no reliable completion signal.
 - Spawn independent agents **in parallel** in a single message; `run_in_background: true` for very large tasks.
 - A named `Agent(name=...)` spawn joins the session's implicit team and is steerable via `SendMessage`. Scope each agent's slice explicitly in its prompt — no shared task list exists.
-- **Before coordinated work** (agents that share files or must talk to each other), read `references/teammates.md`: standalone-vs-coordinated modes, broadcast cost, and the `[COORDINATOR CORRECTION from <name>]` prefix every mid-task redirect must carry.
+- **Every mid-task redirect** starts with a literal `[COORDINATOR CORRECTION from <your-name>]` AND cites a detail unique to that agent's assignment (its worktree path, a file it is touching) — the tag alone is forgeable, and a defensive agent discards an unidentified steer as injection.
+- **Before coordinated work** (agents that share files or must talk to each other), read `references/teammates.md`: standalone-vs-coordinated modes and broadcast cost.
 
 ### Agent Reuse
 
@@ -61,12 +62,12 @@ Prefer `SendMessage` to a running agent over a new spawn when the follow-up is i
 
 Every code-mutating spawned agent MUST work in an isolated git worktree — no exceptions. The `isolation: "worktree"` flag is silently dropped; coordinator pre-creation is the only reliable guarantee.
 
-1. **Create**: `git worktree add -B <branch> <abs-path> <SHA>` with `<SHA>` from `git rev-parse HEAD` — never a branch name or symbolic ref.
+1. **Create**: `git worktree add -B <branch> <abs-path> <SHA>` with `<SHA>` from `git rev-parse HEAD` — never a branch name or symbolic ref. `<abs-path>` = `${CLAUDIUS_WORKTREE_ROOT:-/data/git-worktrees}/<repo-path-slug>-<agent-or-stream>`, the slug being the session's absolute startup path with `/` → `-`; the stall watchdog finds worktrees by that root and naming.
 2. **Brief**: inject the absolute path and the SHA; spawn WITHOUT the `isolation` flag; the agent's FIRST action is `cd <abs-path>` then `git merge --ff-only <sha>` (Option A — unpushed commits are reachable by SHA).
 3. **Fail closed**: instruct every worktree-scoped agent to re-verify `pwd` against its assigned path before EVERY git write command, and on mismatch to refuse the write and report.
 4. **Post-wave**: verify commits → cherry-pick/merge into the feature branch → verify the current branch → clean up (`git worktree remove`, `prune`, `git branch -D`). Never remove a worktree holding uncommitted or unmerged work.
 
-**Post-wave push (coordinator discretion, feature branches only):** once the merged feature branch is verified, the coordinator may push it without user authorization (`git-and-github` § Safety Rules). Never a base/protected branch — outright block, human-only. **Always the coordinator itself** — never relay the push to a spawned agent, which loops or refuses.
+**Post-wave push (coordinator discretion, feature branches only):** once the merged feature branch is verified, the coordinator may push it without user authorization (`git-and-github` § Safety Rules). Never a base/protected branch — outright block, human-only. **Always the coordinator itself** (verify with `git ls-remote`) — never relay the push to a spawned agent, which loops or refuses.
 
 **Cargo target-dir isolation is automatic** — every invocation through `cargo-cached.sh` derives a per-checkout target dir; never assign `CARGO_TARGET_DIR` per agent.
 

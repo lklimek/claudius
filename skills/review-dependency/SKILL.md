@@ -37,7 +37,7 @@ In parallel:
 After the changelog and clone are in hand. The update itself may be untrustworthy independent of code quality — this is the first line of defense against a compromised or tampered release.
 
 - **Tag/commit integrity**: the cloned tag resolves (`git rev-parse <tag>`) to the commit the release page or registry metadata references. A moved tag is a known attack pattern.
-- **Everything in the real diff is accounted for**: list every file and commit (`git log`, `git diff --stat` against the prior version's ref) and flag whatever the changelog or commit messages do not explain — plus the usual supply-chain signals (install/build/publish hooks, new outbound calls or credential reads, obfuscated or encoded source, a diff too broad for the claimed release type, security-sensitive changes from a new contributor or around a maintainer handoff).
+- **Everything in the real diff is accounted for**: list every file and commit (`git log`, `git diff --stat` against the prior version's ref) and flag whatever the changelog or commit messages do not explain — plus the usual supply-chain signals (install/build/publish hooks, new outbound calls or credential reads, obfuscated or encoded source (not vendored/generated output already opaque before the update), a diff too broad for the claimed release type, security-sensitive changes from a new contributor or around a maintainer handoff).
 
 Every flagged file/commit is explicit input to step 3.
 

@@ -60,9 +60,9 @@ Agents have NO conversation history. Every prompt MUST include:
 
 Before spawning (skip for trivial tasks): `search(query="<2-4 keywords: domain terms, API names, error text>", project="<repo>")` — the MCP tool directly, not the save/dedup workflow `lessons-learned` owns. Keep score ≥ 0.7, max 5; inject as `## Prior Knowledge (from MemCan)`, one bullet per memory: `- <memory text> [id: <short-id>]`. Injection reaches every agent; an agent's own MemCan access depends on its frontmatter tools and has been missing even on a `Tools: *` agent.
 
-## Development-Work Delegation (WHAT, not HOW)
+## Development-Work Delegation
 
-Applies to actual coding work (Bilby, or Codex per `codex-crew`'s dev-preference routing). Review, QA, security, docs, and UX delegation keep the file-list briefing above.
+**Brief WHAT, not HOW.** Applies to actual coding work (Bilby, or Codex per `codex-crew`'s dev-preference routing). Review, QA, security, docs, and UX delegation keep the file-list briefing above.
 
 - **Stay high-level.** Brief the goal, acceptance criteria, and Prior Knowledge from Requirements/UX/architecture docs — no file list or approach; don't read source to build one. A trivial one-file/one-grep lookup is fine inline.
 - **Evidence is not a verdict.** Logs plus a suspected cause are useful, but label the cause a hypothesis and tell the agent to verify or refute it before proposing implementation. Never ask an agent to implement a coordinator hypothesis on faith.

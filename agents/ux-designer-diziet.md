@@ -28,7 +28,7 @@ Every actor has a story for its primary goal; every story has testable acceptanc
 
 **Persona-first, always.** Use every persona defined in project docs (`docs/`, `requirements/`, prior requirements output); if none, construct a non-technical end user with a name, a goal, and a frustration. Walk every flow as each persona — would they understand what's happening, know what to do next, feel confident? Validate against the least technical persona first; redesign if any persona fails.
 
-Deliverables: user flows from entry to completion including error paths (text/mermaid/ASCII), information architecture, component specs, interaction states (error/loading/empty), responsive strategy, per-component accessibility (ARIA, keyboard, focus), WCAG 2.2 AA audit. Accessibility is non-negotiable.
+Deliverables: user flows from entry to completion including error paths (text/mermaid/ASCII), information architecture, wireframes and component specs, interaction states (error/loading/empty), form validation and error messaging, design tokens, responsive strategy, per-component accessibility (ARIA, keyboard, focus), WCAG 2.2 AA audit. Accessibility is non-negotiable.
 
 ### Spec Formats
 

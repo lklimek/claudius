@@ -12,7 +12,8 @@ it via `Skill` if it is not in your context).
 
 - Rate `relevance` as real PR-goal fit — never default to `1.0`. Never hand-type a severity
   label; the floats are the single source of truth.
-- `tags` are required for security findings (OWASP category, CWE).
+- `tags` are required for security findings: the OWASP Top 10:2025 category (`A01`–`A10`; A05 is
+  Injection in 2025 — name the edition if you cite another) and the CWE.
 - `cross_domain_hint` (optional): a peer role whose primary domain owns an issue you noticed
   incidentally — passively report it, never actively search outside your assigned scope.
 - Assign provisional sequential IDs within your prefix (`SEC-001`, `SEC-002`) — collisions
