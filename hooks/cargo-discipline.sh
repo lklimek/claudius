@@ -131,7 +131,7 @@ scan=$(sed -E 's/"[^"]*"/""/g; s/'"'"'[^'"'"']*'"'"'/'"''"'/g' <<<"$heredoc_stri
 
 # --- Rule 1: cargo check is banned -----------------------------------------
 if grep -qE "${LEAD}${CARGO}check${TRAIL}" <<<"$scan"; then
-  deny "cargo check is banned (rust-best-practices): clippy is a strict superset and check artifacts do not seed the clippy cache, so check->clippy compiles twice. Run: $WRAPPER clippy <same scope> -- -D warnings. Rarely-justified override: prefix CLAUDIUS_FORCE=1."
+  deny "cargo check is banned (coding-best-practices § Rust): clippy is a strict superset and check artifacts do not seed the clippy cache, so check->clippy compiles twice. Run: $WRAPPER clippy <same scope> -- -D warnings. Rarely-justified override: prefix CLAUDIUS_FORCE=1."
 fi
 
 # --- Rule 2: no chained COMPILING cargo commands in one Bash call -----------
@@ -140,7 +140,7 @@ fi
 n=$(grep -cE "${LEAD}${CARGO}(build|test|clippy|nextest|check|doc|bench)${TRAIL}" \
       <<<"$(tr ';&|' '\n' <<<"$scan")")
 if (( n >= 2 )); then
-  deny "Chained cargo compile commands waste full compile cycles (rust-best-practices: never chain, never pre-compile). Run ONE command for the outcome you need; combine crate scopes as '-p a -p b' instead of '&&'. cargo fmt may still be chained (it does not compile). Override: prefix CLAUDIUS_FORCE=1."
+  deny "Chained cargo compile commands waste full compile cycles (coding-best-practices § Rust: never chain, never pre-compile). Run ONE command for the outcome you need; combine crate scopes as '-p a -p b' instead of '&&'. cargo fmt may still be chained (it does not compile). Override: prefix CLAUDIUS_FORCE=1."
 fi
 
 # --- Rule 3: no ad-hoc target-dir override that differs from canonical ------

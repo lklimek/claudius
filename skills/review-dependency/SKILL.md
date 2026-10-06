@@ -1,159 +1,73 @@
 ---
 name: review-dependency
-description: "This skill should be used when the user asks to \"review a dependency update\", \"audit this dependency bump\", or assess the security of an upgraded or newly added dependency."
+description: "This skill should be used when the user asks to \"review a dependency update\", \"audit this dependency bump\", or assess the security of an upgraded or newly added dependency. It reconciles the documented change against the real upstream diff, audits the changed source, checks our usage, and returns one risk-rated report."
 agent: claudius
 context: fork
-allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Agent, Bash(mktemp *), Bash(git diff *), Bash(git log *), Bash(git show *), Bash(git tag *), Bash(git rev-parse *), Bash(git clone --depth=100 --config core.hooksPath=/dev/null -- *), Bash(gh api /advisories*), Bash(rm -rf /tmp/claude/*), Bash(govulncheck *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *)
+allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Agent, Bash(mktemp *), Bash(git diff *), Bash(git log *), Bash(git show *), Bash(git tag *), Bash(git rev-parse *), Bash(git clone --depth=100 --config core.hooksPath=/dev/null -- *), Bash(gh api /advisories*), Bash(rm -rf /tmp/claude/dep-review-*), Bash(govulncheck *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *)
 ---
 
 # Dependency Security Review
 
-Security-focused review of a dependency update.
+Security-focused review of a dependency update. Produces and returns a report — **it never posts anywhere** (`allowed-tools` has no GitHub write tool). Say "returned" or "written to `<path>`", never "posted"/"published"; the invoking skill or coordinator publishes it (e.g. `dependabot-merge` § 5) and verifies the publish happened.
 
-**Argument**: `$ARGUMENTS` — dependency name (e.g., `github.com/lib/pq`, `express`, `tokio`), optionally with version range (e.g., `github.com/lib/pq 1.11.1..1.11.2`). If empty, auto-detect from the current branch by diffing the dependency manifest against the main branch.
+**Argument**: `$ARGUMENTS` — dependency name (e.g., `github.com/lib/pq`, `express`, `tokio`), optionally with a version range (`github.com/lib/pq 1.11.1..1.11.2`). If empty, auto-detect by diffing the dependency manifests and lockfiles against the base branch.
 
-## 1. Identify the Dependency Change
+## 1. Identify the Change
 
-Detect the ecosystem and locate the manifest:
-
-| Ecosystem | Manifest files |
-|---|---|
-| Go | `go.mod`, `go.sum` |
-| Rust | `Cargo.toml`, `Cargo.lock` |
-| Python | `pyproject.toml`, `requirements*.txt`, `Pipfile.lock`, `poetry.lock` |
-| Node.js | `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` |
-| Other | Identify automatically |
-
-Diff the manifest against the base branch: package name, old version, new version, and any other dependency changes bundled in the same commit.
+From the manifest/lockfile diff: package, old version, new version, and any other dependency changes bundled in the same commit.
 
 ## 2. Gather Upstream Intelligence
 
-Run in parallel:
+**Input validation first**: before the package name reaches any shell command, confirm it contains only alphanumerics, `-`, `_`, `.`, `/`, and `@`; reject anything else.
 
-### 2a. Changelog and Diff
-- Fetch release notes from the upstream releases/tags page
-- Fetch the comparison between old and new versions
-- Summarize: what changed, how many commits, which files, nature of changes
+In parallel:
 
-### 2b. Clone the Library
-Create a session temp dir (if not already created) and clone the new version into it.
+- **Changelog and comparison** — release notes plus the old..new comparison: what changed, how many commits, which files.
+- **Clone** the new version into a session dir:
 
-```bash
-SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/XXXXXX)
-```
+  ```bash
+  SESSION_DIR=$(mkdir -p /tmp/claude && mktemp -d /tmp/claude/dep-review-XXXXXX)
+  git clone --depth=100 --config core.hooksPath=/dev/null -- <upstream-repo-url> "$SESSION_DIR/<package-name>"
+  ```
 
-**Input validation**: before using the package name in any shell command, validate it contains only alphanumerics, hyphens, underscores, dots, forward slashes, and `@`. Reject any input containing shell metacharacters (`;`, `|`, `&`, `$`, `` ` ``, `(`, `)`, `<`, `>`, `!`, `#`, `~`, `{`, `}`).
-
-```bash
-git clone --depth=100 --config core.hooksPath=/dev/null -- <upstream-repo-url> "$SESSION_DIR/<package-name>"
-```
-
-### 2c. Known Vulnerability Scan
-
-| Source | Method |
-|---|---|
-| OSV.dev | `POST https://api.osv.dev/v1/query` with package name and ecosystem |
-| GitHub Advisory Database | `gh api /advisories?ecosystem=<eco>&affects=<pkg>` |
-| NVD | Web search for package CVEs |
-| Ecosystem-specific | `govulncheck` (Go), `cargo audit` (Rust), `npm audit` (Node), `pip-audit` (Python) |
-| Web search | `<package-name> CVE vulnerability security advisory` |
-
-Check for commonly confused similarly-named packages that may pollute search results.
+- **Known vulnerabilities** — OSV.dev, `gh api /advisories?ecosystem=<eco>&affects=<pkg>`, the ecosystem scanner (`govulncheck`, `cargo audit`, `npm audit`, `pip-audit`), and a web search. Watch for similarly-named packages polluting results.
 
 ### 2d. Reconcile the Documented Change Against the Actual Diff
 
-Run after 2a and 2b complete — this cross-checks 2a's claimed changes against 2b's real commit history and diff, which is the first line of defense against a compromised or tampered release (the update itself may not be trustworthy, independent of whether the resulting code has exploitable bugs).
+After the changelog and clone are in hand. The update itself may be untrustworthy independent of code quality — this is the first line of defense against a compromised or tampered release.
 
-- **Tag/commit integrity**: confirm the tag or version cloned in 2b resolves to the same commit the changelog/release page/registry metadata references (`git rev-parse <tag>`, compare against the release notes' linked commit or the registry's recorded commit hash where available). A moved tag pointing at a different commit than what was publicly reviewed is a known attack pattern.
-- **Undocumented files/commits**: list every file and commit in the actual diff (`git log`, `git diff --stat` against the prior version's ref) and flag anything not explained by the changelog or commit messages — especially changes with no corresponding entry at all.
-- **Lifecycle/install hooks**: flag any new or modified build/install/publish scripts — npm `preinstall`/`postinstall`/`prepare` in `package.json`, Python `setup.py` custom `cmdclass`/`build_ext` hooks, Makefile install targets, CI/release workflow files. These run with elevated trust and are a common injection point.
-- **New network calls or exfiltration paths**: source changes that add outbound requests, especially to domains not previously referenced, or that read environment variables/credentials they didn't read before.
-- **Obfuscation**: minified, heavily encoded (base64/hex blobs), or otherwise non-human-reviewable content added to *source* (not generated/vendored build output that was already opaque before this update).
-- **Diff shape vs. claimed change type**: a "patch"/bugfix release with an unusually large or broad diff, or changes touching files unrelated to the stated fix, warrants explanation before proceeding.
-- **Contributor provenance**: a security-sensitive change landed by a contributor with no prior history in the project, or a maintainer change/handoff around the time of this release, raises the bar for scrutiny.
+- **Tag/commit integrity**: the cloned tag resolves (`git rev-parse <tag>`) to the commit the release page or registry metadata references. A moved tag is a known attack pattern.
+- **Everything in the real diff is accounted for**: list every file and commit (`git log`, `git diff --stat` against the prior version's ref) and flag whatever the changelog or commit messages do not explain — plus the usual supply-chain signals (install/build/publish hooks, new outbound calls or credential reads, obfuscated or encoded source, a diff too broad for the claimed release type, security-sensitive changes from a new contributor or around a maintainer handoff).
 
-Anything found here becomes explicit input to step 3 — surface the specific files/commits flagged so the audit reads them directly rather than re-discovering them independently.
+Every flagged file/commit is explicit input to step 3.
 
-## 3. Security Audit of the Library
+## 3. Security Audit
 
-Spawn a `security-engineer-smythe` agent to review the cloned source at `$SESSION_DIR/<package-name>`.
+Spawn ONE `security-engineer-smythe` agent on the cloned source at `$SESSION_DIR/<package-name>` — no second agent for vulnerability research; Smythe owns it.
 
-### Scope
-- **Primary**: all changes between old and new version (the diff)
-- **Secondary**: full audit of security-critical code paths
-- **Any file/commit flagged by step 2d** as undocumented or suspicious — verify it directly, don't take the changelog's silence as evidence of safety
+- **Primary scope**: the old..new diff, and every file/commit step 2d flagged — verify directly; the changelog's silence is not evidence of safety.
+- **Secondary**: security-critical code paths relevant to the library's purpose.
+- **Research**: beyond registered advisories, the issue tracker for **unregistered security fixes** (fixes never assigned a CVE/GHSA), the project's security posture (`SECURITY.md`, disclosure and CVE-registration discipline, maintainer activity), and whether ecosystem vulnerability tooling covers this library at all.
 
-### Audit Checklist
+Findings carry `likelihood`/`impact`/`relevance` floats per `severity` skill § 3 — never a hand-typed label — with file:line, CWE, impact, remediation. This skill runs coordinator-inline (`agent: claudius`, `context: fork`, no consolidation pass), so like review-pr Pass C and check-pr-comments it assigns `merge_class`/`intent_basis` directly (`severity` § Merge Classification) in the v4 report JSON it emits (`claudius:report-format`).
 
-Apply the categories relevant to the library's purpose:
+## 4. Codebase Impact
 
-**Network / Protocol libraries** — TLS certificate validation and defaults, protocol message parsing and length validation, authentication mechanisms (password handling, token security), connection string / URL parsing injection, buffer safety and unbounded allocations from network data
+How **our** code uses the dependency: direct API use vs transitive import; which APIs (any deprecated or known-insecure); where configuration, URLs, and credentials passed to it come from; whether its errors reach end users; whether security-critical settings (TLS mode, auth, timeouts) are explicit or defaulted; whether untrusted input is validated before it reaches the library.
 
-**Data access libraries** — Query injection (SQL, NoSQL, LDAP, etc.), input escaping and parameterization, connection security defaults, credential exposure in errors or logs
+## 5. Consolidated Report
 
-**HTTP libraries** — SSRF and redirect following, header injection (CRLF), request smuggling, cookie security, response body size limits
+One report with these sections:
 
-**Cryptographic libraries** — Algorithm strength, CSPRNG usage, nonce/IV reuse, side-channel resistance, key management and zeroing
+- **Change Summary** — package, versions, commit count, nature of change.
+- **Diff Integrity** — tag/commit integrity result and every undocumented or suspicious file/commit/hook from step 2d, or a plain statement that the diff fully matches what is documented.
+- **Known Vulnerabilities** — CVEs/advisories (or "None found"), affected versions, whether the new version is impacted; commonly confused packages.
+- **Library Audit Findings** — Severity | Finding | Location | CWE, CRITICAL first.
+- **Codebase Compliance** — Recommendation | Status | Action Needed?, per finding.
+- **Risk Assessment** — overall rating **Safe / Low Risk / Medium Risk / High Risk / Do Not Upgrade**, key concerns and mitigations. Flag poor CVE-registration discipline (automated scanning may be blind). **Any unresolved Diff Integrity finding floors the rating at High Risk**, even with a clean code audit — an untrustworthy update is disqualifying on its own.
+- **Recommendations** — numbered actions for our codebase, plus long-term considerations.
 
-**Serialization libraries** — Deserialization attacks and type confusion, resource exhaustion (recursion bombs, billion laughs), malformed input handling
-
-**All libraries** — Input validation and sanitization, memory safety and resource limits, error handling and information disclosure, concurrency safety (races, deadlocks), file system operations (path traversal, symlink attacks), transitive dependency risk, debug/logging modes that may leak sensitive data
-
-### Output Format
-Emit `likelihood`/`impact`/`relevance` floats per `severity` skill § 3 — never a hand-typed label. Runs coordinator-inline (`agent: claudius`, `context: fork`, no consolidation pass), so like review-pr Pass C and check-pr-comments it assigns `merge_class`/`intent_basis` directly (`severity` § Merge Classification) in the v4 report JSON it emits (`claudius:report-format`). Include file:line references, CWE IDs where applicable, impact, and remediation.
-
-## 4. Vulnerability Research
-
-Spawn an `architect-nagatha` agent in parallel with step 3, to:
-
-- Query all major vulnerability databases from step 2c
-- Search the library's issue tracker for security discussions and responsible disclosures
-- Identify **unregistered security fixes** — code fixes never assigned CVEs/GHSAs
-- Assess security posture: `SECURITY.md` presence, disclosure process, CVE registration discipline, maintainer activity
-- Check whether ecosystem vulnerability tooling actually covers this library
-
-## 5. Codebase Impact Assessment
-
-After upstream review completes, assess how the dependency is used in **our** codebase:
-
-- How is the library imported? Direct API use vs transitive/side-effect import?
-- Which APIs are called? Any deprecated or known-insecure APIs?
-- How are configurations (connection strings, URLs, credentials) constructed? From trusted sources?
-- Are errors from this library exposed to end users or external APIs?
-- Are security-critical settings (TLS mode, auth method, timeouts) explicitly configured or left to defaults?
-- Is there input validation on data passed to this library from untrusted sources?
-
-## 6. Consolidated Report
-
-**This skill only produces and returns the report — it never posts anywhere** (`allowed-tools` has no GitHub write tool). Say "returned" or "written to `<path>`", never "posted"/"published". The invoking skill or coordinator publishes it (e.g. `dependabot-merge` § 5) and verifies the publish actually happened.
-
-Present a single report:
-
-### Change Summary
-Package, old version, new version, commit count, nature of changes (bug fix / feature / security fix / breaking change).
-
-### Diff Integrity
-Whether the actual diff/commit history matches the documented changes (step 2d): tag/commit integrity result, and every undocumented, hidden, or otherwise suspicious file/commit/hook found — or state plainly that the diff fully matches what's documented. Treat any unresolved finding here as grounds to escalate the overall risk rating regardless of what the code-level audit (step 3) finds, since it calls the trustworthiness of the update itself into question, not just its code quality.
-
-### Known Vulnerabilities
-Table of CVEs/advisories found (or "None found"), affected versions, whether the new version is impacted. Note any commonly confused packages.
-
-### Library Audit Findings
-Table: Severity | Finding | Location | CWE — grouped by severity, CRITICAL first.
-
-### Codebase Compliance
-Table: Recommendation | Status | Action Needed? — for each finding, assess whether our usage is affected.
-
-### Risk Assessment
-- Overall rating: **Safe / Low Risk / Medium Risk / High Risk / Do Not Upgrade**
-- Key concerns and mitigations
-- Flag poor CVE registration discipline (automated scanning may be blind)
-- Any unresolved Diff Integrity finding floors the rating at High Risk or worse, even with a clean code audit — an untrustworthy update is disqualifying on its own
-
-### Recommendations
-Numbered actionable items for our codebase, plus long-term considerations (e.g., migration to alternatives).
-
-## 7. Cleanup
+## 6. Cleanup
 
 ```bash
 rm -rf "$SESSION_DIR"
