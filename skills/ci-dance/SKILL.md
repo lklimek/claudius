@@ -3,7 +3,7 @@ name: ci-dance
 description: "This skill should be used when the user says 'ci-dance', 'make the PR green', 'ship this and fix CI', 'push and handle reviews', or wants end-to-end PR pipeline automation."
 argument-hint: "timeout=300 bots=<name,...>"
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bash(git branch --show-current), Bash(git status*), Bash(git log *), Bash(git diff *), Bash(git show *), Bash(git cherry-pick *), Bash(git worktree add *), Bash(git worktree list*), Bash(git worktree remove *), Bash(git worktree prune), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *)
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bash(git branch --show-current), Bash(git status*), Bash(git log *), Bash(git diff *), Bash(git show *), Bash(git add *), Bash(git commit *), Bash(git cherry-pick *), Bash(git worktree add *), Bash(git worktree list*), Bash(git worktree remove *), Bash(git worktree prune), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *)
 ---
 
 # CI Dance — Unattended PR Pipeline
@@ -27,15 +27,17 @@ Invocation is full consent to push, fix, and re-push — no confirmations, and s
 
 **REPEAT UNCONDITIONALLY** until Step 5 triggers an exit; log `=== CI Dance: Iteration {n} starting ===` each time. Track iteration count, `start_time`, CI/review iterations, findings fixed and claim-deferred. Stopping after one iteration is a bug.
 
-1. **Push** — `/push`
-2. **Three streams** in parallel (CI, Grumpy, Review), communicating to CLAIM findings and avoid duplicate fixes — the Grumpy Stream starts as soon as the iteration's changes are committed, without waiting for the push
+1. **Commit, start Grumpy, push** — commit locally, spawn the Grumpy Stream on that commit, then `/push`
+2. **Three streams** in parallel (CI, Grumpy, Review), communicating to CLAIM findings and avoid duplicate fixes — CI and Review start after the push; Grumpy is already running
 3. **Merge** — combine the streams' fixes, sync with the PR's base branch
 4. **Resolve** — addressed bot review threads
 5. **Exit check** — unless it triggers an exit, return to Step 1
 
-### Step 1: Push
+### Step 1: Commit, Start Grumpy, Push
 
-Invoke `/push` to commit staged/unstaged changes, push, and create/update the PR (no confirmation — unattended). If nothing to commit or push, proceed to Step 2.
+1. **Commit** staged/unstaged changes locally per `git-and-github` conventions (nothing to commit is fine — iteration 2+ starts from Step 3's already-committed merge).
+2. **Spawn the Grumpy Stream** (Step 2) on that commit's SHA — before anything is published.
+3. **Publish**: invoke `/push` to push and create/update the PR (no confirmation — unattended); with nothing to push, go straight on. Then spawn the CI and Review streams.
 
 ### Step 2: Three Parallel Streams
 
@@ -64,7 +66,7 @@ Route by `merge_class`, never raw severity — a valid pre-existing MEDIUM this 
 | `out_of_scope_follow_up` | **Never fix inline, never file anything.** Surface it in the Final Report for the user's disposition |
 | `disputed` | Skip |
 
-Findings arriving without a `merge_class` (raw CI failures, unclassified comments) get one assigned per `claudius:severity` § Merge Classification before routing — a CI failure on this branch is `blocking` by construction.
+Findings arriving without a `merge_class` (raw CI failures, unclassified comments) get one assigned per `claudius:severity` § Merge Classification (load the skill and its merge-classification reference first) before routing — a CI failure on this branch is `blocking` by construction.
 
 #### CI Stream
 
@@ -74,7 +76,7 @@ CI runs automatically on push (no trigger). Wait and collect per Watch and Colle
 
 Invoke `/grumpy-review` locally (runs inline, spawns its own reviewers, produces a severity-ranked JSON report). Read the report (findings carry severity AND `merge_class`), discard outdated/false positives, route by merge class, then the shared fix sub-step.
 
-**Fix from the local `report.json`, immediately.** The stream needs a commit to review — not the push, the PR, or CI — so spawn it first and never hold it for any of them. Never wait for the findings to appear on the PR, and never post them there as a precondition for fixing: publishing review comments is not part of this loop. Only the *push* of its fixes waits — for Step 3's merge and the next Step 1.
+**Fix from the local `report.json`, immediately.** The stream needs a commit to review — not the push, the PR, or CI — so it is spawned in Step 1 before the push and never held for any of them. Never wait for the findings to appear on the PR, and never post them there as a precondition for fixing: publishing review comments is not part of this loop. Only the *push* of its fixes waits — for Step 3's merge and the next Step 1.
 
 #### Review Stream
 

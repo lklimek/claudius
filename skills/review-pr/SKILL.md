@@ -54,6 +54,8 @@ Audit whether the diff **functionally delivers** what the PR's self-description 
 
 Run all three; at most one finding per axis-trigger (per promise on Axis 2). Verification is **functional**: locate the implementing code and confirm it delivers the claimed behavior — a matching hunk is necessary, not sufficient. For large diffs, delegate per-axis (or per-promise) judgment to subagents per `git-and-github` § Context Management.
 
+**Before scoring**, Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` and `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (skip what this session already loaded) — Pass C assigns floats and `merge_class` itself, and no agent preloads those rules for the coordinator.
+
 Trigger hints give `likelihood`/`impact` float ranges — the coordinator computes `overall_severity` and the integer band from these two alone. Cross-check the rubric and band table in `claudius:severity`. Never hand-type a severity label.
 
 #### Axis 1 — Title ↔ diff

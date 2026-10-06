@@ -18,7 +18,7 @@ Read when reviewing Python code: non-obvious, library/version-specific traps.
 
 ### XML
 
-- **Stdlib XML** (`xml.etree`, `xml.sax`, `xml.dom.minidom`, `xml.dom.pulldom`): billion-laughs/XXE exposure; use `defusedxml`.
+- **Stdlib XML** (`xml.etree`, `xml.sax`, `xml.dom.minidom`, `xml.dom.pulldom`): no external-entity (XXE) resolution by default, but entity-expansion DoS (billion laughs, quadratic blowup) depends on the linked Expat version; use `defusedxml` for untrusted input. Classic XXE needs an explicitly enabled feature or `lxml`.
 - **`lxml`**: parser needs `resolve_entities=False, no_network=True`.
 
 ### Network & SSRF
@@ -35,7 +35,7 @@ Read when reviewing Python code: non-obvious, library/version-specific traps.
 
 - **`assert`** is stripped under `python -O`; never use for authz/validation.
 - **Regex DoS**: nested/complex regex on user input without timeout; use `re2` (note: stdlib `re` has no `re.TIMEOUT`).
-- **asyncio**: shared state across `await` without `asyncio.Lock`; CVE-2024-3219 (socket module); CVE-2024-12254 — `_SelectorSocketTransport.writelines()` ignores the high-water mark (3.12+), unbounded buffer growth.
+- **asyncio**: shared state across `await` without `asyncio.Lock`; CVE-2024-3219 (socket module); CVE-2024-12254 — `_SelectorSocketTransport.writelines()` ignores the high-water mark, unbounded buffer growth (3.12.0–3.12.8, 3.13.0–3.13.1; fixed in 3.12.9 / 3.13.2).
 - **Log forging / secrets in logs**: newlines in logged input; `__repr__`/`__str__` of user objects leaking tokens or PII.
 
 ### Supply Chain

@@ -14,11 +14,11 @@ Merge the remote base branch into the current feature branch: pre-merge analysis
 
 ## 2. Base Branch
 
-From PR metadata; fall back to the repo default branch; if neither resolves, ask the user:
+From PR metadata (prints the bare branch name `<base>`); fall back to the repo default branch (prints `origin/<base>` already — do not prefix it again); if neither resolves, ask the user:
 
 ```bash
 gh pr view --json baseRefName -q .baseRefName
-git symbolic-ref refs/remotes/origin/HEAD
+git symbolic-ref refs/remotes/origin/HEAD --short
 ```
 
 Merge from `origin/<base>` (the remote-tracking ref the fetch just updated) — never the local base branch, which may be stale.

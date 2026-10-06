@@ -54,7 +54,7 @@ Skip the multi-agent pipeline and the fixed trio; spawn exactly ONE fallback rev
 
 Determine the authoring tier from `git log` (commit author/trailer, PR metadata, or the invoking workflow's recorded model selection) before spawning; if genuinely indeterminate, use the default above.
 
-The single agent stands in for the entire trio — its prompt must cover security, structural, and adversarial-correctness concerns in one pass, and gets the security pattern files for the diff's languages (§3 template). It writes the report JSON directly — no consolidation — and MUST do so even if it found nothing: a full valid v4 envelope with `findings: []` and a positive `executive_summary`, never a skipped file. Since §5b never runs on this path, the coordinator assigns `merge_class`/`intent_basis` inline after the producer returns (per `severity` skill § Merge Classification), before rendering.
+The single agent stands in for the entire trio — its prompt must cover security, structural, and adversarial-correctness concerns in one pass, and gets the security pattern files for the diff's languages (§3 template). It writes the report JSON directly — no consolidation — and MUST do so even if it found nothing: a full valid v4 envelope with `findings: []` and a positive `executive_summary`, never a skipped file. Since §5b never runs on this path, the coordinator assigns `merge_class`/`intent_basis` inline after the producer returns (per `severity` skill § Merge Classification — load the skill and Read its `merge-classification.md`, as the Prepare step does on the full path), before rendering.
 
 ### Core agents (always include — fixed trio, every non-trivial review)
 
@@ -137,7 +137,7 @@ Flatten all agent reports, detect duplicate candidates, scan for INTENTIONAL com
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py prepare security-engineer:<SCRATCH_DIR>/security-findings.json project-reviewer:<SCRATCH_DIR>/project-findings.json qa-engineer:<SCRATCH_DIR>/qa-findings.json --repo-root <REPO_ROOT> --base-ref <BASE_REF> --output <SCRATCH_DIR>/intermediate.json --digest --commit <COMMIT> --branch <BRANCH>
 ```
 
-Metadata goes in plain flags (`--commit`, `--branch`, `--project`, `--date`), never JSON on the command line; `project` defaults to the GitHub `owner/repo`, `date` to today (UTC), `--branch` is optional. Make prepare the first call after reviewers return, in the same message as `Skill(claudius:severity)` and a Read of `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (both needed in §5b).
+Metadata goes in plain flags (`--commit`, `--branch`, `--project`, `--date`), never JSON on the command line; `project` defaults to the GitHub `owner/repo`, `date` to today (UTC), `--branch` is optional. Make prepare the first call after reviewers return, in the same message as `Skill(claudius:severity)` and a Read of `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (both needed in §5b; skip either if this session already loaded it).
 
 Writes `intermediate.json` (full `raw_findings`, `duplicate_groups`, `intentional_downgrades`, `section_positives`, `agent_stats`; `metadata.plugin_version` auto-filled) and prints `digest.md` — every finding's `<agent>:<original_id>` key, band, floats, location and clipped description, plus duplicate groups and INTENTIONAL hits by key. Decide from the digest (re-read `<SCRATCH_DIR>/digest.md` if the output was truncated); open `intermediate.json` only when a finding's full text matters.
 

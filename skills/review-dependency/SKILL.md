@@ -49,7 +49,7 @@ Spawn ONE `security-engineer-smythe` agent on the cloned source at `$SESSION_DIR
 - **Secondary**: security-critical code paths relevant to the library's purpose.
 - **Research**: beyond registered advisories, the issue tracker for **unregistered security fixes** (fixes never assigned a CVE/GHSA), the project's security posture (`SECURITY.md`, disclosure and CVE-registration discipline, maintainer activity), and whether ecosystem vulnerability tooling covers this library at all.
 
-Findings carry `likelihood`/`impact`/`relevance` floats per `severity` skill § 3 — never a hand-typed label — with file:line, CWE, impact, remediation. This skill runs coordinator-inline (`agent: claudius`, `context: fork`, no consolidation pass), so like review-pr Pass C and check-pr-comments it assigns `merge_class`/`intent_basis` directly (`severity` § Merge Classification) in the v4 report JSON it emits (`claudius:report-format`).
+Findings carry `likelihood`/`impact`/`relevance` floats per `severity` skill § 3 — never a hand-typed label — with file:line, CWE, impact, remediation. Before classifying, Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` and `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` — this fork has no preloaded copy. This skill runs coordinator-inline (`agent: claudius`, `context: fork`, no consolidation pass), so like review-pr Pass C and check-pr-comments it assigns `merge_class`/`intent_basis` directly (`severity` § Merge Classification) in the v4 report JSON it emits (`claudius:report-format`).
 
 ## 4. Codebase Impact
 
