@@ -21,7 +21,7 @@ description: "This skill should be used when running git or gh commands, interac
 
 ## Committing
 
-Create feature branches; NEVER commit to a base branch. [Conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`; `!` for breaking changes), message passed via HEREDOC, ending with the trailer `Co-Authored-By: Claude <your-model-name> <noreply@anthropic.com>` — your actual current model, never a version copied from a doc. Update `CHANGELOG.md` per [Keep a Changelog](https://keepachangelog.com/).
+Create feature branches; NEVER commit to a base branch. [Conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`; `!` for breaking changes), message passed via HEREDOC, ending with the trailer `Co-Authored-By: Claude <your-model-name> <noreply@anthropic.com>` — your actual current model, never a version copied from a doc. Never create or edit `CHANGELOG.md` in a feature PR — concurrent PRs conflict on it; it is written at release time (`release` skill). Exception: a project policy that explicitly requires a per-PR entry.
 
 ## Pull Requests
 
