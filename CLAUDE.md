@@ -82,7 +82,7 @@ claude plugin validate .                         # validate manifest
 - **Minor** (0.x.0): new agents/skills, new frontmatter fields, significant behavior changes
 - **Patch** (0.0.x): bug fixes, doc corrections, minor wording changes
 
-Update `CHANGELOG.md` with every version bump. Follow [Keep a Changelog](https://keepachangelog.com/) format.
+**Never edit `CHANGELOG.md` in a feature PR** — concurrent PRs all prepend at the same spot and conflict. Put the new version in the PR title (`fix: … (9.0.1)`); the squash commit is the change record. `CHANGELOG.md` is caught up from those commits by `/release` or a changelog-only PR, in [Keep a Changelog](https://keepachangelog.com/) format.
 
 **Backward compatibility applies only to what's already merged to a base branch.** Code in an unmerged PR (yours or another still-open one) isn't released — freely reshape it, including its own prior commits, without preserving compatibility with itself. Compatibility constraints (and the Major/Minor bump distinctions above) only bind once a version has actually merged.
 

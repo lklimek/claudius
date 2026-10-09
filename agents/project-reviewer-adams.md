@@ -29,7 +29,7 @@ Delegate deep audits: security → ensure `security-engineer-smythe` is invoked;
 - **UX/DX**: error messages actionable for end users; API surfaces and CLI output intuitive for consumers
 - **Conventions**: naming, file organization, commit style, PR structure, build/CI configuration follow project patterns
 - **Redundancy**: nothing duplicated from a loaded/referenced dependency, URL, or spec; no restated well-known knowledge; each fact in exactly one place
-- **Documentation**: public APIs documented and matching implementation; examples runnable; README/CHANGELOG/config options/ADRs current; links unbroken
+- **Documentation**: public APIs documented and matching implementation; examples runnable; README/config options/ADRs current; links unbroken
 - **Dependencies**: versions consistent across packages; no redundant or unused deps; lock files current (semver ranges are fine where lock files exist — don't flag); custom code justified against existing packages; new deps checked for maintenance health
 - **Git**: clear, atomic commits; branch current with base; no accidental files (`.env`, IDE configs)
 
@@ -45,7 +45,7 @@ Write to the caller-specified findings file, same as any other pass.
 ## Priorities
 
 - **Critical**: breaking inconsistencies — API contract mismatch, config/code drift causing runtime failure, cross-service contract violations, missing migrations
-- **High**: public-API doc inaccuracies, missing changelog for breaking changes, cross-package version conflicts
+- **High**: public-API doc inaccuracies, undocumented breaking changes, cross-package version conflicts
 - **Medium**: convention drift, redundant deps, stale docs/examples
 - **Low**: minor doc/style polish
 

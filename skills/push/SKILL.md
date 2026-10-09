@@ -19,7 +19,7 @@ Load `claudius:git-and-github` skill first — all commit, push, PR, and attribu
 
 2. **Version bump** (if applicable)
    - Check project's `CLAUDE.md` for versioning policy (SemVer, changelog, version file locations)
-   - **If a policy exists, this PR MUST carry a version bump before it's done** — **exactly once per unmerged PR, not per commit**: a branch already carrying a bump gets its changelog entry amended, not a second bump; re-bump only if the SemVer category grows (patch → minor). "Not merged yet" never means the bump can be skipped. Same reasoning for compatibility: an unmerged PR's earlier commits don't constrain later ones (`coding-best-practices` § "Unmerged code isn't released").
+   - **If a policy exists, this PR MUST carry a version bump before it's done** — **exactly once per unmerged PR, not per commit**: a branch already carrying a bump gets no second one; re-bump only if the SemVer category grows (patch → minor). "Not merged yet" never means the bump can be skipped. Same reasoning for compatibility: an unmerged PR's earlier commits don't constrain later ones (`coding-best-practices` § "Unmerged code isn't released").
 
 3. **Stage and commit**
    - Review changes, check for secrets — warn and exclude if found
