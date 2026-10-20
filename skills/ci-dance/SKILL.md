@@ -8,7 +8,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash(gh pr *), Bash(gh run *), Bas
 
 # CI Dance — Unattended PR Pipeline
 
-Autonomous loop: push, run three parallel streams (CI, grumpy-review, review bots) that fix their own findings, merge, repeat — until done or stuck.
+Autonomous loop: push, run three parallel streams (CI, selected local review, review bots) that fix their own findings, merge, repeat — until done or stuck.
 
 ## Prerequisites
 
@@ -22,6 +22,7 @@ Invocation is full consent to push, fix, and re-push — no confirmations, and s
 
 - `timeout=N` minutes (default **300**) from invocation; check before each iteration — hard stop.
 - `bots=<name,...>` (optional) — the review bots to trigger this run; overrides discovery (Review Stream).
+- `review=basic|full` (optional) — local review mode; default **full** preserves the complete pipeline audit. Basic uses one strong local reviewer per iteration; full invokes `grumpy-review`.
 
 ## Main Loop
 
@@ -41,13 +42,13 @@ Invocation is full consent to push, fix, and re-push — no confirmations, and s
 
 ### Step 2: Three Parallel Streams
 
-**Fresh results required** on iteration 2+: CI Stream watches runs from the most recent push (not cached), Grumpy Stream runs a new `/grumpy-review` on current code, Review Stream checks for reviews new since the last iteration.
+**Fresh results required** on iteration 2+: CI Stream watches runs from the most recent push (not cached), Grumpy Stream runs the selected local review mode on current code, Review Stream checks for reviews new since the last iteration.
 
-Spawn each stream as a named `Agent()` — `ci-stream`, `grumpy-stream`, `review-stream` (`grand-admiral` § Spawning) — each in its own **pre-created** worktree: `git worktree add <worktree-root>/<repo-path-slug>-<stream-name> -b <branch-name> <SHA>` under `$CLAUDIUS_WORKTREE_ROOT` (default `/data/git-worktrees`) BEFORE spawning, absolute path in the spawn `prompt`, stream `cd`s there on its first turn. `isolation="worktree"` is silently dropped for team spawns (`grand-admiral` § Worktree Isolation) — a stream without a worktree edits the main repo directly. Point the stall watchdog's `--worktrees` at the same root.
+Dispatch generic workers named `ci-stream`, `grumpy-stream`, and `review-stream` through the native host API (`grand-admiral` § Spawning), with explicit workflow-skill paths. Each gets a **pre-created** isolated worktree and resolved starting SHA per `grand-admiral` § Worktree Isolation. Reserve capacity for child reviewers; when capacity is tight, run the local review coordinator in the session lead and queue other streams rather than occupying every slot with waiting coordinators.
 
-**Named spawning requires running in the session lead.** If the whole `/ci-dance` was delegated to a teammate, named spawns fail ("Teammates cannot spawn other teammates"): spawn the three streams as **unnamed** background subagents, skip the claim/completion protocol (unnamed agents can't be messaged) and Step 3's `shutdown_request`, and rely on Step 3's merge-time cherry-pick/conflict resolution as the overlap trust boundary.
+Use native messaging and lifecycle tools where present. Claude-specific fallback: if named team spawning is unavailable, use generic independent workers, collect all results, and rely on merge-time conflict checks instead of team broadcasts. Never end the turn with detached streams still running.
 
-Every stream spawn prompt must forbid ending the stream's turn to wait for a `Monitor`/background-task notification from a sub-job it spawned (e.g. a Codex dispatch) — the notification returns to the coordinator, not the stream, which silently stalls. Poll with a bounded local wait loop instead (`codex-crew` § Monitoring a Codex Job).
+Every stream must collect its own child results before ending. Use native worker lifecycle tools; external launcher jobs require bounded status polling (optional launcher material in `delegate`).
 
 Each stream is a **complete unit** — **trigger → wait → collect & classify → fix** — committing in its own worktree; Step 3 cherry-picks the commits back.
 
@@ -74,7 +75,7 @@ CI runs automatically on push (no trigger). Wait and collect per Watch and Colle
 
 #### Grumpy Stream
 
-Invoke `/grumpy-review` locally (runs inline, spawns its own reviewers, produces a severity-ranked JSON report). Read the report (findings carry severity AND `merge_class`), discard outdated/false positives, route by merge class, then the shared fix sub-step.
+Invoke [review](../review/SKILL.md) locally with the selected mode. Collect `report.json` and coverage artifacts before fixing findings. Incomplete coverage cannot satisfy the clean-review exit condition; continue the unfinished pass or report the concrete blocker. Read findings, discard outdated/false positives, route by merge class, then use the shared fix sub-step.
 
 **Fix from the local `report.json`, immediately.** The stream needs a commit to review — not the push, the PR, or CI — so it is spawned in Step 1 before the push and never held for any of them. Never wait for the findings to appear on the PR, and never post them there as a precondition for fixing: publishing review comments is not part of this loop. Only the *push* of its fixes waits — for Step 3's merge and the next Step 1.
 
@@ -149,6 +150,6 @@ On exit (any condition), report:
 
 ## Notes
 
-- Delegate to `/push`, `/grumpy-review`, `/check-pr-comments` — never duplicate their logic
+- Delegate to `/push`, `/review` (full → `/grumpy-review`), `/check-pr-comments` — never duplicate their logic
 - Wait ~5 s after a push before listing new workflow runs
 - **Not for GitHub Actions** — pushing commits from inside a workflow causes concurrency cancellation loops. CLI only.

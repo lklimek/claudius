@@ -68,14 +68,14 @@ Write findings files with the Write tool — never `cat > file`, `tee`, heredocs
 
 | Prefix | Category | Used by |
 |--------|----------|---------|
-| `SEC-` | security | security-engineer-smythe |
-| `QA-` | code_quality | qa-engineer-marvin |
-| `PROJ-` | project | project-reviewer-adams |
+| `SEC-` | security | Smythe / security-best-practices |
+| `QA-` | code_quality | Marvin / review |
+| `PROJ-` | project | Adams / review |
 | `CODE-`, `RUST-`, `PY-`, `GO-`, `FE-` | code_quality | generic / Rust / Python / Go / frontend — whichever of Adams or Marvin surfaced the finding |
 | `CALL-` | call_tree | reviewer call-tree inspection pass |
-| `DOC-` | documentation | technical-writer-trillian |
-| `ARCH-` | architecture | architect-nagatha |
-| `UX-` | ux | ux-designer-diziet |
+| `DOC-` | documentation | Trillian / technical-writing |
+| `ARCH-` | architecture | Nagatha / architecture |
+| `UX-` | ux | Diziet / product-design |
 | `DEP-` | dependencies | review-dependency |
 | `CMT-` | pr_comments | check-pr-comments — plus `reviewer`, `comment_id`, `comment_url`, `thread_id`, `verdict` fields (schema-defined) |
 | `PPM-` | pr_promises | review-pr Pass C — `location` is a synthetic string (`PR-title`, `PR-body:summary-bullet-N`, `PR-body:out-of-scope-item-N`), rendered as plain text; `relevance: 1.0`. Worked example: `review-pr` § Finding emit template |

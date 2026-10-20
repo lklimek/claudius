@@ -1,57 +1,53 @@
-"""BP-load audit: every coding/reviewing agent must declare `coding-best-practices`.
-
-Cross-Cutting Rules (no tombstones, present-state comments, verify-before-act,
-minimize code, etc.) only bind an agent when it preloads `coding-best-practices`.
-Reviewer agents that omit the skill silently skip those rules, so audits hinge
-on this regression guard.
-
-The curated list below is the project-level contract — adding a new
-coding/reviewing agent? Add it here too.
-"""
+"""Role skills must explicitly load their coding rules on every host."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-AGENTS_DIR = REPO_ROOT / "agents"
-
-# Agents that write, edit, or review code. Each MUST load `coding-best-practices`
-# so its Cross-Cutting Rules govern every action and finding.
-BP_REQUIRED_AGENTS = [
-    "architect-nagatha",
-    "claudius",
-    "developer-bilby",
-    "project-reviewer-adams",
-    "qa-engineer-marvin",
-    "security-engineer-smythe",
-    "technical-writer-trillian",
-    "ux-designer-diziet",
-]
+SKILLS_DIR = REPO_ROOT / "skills"
+ROLE_SKILLS = (
+    "architecture",
+    "coding-best-practices",
+    "grand-admiral",
+    "review",
+    "security-best-practices",
+    "technical-writing",
+    "product-design",
+)
+SKILL_LINK = re.compile(r"\]\(([^)#]+/SKILL\.md)(?:#[^)]*)?\)")
 
 
-def _load_frontmatter(agent_name: str) -> dict:
-    path = AGENTS_DIR / f"{agent_name}.md"
-    text = path.read_text(encoding="utf-8")
-    parts = text.split("---", 2)
-    assert len(parts) >= 3, f"{path}: no `---` frontmatter delimiters found"
-    data = yaml.safe_load(parts[1])
-    assert isinstance(data, dict), f"{path}: frontmatter did not parse to a dict"
-    return data
+def _reachable_skills(path: Path, seen: set[Path] | None = None) -> set[Path]:
+    seen = set() if seen is None else seen
+    path = path.resolve()
+    if path in seen:
+        return seen
+    seen.add(path)
+    for target in SKILL_LINK.findall(path.read_text(encoding="utf-8")):
+        linked = (path.parent / target).resolve()
+        assert linked.is_file(), f"{path}: missing skill dependency {target}"
+        _reachable_skills(linked, seen)
+    return seen
 
 
-@pytest.mark.parametrize("agent_name", BP_REQUIRED_AGENTS)
-def test_agent_loads_coding_best_practices(agent_name: str) -> None:
-    fm = _load_frontmatter(agent_name)
-    skills = fm.get("skills", [])
-    assert isinstance(skills, list), (
-        f"agents/{agent_name}.md: `skills` field must be a list, got {type(skills).__name__}"
-    )
-    assert "coding-best-practices" in skills, (
-        f"agents/{agent_name}.md: missing `coding-best-practices` in `skills` frontmatter "
-        f"(found: {skills}). Reviewer/coder agents must preload BP so its "
-        f"Cross-Cutting Rules govern every finding."
-    )
+@pytest.mark.parametrize("name", ROLE_SKILLS)
+def test_role_skill_loads_coding_best_practices(name: str) -> None:
+    path = SKILLS_DIR / name / "SKILL.md"
+    assert path.is_file(), f"Role instructions are not discoverable: {path}"
+    assert SKILLS_DIR / "coding-best-practices" / "SKILL.md" in _reachable_skills(path)
+
+
+def test_no_custom_agent_definitions_remain() -> None:
+    assert not list((REPO_ROOT / "agents").glob("*.md"))
+
+
+@pytest.mark.parametrize("path", sorted(SKILLS_DIR.glob("*/SKILL.md")))
+def test_skills_do_not_require_agent_frontmatter(path: Path) -> None:
+    front = yaml.safe_load(path.read_text(encoding="utf-8").split("---", 2)[1])
+    agent_fields = {"agent", "skills", "tools", "mcpServers", "memory"}
+    assert not (agent_fields & front.keys()), f"{path}: agent-only metadata"

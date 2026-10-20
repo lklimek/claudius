@@ -40,30 +40,22 @@ Extract per PR: number, title, CI status (which checks passed/failed), mergeable
 
 Present the classification table to the user and **ask for confirmation** before proceeding.
 
-### 4. Spawn Review Agents
+### 4. Dispatch Dependency Reviews
 
-For each PR, the coordinator **pre-creates an isolated worktree** (see `grand-admiral` § Worktree Isolation — the `isolation` flag is unreliable for `run_in_background` spawns) and spawns a background agent that `cd`s into it as its FIRST action:
+Load [delegate](../delegate/SKILL.md) and [grand-admiral](../grand-admiral/SKILL.md). For each PR, prepare an isolated worktree at the verified PR revision and dispatch a generic worker through the host's native tools. Supply the absolute worktree path as its working directory and explicit skill paths; no custom agent type or permission-bypass mode is required.
 
-```
-Agent(
-  mode: "bypassPermissions",
-  run_in_background: true,
-  prompt: "cd <pre-created worktree abs-path> first, then review the dependabot PR ..."
-)
-```
-
-Set `model` per spawn: **opus** for every dependency bump — a bump pulls in third-party code and is security-sensitive by default; a passing vulnerability scan (e.g. govulncheck) is NOT evidence of low risk. ALWAYS fully investigate the bump, including the updated dependency's changed code; never downgrade to Sonnet.
+Use a strong available reasoning model for every dependency bump per `delegate` § Token Economy. A passing vulnerability scan is not evidence of low risk; fully investigate the changed third-party source.
 
 **Agent prompt must include ALL of:**
 1. PR number, title, repo `<owner>/<repo>`
 2. CI status — green or red, which checks failed
 3. Mergeable state
-4. Instruction to invoke `review-dependency` skill with the PR number as argument
+4. Instruction to load [review-dependency](../review-dependency/SKILL.md) and its dependencies, with the PR diff, package names, and version range as context
 5. Instruction to post a comment with findings via `gh pr comment <number> --repo <owner>/<repo> --body-file <file>` (include attribution footer; `ghsudo` on 403), and to report back either "confirmed posted: `<comment URL>`" or "NOT posted: `<reason>`" — never a bare "published"/"done", which has been observed meaning only "returned the text to you"
 6. **If Green**: merge via `ghsudo gh pr merge <number> --repo <owner>/<repo> --squash`
 7. **If Red or Conflicting**: do NOT merge; post `@dependabot rebase`, then enter **Rebase Watch Loop** (step 5a)
 
-Spawn **all agents in a single message** for maximum parallelism.
+Bound concurrency by actual host capacity. Each `review-dependency` invocation dispatches its own security reviewer: reserve capacity for that child before starting a PR worker, and queue remaining PRs. If capacity permits only a coordinator and one reviewer, run the dependency workflow in the coordinator and dispatch its security pass directly. Collect every result before ending the turn.
 
 ### 5. Collect Results and Handle Write Blocks
 

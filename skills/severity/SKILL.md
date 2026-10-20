@@ -1,6 +1,6 @@
 ---
 name: severity
-description: "This skill should be used when rating findings in reviews, audits, and assessments, or deciding whether a finding blocks a merge. It defines the backstop zones, blocker gates, the likelihood/impact/relevance floats, severity bands, and merge classes. Preloaded on finding-producing agents."
+description: "This skill should be used when rating findings in reviews, audits, and assessments, or deciding whether a finding blocks a merge. It defines the backstop zones, blocker gates, the likelihood/impact/relevance floats, severity bands, and merge classes. Load explicitly before producing findings."
 ---
 
 # Severity Classification

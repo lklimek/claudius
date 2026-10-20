@@ -17,4 +17,4 @@ Default discipline for diagnosing a reported bug. The user's reproducible observ
 
 The classic failure violates all four at once: anchoring on the user's theory instead of the observation, tracing a function by name instead of from the button, proving that *a* correct path exists, and rationalizing a contradiction away instead of stopping.
 
-This is a FORWARD trace (entry point → symptom); the BACKWARD direction (which callers a changed function breaks) is `grumpy-review`'s call-tree walk.
+This traces the exercised path from entry point to symptom. Review additionally checks all affected callers and outcomes through the shared coverage contract in [review](../review/SKILL.md).

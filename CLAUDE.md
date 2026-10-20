@@ -4,33 +4,23 @@ Guidance for Claude Code working in this repository.
 
 ## Project Overview
 
-**Claudius** — a Claude Code plugin at [github.com/lklimek/claudius](https://github.com/lklimek/claudius). Reusable agents and skills for development workflows. GPL-3.0.
+**Claudius** — development workflow skills for Claude Code and Codex at [github.com/lklimek/claudius](https://github.com/lklimek/claudius). GPL-3.0.
 
 ## Repository Structure
 
 ```
 .claude-plugin/
-  plugin.json       # Plugin manifest (only `name` required; agents/ and skills/ auto-discovered)
-agents/             # Agent definitions (.md files with YAML frontmatter)
+  plugin.json       # Plugin manifest (only `name` required; skills/ auto-discovered)
 skills/             # Skill definitions (directories with SKILL.md + optional resources)
 scripts/            # Helper scripts used by skills (Python + shell)
 schemas/            # JSON Schema definitions for shared data formats
 ```
 
-## Agents
+## Roles
 
-Single `.md` file with YAML frontmatter. Body is the agent's system prompt.
+Roles live in skills; character names are labels for generic workers. Do not add custom agent definitions. Explicitly load skill dependencies in the body; agent-only frontmatter cannot provide portable preloading, tools, memory, or model selection.
 
-```yaml
----
-name: agent-name
-description: "When to use this agent."
-tools: Read, Grep, Glob, Bash   # omit Edit/Write for read-only agents
-model: inherit                   # inherit | sonnet | opus | haiku
----
-```
-
-Other fields: `disallowedTools`, `permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks`, `memory` (user|project|local), `background`, `isolation` (worktree).
+Ordinary review uses `review` basic mode (one strong independent reviewer); full review uses `grumpy-review`. Both share requirements and execution-path coverage.
 
 ## Skills
 
@@ -52,6 +42,7 @@ Substitutions: `$ARGUMENTS`, `$0`/`$1`/etc., `${CLAUDE_SESSION_ID}`, `` !`comman
 Claude Code substitutes `${CLAUDE_SKILL_DIR}` and, in plugin skills, `${CLAUDE_PLUGIN_ROOT}` inline in the SKILL.md body and in `allowed-tools` Bash rules ([skills docs](https://code.claude.com/docs/en/skills)). Never in the Bash tool's environment, nor in reference files read via Read — there the caller writes the resolved path.
 
 - **Instructions**: `${CLAUDE_PLUGIN_ROOT}/scripts/foo.py` for plugin-root scripts. Relative paths (`scripts/helper.py`, `[ref](references/ref.md)`) for skill-local files.
+- **Other hosts**: resolve skill-relative links against the loaded file. When Claude variables are not substituted, resolve the actual plugin root before executing commands; do not pass unresolved placeholders to a shell.
 - **`allowed-tools`**: anchor script rules — `Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/foo.py *)`. Rules match a literal prefix, so every body invocation must use the identical form (`${CLAUDE_SKILL_DIR}/../../scripts/foo.py` is not normalized and won't match). Grants last only for the invoking turn and, as observed on Claude Code 2.1.280 `-p`, don't apply when the model invokes the skill via the Skill tool — headless callers need their own allowlist. Some skills still use legacy path-agnostic `Bash(*foo.py *)` globs with `../..` body paths; convert both together.
 
 ## Conventions
@@ -90,12 +81,13 @@ claude plugin validate .                         # validate manifest
 
 Before modifying plugin components, load the matching `plugin-dev` skill from [claude-plugins-official](https://github.com/anthropics/claude-plugins-official):
 
-- Before modifying an **agent** → load `plugin-dev:agent-development`
 - Before modifying a **skill** → load `plugin-dev:skill-development`
 - Before modifying **hooks** → load `plugin-dev:hook-development`
 - Before modifying **plugin structure or plugin.json** → load `plugin-dev:plugin-structure`
-- After creating/modifying an agent → run `plugin-dev:agent-creator` or `plugin-dev:skill-reviewer` to validate
+- After creating/modifying skills → apply the `plugin-dev:skill-reviewer` rubric
 - After modifying plugin components → ALWAYS run `plugin-dev:plugin-validator` to check structure before finishing
+
+When the host does not provide these named reviewers, supply their upstream rubric files to a generic validation worker.
 
 ## Safety: Destructive Data Operations
 

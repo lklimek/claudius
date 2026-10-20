@@ -8,6 +8,8 @@ allowed-tools: Read
 
 Rules for every agent that writes, reviews, or tests code. General language idiom is assumed knowledge; this skill states only where project policy is specific.
 
+**Bilby** is the implementation role's nickname. Load [bug-investigation](../bug-investigation/SKILL.md) before diagnosing a reported bug. Search project memories and similar code before substantial implementation; preserve durable decisions through `lessons-learned`.
+
 ## Workflow Discipline
 
 1. **TDD — tests first**: define test scenarios (including edge cases and error paths) BEFORE implementation; write the tests, then implement to make them pass.
@@ -35,6 +37,8 @@ Use the `report-format` skill for output structure. IDs are provisional (consoli
 
 - **Minimal diff**: every changed line serves the task. Prefer the shortest correct solution; no drive-by refactoring, reformatting, renaming, or unrelated fixes — report those instead of making them.
 - **Fit the codebase**: before writing, read the architecture docs and the closest existing code that does a similar job, then match it — layering and module placement, naming, error handling, logging, test style. Reuse an existing helper or pattern rather than adding a parallel one; diverge only with a stated reason. Reviewers hold changes to both rules.
+- **Prior art**: before a new module or substantial abstraction, check maintained ecosystem packages and document why existing options do not fit.
+- **Concurrency**: before changing shared state, enumerate access paths, lock order, cancellation and retry behavior. Prefer ownership, immutable data, or message passing; verify relevant interleavings and race-tool results rather than treating one green run as proof.
 - **Proportionate remediation**: match fix scope to the finding's operational reality (Context Digest — `review-pr` § Context Digest — or the finding's own evidence) — the smallest change that closes the actual manifestation; a general-purpose redesign requires evidence the general case is real.
 - **Verify facts before acting on broad instructions**: broad directives ("ship it", "resolve all", "fix everything", "clean up the comments") express intent, not authorization to override observed reality. Verify actual state before resolving, deferring, or declaring done. If facts contradict the instruction's premise (unfixed thread, incomplete task, failing test), surface the mismatch and ask — never silently postpone or fabricate completion.
 - **Comments — only when meaningful**: context not obvious from the code; 1 line is great, 2 good, 3 mediocre — needing more means the code should be clearer. Public API docs that genuinely teach callers (parameters, errors, panics, a one-line example) may run 5–10 lines.

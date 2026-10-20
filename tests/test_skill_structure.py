@@ -18,7 +18,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 SKILL_FILES = sorted(SKILLS_DIR.glob("*/SKILL.md"))
 REFERENCE_FILES = sorted(SKILLS_DIR.glob("*/references/*.md"))
-AGENT_FILES = sorted((REPO_ROOT / "agents").glob("*.md"))
 
 MAX_BODY_LINES = 500
 MAX_DESCRIPTION_CHARS = 1024
@@ -32,17 +31,17 @@ REMOVED_SKILLS = (
     "python-best-practices",
     "go-best-practices",
     "frontend-best-practices",
+    "codex-crew",
 )
 
 # Files scanned for stale names (CHANGELOG.md is history and exempt).
-STALE_SCAN_ROOTS = ("skills", "agents", "hooks", "scripts")
+STALE_SCAN_ROOTS = ("skills", "hooks", "scripts")
 STALE_SCAN_FILES = ("README.md", "SETUP.md")
 TEXT_SUFFIXES = {".md", ".sh", ".py", ".json", ".yml", ".yaml", ".txt"}
 
 # Files scanned for ``<skill> § <Section>`` citations.
 CITATION_SOURCES = (
     *SKILLS_DIR.glob("**/*.md"),
-    *AGENT_FILES,
     *(REPO_ROOT / "hooks").glob("*.sh"),
     *(REPO_ROOT / "scripts").glob("*.py"),
 )
@@ -158,23 +157,17 @@ def test_reference_has_no_claude_variables(path: Path) -> None:
     assert not found, f"{_rel(path)}: unsubstituted variables {sorted(set(found))}"
 
 
-# --------------------------------------------------------------------------- agents and removed skills
+# --------------------------------------------------------------------------- skill dependencies and removed skills
 
 
-def _agent_skills(path: Path) -> list[str]:
-    front, _ = _split_frontmatter(path)
-    value = (yaml.safe_load(front) or {}).get("skills") or []
-    if isinstance(value, str):
-        value = re.split(r"[,\s]+", value.strip())
-    return [s.removeprefix("claudius:") for s in value if s]
-
-
-@pytest.mark.parametrize("path", AGENT_FILES, ids=lambda p: p.name)
-def test_agent_preloaded_skills_exist(path: Path) -> None:
-    missing = [
-        s for s in _agent_skills(path) if not (SKILLS_DIR / s / "SKILL.md").is_file()
-    ]
-    assert not missing, f"{_rel(path)}: skills: names a missing skill {missing}"
+@pytest.mark.parametrize("path", SKILL_FILES, ids=_id)
+def test_linked_skill_dependencies_exist(path: Path) -> None:
+    for link in MD_LINK.finditer(path.read_text(encoding="utf-8")):
+        target = link.group(1)
+        if target.endswith("/SKILL.md") and not target.startswith("https://"):
+            assert (path.parent / target).resolve().is_file(), (
+                f"{_rel(path)}: missing skill dependency {target}"
+            )
 
 
 def _stale_scan_files() -> list[Path]:

@@ -5,16 +5,18 @@ description: "This skill should be used before delegating work to an agent — o
 
 # Delegate
 
-Load before the first `Agent()` call of a session; re-read after compaction. Spawning is the dominant token cost: every subagent rebuilds its context cache from scratch. The cheapest work is the spawn that never happens.
+Load before the first native worker dispatch of a session; re-read after compaction. Use the host's available tools (`spawn_agent`/native messaging in Codex, generic `Agent` workers in Claude). Supply skill paths explicitly; character names are labels, not agent definitions or permission grants.
+
+Resolve relative links from the loaded skill file. If the host does not substitute `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_SKILL_DIR}`, replace them with the verified installation paths before running a command. Never assume they are shell environment variables.
 
 ## Pre-Delegation Checklist
 
-1. **Total scope size** — sum the estimated diff (excluding comments) across the whole batch, not per item. Under ~300 lines total (soft): do it in the coordinator, or fold into an agent already live in scope via `SendMessage`; do not spawn.
+1. **Total scope size** — sum the estimated diff (excluding comments) across the whole batch, not per item. Under ~300 lines total (soft): do it in the coordinator, or reuse a worker already live in scope through native messaging. An explicitly required independent review is exempt: basic review still gets one strong independent reviewer.
 2. **Genuine parallelism** — a real wall-clock or file-independence need, or would sequential merely take "a bit longer"? No real need → one agent, sequential. Tightly coupled cross-file work → one agent, never a parallel split.
 3. **Reuse** — an agent already live in the same file/domain scope? → `SendMessage` it (`grand-admiral` § Agent Reuse).
-4. **Model tier** — set explicitly on this spawn (§ Token Economy); never leave it to the frontmatter fallback.
+4. **Model tier** — select from the host's available models (§ Token Economy); no role frontmatter selects it.
 5. **Worktree** — code-mutating agents: pre-create it and inject the resolved SHA; never rely on `isolation: "worktree"` (`grand-admiral` § Worktree Isolation).
-6. **Monitoring** — is the stall watchdog running? An un-monitored dispatch is a doctrine violation (`grand-admiral` § Recovery → Stall Watchdog).
+6. **Monitoring** — track native worker IDs or external launcher jobs per `grand-admiral` § Recovery → Stall Watchdog.
 7. **Development work?** — brief the goal only (§ Development-Work Delegation).
 8. **Tracked?** — one entry per dispatched unit in the durable file (§ Tracking).
 
@@ -23,12 +25,7 @@ Load before the first `Agent()` call of a session; re-read after compaction. Spa
 ## Token Economy
 
 1. **Spawn discipline**: inline small/sequential work in the warm parent context. Spawn ONLY for genuinely parallel independent work, large scope (~20k+ output tokens, many files), or required context isolation.
-2. **Model tiering (mandatory)**: set the model on every spawn — frontmatter `model:` is only the fallback. `sonnet` is the default workhorse. Tier by where quality is load-bearing:
-   - **Opus** — quality-critical reasoning/agentic depth: `developer-bilby`, `project-reviewer-adams`, `architect-nagatha`, `ux-designer-diziet`, `security-engineer-smythe` (their frontmatter fallback).
-   - **Sonnet** — agentic-but-routine: the coordinator, `qa-engineer-marvin` (adversarial QA execution), `technical-writer-trillian`, `Explore`/`general-purpose` (search), terminal/GUI/browser-automation verification.
-   - **Haiku** — trivial mechanical (bulk search, formatting).
-
-   Override per task both ways: downgrade a quality-critical agent for a trivial job; upgrade a routine agent for a genuinely hard one. **Security always escalates to Opus**: crypto, auth/key handling, network/transport, deserialization, untrusted input, dependency/version bumps, or a large/opaque diff. A passing vulnerability scan is NOT evidence of low risk; ALWAYS fully investigate a version bump, including the dependency's changed code. Cost breaks ties only among non-security work — when unsure, tier up.
+2. **Model capability**: choose from the actual host catalog, respecting explicit user selections. Strong reasoning (Claude Opus or a high-capability Codex model, high effort where supported) is required for basic review, requirements/path analysis, security, architecture, and substantive implementation. Use a workhorse for routine execution/docs and a lightweight model for mechanical work. Never downgrade the basic reviewer because the diff is small. A passing vulnerability scan cannot replace reading changed dependency source.
 3. **Read discipline**: Grep/Glob first, Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary (`git-and-github` § Context Management).
 4. **Coordinator context**: the inline-vs-spawn axis is bounded-vs-bulk, not small-vs-large. Inline only BOUNDED work; anything pulling in bulk or unbounded data (large files, logs, wide searches) goes to a disposable subagent so those bytes never enter the coordinator's context. For long sessions, summarise completed work to the tracking file and rely on compaction rather than carrying full history.
 
@@ -51,25 +48,25 @@ Agents have NO conversation history. Every prompt MUST include:
 7. **Worktree base sync** (code-mutating) — absolute worktree path plus a resolved SHA and `git merge --ff-only <sha>` as first action; never a branch name or symbolic ref (`grand-admiral` § Worktree Isolation).
 8. **Prior knowledge** — MemCan results relevant to the task (§ MemCan Context Injection).
 9. **Bug/diagnosis tasks** — quote the user's exact reproduction steps and the literal entry point (button/command); instruct "trace from this entry point; if you can't reproduce the observed symptom, you haven't found the cause — see `bug-investigation`".
-10. **Coding standards** — any agent that writes, modifies, reviews, or tests code is told to apply `coding-best-practices` throughout; it is preloaded via frontmatter, but state it so the agent applies it as it works.
+10. **Skills** — give absolute paths to the role's skills and tell the worker to load them and their dependencies first. All code workers load `coding-best-practices`; findings producers also load `report-format` and `severity`. No frontmatter preloading is assumed.
 11. **Cargo scope** (code agents) — name the narrowest cargo scope allowed (`-p` covering its files) and brief the OUTCOME ("clippy clean and tests green for `-p X`"), never a command chain. Require the ledger evidence line (command, tree key, exit, log path) and the provenance check in the report (`grand-admiral` § Verification Economy). Workspace-wide runs only for real cross-cutting regression risk.
-12. **Executable brief** — require only actions the agent's frontmatter tools support. An agent without Task/Agent cannot invoke another agent — tell it to "apply the `plugin-dev:skill-reviewer` rubric directly (read `plugin-dev/agents/skill-reviewer.md`)", not to run that agent.
+12. **Executable brief** — require only tools the worker actually has. A leaf worker does not dispatch peers; supply an external validation rubric as reading material when needed.
 13. **Reporting channel** — state that the agent is always a subagent, never the top-level session: inline assistant text reaches no coordinator. Give the exact `to:` value (the coordinator's identity, or `team-lead`); `to:"main"` is rejected for a named subagent and has orphaned full reports. A correctly addressed agent that goes silent is not necessarily idle — `grand-admiral` § Recovery → Reporting Channel Failures.
 
 ### MemCan Context Injection
 
-Before spawning (skip for trivial tasks): `search(query="<2-4 keywords: domain terms, API names, error text>", project="<repo>")` — the MCP tool directly, not the save/dedup workflow `lessons-learned` owns. Keep score ≥ 0.7, max 5; inject as `## Prior Knowledge (from MemCan)`, one bullet per memory: `- <memory text> [id: <short-id>]`. Injection reaches every agent; an agent's own MemCan access depends on its frontmatter tools and has been missing even on a `Tools: *` agent.
+Before spawning (skip for trivial tasks): `search(query="<2-4 keywords: domain terms, API names, error text>", project="<repo>")` — the MCP tool directly, not the save/dedup workflow `lessons-learned` owns. Keep score ≥ 0.7, max 5; inject as `## Prior Knowledge (from MemCan)`, one bullet per memory: `- <memory text> [id: <short-id>]`. Do not assume the worker has the coordinator's memory tools.
 
 ## Development-Work Delegation
 
-**Brief WHAT, not HOW.** Applies to actual coding work (Bilby, or Codex per `codex-crew`'s dev-preference routing). Review, QA, security, docs, and UX delegation keep the file-list briefing above.
+**Brief WHAT, not HOW.** Implementation workers (nicknamed Bilby) load `coding-best-practices`. Review, security, docs, and UX delegation keep the file-list briefing above.
 
 - **Stay high-level.** Brief the goal, acceptance criteria, and Prior Knowledge from Requirements/UX/architecture docs — no file list or approach; don't read source to build one. A trivial one-file/one-grep lookup is fine inline.
 - **Evidence is not a verdict.** Logs plus a suspected cause are useful, but label the cause a hypothesis and tell the agent to verify or refute it before proposing implementation. Never ask an agent to implement a coordinator hypothesis on faith.
-- **Coordinator selects the gate.** A named Claude teammate investigates, returns an implementation plan (files, approach, sequence), and pauses for approval via `SendMessage`. Codex: dispatch well-scoped work directly with `--write`; large or risky work uses a read-only plan then a fresh writable job — `codex-crew` § Plan-Approval Gate.
+- **Coordinator selects the gate.** Well-scoped work runs through the single-worker loop below. For large or risky work, request a plan first and approve it within existing authorization. External launchers with immutable write permissions require a fresh writable job after a read-only plan.
 - **Review scope**: requirements fit, architecture fit, conflicts with other in-flight agents — not implementation correctness (QA's job afterward).
 - **User involvement**: only when the plan is genuinely ambiguous/high-stakes, or on explicit request — otherwise approve or send back revisions autonomously.
-- **Docs you rely on but never author**: Requirements, UX spec, architecture/Dev Plan. Missing or stale → delegate the update (`ux-designer-diziet` for requirements/UX, `architect-nagatha` for architecture) in the same session before proceeding.
+- **Design artifacts**: when requirements, UX specs, or architecture need work, apply `product-design` or `architecture`; a separate worker is warranted only by the dispatch rules above.
 
 ### Single-Agent Loop (bug fix or change ≤1000 LOC)
 
@@ -78,7 +75,7 @@ One high-capability agent (`opus`, `fable`, or Codex at high effort; follow any 
 1. **Plan** — investigate, decide the approach, note it briefly before writing code.
 2. **TDD** — tests first; they must fail before implementation.
 3. **Implement** — until tests pass.
-4. **Self-review** the full diff: correctness, edge cases, duplication, comment discipline, formatting/linting (`coding-best-practices`). General review, not `grumpy-review`.
+4. **Self-review** the full diff: correctness, edge cases, duplication, comment discipline, formatting/linting (`coding-best-practices`). This author check is not an independent review; a requested review uses `review` basic mode unless full was selected.
 5. **Self-fix, then repeat 4–5** until a pass finds nothing new; cap at 5 passes, then stop and report the remainder.
 
 Out-of-scope findings go in the final report, never fixed inline. Ambiguous requirement, no reproduction, or a capped loop → surface to the coordinator rather than guess. The agent commits everything before exiting; the coordinator pushes. Final report: approach, tests added, self-review passes, fixes applied, what was left out of scope.
@@ -92,4 +89,8 @@ An in-context checklist dies on compaction — exactly how multi-task work silen
 
 ## Scope
 
-This skill owns the spawn: whether, how many, at which tier, with what brief, tracked where. Coordinator-only doctrine — session protocol, worktree mechanics, teammates, recovery, programme management — lives in `grand-admiral`. Any agent holding a Task tool can spawn, so this skill stands alone and assumes no `grand-admiral` load.
+This skill owns whether/how to dispatch, capability selection, briefs, and tracking. Coordinator lifecycle, worktrees, recovery, and multi-project management live in `grand-admiral`.
+
+## External Codex launcher
+
+Prefer native dispatch. Only when using an installed `codex-companion.mjs` bridge, read [external-codex-dispatch.md](references/external-codex-dispatch.md) for dispatch and plan gates, and [codex-sandbox-and-recovery.md](references/codex-sandbox-and-recovery.md) for sandbox issues, monitoring, collisions, and broker recovery. These references do not set the default host or override role skills.
