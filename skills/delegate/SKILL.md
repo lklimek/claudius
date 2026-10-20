@@ -65,17 +65,17 @@ Before spawning (skip for trivial tasks): `search(query="<2-4 keywords: domain t
 - **Evidence is not a verdict.** Logs plus a suspected cause are useful, but label the cause a hypothesis and tell the agent to verify or refute it before proposing implementation. Never ask an agent to implement a coordinator hypothesis on faith.
 - **Coordinator selects the gate.** Well-scoped work runs through the single-worker loop below. For large or risky work, request a plan first and approve it within existing authorization. External launchers with immutable write permissions require a fresh writable job after a read-only plan.
 - **Review scope**: requirements fit, architecture fit, conflicts with other in-flight agents — not implementation correctness (QA's job afterward).
-- **User involvement**: only when the plan is genuinely ambiguous/high-stakes, or on explicit request — otherwise approve or send back revisions autonomously.
+- **User involvement**: when the plan is genuinely ambiguous/high-stakes, explicitly requested, or a loaded skill requires a user decision (such as dependency defects in `bug-investigation`) — otherwise approve or send back revisions autonomously.
 - **Design artifacts**: when requirements, UX specs, or architecture need work, apply `product-design` or `architecture`; a separate worker is warranted only by the dispatch rules above.
 
 ### Single-Agent Loop (bug fix or change ≤1000 LOC)
 
-One high-capability agent (`opus`, `fable`, or Codex at high effort; follow any standing dev-routing preference — never a lightweight tier) runs the whole cycle unattended, with no phase handoffs and no separate QA pass. Put the loop in its brief:
+One high-capability agent (`opus`, `fable`, or Codex at high effort; follow any standing dev-routing preference — never a lightweight tier) runs the implementation cycle, with no phase handoffs within it. The coordinator then completes the independent-review gate in `coding-best-practices` § Workflow Discipline. Put the loop in its brief:
 
 1. **Plan** — investigate, decide the approach, note it briefly before writing code.
 2. **TDD** — tests first; they must fail before implementation.
 3. **Implement** — until tests pass.
-4. **Self-review** the full diff: correctness, edge cases, duplication, comment discipline, formatting/linting (`coding-best-practices`). This author check is not an independent review; a requested review uses `review` basic mode unless full was selected.
+4. **Self-review** the full diff: correctness, edge cases, duplication, comment discipline, formatting/linting (`coding-best-practices`). This author check precedes the mandatory independent review.
 5. **Self-fix, then repeat 4–5** until a pass finds nothing new; cap at 5 passes, then stop and report the remainder.
 
 Out-of-scope findings go in the final report, never fixed inline. Ambiguous requirement, no reproduction, or a capped loop → surface to the coordinator rather than guess. The agent commits everything before exiting; the coordinator pushes. Final report: approach, tests added, self-review passes, fixes applied, what was left out of scope.

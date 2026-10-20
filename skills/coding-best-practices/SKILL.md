@@ -18,6 +18,7 @@ Rules for every agent that writes, reviews, or tests code. General language idio
    - **A mismatch is a bug**: behavior disagreeing with its name/docs/spec is itself a defect (code bug or doc bug) — never silently accept it or codify the wrong side in a passing test. Resolve which side is correct, fix it, test the correct side.
 2. **Implement** the production code to satisfy the tests.
 3. **Self-review** before considering code complete: correctness, edge cases, naming, error handling — and re-read the diff itself: is every changed line needed, and does the change sit where the architecture and the neighbouring code say it belongs (Cross-Cutting Rules: Minimal diff, Fit the codebase)?
+4. **Independent review before completion**: after self-review and validation, invoke [review](../review/SKILL.md) in basic mode (one independent reviewer), regardless of change size or whether the coordinator implemented it. Full mode applies when selected. Address findings and have the reviewer verify resulting changes before declaring the work complete. If an independent reviewer is unavailable or coverage is incomplete, report the unmet gate; never substitute self-review. Delegated implementers hand off to the coordinator, who owns this gate. Review-only workers do not recursively invoke review.
 
 ## Code Quality Tool Timing
 
@@ -36,7 +37,7 @@ Use the `report-format` skill for output structure. IDs are provisional (consoli
 ## Cross-Cutting Rules
 
 - **Minimal diff**: every changed line serves the task. Prefer the shortest correct solution; no drive-by refactoring, reformatting, renaming, or unrelated fixes — report those instead of making them.
-- **Fit the codebase**: before writing, read the architecture docs and the closest existing code that does a similar job, then match it — layering and module placement, naming, error handling, logging, test style. Reuse an existing helper or pattern rather than adding a parallel one; diverge only with a stated reason. Reviewers hold changes to both rules.
+- **Fit the codebase**: before writing, identify the owning architectural layer and module from project documentation and analogous existing code; state the placement and supporting references in the plan. Match local coding style, naming, error handling, logging, and tests. Fix the cause in its owning layer, reuse existing helpers, and avoid workarounds by default. If documentation and code conflict or ownership is unclear, resolve that before implementation. Reviewers verify placement and consistency as well as minimal diff.
 - **Prior art**: before a new module or substantial abstraction, check maintained ecosystem packages and document why existing options do not fit.
 - **Concurrency**: before changing shared state, enumerate access paths, lock order, cancellation and retry behavior. Prefer ownership, immutable data, or message passing; verify relevant interleavings and race-tool results rather than treating one green run as proof.
 - **Proportionate remediation**: match fix scope to the finding's operational reality (Context Digest — `review-pr` § Context Digest — or the finding's own evidence) — the smallest change that closes the actual manifestation; a general-purpose redesign requires evidence the general case is real.

@@ -38,7 +38,7 @@ See the [Setup Guide](SETUP.md) for detailed configuration.
 
 Ordinary review and `/review basic` use one strong reviewer, regardless of diff size. `/review full` and `/grumpy-review` run the full specialist review. Both trace requirements and all execution paths through changed code, including affected callers, failures, and side effects beyond the diff. Missing coverage is reported as incomplete, never a clean result.
 
-`review-pr` defaults to basic and accepts `full`; `ci-dance` retains full review by default and accepts `review=basic`. Author self-review remains a separate implementation check.
+Independent review is required before implementation work is complete, including small changes made by the coordinator. Basic is the default completion gate; author self-review is a separate earlier check. `review-pr` defaults to basic and accepts `full`; `ci-dance` retains full review by default and accepts `review=basic`.
 
 ### `/grumpy-review` then `/triage-findings`
 
