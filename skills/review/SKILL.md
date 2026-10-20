@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Use before completing implementation, for requested code review, or when choosing basic versus full review. Basic (default) uses one strong independent reviewer for requirements and all execution paths; full invokes grumpy-review. For GitHub PR context and publication, use review-pr."
+description: "Use before completing changes of at least 100 code lines per coding-best-practices, for requested code review, or when choosing basic versus full review. Basic (default) uses one strong independent reviewer for requirements and all execution paths; full invokes grumpy-review. For GitHub PR context and publication, use review-pr."
 ---
 
 # Review

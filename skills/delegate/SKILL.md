@@ -70,12 +70,12 @@ Before spawning (skip for trivial tasks): `search(query="<2-4 keywords: domain t
 
 ### Single-Agent Loop (bug fix or change ≤1000 LOC)
 
-One high-capability agent (`opus`, `fable`, or Codex at high effort; follow any standing dev-routing preference — never a lightweight tier) runs the implementation cycle, with no phase handoffs within it. The coordinator then completes the independent-review gate in `coding-best-practices` § Workflow Discipline. Put the loop in its brief:
+One high-capability agent (`opus`, `fable`, or Codex at high effort; follow any standing dev-routing preference — never a lightweight tier) runs the implementation cycle, with no phase handoffs within it. The coordinator then applies the independent-review threshold in `coding-best-practices` § Workflow Discipline. Put the loop in its brief:
 
 1. **Plan** — investigate, decide the approach, note it briefly before writing code.
 2. **TDD** — tests first; they must fail before implementation.
 3. **Implement** — until tests pass.
-4. **Self-review** the full diff: correctness, edge cases, duplication, comment discipline, formatting/linting (`coding-best-practices`). This author check precedes the mandatory independent review.
+4. **Self-review** the full diff: correctness, edge cases, duplication, comment discipline, formatting/linting (`coding-best-practices`). This author check precedes any required independent review.
 5. **Self-fix, then repeat 4–5** until a pass finds nothing new; cap at 5 passes, then stop and report the remainder.
 
 Out-of-scope findings go in the final report, never fixed inline. Ambiguous requirement, no reproduction, or a capped loop → surface to the coordinator rather than guess. The agent commits everything before exiting; the coordinator pushes. Final report: approach, tests added, self-review passes, fixes applied, what was left out of scope.
