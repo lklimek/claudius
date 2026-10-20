@@ -224,9 +224,9 @@ The `memcan` plugin requires Docker Compose for Qdrant (vector DB) and optionall
 | Trillian | `technical-writing` |
 | Diziet | `product-design` |
 
-Load the skill's instructions and dependencies explicitly. Names do not grant tools or select a model. In Codex, use the host's native workers; in Claude Code, use generic workers with the same skills.
+Load the skill's instructions and dependencies explicitly. Names do not grant tools or select a model. In Codex, use native workers with the same skills; hosts supporting `agents/` may also use the named identities.
 
-Version 10 removes custom agent definitions. Replace custom-agent dispatches with generic workers and the skill above. The external Codex launcher instructions are optional references under `delegate`, not a separate routing skill.
+Version 10 moves agent logic into skills. The eight files in `agents/` retain only identity, personality, and mandatory role-skill loading. Generic workers load those same skills directly. The external Codex launcher instructions are references under `delegate`, loaded conditionally when Codex is available and external delegation is relevant. Without it, delegation continues with available native workers.
 
 ### Review modes
 

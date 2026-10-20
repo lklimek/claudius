@@ -1,4 +1,4 @@
-"""Role skills must explicitly load their coding rules on every host."""
+"""Role skills own policy; optional agent identities must load those skills."""
 
 from __future__ import annotations
 
@@ -19,6 +19,16 @@ ROLE_SKILLS = (
     "technical-writing",
     "product-design",
 )
+AGENT_ROLES = {
+    "architect-nagatha": "architecture",
+    "claudius": "grand-admiral",
+    "developer-bilby": "coding-best-practices",
+    "project-reviewer-adams": "review",
+    "qa-engineer-marvin": "review",
+    "security-engineer-smythe": "security-best-practices",
+    "technical-writer-trillian": "technical-writing",
+    "ux-designer-diziet": "product-design",
+}
 SKILL_LINK = re.compile(r"\]\(([^)#]+/SKILL\.md)(?:#[^)]*)?\)")
 
 
@@ -42,8 +52,22 @@ def test_role_skill_loads_coding_best_practices(name: str) -> None:
     assert SKILLS_DIR / "coding-best-practices" / "SKILL.md" in _reachable_skills(path)
 
 
-def test_no_custom_agent_definitions_remain() -> None:
-    assert not list((REPO_ROOT / "agents").glob("*.md"))
+@pytest.mark.parametrize("name,role", AGENT_ROLES.items())
+def test_agent_identity_loads_role_skill(name: str, role: str) -> None:
+    path = REPO_ROOT / "agents" / f"{name}.md"
+    assert path.is_file(), f"Missing identity: {path}"
+    front = yaml.safe_load(path.read_text(encoding="utf-8").split("---", 2)[1])
+    assert front["name"] == name
+    assert front["skills"] == [role]
+    assert SKILLS_DIR / role / "SKILL.md" in _reachable_skills(path)
+    assert SKILLS_DIR / "coding-best-practices" / "SKILL.md" in _reachable_skills(path)
+
+
+@pytest.mark.parametrize("path", sorted((REPO_ROOT / "agents").glob("*.md")))
+def test_agent_metadata_only_defines_identity_and_skill_loading(path: Path) -> None:
+    front = yaml.safe_load(path.read_text(encoding="utf-8").split("---", 2)[1])
+    assert front.keys() <= {"name", "description", "model", "color", "skills"}
+    assert front["model"] == "inherit"
 
 
 @pytest.mark.parametrize("path", sorted(SKILLS_DIR.glob("*/SKILL.md")))

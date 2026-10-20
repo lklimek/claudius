@@ -1,6 +1,6 @@
 # External Codex Launcher
 
-Optional `codex-companion.mjs` bridge for hosts without native Codex worker dispatch. Read through the delegate skill only when this installed launcher is actually needed. Native Codex work does not use this bridge.
+Optional `codex-companion.mjs` bridge. Load through `delegate` only when Codex and this launcher are available and external delegation is relevant. Native Codex workers do not use this bridge.
 
 ## Contents
 
@@ -16,7 +16,7 @@ Optional `codex-companion.mjs` bridge for hosts without native Codex worker disp
 
 ## When to Enlist Codex
 
-- Use only when the user requests this bridge or native dispatch cannot serve an authorized task.
+- Use when available and suitable for an authorized task, respecting the user's routing preference. Native dispatch need not fail first.
 - Role skills work on either host; the launcher does not decide which roles Codex may perform.
 
 ## Routing — Model Selection, High Effort

@@ -5,7 +5,7 @@ description: "This skill should be used before delegating work to an agent — o
 
 # Delegate
 
-Load before the first native worker dispatch of a session; re-read after compaction. Use the host's available tools (`spawn_agent`/native messaging in Codex, generic `Agent` workers in Claude). Supply skill paths explicitly; character names are labels, not agent definitions or permission grants.
+Load before the first native worker dispatch of a session; re-read after compaction. Use the host's available tools (`spawn_agent`/native messaging in Codex, `Agent` workers in Claude). Supply skill paths explicitly. Optional named identities add personality and require the same skills; they contain no working logic or permission grants.
 
 Resolve relative links from the loaded skill file. If the host does not substitute `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_SKILL_DIR}`, replace them with the verified installation paths before running a command. Never assume they are shell environment variables.
 
@@ -93,4 +93,6 @@ This skill owns whether/how to dispatch, capability selection, briefs, and track
 
 ## External Codex launcher
 
-Prefer native dispatch. Only when using an installed `codex-companion.mjs` bridge, read [external-codex-dispatch.md](references/external-codex-dispatch.md) for dispatch and plan gates, and [codex-sandbox-and-recovery.md](references/codex-sandbox-and-recovery.md) for sandbox issues, monitoring, collisions, and broker recovery. These references do not set the default host or override role skills.
+Optional integration: first check whether external Codex dispatch is available through the host's tools or an installed launcher. If unavailable, skip these references and continue with available native workers; do not install Codex or block ordinary delegation.
+
+When Codex is available and external dispatch is relevant, load [external-codex-dispatch.md](references/external-codex-dispatch.md) for the `codex-companion.mjs` bridge. Load [codex-sandbox-and-recovery.md](references/codex-sandbox-and-recovery.md) only when that bridge needs sandbox, monitoring, collision, or broker guidance. Native Codex workers do not need these references. The integration does not override role skills or select the default host.

@@ -29,7 +29,7 @@ Identify need → select matching skills/agents → plan and delegate. Get speci
 
 ## Crew Roster
 
-Names are optional labels for generic workers, never custom agent types. Load the corresponding skill explicitly:
+Names are optional identities. Hosts may load the thin `agents/` wrappers or label generic workers; both must load the corresponding skill explicitly:
 
 | Name | Skill / responsibility |
 |---|---|

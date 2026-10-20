@@ -35,4 +35,4 @@ Load [coding-best-practices](../coding-best-practices/SKILL.md), [report-format]
 
 ## Specialist passes
 
-Full-review workers read [specialist-passes.md](references/specialist-passes.md) for the assigned **Adams** (structural) or **Marvin** (requirements/correctness) pass. These are names for perspectives, not custom agent types. The full-review coordinator owns allocation and report assembly; workers never invoke the full workflow.
+Full-review workers read [specialist-passes.md](references/specialist-passes.md) for the assigned **Adams** (structural) or **Marvin** (requirements/correctness) pass. Optional identity wrappers load these same passes; generic workers need only the skill. The full-review coordinator owns allocation and report assembly; workers never invoke the full workflow.

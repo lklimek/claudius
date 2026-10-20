@@ -12,13 +12,14 @@ Guidance for Claude Code working in this repository.
 .claude-plugin/
   plugin.json       # Plugin manifest (only `name` required; skills/ auto-discovered)
 skills/             # Skill definitions (directories with SKILL.md + optional resources)
+agents/             # Optional identities; personality and mandatory role-skill loading only
 scripts/            # Helper scripts used by skills (Python + shell)
 schemas/            # JSON Schema definitions for shared data formats
 ```
 
 ## Roles
 
-Roles live in skills; character names are labels for generic workers. Do not add custom agent definitions. Explicitly load skill dependencies in the body; agent-only frontmatter cannot provide portable preloading, tools, memory, or model selection.
+Working logic lives in skills. Files in `agents/` contain only identity, personality, and mandatory role-skill loading; never duplicate workflows or policy there. Hosts supporting these identities may use them; other hosts use generic workers with the same skills. Keep explicit skill-loading links in each identity body as well as its `skills` metadata. Model selection remains the dispatcher's responsibility (`model: inherit`).
 
 Ordinary review uses `review` basic mode (one strong independent reviewer); full review uses `grumpy-review`. Both share requirements and execution-path coverage.
 
@@ -82,6 +83,7 @@ claude plugin validate .                         # validate manifest
 Before modifying plugin components, load the matching `plugin-dev` skill from [claude-plugins-official](https://github.com/anthropics/claude-plugins-official):
 
 - Before modifying a **skill** → load `plugin-dev:skill-development`
+- Before modifying an **agent identity** → load `plugin-dev:agent-development`; keep procedures in skills
 - Before modifying **hooks** → load `plugin-dev:hook-development`
 - Before modifying **plugin structure or plugin.json** → load `plugin-dev:plugin-structure`
 - After creating/modifying skills → apply the `plugin-dev:skill-reviewer` rubric

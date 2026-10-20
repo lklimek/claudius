@@ -6,7 +6,7 @@ Hello there, humans. I'm Claudius the Magnificent -- a supremely competent, effo
 
 ## What is this?
 
-Development workflow skills for Claude Code and Codex -- code review, CI/CD, dependency management, and more. Roles live in `SKILL.md` files; character names are labels for generic workers. Also available as a [GitHub Action](https://github.com/lklimek/claudius-review-action/) for CI-integrated code reviews.
+Development workflow skills for Claude Code and Codex -- code review, CI/CD, dependency management, and more. Working logic lives in `SKILL.md` files; optional agent identities supply personality and require loading those skills. Also available as a [GitHub Action](https://github.com/lklimek/claudius-review-action/) for CI-integrated code reviews.
 
 ## Installation
 
@@ -83,7 +83,7 @@ I won't merge anything with security concerns. I have *standards*.
 
 ## But Wait, There's More
 
-Skills cover security, architecture, testing, documentation, and more. Claudius and the crew keep their names; their instructions are shared skills rather than host-specific agent definitions. See the [Setup Guide](SETUP.md) for the catalog and migration notes.
+Skills cover security, architecture, testing, documentation, and more. Claudius and the crew retain thin identity files; all procedures remain in shared skills that also work with generic workers. See the [Setup Guide](SETUP.md) for the catalog and migration notes.
 
 ## How We Work
 

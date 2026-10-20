@@ -1,4 +1,4 @@
-"""Regression guard: every skill's YAML frontmatter must parse cleanly via PyYAML.
+"""Regression guard: skill and identity YAML must parse cleanly via PyYAML.
 
 A skill whose frontmatter fails to parse loses discovery metadata at
 runtime. Catching this in CI keeps
@@ -15,7 +15,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-FRONTMATTER_FILES = sorted(REPO_ROOT.glob("skills/*/SKILL.md"))
+FRONTMATTER_FILES = sorted(REPO_ROOT.glob("skills/*/SKILL.md")) + sorted(
+    REPO_ROOT.glob("agents/*.md")
+)
 
 
 def _extract_frontmatter(path: Path) -> str:
