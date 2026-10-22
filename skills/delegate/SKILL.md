@@ -14,10 +14,10 @@ Resolve relative links from the loaded skill file. If the host does not substitu
 1. **Total scope size** — sum the estimated diff (excluding comments) across the whole batch, not per item. Under ~300 lines total (soft): do it in the coordinator, or reuse a worker already live in scope through native messaging. An explicitly required independent review is exempt: basic review still gets one strong independent reviewer.
 2. **Genuine parallelism** — a real wall-clock or file-independence need, or would sequential merely take "a bit longer"? No real need → one agent, sequential. Tightly coupled cross-file work → one agent, never a parallel split.
 3. **Reuse** — an agent already live in the same file/domain scope? → `SendMessage` it (`grand-admiral` § Agent Reuse).
-4. **Model tier** — select from the host's available models (§ Token Economy); no role frontmatter selects it.
+4. **Model tier and context** — select from the host's available models (§ Token Economy); prepare the context packet before strong-model dispatch (§ Context Preparation). No role frontmatter selects the model.
 5. **Worktree** — code-mutating agents: pre-create it and inject the resolved SHA; never rely on `isolation: "worktree"` (`grand-admiral` § Worktree Isolation).
 6. **Monitoring** — track native worker IDs or external launcher jobs per `grand-admiral` § Recovery → Stall Watchdog.
-7. **Development work?** — brief the goal only (§ Development-Work Delegation).
+7. **Development work?** — brief the goal, acceptance criteria, and supporting context (§ Development-Work Delegation).
 8. **Tracked?** — one entry per dispatched unit in the durable file (§ Tracking).
 
 **Anti-pattern — file-independence is not spawn-justification.** Four doc-only fixes, each under 20 lines in its own file, got four Opus spawns — the batch belonged to one agent. Independent files justify a separate worktree or commit, NOT automatically a separate agent.
@@ -29,6 +29,21 @@ Resolve relative links from the loaded skill file. If the host does not substitu
 3. **Read discipline**: Grep/Glob first, Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary (`git-and-github` § Context Management).
 4. **Coordinator context**: the inline-vs-spawn axis is bounded-vs-bulk, not small-vs-large. Inline only BOUNDED work; anything pulling in bulk or unbounded data (large files, logs, wide searches) goes to a disposable subagent so those bytes never enter the coordinator's context. For long sessions, summarise completed work to the tracking file and rely on compaction rather than carrying full history.
 
+## Context Preparation
+
+Before dispatching a high-capability worker, assemble a concise context packet proportional to the task. Reuse known context; bound discovery to what removes likely repeated searches. For a small, obvious task, existing paths and references may suffice; skip a separate discovery worker when its dispatch and handoff would cost more than direct execution.
+
+Use the coordinator for bounded lookups, or a reused/suitably cheaper worker for mechanical discovery under the dispatch rules above. Match capability to the work: locating files and extracting references can use a lightweight model; diagnosis, architecture decisions, and requirements/path analysis retain the strong-model requirement. Respect host availability and explicit model choices.
+
+Supply the packet alongside the required brief and context digest:
+
+- Candidate layers/modules, file paths, entry points, and relevant symbols, with source references; mark uncertain ownership.
+- Applicable project instructions, architecture/style documentation, and analogous existing code.
+- Related tests, documented validation commands, and any existing reproduction evidence.
+- Open questions; separate verified observations from hypotheses. Prefer paths and short excerpts over whole files or raw search output.
+
+Treat candidate files as starting points, not implementation boundaries. Leave diagnosis and solution design to the strong worker; require it to verify key evidence against live files and expand discovery as needed. Assess savings by total task cost, including discovery, handoff, repeated searches, and rework.
+
 ## Scaling
 
 **Splitting:** large tasks (50+ files) → multiple agents of the same type with different file scopes by package/module/layer.
@@ -39,8 +54,8 @@ Resolve relative links from the loaded skill file. If the host does not substitu
 
 Agents have NO conversation history. Every prompt MUST include:
 
-1. **Role/scope** — what to do, focus area. Development work: goal and acceptance criteria only (§ Development-Work Delegation).
-2. **File list** — explicit paths or globs; except development work, where the agent locates files itself.
+1. **Role/scope** — what to do, focus area. Development work: goal, acceptance criteria, and supporting context without prescribing the solution (§ Development-Work Delegation).
+2. **File list** — explicit paths or globs; for development work, supply discovered candidates as starting points (§ Context Preparation).
 3. **Output format** — structure, severity, where to write. Standalone agents write to `<tmpdir>/<agent-name>-report.md` (session dir: `mktemp -d /tmp/claudius-XXXXXX`); named teammates report via `SendMessage`. Each agent reports skills used.
 4. **Constraints** — what NOT to do.
 5. **Context digest** — goal, non-goals, operational profile (invocation, concurrency reality, failure cost, each with evidence), UX/DX priorities; `review-pr` § Context Digest. Unevidenced fields are `unknown`, never guessed.
@@ -61,7 +76,7 @@ Before spawning (skip for trivial tasks): `search(query="<2-4 keywords: domain t
 
 **Brief WHAT, not HOW.** Implementation workers (nicknamed Bilby) load `coding-best-practices`. Review, security, docs, and UX delegation keep the file-list briefing above.
 
-- **Stay high-level.** Brief the goal, acceptance criteria, and Prior Knowledge from Requirements/UX/architecture docs — no file list or approach; don't read source to build one. A trivial one-file/one-grep lookup is fine inline.
+- **Stay high-level.** Brief the goal, acceptance criteria, Prior Knowledge, and the context packet (§ Context Preparation). Read source to locate evidence and analogues, without prescribing an implementation approach; the worker validates and extends this starting context.
 - **Evidence is not a verdict.** Logs plus a suspected cause are useful, but label the cause a hypothesis and tell the agent to verify or refute it before proposing implementation. Never ask an agent to implement a coordinator hypothesis on faith.
 - **Coordinator selects the gate.** Well-scoped work runs through the single-worker loop below. For large or risky work, request a plan first and approve it within existing authorization. External launchers with immutable write permissions require a fresh writable job after a read-only plan.
 - **Review scope**: requirements fit, architecture fit, conflicts with other in-flight agents — not implementation correctness (QA's job afterward).
