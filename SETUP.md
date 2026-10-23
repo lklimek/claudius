@@ -213,25 +213,23 @@ The `memcan` plugin requires Docker Compose for Qdrant (vector DB) and optionall
 
 ## Roles as Skills
 
-| Name | Skill |
-|------|-------|
-| Claudius | `grand-admiral` — coordination |
-| Nagatha | `architecture` |
-| Adams | `review` — structural pass |
-| Bilby | `coding-best-practices` — implementation |
-| Marvin | `review` — requirements/correctness pass |
-| Smythe | `security-best-practices` — security audit pass |
-| Trillian | `technical-writing` |
-| Diziet | `product-design` |
+| Name | Skill | Claude model fallback |
+|------|-------|-------|
+| Claudius | `grand-admiral` — coordination | opus |
+| Nagatha | `architecture` | opus |
+| Adams | `review-changes` — structural pass | opus |
+| Bilby | `coding-best-practices` — implementation | opus |
+| Marvin | `review-changes` — requirements/correctness pass | sonnet |
+| Smythe | `security-best-practices` — security audit pass | opus |
+| Trillian | `technical-writing` | sonnet |
+| Diziet | `product-design` | opus |
 
-Load the skill's instructions and dependencies explicitly. Names do not grant tools or select a model. In Codex, use native workers with the same skills; hosts supporting `agents/` may also use the named identities.
-
-Version 10 moves agent logic into skills. The eight files in `agents/` retain only identity, personality, and mandatory role-skill loading. Generic workers load those same skills directly. The external Codex launcher instructions are references under `delegate`, loaded conditionally when Codex is available and external delegation is relevant. Without it, delegation continues with available native workers.
+Version 10 moves agent logic into skills. In Claude Code, the eight `agents/` identities (`claudius:<identity>`) add personality, a least-privilege tool list, the model fallback above, and preloaded namespaced skills (`claudius:<skill>`); each body also invokes those skills through the Skill tool, because teammates and `--agent` sessions get no preload. Dispatchers still set the model per spawn. In Codex, native workers load the same skills directly. The external Codex launcher instructions are references under `delegate`, loaded conditionally when Codex is available and external delegation is relevant. Without it, delegation continues with available native workers.
 
 ### Review modes
 
-- **Basic**: `/review` or `/review basic` — one strong independent reviewer checks requirements and all execution paths.
-- **Full**: `/review full` or `/grumpy-review` — independent security, structural, and correctness passes, including for tiny diffs.
+- **Basic**: `/review-changes` or `/review-changes basic` — one strong independent reviewer checks requirements and all execution paths.
+- **Full**: `/review-changes full` or `/grumpy-review` — independent security, structural, and correctness passes, including for tiny diffs.
 
 `review-pr <PR>` defaults to basic; add `full` for the specialist audit. `ci-dance` defaults to full and accepts `review=basic`. Both modes report coverage and cannot claim completion with unresolved paths.
 
@@ -341,7 +339,7 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `product-design` | Requirements, domain analysis, user flows, accessibility, developer experience |
 | `release` | Bump version (SemVer), update changelog, commit, push, and create GitHub release |
 | `report-format` | Unified review report format for all finding-producing agents |
-| `review` | Basic review with one strong worker; full mode routes to grumpy-review |
+| `review-changes` | Basic review with one strong worker; full mode routes to grumpy-review |
 | `review-dependency` | Security-focused dependency update review |
 | `review-pr` | Audit and review pull requests |
 | `security-best-practices` | Router to language-specific security pitfall references (Rust, Go, Python, TypeScript) beyond general OWASP knowledge; fixes the citation vocabulary for security findings |

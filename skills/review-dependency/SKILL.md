@@ -1,6 +1,9 @@
 ---
 name: review-dependency
 description: "This skill should be used when the user asks to \"review a dependency update\", \"audit this dependency bump\", or assess the security of an upgraded or newly added dependency. It reconciles the documented change against the real upstream diff, audits the changed source, checks our usage, and returns one risk-rated report."
+context: fork
+background: false
+model: opus
 allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Agent, Bash(mktemp *), Bash(git diff *), Bash(git log *), Bash(git show *), Bash(git tag *), Bash(git rev-parse *), Bash(git clone --depth=100 --config core.hooksPath=/dev/null -- *), Bash(gh api /advisories*), Bash(rm -rf /tmp/claude/dep-review-*), Bash(govulncheck *), Bash(cargo audit *), Bash(npm audit *), Bash(pip-audit *)
 ---
 
@@ -41,13 +44,13 @@ Every flagged file/commit is explicit input to step 3.
 
 ## 3. Security Audit
 
-Dispatch one strong generic worker, nicknamed Smythe, on the cloned source at `$SESSION_DIR/<package-name>`. Explicitly load [security-best-practices](../security-best-practices/SKILL.md), including its audit pass and dependencies; the same worker owns vulnerability research. Use native host dispatch per `delegate`.
+Dispatch one strong worker, nicknamed Smythe (in Claude, the `claudius:security-engineer-smythe` identity), on the cloned source at `$SESSION_DIR/<package-name>`. Explicitly load [security-best-practices](../security-best-practices/SKILL.md), including its audit pass and dependencies; the same worker owns vulnerability research. Use native host dispatch per `delegate`.
 
 - **Primary scope**: the old..new diff, and every file/commit step 2d flagged — verify directly; the changelog's silence is not evidence of safety.
 - **Secondary**: security-critical code paths relevant to the library's purpose.
 - **Research**: beyond registered advisories, the issue tracker for **unregistered security fixes** (fixes never assigned a CVE/GHSA), the project's security posture (`SECURITY.md`, disclosure and CVE-registration discipline, maintainer activity), and whether ecosystem vulnerability tooling covers this library at all.
 
-Findings carry `likelihood`/`impact`/`relevance` floats per `severity` skill § 3, with file:line, CWE, impact, and remediation. Before classifying, load `severity` and its merge-classification reference explicitly. The coordinator assigns `merge_class`/`intent_basis` directly, like review-pr Pass C and check-pr-comments, in the v4 report it assembles from the worker's findings. No custom agent or fork frontmatter is required.
+Findings carry `likelihood`/`impact`/`relevance` floats per `severity` skill § 3, with file:line, CWE, impact, and remediation. Before classifying, load `severity` and its merge-classification reference explicitly — the fork has no preloaded copy. This skill runs forked (`context: fork`, foreground, Opus in Claude) with no consolidation pass, so like review-pr Pass C and check-pr-comments it assigns `merge_class`/`intent_basis` directly in the v4 report it assembles from the worker's findings.
 
 ## 4. Codebase Impact
 

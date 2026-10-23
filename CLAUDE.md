@@ -12,16 +12,16 @@ Guidance for Claude Code working in this repository.
 .claude-plugin/
   plugin.json       # Plugin manifest (only `name` required; skills/ auto-discovered)
 skills/             # Skill definitions (directories with SKILL.md + optional resources)
-agents/             # Optional identities; personality and mandatory role-skill loading only
+agents/             # Thin identities: personality, tools, model fallback, role-skill loading
 scripts/            # Helper scripts used by skills (Python + shell)
 schemas/            # JSON Schema definitions for shared data formats
 ```
 
 ## Roles
 
-Working logic lives in skills. Files in `agents/` contain only identity, personality, and mandatory role-skill loading; never duplicate workflows or policy there. Hosts supporting these identities may use them; other hosts use generic workers with the same skills. Keep explicit skill-loading links in each identity body as well as its `skills` metadata. Model selection remains the dispatcher's responsibility (`model: inherit`).
+Working logic lives in skills. Files in `agents/` contain only identity, personality, host configuration (least-privilege `tools`, a `model` fallback, `color`), and mandatory role-skill loading; never duplicate workflows or policy there. Hosts supporting these identities may use them; other hosts use generic workers with the same skills. List skills in `skills:` as namespaced `claudius:<skill>` (a bare name can resolve to a bundled command), and have each body invoke them via the Skill tool at task start — teammates and `--agent` sessions get no preload, and relative links don't resolve from agent bodies. Dispatchers set the model on every spawn; frontmatter `model` is only the Claude fallback (opus, except sonnet for Marvin and Trillian).
 
-Ordinary review uses `review` basic mode (one strong independent reviewer); full review uses `grumpy-review`. Both share requirements and execution-path coverage.
+Ordinary review uses `review-changes` basic mode (one strong independent reviewer); full review uses `grumpy-review`. Both share requirements and execution-path coverage.
 
 ## Skills
 
@@ -34,7 +34,7 @@ description: When and how this skill should be invoked.
 ---
 ```
 
-Other fields: `argument-hint`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `context` (fork), `agent`, `hooks`.
+Other fields: `argument-hint`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `context` (fork), `agent`, `background` (with fork), `hooks`.
 
 Substitutions: `$ARGUMENTS`, `$0`/`$1`/etc., `${CLAUDE_SESSION_ID}`, `` !`command` ``.
 
@@ -51,7 +51,7 @@ Claude Code substitutes `${CLAUDE_SKILL_DIR}` and, in plugin skills, `${CLAUDE_P
 - Names: lowercase kebab-case (`security-engineer.md`, `my-skill/`)
 - Self-contained: each agent/skill works independently
 - Frontmatter `description`: state **when** to use, not just what it does
-- Prefer minimal tool sets; read-only agents omit Edit/Write
+- Prefer minimal tool sets; read-only agents omit Edit and keep Write only for their own reports
 - `allowed-tools` Bash globs must be as specific as possible — anchored exact script names (e.g., `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *)`) not generic patterns (e.g., `Bash(*gh-*.sh *)`); grant only what the skill's own turn runs
 - Concise by default — every change (code, docs, descriptions, instructions, commit/PR/changelog text): same value, fewer tokens.
 - Frontmatter values: single-line strings, no YAML folded/literal scalars (`>`, `|`). Use long lines instead of wrapping.

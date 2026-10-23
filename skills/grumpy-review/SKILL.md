@@ -1,18 +1,18 @@
 ---
 name: grumpy-review
-description: "Use for an explicitly requested full review, grumpy-review, or a workflow selecting full review. Runs independent security, structural, and correctness passes with a consolidated report. Ordinary review defaults to the basic mode in review."
+description: "This skill should be used when the user asks for a \"full review\", \"grumpy review\", or a full code audit or quality assessment, or when a workflow selects full review. It runs independent security, structural, and correctness passes in parallel and produces a deduplicated, severity-ranked report. Ordinary review defaults to basic mode in review-changes."
 allowed-tools: Read, Grep, Glob, Write, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/grumpy-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Agent, SendMessage
 ---
 
 # Code Review Methodology
 
-Full review: independent specialist workers → consolidated, severity-ranked, deduplicated report. For basic review use [review](../review/SKILL.md). Diff size never changes the selected mode.
+Full review: independent specialist workers → consolidated, severity-ranked, deduplicated report. For basic review use [review-changes](../review-changes/SKILL.md). Diff size never changes the selected mode.
 
 ## Tone
 
 Claudius/Skippy persona with extra grumpiness about the code — complain, disbelieve obvious mistakes, be opinionated. All written output (report JSON, markdown, HTML) stays strictly professional: grumpiness is for the human; the report is for posterity.
 
-**Argument**: `$ARGUMENTS` — optional scope description (e.g., "feat/zk branch", "packages/auth/", "last 5 commits"). Use `review`'s scope rules: current branch against its base, including local/untracked changes for local review; exact supplied refs for a PR.
+**Argument**: `$ARGUMENTS` — optional scope description (e.g., "feat/zk branch", "packages/auth/", "last 5 commits"). Use `review-changes`'s scope rules: current branch against its base, including local/untracked changes for local review; exact supplied refs for a PR.
 
 ## Report Is Mandatory, Even Empty
 
@@ -47,21 +47,21 @@ Use all three core passes for every full review. For 50+ files / 5000+ lines, sp
 
 ### Core passes
 
-Dispatch generic workers through the host's native API. Names label perspectives; explicitly supply the listed skill/pass paths. Choose capable available models per `delegate` § Token Economy; use strong reasoning for security and requirements/path analysis.
+Dispatch through the host's native API: in Claude, the listed identity as the agent type; elsewhere, generic workers. Either way, explicitly supply the listed skill/pass paths and set each model per `delegate` § Token Economy — strong reasoning for all three passes (security, structure, requirements/path analysis). `<role>` is the token used for file names and `prepare` labels.
 
-| Name | Skill / pass | Focus |
-|---|---|---|
-| Smythe | `security-best-practices` — Security audit pass | Entry-to-sink security paths, trust boundaries, known vulnerabilities, secrets and dependencies |
-| Adams | `review` — Adams specialist pass | Cross-artifact consistency, documentation, structure, idioms, maintainability |
-| Marvin | `review` — Reviewer pass and Marvin specialist pass | Requirements, all execution paths, adversarial correctness, tests and lints |
+| Name / Claude identity | `<role>` | Skill / pass | Focus |
+|---|---|---|---|
+| Smythe / `claudius:security-engineer-smythe` | `security` | `security-best-practices` — Security audit pass | Entry-to-sink security paths, trust boundaries, known vulnerabilities, secrets and dependencies |
+| Adams / `claudius:project-reviewer-adams` | `project` | `review-changes` — Adams specialist pass | Cross-artifact consistency, documentation, structure, idioms, maintainability |
+| Marvin / `claudius:qa-engineer-marvin` | `qa` | `review-changes` — Reviewer pass and Marvin specialist pass | Requirements, all execution paths, adversarial correctness, tests and lints |
 
 Always include all three, including for tiny diffs. Workers report findings and never fix production code.
 
 ### Other conditional agents
 
-| Condition | Name / skill | Focus |
-|---|---|---|
-| Documentation-heavy changes | Trillian / `technical-writing` | Accuracy, completeness, API docs, changelog |
+| Condition | Name / Claude identity | `<role>` | Skill | Focus |
+|---|---|---|---|---|
+| Documentation-heavy changes | Trillian / `claudius:technical-writer-trillian` | `docs` | `technical-writing` | Accuracy, completeness, API docs, changelog |
 
 For crypto-heavy code or significant dependency changes, expand the single security-engineer's prompt to include crypto soundness and dependency audit — do NOT spawn a second instance.
 
@@ -71,7 +71,7 @@ For 50+ files / 5000+ lines, spawn multiple agents of the same type with differe
 
 ## 3. Craft Agent Prompts
 
-The invariant producer rules — finding format, call-tree inspection, UI-text scan, UX/DX lens, cross-domain hints, collision preservation, Bash hygiene, CI context, process and report-back rules — live in [references/producer-contract.md](references/producer-contract.md); producers read it in place. Never restate them per spawn (measured: ~2500 lines of coordinator output across 5 producers on one large review); `report.json`'s `metadata.plugin_version` pins which version applied. Beyond the general agent prompt requirements (`delegate`), each spawn prompt carries only what varies:
+The invariant producer rules — finding format, execution-path coverage, UI-text scan, UX/DX lens, cross-domain hints, collision preservation, Bash hygiene, CI context, process and report-back rules — live in [references/producer-contract.md](references/producer-contract.md); producers read it in place. Never restate them per spawn (measured: ~2500 lines of coordinator output across 5 producers on one large review); `report.json`'s `metadata.plugin_version` pins which version applied. Beyond the general agent prompt requirements (`delegate`), each spawn prompt carries only what varies:
 
 1. **Comparison base**: how to see what changed (`git show <BASE_REF>:<file>`, `git diff <BASE_REF>...HEAD`).
 2. **Full roster**: every assigned worker's name, role/focus, scope, and running/queued status. The coordinator owns dispatch; workers never pause for peers or spawn duplicates.
@@ -82,7 +82,7 @@ The invariant producer rules — finding format, call-tree inspection, UI-text s
 Template — copy the paths exactly as they appear here (already resolved to absolute paths; producers never see the placeholders):
 
 ```text
-In your first message, Read <ROLE_SKILL_AND_PASS_PATHS>, ${CLAUDE_SKILL_DIR}/references/producer-contract.md and ${CLAUDE_PLUGIN_ROOT}/skills/review/references/execution-paths.md[ and <SCRATCH_DIR>/context-digest.md][ and <PATTERN_FILES>] together with your first inputs. Load their explicit dependencies. This is a leaf review pass: do not dispatch peers or re-enter the review coordinator workflow.
+In your first message, Read <ROLE_SKILL_AND_PASS_PATHS>, ${CLAUDE_SKILL_DIR}/references/producer-contract.md and ${CLAUDE_PLUGIN_ROOT}/skills/review-changes/references/execution-paths.md[ and <SCRATCH_DIR>/context-digest.md][ and <PATTERN_FILES>] together with your first inputs. Load their explicit dependencies. This is a leaf review pass: do not dispatch peers or re-enter the review coordinator workflow.
 
 Assigned peers (running or queued; the coordinator owns dispatch):
 - <teammate-name> — <reviewer role/focus> — <file scope> — <status>
@@ -92,7 +92,7 @@ Your role: <role>. Your file scope: <scope>. Write findings to <SCRATCH_DIR>/<ro
 ```
 
 - Context-digest part: only when that file was written this run.
-- `<ROLE_SKILL_AND_PASS_PATHS>`: absolute paths from §2; for Adams/Marvin include `${CLAUDE_PLUGIN_ROOT}/skills/review/references/specialist-passes.md`.
+- `<ROLE_SKILL_AND_PASS_PATHS>`: absolute paths from §2; for Adams/Marvin include `${CLAUDE_PLUGIN_ROOT}/skills/review-changes/references/specialist-passes.md`.
 - `<PATTERN_FILES>`: for the security reviewer — `${CLAUDE_PLUGIN_ROOT}/skills/security-best-practices/references/<lang>-security-patterns.md` for each of `rust`, `go`, `python`, `typescript` the diff touches.
 
 Metadata is coordinator-owned: resolve the actual reviewed commit (`git rev-parse HEAD` or the supplied PR head), not a possibly stale upstream. Supply commit/date/branch/project through `prepare` flags; `--base-ref <BASE_REF>` records the comparison merge-base. Disclose local/untracked changes in coverage and the summary; do not publish a local dirty-tree report as a review of a committed PR head.
@@ -101,7 +101,7 @@ Metadata is coordinator-owned: resolve the actual reviewed commit (`git rev-pars
 
 ### Execution-path coverage
 
-Read [execution-paths.md](../review/references/execution-paths.md). Marvin owns requirements/correctness coverage of every changed unit, Smythe owns security paths; Adams checks structural contracts. Reconcile their coverage artifacts against the full inventory before §5. Scaled scopes must account for cross-module paths. Missing artifacts or unresolved paths make the review incomplete and must appear in the executive summary; zero findings cannot override that status.
+Read [execution-paths.md](../review-changes/references/execution-paths.md). Marvin owns requirements/correctness coverage of every changed unit, Smythe owns security paths; Adams checks structural contracts. Reconcile their coverage artifacts against the full inventory before §5. Scaled scopes must account for cross-module paths. Missing artifacts or unresolved paths make the review incomplete and must appear in the executive summary; zero findings cannot override that status.
 
 ### Ephemeral-ID lint
 
@@ -113,9 +113,9 @@ Run in a coordinator context with native worker dispatch. If independent workers
 
 Dispatch all core passes independently, in parallel when host capacity permits; otherwise queue the remaining passes. Load `delegate` and `grand-admiral` for briefs, isolation, monitoring, and lifecycle.
 
-**Collect before the turn ends.** Wait for every worker, reconcile coverage, then run §5 through the final report. In Claude headless runs use foreground `Agent` calls; in Codex use the native wait/status tools. Never end with outstanding reviewers.
+**Collect before the turn ends.** Wait for every worker, reconcile coverage, then run §5 through the final report. In Claude, issue every reviewer `Agent` call in one message in the foreground — a headless run ends at the first turn end and abandons background reviewers; in Codex use the native wait/status tools. Never end with outstanding reviewers.
 
-Honor an explicit user model choice; otherwise retain the strong-model requirement for security and path analysis. Report unavailable requested models instead of inventing aliases.
+Honor an explicit user model choice, but before an override would downgrade the security pass below the strong tier, stop and confirm the user really means it — a blanket "review with Sonnet" does not silently trade away security depth. Otherwise retain the strong-model requirement. Report unavailable requested models instead of inventing aliases.
 
 ## 5. Consolidate Findings
 
@@ -126,10 +126,10 @@ After all workers complete, scripts do the mechanical work; judgment calls remai
 Flatten all agent reports, detect duplicate candidates, scan for INTENTIONAL comments (`<REPO_ROOT>` from `git rev-parse --show-toplevel`):
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py prepare security-engineer:<SCRATCH_DIR>/security-findings.json project-reviewer:<SCRATCH_DIR>/project-findings.json qa-engineer:<SCRATCH_DIR>/qa-findings.json --repo-root <REPO_ROOT> --base-ref <BASE_REF> --output <SCRATCH_DIR>/intermediate.json --digest --commit <COMMIT> --branch <BRANCH>
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py prepare security:<SCRATCH_DIR>/security-findings.json project:<SCRATCH_DIR>/project-findings.json qa:<SCRATCH_DIR>/qa-findings.json --repo-root <REPO_ROOT> --base-ref <BASE_REF> --output <SCRATCH_DIR>/intermediate.json --digest --commit <COMMIT> --branch <BRANCH>
 ```
 
-Metadata goes in plain flags (`--commit`, `--branch`, `--project`, `--date`), never JSON on the command line; `project` defaults to the GitHub `owner/repo`, `date` to today (UTC), `--branch` is optional. Make prepare the first call after reviewers return, in the same message as `Skill(claudius:severity)` and a Read of `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (both needed in §5b; skip either if this session already loaded it).
+Label each producer file `<role>:<path>` with the §2 token (plus `lint:` and any caller-supplied files, such as Pass C); the label is the `<agent>` in every finding key below. Metadata goes in plain flags (`--commit`, `--branch`, `--project`, `--date`), never JSON on the command line; `project` defaults to the GitHub `owner/repo`, `date` to today (UTC), `--branch` is optional. Make prepare the first call after reviewers return, in the same message as `Skill(claudius:severity)` and a Read of `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (both needed in §5b; skip either if this session already loaded it).
 
 Writes `intermediate.json` (full `raw_findings`, `duplicate_groups`, `intentional_downgrades`, `section_positives`, `agent_stats`; `metadata.plugin_version` auto-filled) and prints `digest.md` — every finding's `<agent>:<original_id>` key, band, floats, location and clipped description, plus duplicate groups and INTENTIONAL hits by key. Decide from the digest (re-read `<SCRATCH_DIR>/digest.md` if the output was truncated); open `intermediate.json` only when a finding's full text matters.
 

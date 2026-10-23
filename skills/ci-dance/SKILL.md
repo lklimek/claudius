@@ -48,7 +48,7 @@ Dispatch generic workers named `ci-stream`, `grumpy-stream`, and `review-stream`
 
 Use native messaging and lifecycle tools where present. Claude-specific fallback: if named team spawning is unavailable, use generic independent workers, collect all results, and rely on merge-time conflict checks instead of team broadcasts. Never end the turn with detached streams still running.
 
-Every stream must collect its own child results before ending. Use native worker lifecycle tools; external launcher jobs require bounded status polling (optional launcher material in `delegate`).
+Every stream must collect its own child results before ending. Never end a stream's turn to wait for a `Monitor`/background-task notification from its sub-job: that notification goes to the coordinator, so the stream silently stalls. Use native worker lifecycle tools; external launcher jobs require bounded status polling (optional launcher material in `delegate`).
 
 Each stream is a **complete unit** — **trigger → wait → collect & classify → fix** — committing in its own worktree; Step 3 cherry-picks the commits back.
 
@@ -75,7 +75,7 @@ CI runs automatically on push (no trigger). Wait and collect per Watch and Colle
 
 #### Grumpy Stream
 
-Invoke [review](../review/SKILL.md) locally with the selected mode. Collect `report.json` and coverage artifacts before fixing findings. Incomplete coverage cannot satisfy the clean-review exit condition; continue the unfinished pass or report the concrete blocker. Read findings, discard outdated/false positives, route by merge class, then use the shared fix sub-step.
+Invoke [review-changes](../review-changes/SKILL.md) locally with the selected mode. Collect `report.json` and coverage artifacts before fixing findings. Incomplete coverage cannot satisfy the clean-review exit condition; continue the unfinished pass or report the concrete blocker. Read findings, discard outdated/false positives, route by merge class, then use the shared fix sub-step.
 
 **Fix from the local `report.json`, immediately.** The stream needs a commit to review — not the push, the PR, or CI — so it is spawned in Step 1 before the push and never held for any of them. Never wait for the findings to appear on the PR, and never post them there as a precondition for fixing: publishing review comments is not part of this loop. Only the *push* of its fixes waits — for Step 3's merge and the next Step 1.
 
@@ -150,6 +150,6 @@ On exit (any condition), report:
 
 ## Notes
 
-- Delegate to `/push`, `/review` (full → `/grumpy-review`), `/check-pr-comments` — never duplicate their logic
+- Delegate to `/push`, `/review-changes` (full → `/grumpy-review`), `/check-pr-comments` — never duplicate their logic
 - Wait ~5 s after a push before listing new workflow runs
 - **Not for GitHub Actions** — pushing commits from inside a workflow causes concurrency cancellation loops. CLI only.

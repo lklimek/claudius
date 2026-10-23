@@ -69,10 +69,10 @@ Write findings files with the Write tool — never `cat > file`, `tee`, heredocs
 | Prefix | Category | Used by |
 |--------|----------|---------|
 | `SEC-` | security | Smythe / security-best-practices |
-| `QA-` | code_quality | Marvin / review |
-| `PROJ-` | project | Adams / review |
+| `QA-` | code_quality | Marvin / review-changes |
+| `PROJ-` | project | Adams / review-changes |
 | `CODE-`, `RUST-`, `PY-`, `GO-`, `FE-` | code_quality | generic / Rust / Python / Go / frontend — whichever of Adams or Marvin surfaced the finding |
-| `CALL-` | call_tree | reviewer call-tree inspection pass |
+| `CALL-` | call_tree | execution-path coverage (any reviewer) |
 | `DOC-` | documentation | Trillian / technical-writing |
 | `ARCH-` | architecture | Nagatha / architecture |
 | `UX-` | ux | Diziet / product-design |

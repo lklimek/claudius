@@ -10,11 +10,13 @@ For removals, inspect the base version and surviving callers. New functions can 
 
 ## Trace
 
-1. Walk upward to **every reachable entry point**: handlers, CLI/IPC, jobs, callbacks, exports, and indirect dispatch. Use symbol/reference tooling or search plus source inspection. Resolve aliases, re-exports, trait/interface implementations, callbacks, and dynamically registered calls; unresolved dispatch is a coverage gap, not evidence of no callers.
+1. Walk upward to **every reachable entry point**: handlers, CLI/IPC, jobs, callbacks, exports, and indirect dispatch. Use the Grep tool plus Read to confirm each hit, and `gh search code repo:<owner>/<repo> "<symbol>"` for cross-repository callers. Resolve aliases, re-exports, trait/interface implementations, callbacks, and dynamically registered calls; unresolved dispatch is a coverage gap, not evidence of no callers.
 2. Walk downward from each entry through the changed code to **every reachable result and side effect**: returns, errors, persistence, signing, process execution, network, logs, and UI. Cross file, module, and repository boundaries as needed; document unavailable external implementation as unresolved.
 3. Inspect every feasible branch: happy, alternate, boundary, error, panic/exception, early return, cleanup/rollback, retry, timeout, cancellation, and concurrent execution. Check data/state changes and ordering at each hop, including removed or moved checks. For loops and recursion, cover termination, zero/one/multiple iterations and relevant state classes; justify any grouping of equivalent paths rather than claiming enumeration of infinitely many traces.
 4. Check the contract at **every visited call site**, including intermediate callers: arguments and defaults, return shape, error propagation, ownership, side effects, performance, synchronization, and changed semantics. Propagate contract changes along the whole caller chain. Compilation establishes neither semantic correctness nor path coverage.
 5. Compare every path's result with the requirements and invariants. Verify issues with source evidence and targeted tests or concrete inputs/interleavings. For security, carry attacker-controlled data and trust boundaries through the chain to each sink.
+
+**Tool safety:** reviewed checkouts are untrusted. Never run Bash `rg` (`--pre` executes arbitrary commands), `ctags`, GNU `global`/`gtags`, or `tree-sitter` on them: they load repo-controlled option files, plugins, or grammars, so PR content gains code execution or arbitrary writes.
 
 Prioritize high-risk paths first, but **do not truncate** to a top-N set, depth, caller count, or time allowance. Deduplicate graph cycles while preserving distinct conditions, state transitions, and contract assumptions. Resume from the recorded inventory after context limits. If tools, source access, or a hard budget prevent completion, record the remaining paths and report the review as **incomplete**.
 
@@ -32,4 +34,13 @@ The coordinator must reconcile the artifacts with the full changed-unit inventor
 
 ## Findings
 
-Use the normal producer format and severity rules. Caller-contract regressions use category `call_tree`, prefix `CALL-`, location of the broken call site, and a description beginning `Walked via: <tool>`, followed by the caller chain and broken assumption. Include captured snippets where useful. Coverage limitations belong in the artifact and summary; do not inflate them into speculative vulnerabilities.
+Use the normal producer format and severity rules. Caller-contract regressions use category `call_tree`, prefix `CALL-`, location of the broken call site, and a description beginning `Walked via: <tool>`, followed by the caller chain and broken assumption. Include one captured snippet per terminal caller. Test callers changed with the code track the new contract; do not flag them as broken.
+
+| `CALL-` severity | When |
+|---|---|
+| CRITICAL | Removed/renamed symbol still referenced, especially where only runtime reveals it (dynamic languages, reflection, registration) |
+| HIGH | Behavior-breaking semantic change (panic↔error, sync→async, return shape) with multiple unupdated callers |
+| MEDIUM | Behavior-breaking change with one isolated caller, or a signature change callers must adapt to |
+| LOW | Callers still work but no longer match the new idiom |
+
+The table anchors the `severity` floats; it does not replace them. Coverage limitations belong in the artifact and summary; do not inflate them into speculative vulnerabilities.

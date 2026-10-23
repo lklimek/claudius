@@ -1,6 +1,6 @@
 ---
 name: architecture
-description: "Use for system design, module boundaries, architectural trade-offs, dependency or technology evaluation, and checking an implementation plan against requirements."
+description: "This skill should be used when the user asks to \"design the architecture\", \"evaluate this library\", \"compare these technologies\", or \"check this plan\", or when work needs system design, module boundaries, architectural trade-offs, dependency review, or validating an implementation plan against requirements before presenting it."
 ---
 
 # Architecture

@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 SKILL_FILES = sorted(SKILLS_DIR.glob("*/SKILL.md"))
 REFERENCE_FILES = sorted(SKILLS_DIR.glob("*/references/*.md"))
+AGENT_FILES = sorted((REPO_ROOT / "agents").glob("*.md"))
 
 MAX_BODY_LINES = 500
 MAX_DESCRIPTION_CHARS = 1024
@@ -35,13 +36,14 @@ REMOVED_SKILLS = (
 )
 
 # Files scanned for stale names (CHANGELOG.md is history and exempt).
-STALE_SCAN_ROOTS = ("skills", "hooks", "scripts")
-STALE_SCAN_FILES = ("README.md", "SETUP.md")
+STALE_SCAN_ROOTS = ("skills", "agents", "hooks", "scripts")
+STALE_SCAN_FILES = ("README.md", "SETUP.md", "CLAUDE.md")
 TEXT_SUFFIXES = {".md", ".sh", ".py", ".json", ".yml", ".yaml", ".txt"}
 
 # Files scanned for ``<skill> § <Section>`` citations.
 CITATION_SOURCES = (
     *SKILLS_DIR.glob("**/*.md"),
+    *AGENT_FILES,
     *(REPO_ROOT / "hooks").glob("*.sh"),
     *(REPO_ROOT / "scripts").glob("*.py"),
 )
@@ -191,6 +193,25 @@ def test_removed_skill_is_not_mentioned(name: str) -> None:
         if pattern.search(line)
     ]
     assert not offenders, f"removed skill {name!r} still mentioned at {offenders}"
+
+
+# The basic-review skill must not be called `review`: Claude Code's bundled `/review`
+# (alias of `/code-review`) wins over a plugin skill of that name.
+BARE_REVIEW_SKILL = re.compile(
+    r"`/?review`|(?<![\w-])/review(?![\w-])|claudius:review(?![\w-])"
+    r"|(?:skills|\.\.)/review/"
+)
+
+
+def test_basic_review_skill_never_referenced_by_bare_name() -> None:
+    offenders = [
+        f"{_rel(p)}:{n}"
+        for p in _stale_scan_files()
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+        if BARE_REVIEW_SKILL.search(line)
+    ]
+    assert not (SKILLS_DIR / "review").exists(), "skills/review collides with /review"
+    assert not offenders, f"bare `review` skill reference at {offenders}"
 
 
 # --------------------------------------------------------------------------- § citations
@@ -354,3 +375,22 @@ def test_matcher_rejects_renamed_section_but_tolerates_trailing_prose() -> None:
     assert _segment_resolves("5d", titles)
     assert not _segment_resolves("Merge Class Routing", titles)
     assert not _segment_resolves("7", titles)
+
+
+@pytest.mark.parametrize("path", SKILL_FILES, ids=_id)
+def test_description_is_third_person_trigger(path: Path) -> None:
+    front, _ = _split_frontmatter(path)
+    description = yaml.safe_load(front)["description"]
+    assert "This skill should be used" in description, (
+        f"{_rel(path)}: description must state when, in the third person"
+    )
+
+
+def test_execution_paths_forbid_repo_configured_tooling() -> None:
+    """Reviewers run on untrusted checkouts: these tools execute repo-controlled config."""
+    text = (
+        SKILLS_DIR / "review-changes" / "references" / "execution-paths.md"
+    ).read_text(encoding="utf-8")
+    for needle in ("`rg`", "ctags", "gtags", "tree-sitter", "gh search code"):
+        assert needle in text, f"execution-paths.md: tool-safety rule lacks {needle}"
+    assert "symbol/reference tooling" not in text

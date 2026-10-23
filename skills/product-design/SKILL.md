@@ -1,6 +1,6 @@
 ---
 name: product-design
-description: "Use for requirements and domain analysis, stakeholder mapping, user stories, UI flows, interaction design, usability, accessibility, or API developer experience."
+description: "This skill should be used when the user asks to \"write user stories\", \"gather requirements\", \"design the UI flow\", or \"check accessibility\", or when work needs domain analysis, stakeholder mapping, interaction design, usability, API developer experience, or validating a plan against user needs before presenting it."
 ---
 
 # Product Design

@@ -42,7 +42,7 @@ Present the classification table to the user and **ask for confirmation** before
 
 ### 4. Dispatch Dependency Reviews
 
-Load [delegate](../delegate/SKILL.md) and [grand-admiral](../grand-admiral/SKILL.md). For each PR, prepare an isolated worktree at the verified PR revision and dispatch a generic worker through the host's native tools. Supply the absolute worktree path as its working directory and explicit skill paths; no custom agent type or permission-bypass mode is required.
+Load [delegate](../delegate/SKILL.md) and [grand-admiral](../grand-admiral/SKILL.md). For each PR, prepare an isolated worktree at the verified PR revision and dispatch a generic worker through the host's native tools. Supply the absolute worktree path as its working directory and explicit skill paths. Don't request `bypassPermissions`: Claude Code (≥ 2.1.267) runs a subagent in it only when the main session already is. Without matching allow rules a worker's `gh` writes may be denied; §5 then has the coordinator post and merge.
 
 Use a strong available reasoning model for every dependency bump per `delegate` § Token Economy. A passing vulnerability scan is not evidence of low risk; fully investigate the changed third-party source.
 

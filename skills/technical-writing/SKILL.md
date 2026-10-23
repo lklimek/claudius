@@ -1,6 +1,6 @@
 ---
 name: technical-writing
-description: "Use for creating, maintaining, or reviewing READMEs, API documentation, tutorials, migration guides, ADRs, runbooks, and contributor documentation."
+description: "This skill should be used when the user asks to \"write the docs\", \"update the README\", \"document this API\", \"write an ADR\", or \"review the documentation\", covering READMEs, API documentation, tutorials, migration guides, changelogs, ADRs, runbooks, and contributor documentation."
 ---
 
 # Technical Writing

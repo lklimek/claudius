@@ -1,7 +1,7 @@
 """Regression guard: skill and identity YAML must parse cleanly via PyYAML.
 
-A skill whose frontmatter fails to parse loses discovery metadata at
-runtime. Catching this in CI keeps
+A skill or agent whose frontmatter fails to parse loses its metadata at runtime —
+descriptions, tool limits, model fallback, and skill preloading. Catching this in CI keeps
 authors from shipping a SKILL.md with an unquoted colon, a stray tab, or any
 other YAML poison that `claude plugin validate` rejects.
 """
@@ -43,4 +43,6 @@ def test_frontmatter_parses(path: Path) -> None:
 
 def test_corpus_not_empty() -> None:
     """Guard against the glob silently matching nothing (e.g. after a directory rename)."""
-    assert FRONTMATTER_FILES, "No SKILL.md files discovered — glob is broken"
+    assert FRONTMATTER_FILES, (
+        "No SKILL.md or agent .md files discovered — glob is broken"
+    )

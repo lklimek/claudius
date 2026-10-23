@@ -16,8 +16,8 @@ Optional `codex-companion.mjs` bridge. Load through `delegate` only when Codex a
 
 ## When to Enlist Codex
 
-- Use when available and suitable for an authorized task, respecting the user's routing preference. Native dispatch need not fail first.
-- Role skills work on either host; the launcher does not decide which roles Codex may perform.
+- **Opt-in, not default**: only on user request or a stated coding-routing preference. Native dispatch need not fail first.
+- **Non-coding roles stay native** — review, QA, security, architecture, and docs — unless the user opts them into Codex. Role skills work on either host.
 
 ## Routing — Model Selection, High Effort
 
@@ -67,25 +67,25 @@ The fresh job rebuilds context but is the only safe read-only-to-writable bounda
 
 Codex runs under `sandbox_mode = "workspace-write"` (`~/.codex/config.toml`). Three rules:
 
-1. **Write scope = cwd + the effective `writable_roots`.** Rely on the configured worktree root (`$CLAUDIUS_WORKTREE_ROOT`; see `grand-admiral` § Worktree Isolation), scratch location, and shared cargo target dir, plus `network_access = true`. Do **not** assume the configured artifacts location is writable even when config lists it; use the coordinator-owned delivery path in the companion sandbox/recovery material § `workspace-write` Config. Paths outside cwd and the effective roots are read-only.
+1. **Write scope = cwd + the effective `writable_roots`.** Rely on the configured worktree root (`$CLAUDIUS_WORKTREE_ROOT`; see `grand-admiral` § Worktree Isolation), scratch location, and shared cargo target dir, plus `network_access = true`. Do **not** assume the configured artifacts location is writable even when config lists it; use the coordinator-owned delivery path in sibling `codex-sandbox-and-recovery.md` § `workspace-write` Config. Paths outside cwd and the effective roots are read-only.
 
-2. **Codex `git commit` in a linked worktree is inconsistent** — one dispatch commits cleanly, the next hits "Git metadata is read-only"/`index.lock`, with identical config. **Coordinator-commit is the reliable default:** tell Codex to attempt `git add`/`git commit` last (with an explicit message), then verify via `git log`/`git status` in the worktree — never trust its self-report — and commit yourself (unsandboxed) when it didn't land. Details: the companion sandbox/recovery material § Git Commit in a Linked Worktree.
+2. **Codex `git commit` in a linked worktree is inconsistent** — one dispatch commits cleanly, the next hits "Git metadata is read-only"/`index.lock`, with identical config. **Coordinator-commit is the reliable default:** tell Codex to attempt `git add`/`git commit` last (with an explicit message), then verify via `git log`/`git status` in the worktree — never trust its self-report — and commit yourself (unsandboxed) when it didn't land. Details: sibling `codex-sandbox-and-recovery.md` § Git Commit in a Linked Worktree.
 
 3. **Worktrees live at `<worktree-root>/<slug>`** (`$CLAUDIUS_WORKTREE_ROOT`; default `/data/git-worktrees`; slug from the startup `$PWD`), pre-created by the coordinator per `grand-admiral` § Worktree Isolation. **The broker keys off `codex-companion.mjs`'s own resolved cwd, not any path in prompt text** — a dispatch told via prompt to `cd` into a worktree still bound to the coordinator's checkout and blocked ALL writes, even on the first dispatch. Pass the worktree via `--cwd` (§ Direct Dispatch); each `--cwd` is self-contained, so N worktrees dispatch concurrently.
 
 ### Never Dispatch Concurrently to the Same `--cwd`
 
-**Never fire dispatch N+1 at the same `--cwd` until dispatch N's job JSON shows a terminal `status`** (`completed`/`failed`). One broker serves each workspace slug (keyed off `--cwd`), not each job; same-cwd dispatches collide even minutes apart — only polling for terminal status protects, never a fixed stagger delay. A collision silently strands the earlier job at `running` forever, or instantly returns generic capabilities boilerplate with `touchedFiles: []` (looks like a trivial done, isn't). After any dispatch, check the job's `workspaceRoot` matches the intended worktree and its `rawOutput` engages the dispatched task — a suspiciously fast, generic completion is a collision red flag. Detail: the companion sandbox/recovery material § Same-`--cwd` Collisions.
+**Never fire dispatch N+1 at the same `--cwd` until dispatch N's job JSON shows a terminal `status`** (`completed`/`failed`). One broker serves each workspace slug (keyed off `--cwd`), not each job; same-cwd dispatches collide even minutes apart — only polling for terminal status protects, never a fixed stagger delay. A collision silently strands the earlier job at `running` forever, or instantly returns generic capabilities boilerplate with `touchedFiles: []` (looks like a trivial done, isn't). After any dispatch, check the job's `workspaceRoot` matches the intended worktree and its `rawOutput` engages the dispatched task — a suspiciously fast, generic completion is a collision red flag. Detail: sibling `codex-sandbox-and-recovery.md` § Same-`--cwd` Collisions.
 
 ## Monitoring a Codex Job
 
 A `--background` dispatch is a detached Node process with on-disk job-state files — no agent lifecycle to watch, nothing to shut down. (`codex:codex-rescue` `idle_notification`s are worthless: jobs sat `completed` 40–85 min before the wrapper reported.)
 
-- **Primary method: read the job's on-disk state directly** (mtime-gated, minimal fields, never the full blob) — the companion sandbox/recovery material § On-Disk Job State.
-- **Get notified, don't wait for a user request:** arm a `Bash` `run_in_background` loop on the job's own `jobs/<job-id>.json` that exits on a terminal status or a dead `pid` (script: the companion sandbox/recovery material § Monitoring Loop). The loop can itself be silently killed — periodically confirm it's alive; silence is not health.
+- **Primary method: read the job's on-disk state directly** (mtime-gated, minimal fields, never the full blob) — sibling `codex-sandbox-and-recovery.md` § On-Disk Job State.
+- **Get notified, don't wait for a user request:** arm a `Bash` `run_in_background` loop on the job's own `jobs/<job-id>.json` that exits on a terminal status or a dead `pid` (script: sibling `codex-sandbox-and-recovery.md` § Monitoring Loop). The loop can itself be silently killed — periodically confirm it's alive; silence is not health.
 - `ScheduleWakeup` is not a substitute (`/loop` dynamic-mode-only).
 - The stall watchdog (`grand-admiral` § Recovery → Stall Watchdog) emits `CODEX_*` events — **mandatory** for every dispatch, but best-effort on top of the direct job-state check, never a substitute. **Codex discovery requires `--worktrees`** at the configured worktree root (a direct dispatch is never a teammate); without it: a one-time startup warning, then silently zero Codex monitoring. Don't guess the Monitor's `--session-id`: derive `--team-dir` from a spawn's own `agent_id` per `grand-admiral` § Stall Watchdog.
 
 ## Recovering a Stale Broker
 
-Recreating a worktree at the **same path** while its broker (`app-server-broker.mjs`) still runs strands it: the next dispatch fails in ~0 s with a misleading auth-shaped error (`failed to resolve feature override precedence` / `auth.loggedIn: false`). Kill the orphaned broker, remove its `/tmp/cxc-<id>`, redispatch — commands in the companion sandbox/recovery material § Broker Recovery.
+Recreating a worktree at the **same path** while its broker (`app-server-broker.mjs`) still runs strands it: the next dispatch fails in ~0 s with a misleading auth-shaped error (`failed to resolve feature override precedence` / `auth.loggedIn: false`). Kill the orphaned broker, remove its `/tmp/cxc-<id>`, redispatch — commands in sibling `codex-sandbox-and-recovery.md` § Broker Recovery.

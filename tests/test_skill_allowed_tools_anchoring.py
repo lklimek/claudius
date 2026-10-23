@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Skills that grant plugin scripts via allowed-tools: rules AND body invocations are pinned in lockstep.
 ANCHORED_SKILLS = (
     "grumpy-review",
+    "review-changes",
     "review-pr",
     "check-pr-comments",
     "ci-dance",

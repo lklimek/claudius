@@ -1,12 +1,12 @@
 ---
 name: review-pr
-description: "Use to review or audit a GitHub pull request: gather context, verify PR promises, run basic review by default (full on request), and prepare a summary plus draft inline review."
+description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness. It gathers context, verifies the PR description against the diff (Pass C), runs basic review by default (full on request), and prepares a summary comment plus a draft inline review."
 allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/post_pr_review.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-pr-base-sha.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Agent, SendMessage
 ---
 
 # PR Audit Workflow
 
-Run in the coordinator context. Arguments: `<PR> [basic|full]`; default **basic**, with explicit full/grumpy requests selecting **full**. Mode semantics belong to [review](../review/SKILL.md). `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) is the resolved plugin installation root.
+Run in the coordinator context. Arguments: `<PR> [basic|full]`; default **basic**, with explicit full/grumpy requests selecting **full**. Mode semantics belong to [review-changes](../review-changes/SKILL.md). `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) is the resolved plugin installation root.
 
 ## 1. Gather PR Context
 
@@ -127,11 +127,11 @@ Pass C conventions:
 
 ## 3. Conduct the Review
 
-Invoke [review](../review/SKILL.md) with the selected mode and PR scope. Basic uses one strong reviewer; full invokes `grumpy-review` and retains all specialist passes regardless of diff size.
+Invoke [review-changes](../review-changes/SKILL.md) with the selected mode and PR scope. Basic uses one strong reviewer; full invokes `grumpy-review` and retains all specialist passes regardless of diff size.
 
 Pass the changed files, base branch, and Context Digest (§1). Collect every assigned reviewer and its coverage artifact before ending the turn. Feed Pass C (§2) into the same `prepare` call as the selected mode's producer files; the coordinator assigns `merge_class`/`intent_basis` per `claudius:severity` § Merge Classification. Consolidate once, never renumber a second time.
 
-Both modes use [execution-paths.md](../review/references/execution-paths.md). Record requirements and path coverage in the final summary; incomplete coverage cannot yield a clean verdict. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD` once before consolidation and include genuine `code_quality` hits.
+Both modes use [execution-paths.md](../review-changes/references/execution-paths.md). Record requirements and path coverage in the final summary; incomplete coverage cannot yield a clean verdict. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD` once before consolidation and include genuine `code_quality` hits.
 
 ## 4. Post GitHub PR Review
 
