@@ -131,7 +131,7 @@ Invoke [review-changes](../review-changes/SKILL.md) with the selected mode and P
 
 Pass the changed files, base branch, and Context Digest (§1). Collect every assigned reviewer and its coverage artifact before ending the turn. Feed Pass C (§2) into the same `prepare` call as the selected mode's producer files; the coordinator assigns `merge_class`/`intent_basis` per `claudius:severity` § Merge Classification. Consolidate once, never renumber a second time.
 
-Both modes use [execution-paths.md](../review-changes/references/execution-paths.md). Record requirements and path coverage in the final summary; incomplete coverage cannot yield a clean verdict. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD` once before consolidation and include genuine `code_quality` hits.
+Both modes use [execution-paths.md](../review-changes/references/execution-paths.md). Record requirements and path coverage in the final summary; incomplete coverage cannot yield a clean verdict. The selected mode runs the ephemeral-ID lint; include its genuine `code_quality` hits.
 
 ## 4. Post GitHub PR Review
 

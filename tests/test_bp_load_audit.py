@@ -187,3 +187,19 @@ def test_review_dependency_runs_forked_in_foreground() -> None:
     front = _front(SKILLS_DIR / "review-dependency" / "SKILL.md")
     assert front.get("context") == "fork"
     assert front.get("background") is False, "the invoker must wait for the report"
+
+
+def test_delegate_model_fallback_map_matches_frontmatter() -> None:
+    """`delegate` restates the fallback map for dispatchers; keep it pinned."""
+    text = (SKILLS_DIR / "delegate" / "SKILL.md").read_text(encoding="utf-8")
+    m = re.search(r"Opus for ([^;]+); Sonnet for ([^—.]+)", text)
+    assert m, "delegate lost its identity model-fallback sentence"
+
+    def nicknames(group: str) -> set[str]:
+        return {n.strip().lower() for n in re.split(r",|\band\b", group) if n.strip()}
+
+    by_model: dict[str, set[str]] = {}
+    for name, model in AGENT_MODELS.items():
+        by_model.setdefault(model, set()).add(name.rsplit("-", 1)[-1])
+    assert nicknames(m.group(1)) == by_model["opus"]
+    assert nicknames(m.group(2)) == by_model["sonnet"]

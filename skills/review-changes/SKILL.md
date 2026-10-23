@@ -1,6 +1,6 @@
 ---
 name: review-changes
-description: "This skill should be used when the user asks to \"review my changes\", \"review this branch\", \"run a basic review\", or \"run a full review\", before completing changes of at least 50 code lines per coding-best-practices, or when choosing basic versus full review. Basic (default) uses one strong independent reviewer for requirements and all execution paths; full invokes grumpy-review. For GitHub PR context and publication, use review-pr."
+description: "This skill should be used when the user asks for a \"code review\" or to \"review this code\", \"review my changes\", \"review this branch\", \"run a basic review\", or \"run a full review\", before completing changes of at least 50 code lines per coding-best-practices, or when choosing basic versus full review. Basic (default) uses one strong independent reviewer for requirements and all execution paths; full invokes grumpy-review. For GitHub PR context and publication, use review-pr."
 allowed-tools: Read, Grep, Glob, Write, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/review-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Agent, SendMessage
 ---
 

@@ -5,7 +5,7 @@ description: "This skill should be used before delegating work to an agent (one 
 
 # Delegate
 
-Load before the first native worker dispatch of a session; re-read after compaction. Use the host's available tools (`spawn_agent`/native messaging in Codex, `Agent` workers in Claude). Supply skill paths explicitly. Named identities (Claude `claudius:<identity>` agent types) add personality, a least-privilege tool list, preloaded skills, and a model fallback, but no working logic; in Claude prefer the matching identity over a generic worker. Other hosts use generic workers with the same skills.
+Load before the first native worker dispatch of a session; re-read after compaction. Use the host's available tools (`spawn_agent`/native messaging in Codex, `Agent` workers in Claude). Supply skill paths explicitly. Named identities (Claude `claudius:<identity>` agent types) add personality, a least-privilege tool list (the coordinator is unrestricted), preloaded skills, and a model fallback, but no working logic; in Claude prefer the matching identity over a generic worker. Other hosts use generic workers with the same skills.
 
 Resolve relative links from the loaded skill file. If the host does not substitute `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_SKILL_DIR}`, replace them with the verified installation paths before running a command. Never assume they are shell environment variables.
 

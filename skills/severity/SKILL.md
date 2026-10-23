@@ -82,7 +82,7 @@ Probability that a real user or attacker reaches this defect under zone-realisti
 - **Precondition probability** — ordinary input high; unusual config/rare input mid; concurrent callers that structurally cannot exist bottom
 - **Triggering actor** — any user or untrusted automation high; internal automation mid; deliberate trusted-operator action low
 
-🔴 **Evidence rule** — a low rung on any factor MUST cite evidence: the reviewer's own call-tree/entry-point trace (`grumpy-review`), an evidenced Context Digest claim (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence, score generically. This axis lowers a score only on evidence, never suppresses a finding — adjusted floats, still reported.
+🔴 **Evidence rule** — a low rung on any factor MUST cite evidence: the reviewer's own execution-path trace (`review-changes` execution-paths contract), an evidenced Context Digest claim (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence, score generically. This axis lowers a score only on evidence, never suppresses a finding — adjusted floats, still reported.
 
 ### `impact` — how bad is the worst plausible outcome?
 

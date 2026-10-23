@@ -50,7 +50,7 @@ Dispatch one strong worker, nicknamed Smythe (in Claude, the `claudius:security-
 - **Secondary**: security-critical code paths relevant to the library's purpose.
 - **Research**: beyond registered advisories, the issue tracker for **unregistered security fixes** (fixes never assigned a CVE/GHSA), the project's security posture (`SECURITY.md`, disclosure and CVE-registration discipline, maintainer activity), and whether ecosystem vulnerability tooling covers this library at all.
 
-Findings carry `likelihood`/`impact`/`relevance` floats per `severity` skill § 3, with file:line, CWE, impact, and remediation. Before classifying, load `severity` and its merge-classification reference explicitly — the fork has no preloaded copy. This skill runs forked (`context: fork`, foreground, Opus in Claude) with no consolidation pass, so like review-pr Pass C and check-pr-comments it assigns `merge_class`/`intent_basis` directly in the v4 report it assembles from the worker's findings.
+Findings carry `likelihood`/`impact`/`relevance` floats per `severity` skill § 3, with file:line, CWE, impact, and remediation. Before classifying, load `severity` and its merge-classification reference explicitly — the fork has no preloaded copy. Invoked as a skill, it runs forked (`context: fork`, foreground, Opus in Claude); either way it has no consolidation pass, so like review-pr Pass C and check-pr-comments it assigns `merge_class`/`intent_basis` directly in the v4 report it assembles from the worker's findings.
 
 ## 4. Codebase Impact
 

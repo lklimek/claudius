@@ -44,7 +44,7 @@ Producers emit a JSON array of `finding_section` objects:
 - `location` — full file path with lines (`src/auth.rs:42-56`), never a bare line number.
 - `tags` (optional) — OWASP category, CWE, guideline IDs. `impact_description` (optional) — Markdown narrative paired with the `impact` float.
 - `description`, `impact_description`, `recommendation` are **Markdown** (CommonMark — blank line before lists, code blocks, headings); `title`, `category`, `location` are plain text.
-- Check your own output: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py <file>` — the producer shape above validates as-is.
+- Check your own output: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py <file>` — the producer shape above validates as-is. Producers without Bash (e.g. Diziet) report the file path instead; their coordinator validates it.
 
 ### code_snippets
 

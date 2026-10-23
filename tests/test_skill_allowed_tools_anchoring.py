@@ -66,7 +66,6 @@ def test_body_invocations_match_a_rule(skill: str) -> None:
     front, body = _split(REPO_ROOT / "skills" / skill / "SKILL.md")
     rules = _bash_rules(front)
     invocations = [m.group(0).strip() for m in SCRIPT_INVOCATION.finditer(body)]
-    assert invocations, f"{skill}: no script invocations found — regex broken?"
     for cmd in invocations:
         assert "CLAUDE_SKILL_DIR" not in cmd, (
             f"{skill}: use {ROOT}, not SKILL_DIR/../..: {cmd!r}"
@@ -74,6 +73,12 @@ def test_body_invocations_match_a_rule(skill: str) -> None:
         assert any(fnmatchcase(cmd, r) for r in rules), (
             f"{skill}: no allowed-tools rule matches {cmd!r}"
         )
+
+
+def test_invocation_regex_finds_known_invocations() -> None:
+    """Sanity: an empty match list above must mean "no body scripts", not a broken regex."""
+    _, body = _split(REPO_ROOT / "skills" / "grumpy-review" / "SKILL.md")
+    assert len(SCRIPT_INVOCATION.findall(body)) >= 3, "regex broken?"
 
 
 @pytest.mark.parametrize("path", ALL_SKILL_FILES, ids=lambda p: p.parent.name)

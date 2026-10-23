@@ -50,7 +50,7 @@ Use a strong available reasoning model for every dependency bump per `delegate` 
 1. PR number, title, repo `<owner>/<repo>`
 2. CI status — green or red, which checks failed
 3. Mergeable state
-4. Instruction to load [review-dependency](../review-dependency/SKILL.md) and its dependencies, with the PR diff, package names, and version range as context
+4. Instruction to invoke `claudius:review-dependency` through the Skill tool (it runs forked and returns the report; on hosts without it, load [review-dependency](../review-dependency/SKILL.md)), with the PR diff, package names, and version range as context
 5. Instruction to post a comment with findings via `gh pr comment <number> --repo <owner>/<repo> --body-file <file>` (include attribution footer; `ghsudo` on 403), and to report back either "confirmed posted: `<comment URL>`" or "NOT posted: `<reason>`" — never a bare "published"/"done", which has been observed meaning only "returned the text to you"
 6. **If Green**: merge via `ghsudo gh pr merge <number> --repo <owner>/<repo> --squash`
 7. **If Red or Conflicting**: do NOT merge; post `@dependabot rebase`, then enter **Rebase Watch Loop** (step 5a)

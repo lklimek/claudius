@@ -213,18 +213,18 @@ The `memcan` plugin requires Docker Compose for Qdrant (vector DB) and optionall
 
 ## Roles as Skills
 
-| Name | Skill | Claude model fallback |
-|------|-------|-------|
-| Claudius | `grand-admiral` — coordination | opus |
-| Nagatha | `architecture` | opus |
-| Adams | `review-changes` — structural pass | opus |
-| Bilby | `coding-best-practices` — implementation | opus |
-| Marvin | `review-changes` — requirements/correctness pass | sonnet |
-| Smythe | `security-best-practices` — security audit pass | opus |
-| Trillian | `technical-writing` | sonnet |
-| Diziet | `product-design` | opus |
+| Name | Skill |
+|------|-------|
+| Claudius | `grand-admiral` — coordination |
+| Nagatha | `architecture` |
+| Adams | `review-changes` — structural pass |
+| Bilby | `coding-best-practices` — implementation |
+| Marvin | `review-changes` — requirements/correctness pass |
+| Smythe | `security-best-practices` — security audit pass |
+| Trillian | `technical-writing` |
+| Diziet | `product-design` |
 
-Version 10 moves agent logic into skills. In Claude Code, the eight `agents/` identities (`claudius:<identity>`) add personality, a least-privilege tool list, the model fallback above, and preloaded namespaced skills (`claudius:<skill>`); each body also invokes those skills through the Skill tool, because teammates and `--agent` sessions get no preload. Dispatchers still set the model per spawn. In Codex, native workers load the same skills directly. The external Codex launcher instructions are references under `delegate`, loaded conditionally when Codex is available and external delegation is relevant. Without it, delegation continues with available native workers.
+Version 10 moves agent logic into skills. In Claude Code, the eight `agents/` identities (`claudius:<identity>`) add personality, a model fallback (see each file's frontmatter), a least-privilege tool list (except the unrestricted coordinator), and preloaded namespaced skills (`claudius:<skill>`); each body also invokes those skills through the Skill tool, because teammates and `--agent` sessions get no preload. Dispatchers still set the model per spawn. In Codex, native workers load the same skills directly. The external Codex launcher instructions are references under `delegate`, loaded conditionally when Codex is available and external delegation is relevant. Without it, delegation continues with available native workers.
 
 ### Review modes
 

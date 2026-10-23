@@ -19,7 +19,7 @@ schemas/            # JSON Schema definitions for shared data formats
 
 ## Roles
 
-Working logic lives in skills. Files in `agents/` contain only identity, personality, host configuration (least-privilege `tools`, a `model` fallback, `color`), and mandatory role-skill loading; never duplicate workflows or policy there. Hosts supporting these identities may use them; other hosts use generic workers with the same skills. List skills in `skills:` as namespaced `claudius:<skill>` (a bare name can resolve to a bundled command), and have each body invoke them via the Skill tool at task start — teammates and `--agent` sessions get no preload, and relative links don't resolve from agent bodies. Dispatchers set the model on every spawn; frontmatter `model` is only the Claude fallback (opus, except sonnet for Marvin and Trillian).
+Working logic lives in skills. Files in `agents/` contain only identity, personality, host configuration (least-privilege `tools`, a `model` fallback, `color`), and mandatory role-skill loading; never duplicate workflows or policy there. Hosts supporting these identities may use them; other hosts use generic workers with the same skills. List skills in `skills:` as namespaced `claudius:<skill>` (a bare name can resolve to a bundled command), and have each body invoke them via the Skill tool at task start — teammates and `--agent` sessions get no preload, and relative links don't resolve from agent bodies. Dispatchers set the model on every spawn; frontmatter `model` is only the Claude fallback.
 
 Ordinary review uses `review-changes` basic mode (one strong independent reviewer); full review uses `grumpy-review`. Both share requirements and execution-path coverage.
 

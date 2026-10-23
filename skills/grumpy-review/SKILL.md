@@ -1,6 +1,6 @@
 ---
 name: grumpy-review
-description: "This skill should be used when the user asks for a \"full review\", \"grumpy review\", or a full code audit or quality assessment, or when a workflow selects full review. It runs independent security, structural, and correctness passes in parallel and produces a deduplicated, severity-ranked report. Ordinary review defaults to basic mode in review-changes."
+description: "This skill should be used when the user asks for a \"full review\", \"grumpy review\", or a full code review, audit, or quality assessment, or when a workflow selects full review. It runs independent security, structural, and correctness passes in parallel and produces a deduplicated, severity-ranked report. Ordinary review defaults to basic mode in review-changes."
 allowed-tools: Read, Grep, Glob, Write, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/grumpy-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Agent, SendMessage
 ---
 
@@ -113,7 +113,7 @@ Run in a coordinator context with native worker dispatch. If independent workers
 
 Dispatch all core passes independently, in parallel when host capacity permits; otherwise queue the remaining passes. Load `delegate` and `grand-admiral` for briefs, isolation, monitoring, and lifecycle.
 
-**Collect before the turn ends.** Wait for every worker, reconcile coverage, then run §5 through the final report. In Claude, issue every reviewer `Agent` call in one message in the foreground — a headless run ends at the first turn end and abandons background reviewers; in Codex use the native wait/status tools. Never end with outstanding reviewers.
+**Collect before the turn ends.** Wait for every worker, reconcile coverage, then run §5 through the final report. In Claude headless (`-p`) runs, issue every reviewer `Agent` call in one message and wait in-turn — a headless run ends at the first turn end and abandons background reviewers; interactively, collect every completion before §5; in Codex use the native wait/status tools. Never end with outstanding reviewers.
 
 Honor an explicit user model choice, but before an override would downgrade the security pass below the strong tier, stop and confirm the user really means it — a blanket "review with Sonnet" does not silently trade away security depth. Otherwise retain the strong-model requirement. Report unavailable requested models instead of inventing aliases.
 
