@@ -15,6 +15,8 @@ Arguments: `[basic|full] [scope]`. Scope defaults to changes against the reposit
 
 ## Basic workflow
 
+The invoking coordinator runs this workflow. An assigned reviewer, including the Adams/Marvin identities, runs only its pass below.
+
 1. Gather the user's requirements, acceptance criteria, relevant specs, and changed files. Carry the caller's Context Digest verbatim when supplied (`review-pr` § Context Digest). Mark missing requirements as unknown; never infer intended behavior solely from the implementation. Fix one collision-resistant scratch directory (reuse the caller's, else `mkdir -p /data/tmp/review-<branch>-<session-id-fragment>`), and assign findings/coverage paths before dispatch.
 2. Scope per `grumpy-review` § Scope the Review, including its Bash hygiene and local-change inspection, and run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD`. Judge hits per `grumpy-review` § Ephemeral-ID lint; promoted hits form their own producer file.
 3. Load [delegate](../delegate/SKILL.md), then dispatch **one** worker with a strong available reasoning model at high effort where supported, setting the model explicitly (Claude: Opus, preferably the `claudius:qa-engineer-marvin` identity; Codex: a high-capability model available in the current session). Select independently of the author's model; never substitute a lightweight model for a small diff. Give it the requirements, scope, this skill's **Reviewer pass**, and absolute paths to the references it names. A worker assigned this pass must not dispatch another reviewer or re-enter mode selection.
