@@ -1,16 +1,16 @@
 ---
 name: review-pr
-description: "Audits a pull request end to end: verifies the PR description against the diff (Pass C), runs a multi-agent grumpy-review, and posts a summary comment plus a draft inline review. This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness."
+description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness. It gathers context, verifies the PR description against the diff (Pass C), runs basic review by default (full on request), and prepares a summary comment plus a draft inline review."
 allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/post_pr_review.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-pr-base-sha.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Agent, SendMessage
 ---
 
 # PR Audit Workflow
 
-Runs inline (not forked) so it — and the `/claudius:grumpy-review` it invokes in §3 — keeps the `Agent` tool for fan-out. `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) commands is `${CLAUDE_PLUGIN_ROOT}` — write it exactly so the `allowed-tools` rules match.
+Run in the coordinator context. Arguments: `<PR> [basic|full]`; default **basic**, with explicit full/grumpy requests selecting **full**. Mode semantics belong to [review-changes](../review-changes/SKILL.md). `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) is the resolved plugin installation root.
 
 ## 1. Gather PR Context
 
-Load `/claudius:git-and-github`. Fetch PR metadata, changed files, and diff per [pr-review.md](../git-and-github/references/pr-review.md) § Get PR Context — files and diff via the subagent pattern in `git-and-github` § Context Management. Local git for commit history and detailed diffs.
+Load `/claudius:git-and-github`. Fetch PR metadata, changed files, and diff per [pr-review.md](../git-and-github/references/pr-review.md) § Get PR Context. In basic mode, let the one reviewer read bulk diff data; do not spawn extra extraction or promise-review workers. Local git supplies history and detailed diffs.
 
 ### Context Digest
 
@@ -52,7 +52,7 @@ Audit whether the diff **functionally delivers** what the PR's self-description 
 
 ### Audit axes
 
-Run all three; at most one finding per axis-trigger (per promise on Axis 2). Verification is **functional**: locate the implementing code and confirm it delivers the claimed behavior — a matching hunk is necessary, not sufficient. For large diffs, delegate per-axis (or per-promise) judgment to subagents per `git-and-github` § Context Management.
+Run all three; at most one finding per axis-trigger (per promise on Axis 2). Verification is **functional**: locate the implementing code and confirm it delivers the claimed behavior — a matching hunk is necessary, not sufficient. In basic mode keep all axes with the coordinator or the single reviewer; only full mode permits additional per-axis workers.
 
 **Before scoring**, Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` and `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (skip what this session already loaded) — Pass C assigns floats and `merge_class` itself, and no agent preloads those rules for the coordinator.
 
@@ -127,11 +127,11 @@ Pass C conventions:
 
 ## 3. Conduct the Review
 
-Invoke `/claudius:grumpy-review` with the PR scope as argument — it covers agent selection/scaling by PR size, parallel spawning with explicit prompts, OWASP classification on security findings, and consolidated deduplicated report generation.
+Invoke [review-changes](../review-changes/SKILL.md) with the selected mode and PR scope. Basic uses one strong reviewer; full invokes `grumpy-review` and retains all specialist passes regardless of diff size.
 
-Pass the PR's scope (changed files, base branch) as context. Its §4 foreground-only rule binds here too: never end the turn with reviewers outstanding or before `report.json` exists. Feed the Pass C report file (§2) into `consolidate_reports.py prepare` alongside the agent reports, and supply the Context Digest (§1) to grumpy-review's §3 spawn prompts and §5b judgment step, where the coordinator assigns `merge_class`/`intent_basis` to every finding per `claudius:severity` § Merge Classification. One consolidation round covers all passes — never consolidate twice (`assign_ids` renumbers on every run).
+Pass the changed files, base branch, and Context Digest (§1). Collect every assigned reviewer and its coverage artifact before ending the turn. Feed Pass C (§2) into the same `prepare` call as the selected mode's producer files; the coordinator assigns `merge_class`/`intent_basis` per `claudius:severity` § Merge Classification. Consolidate once, never renumber a second time.
 
-The grumpy-review delegation inherits the deep transitive call-tree walk (`category: "call_tree"`, `CALL-` prefix; see [../grumpy-review/references/call-tree-walk.md](../grumpy-review/references/call-tree-walk.md)), the ephemeral-ID lint, and the G-UI-TEXT user-visible-string scan (`claudius:grumpy-review` §3). After the review completes, run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py --range <BASE_REF>...HEAD` (`<BASE_REF>` = grumpy-review §1's verified base ref, e.g. `origin/main`) and fold genuine `code_quality` hits into the audit before posting.
+Both modes use [execution-paths.md](../review-changes/references/execution-paths.md). Record requirements and path coverage in the final summary; incomplete coverage cannot yield a clean verdict. The selected mode runs the ephemeral-ID lint; include its genuine `code_quality` hits.
 
 ## 4. Post GitHub PR Review
 
@@ -141,8 +141,8 @@ Ask if findings should be published as a GitHub PR review. Two parts:
 
 ### Part A: Summary comment (visible immediately)
 
-A normal PR issue comment (draft reviews hide their body text), titled `## Audit Summary`, written to `<SCRATCH_DIR>/summary.md` (grumpy-review's scratch dir) with the Write tool. Include:
-- **Attribution**: `**Reviewed by:** Claude Code with a N-agent team:` plus one `agent-name` (agent-type) — focus area line per member
+A normal PR issue comment (draft reviews hide their body text), titled `## Audit Summary`, written to `<SCRATCH_DIR>/summary.md` in the selected review's scratch directory. Include:
+- **Attribution**: name the actual host and selected mode (`basic` or `full`), then list the actual reviewers, models when known, and assigned skills/passes. Character names are optional labels; never claim a Claude host or custom agent type on another host.
 - Overall assessment (LLM-authored; must not contradict the merge classification — reflect every valid `blocking` finding)
 - Findings table (merge class, severity, tags, location, description) — `blocking` first
 - Deferred (`out_of_scope_follow_up`) findings, and any pre-existing finding tripping a universal gate (G-FUNDS/G-SECRET/G-CRYPTO/G-DATA) awaiting the user's disposition call

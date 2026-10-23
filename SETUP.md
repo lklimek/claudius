@@ -131,16 +131,16 @@ sudo apt-get install -y fonts-dejavu-core fonts-noto-core
 
 PDF output searches DejaVu/Noto fonts or `$CLAUDIUS_PDF_FONT`; without a Unicode font it uses ReportLab's Latin-1 core fonts.
 
-#### `codex-crew`
+#### Optional external Codex launcher
 
-Install Node.js, npm, the [OpenAI Codex CLI](https://developers.openai.com/codex/cli), and the separate `openai-codex` plugin before using `codex-crew`:
+For the optional `codex-companion.mjs` bridge documented under `delegate`, install Node.js, npm, the [OpenAI Codex CLI](https://developers.openai.com/codex/cli), and the separate `openai-codex` plugin:
 
 ```bash
 sudo apt-get install -y nodejs npm
 sudo npm install --global @openai/codex
 ```
 
-These requirements have no fallback. Configure the Codex CLI in `~/.codex/config.toml` before using `codex-crew`.
+Configure the Codex CLI in `~/.codex/config.toml` before using that bridge. Native Codex workers do not require the bridge.
 
 #### Built-in stall watchdog
 
@@ -211,27 +211,36 @@ The `memcan` plugin requires Docker Compose for Qdrant (vector DB) and optionall
 /plugin install memcan@lklimek
 ```
 
-## Agents
+## Roles as Skills
 
-| Agent | Description |
-|-------|-------------|
-| `claudius` | Team coordinator. Magnificently arrogant, always right. |
-| `architect-nagatha` | System architecture, module boundaries, API design, dependency review |
-| `project-reviewer-adams` | Project consistency, cross-artifact validation, convention adherence, structural/idiom code-quality review (readability, naming, DRY, cross-file consistency) |
-| `developer-bilby` | Code changes in any language |
-| `qa-engineer-marvin` | Test plans, automated tests, edge case identification, coverage analysis, adversarial execution-focused code-quality review (running tests/linters, edge cases, error handling, races) |
-| `security-engineer-smythe` | OWASP Top 10, dependency scanning, secret detection, secure coding review |
-| `technical-writer-trillian` | README, API docs, tutorials, guides, changelogs, runbooks |
-| `ux-designer-diziet` | Requirements, domain analysis, UI flows, interaction patterns, accessibility |
+| Name | Skill |
+|------|-------|
+| Claudius | `grand-admiral` — coordination |
+| Nagatha | `architecture` |
+| Adams | `review-changes` — structural pass |
+| Bilby | `coding-best-practices` — implementation |
+| Marvin | `review-changes` — requirements/correctness pass |
+| Smythe | `security-best-practices` — security audit pass |
+| Trillian | `technical-writing` |
+| Diziet | `product-design` |
+
+Version 10 moves agent logic into skills. In Claude Code, the eight `agents/` identities (`claudius:<identity>`) add personality, a model fallback (see each file's frontmatter), a least-privilege tool list (except the unrestricted coordinator), and preloaded namespaced skills (`claudius:<skill>`); each body also invokes those skills through the Skill tool, because teammates and `--agent` sessions get no preload. Dispatchers still set the model per spawn. In Codex, native workers load the same skills directly. The external Codex launcher instructions are references under `delegate`, loaded conditionally when Codex is available and external delegation is relevant. Without it, delegation continues with available native workers.
+
+### Review modes
+
+- **Basic**: `/review-changes` or `/review-changes basic` — one strong independent reviewer checks requirements and all execution paths.
+- **Full**: `/review-changes full` or `/grumpy-review` — independent security, structural, and correctness passes, including for tiny diffs.
+
+`review-pr <PR>` defaults to basic; add `full` for the specialist audit. `ci-dance` defaults to full and accepts `review=basic`. Both modes report coverage and cannot claim completion with unresolved paths.
 
 ### Optional Plugin Dependencies
 
-Some agents delegate to skills from external plugins for specialized capabilities. These plugins are **not required** -- agents work without them -- but installing them unlocks additional quality.
+Some workflows use external plugins for specialized capabilities. These plugins are optional.
 
-| Agent | External Skill | Plugin | Benefit |
+| Role | External Skill | Plugin | Benefit |
 |-------|---------------|--------|---------|
-| `developer-bilby` | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
-| `developer-bilby` | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
+| Bilby | `frontend-design` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | Design quality guidance for high-fidelity UI work |
+| Bilby | `rust-analyzer-lsp` | [`claude-plugins-official`](https://github.com/anthropics/claude-plugins-official) | LSP diagnostics, go-to-definition, type inference for `.rs` files |
 | `claudius` (all workflows) | `lessons-learned` | [`memcan`](https://github.com/lklimek/memcan) | Persistent lessons-learned memory across sessions |
 
 > **Note:** `plugin.json` does not yet support a `dependencies` field. Until then, install optional dependencies manually.
@@ -317,7 +326,7 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `bye` | End-of-session teardown -- shut down agents, remove worktrees, reconcile work |
 | `check-pr-comments` | Verify that PR review comments are addressed in code, then reply to or resolve threads; optional triage-compatible report |
 | `ci-dance` | End-to-end PR pipeline -- push, CI monitoring, parallel reviews, fix, repeat until green |
-| `codex-crew` | Pre-flight guide for routing development work to Codex agents -- direct dispatch, sandbox rules, job monitoring, broker recovery |
+| `architecture` | System boundaries, design trade-offs, dependency evaluation, implementation plans |
 | `coding-best-practices` | Universal rules for TDD, self-review, quality-tool timing, comments, logging and review output, plus the Rust policy (typed errors, cargo wrapper discipline) |
 | `delegate` | Choose whether, how, and at what model tier to delegate work; agent prompt requirements, the single-agent plan/TDD/implement/self-review loop (≤1000 LOC), and durable tracking of delegated work |
 | `dependabot-merge` | Bulk-process dependabot PRs -- audit, comment, merge safe ones, rebase failures |
@@ -327,12 +336,15 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `lessons-learned` | Extract and save reusable learnings from the session |
 | `merge-base` | Careful merge of remote base branch into current feature branch |
 | `push` | Commit, push, and create/update PR -- auto-creates feature branch if on base |
+| `product-design` | Requirements, domain analysis, user flows, accessibility, developer experience |
 | `release` | Bump version (SemVer), update changelog, commit, push, and create GitHub release |
 | `report-format` | Unified review report format for all finding-producing agents |
+| `review-changes` | Basic review with one strong worker; full mode routes to grumpy-review |
 | `review-dependency` | Security-focused dependency update review |
 | `review-pr` | Audit and review pull requests |
 | `security-best-practices` | Router to language-specific security pitfall references (Rust, Go, Python, TypeScript) beyond general OWASP knowledge; fixes the citation vocabulary for security findings |
 | `severity` | Consistent severity classification (CRITICAL-INFO) for review findings |
+| `technical-writing` | Documentation authoring and review, verified examples, migration guides |
 | `triage` | Reproduce and root-cause GitHub issues, assess severity, and post status |
 | `triage-findings` | Interactive finding triage -- classify in browser, decisions feed back to Claude |
 | `validate-findings` | LLM validation pass for consolidated review findings |
