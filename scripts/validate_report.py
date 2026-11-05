@@ -122,7 +122,7 @@ def check_merge_classification(f: dict) -> list[str]:
       PR was never named, so nobody can check whether one was really tripped.
     - a valid citation on anything other than ``blocking`` — a gate-tripping
       finding parked as ``non_blocking`` or, worse, ``out_of_scope_follow_up``,
-      which the doctrine reads as "acceptable to never fix". Nothing else in
+      which the doctrine reads as "not in this PR". Nothing else in
       the pipeline can catch that one.
 
     Split out of :func:`check_consistency` so producer mode can run it: the

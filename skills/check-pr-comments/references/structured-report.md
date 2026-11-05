@@ -12,7 +12,7 @@ Read only when the user explicitly asked for a report (e.g. "generate report", "
 
 ## Finding additions
 
-One finding per review comment, IDs `CMT-001`, `CMT-002`, …; unresolved first (severity descending), then resolved. Beyond the standard fields:
+One finding per review comment, IDs `CMT-001`, `CMT-002`, …; unresolved first (severity descending; out of scope after in scope), then resolved. Beyond the standard fields:
 
 ```json
 {
@@ -41,5 +41,5 @@ This skill renders its own final report, so it emits what a coordinator would ot
 ### Scoring and classification
 
 - **Resolved**: floats and `recommendation` rule are in SKILL.md step 5.
-- **Unresolved**: `likelihood` and `impact` per `claudius:severity`. Rate `relevance` as PR-goal fit, not blast radius: addresses the PR's core change ≈ `1.0`; adjacent/tangential ≈ `0.5`; pre-existing concern unrelated to the diff ≈ `0.1` — do NOT default to `1.0`. `verdict: "UNRESOLVED"`.
-- **Merge class** (coordinator-inline producer exception — `claudius:report-format`): RESOLVED comments omit `merge_class`. Classify UNRESOLVED per `claudius:severity` § Merge Classification — `blocking` only when the concern trips a blocker gate (`intent_basis` names the gate ID plus the reviewer's request as evidence); otherwise `non_blocking` (in/adjacent to the change) or `out_of_scope_follow_up` — reported for the user's attention, never filed anywhere by this skill (`claudius:severity` § `out_of_scope_follow_up`).
+- **Unresolved**: `likelihood` and `impact` per `claudius:severity`. Rate `relevance` as PR-goal fit per the `claudius:severity` § 3 scale, not blast radius — do NOT default to `1.0`. `verdict: "UNRESOLVED"`.
+- **Merge class** (coordinator-inline producer exception — `claudius:report-format`): RESOLVED comments omit `merge_class`. Classify UNRESOLVED per `claudius:severity` § Merge Classification — `blocking` only when the concern trips a blocker gate (`intent_basis` names the gate ID plus the reviewer's request as evidence); otherwise `non_blocking` (in PR scope) or `out_of_scope_follow_up` — reported for the user's decision, never filed anywhere by this skill (`claudius:severity` § 5).

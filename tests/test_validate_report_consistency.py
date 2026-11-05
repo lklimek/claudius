@@ -312,7 +312,7 @@ class TestBlockerGateCitations:
 class TestGateCitedButNotBlocking:
     """The reverse rule, which nothing could detect before: a gate-tripping
     finding parked as non-blocking or deferred. `out_of_scope_follow_up` reads
-    as "acceptable to never fix", so a deferred gate is a silent doctrine
+    as "not in this PR", so a deferred gate is a silent doctrine
     violation with no other mechanical backstop.
     """
 

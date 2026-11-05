@@ -1174,7 +1174,7 @@ details summary:hover{color:{{ ACCENT }}}
     {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of likelihood and impact)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
     {% if f.likelihood is number %}<span class="metric-chip metric-likelihood" title="Likelihood a real user or attacker reaches this defect">L {{ '%.2f' % f.likelihood }}</span>{% endif %}
     {% if f.impact is number %}<span class="metric-chip metric-impact" title="Worst plausible outcome, blast radius included">I {{ '%.2f' % f.impact }}</span>{% endif %}
-    {% if f.relevance is number %}<span class="metric-chip metric-relevance" title="Fit to this PR's stated goal (1.0 the very thing, ~0.5 adjacent, ~0.1 pre-existing) — not part of the severity math">R {{ '%.2f' % f.relevance }}</span>{% endif %}
+    {% if f.relevance is number %}<span class="metric-chip metric-relevance" title="Fit to this PR's stated goal (1.0 the very thing, ~0.5 worsened or exposed by the diff, ~0.1 pre-existing) — not part of the severity math">R {{ '%.2f' % f.relevance }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}

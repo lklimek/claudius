@@ -93,7 +93,7 @@ One high-capability agent (`opus`, `fable`, or Codex at high effort; follow any 
 4. **Self-review** the full diff: correctness, edge cases, duplication, comment discipline, formatting/linting (`coding-best-practices`). This author check precedes any required independent review.
 5. **Self-fix, then repeat 4–5** until a pass finds nothing new; cap at 5 passes, then stop and report the remainder.
 
-Out-of-scope findings go in the final report, never fixed inline. Ambiguous requirement, no reproduction, or a capped loop → surface to the coordinator rather than guess. The agent commits everything before exiting; the coordinator pushes. Final report: approach, tests added, self-review passes, fixes applied, what was left out of scope.
+Out-of-scope findings go in the final report, never fixed inline (`coding-best-practices` § Cross-Cutting Rules, PR scope). Ambiguous requirement, no reproduction, or a capped loop → surface to the coordinator rather than guess. The agent commits everything before exiting; the coordinator pushes. Final report: approach, tests added, self-review passes, fixes applied, what was left out of scope.
 
 ## Tracking
 

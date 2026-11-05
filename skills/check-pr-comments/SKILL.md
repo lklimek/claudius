@@ -35,6 +35,8 @@ For every unresolved inline comment, read the code at the referenced location (a
 - Semantic satisfaction, not syntactic; every sub-item independently — resolved only when **all** are addressed; the intended end-user/developer experience, not just technical correctness.
 - **Trace touched functions**: for functions added, removed, or changed in the resolution commits (body or signature), apply [execution-paths.md](../review-changes/references/execution-paths.md) to the comment's affected scope. Check every affected call site; a caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up. Unresolved coverage must be reported, not treated as proof of a fix.
 
+**Scope**: Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` § 5 (skip if loaded) and classify every `Unresolved` comment **in scope** or **out of scope** per its PR scope. A reviewer's request is not PR intent until the user or a human PR author accepts it; an out-of-scope comment is not fixed in this PR.
+
 **Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`), the API returns `type: "Bot"`, or the project instructions name the account as a review bot (some run under ordinary user accounts); **Human** — all others.
 
 ## 4. Present Summary
@@ -46,7 +48,8 @@ Present concisely to the user:
   - **Already resolved** (`isResolved: true` at fetch): report as resolved citing GitHub's status — do not restate a fix assessment you didn't perform (step 3).
   - **Resolved by verification this session**: confirm the fix is adequate, or flag concerns when technically present but semantically incomplete. State whether the original comment was valid.
   - **Unresolved**: your recommendation (priority, suggested approach). If you disagree with the reviewer's concern, say so with a brief reason.
-- Unresolved first, then resolved
+  - **Out of scope**: proposed disposition (separate PR, issue, or drop) for the user to decide.
+- Unresolved first, then out of scope, then resolved
 - Author type (bot/human) and planned action (auto-resolve, reply, etc.) per comment
 
 Default end of workflow, except step 8 (resolve threads).
@@ -81,7 +84,7 @@ Present the rendered markdown (optionally `--format html`). The user can also ru
 
 ## 8. Resolve and Reply to Threads
 
-**Sequencing gate — decide fix/no-fix before acting.** Do not reply to or resolve an `Unresolved` (step 3) comment while its fix is still pending in this pass. Settle each comment's disposition — `Fixed (verified this session)` or `Not fixed` — then apply the matching matrix row. Replying during triage and fixing later leaves a redundant reply on every fixed thread; a fixed bot thread goes straight to auto-resolve with no intermediate reply.
+**Sequencing gate — decide fix/no-fix/out-of-scope before acting.** Do not reply to or resolve an `Unresolved` (step 3) comment while its fix is still pending in this pass. Settle each comment's disposition — `Fixed (verified this session)`, `Not fixed`, or `Out of scope` — then apply the matching matrix row. Replying during triage and fixing later leaves a redundant reply on every fixed thread; a fixed bot thread goes straight to auto-resolve with no intermediate reply.
 
 Apply the matrix **without asking for confirmation**, except where noted:
 
@@ -90,8 +93,10 @@ Apply the matrix **without asking for confirmation**, except where noted:
 | Any | Already resolved (`isResolved: true`) | No action — do not reply or resolve again |
 | Bot | Fixed (verified this session) | Auto-resolve the thread (no confirmation needed) |
 | Bot | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
+| Bot | Out of scope | Reply "Out of scope for this PR; reported to the maintainer", then resolve. Exception: a concern tripping G-FUNDS, G-SECRET, G-CRYPTO, or G-DATA stays unresolved and goes to the user. |
 | Human | Fixed (verified this session) | Post a reply explaining what was done. Do NOT resolve. |
 | Human | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
+| Human | Out of scope | No reply, no resolve — list it with a proposed disposition; the user may accept it into PR intent, which makes it in scope. |
 
 **NEVER auto-resolve human-created threads** without explicit per-invocation permission (e.g. "resolve all fixed threads", "resolve human threads too"). Even when fully fixed, the human reviewer resolves their own threads.
 
@@ -100,7 +105,7 @@ Apply the matrix **without asking for confirmation**, except where noted:
 - PR-level replies: `gh pr comment <pr> -R <owner/repo> --body-file <file>`
 - Keep replies concise: what was done, what remains, relevant commit reference
 
-**Resolving bot threads** (fixed only) via the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
+**Resolving bot threads** (fixed or out of scope) via the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
 
 ```bash
 # GraphQL node IDs (PRRT_*) — pass directly:

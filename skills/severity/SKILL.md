@@ -10,7 +10,7 @@ Two independent axes per finding:
 - **severity** — how bad is the shipped defect? Derived from the `likelihood`/`impact` floats.
 - **merge_class** — does this stop THIS PR? Decided by the **blocker gates** below.
 
-Never encode one in the other: a LOW can block (it trips a gate); a CRITICAL can be `out_of_scope_follow_up` (pre-existing, untouched, no gate reachable through this PR).
+Never encode one in the other: a LOW can block (it trips a gate); a CRITICAL can be `out_of_scope_follow_up` (pre-existing, outside PR scope, no gate tripped in scope).
 
 ## 1. Backstop zone (judge this first)
 
@@ -104,9 +104,9 @@ Drives `merge_class` and report ordering. **Not** part of the severity math.
 
 | Value | Meaning |
 |---|---|
-| `1.0` | The very thing this PR set out to do |
-| `~0.5` | Adjacent — in the code this PR touched |
-| `~0.1` | Pre-existing, unrelated to the change |
+| `1.0` | The very thing this PR set out to do, or a defect its diff introduces |
+| `~0.5` | Pre-existing, but the diff worsens, newly exposes, or relies on it |
+| `~0.1` | Pre-existing and untouched by the change, even in a file the diff edits |
 | `0.0` | Informational / resolved / praise |
 
 ### Derivation
@@ -150,7 +150,9 @@ In finding JSON, `severity` is the integer, not the label.
 
 **Coordinator-owned** — fan-out producers never set it. Assigned during consolidation (`review-changes` § Decide) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments, review-dependency — each runs as the coordinator with no separate consolidation pass).
 
+**PR scope is narrow**: the PR's intent, defects its diff introduces, worsens, newly exposes, or relies on, and its own tests and docs. Anything else is out of scope regardless of severity or proximity, and review fixes never widen the PR beyond it.
+
 **Before assigning any `merge_class`, read `references/merge-classification.md`** — establishing PR intent, the ordered decision tree, pre-existing findings, and the external-reviewer field map. Two rules bind even at a glance:
 
 - 🔴 A pre-existing finding tripping G-FUNDS, G-SECRET, G-CRYPTO, or G-DATA is never silently deferred — surface it to the human explicitly.
-- 🔴 `out_of_scope_follow_up` means "acceptable to never fix": nothing files these findings. Deferrals are surfaced by name when presenting results; a finding that must be fixed is `blocking` or `non_blocking`, never deferred.
+- 🔴 `out_of_scope_follow_up` means "not in this PR": never fixed here, never filed automatically, always listed by name with a proposed disposition (separate PR, issue, or drop) for the user to decide.
