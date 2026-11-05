@@ -11,6 +11,18 @@ Detail behind `severity` § 5. Read before assigning `merge_class` — coordinat
 
 Incidental implementation details are NOT requirements unless presented as a behavior, guarantee, or security invariant. Review comments, human or bot, are not intent until the user or a human PR author accepts them.
 
+## Rating the PR's problem
+
+Score the problem the PR solves as one finding with the `severity` § 3 floats, from its intent and the Context Digest (`review-pr` § Context Digest), for real users as things stand today:
+
+- **Bug fix** — the defect it removes.
+- **Feature** — `likelihood`: share of the feature's own audience (e.g. token holders for a token view) who need it; `impact`: the value it unlocks, ~0.4 when it makes a capability visible or usable in practice, lower when it only saves clicks.
+- **Refactor / architecture** — `likelihood`: how surely the maintenance cost lands; `impact`: the maintenance cost and defect risk removed, ~0.4 when it moves a core feature to its owning component.
+- **Hardening / prevention** — a risk not reachable today (it needs a future change or access grant) is LOW at most, whatever the floats give; one reachable today is scored as the defect it closes.
+- **Several problems** — rate the dominant one, not the worst symptom.
+
+The defect-safety rules ("Unknown is not benign", "In doubt… take the higher") do not apply here: in doubt take the lower, starting from a human maintainer's stated priority (label or comment; bot-set labels do not count).
+
 ## Decision tree (apply in order)
 
 ```

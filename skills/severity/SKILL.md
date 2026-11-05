@@ -95,7 +95,7 @@ Capped by the backstop zone (§1). Blast radius folds in here — a defect reach
 | `1.0` | Irreversible loss of funds, keys, or data |
 | `~0.7` | Recoverable loss, security degradation, or an unrecoverable-stuck user |
 | `~0.4` | Task fails, scary or confusing UX, restart fixes it |
-| `~0.1` | Cosmetic |
+| `~0.1` | Cosmetic, or brief confusion the user resolves alone |
 | `0.0` | No defect exists — informational only (see below) |
 
 **Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood = 0.0, impact = 0.0`, `relevance = 0.0` → INFO, the only band meaning "no action required". Exact zeros, never a hedge like `0.05` (no defect means genuinely zero, and hedges drift across documents); a low `relevance` cannot sink a finding into INFO — it is not in the mean.
@@ -154,7 +154,7 @@ In finding JSON, `severity` is the integer, not the label.
 
 **PR scope is narrow**: the PR's intent, defects its diff introduces, worsens, newly exposes, or relies on, and its own tests and docs. Anything else is out of scope regardless of severity or proximity, and review fixes never widen the PR beyond it.
 
-**Proportionate to the PR's problem**: what a PR must fix scales with how important the problem it solves is, judged from its intent and the Context Digest (`review-pr` § Context Digest). Below the gates, a finding whose fix outweighs a minor PR's own value — a pre-existing defect the diff worsens or exposes, or a LOW the diff introduces — is deferred; MEDIUM+ defects the diff introduces are always fixed.
+**Proportionate to the PR's problem**: what a PR must fix scales with how important the problem it solves is (`references/merge-classification.md` § Rating the PR's problem); a minor PR is one whose problem bands LOW. Below the gates, a finding whose fix outweighs a minor PR's own value — a pre-existing defect the diff worsens or exposes, or a LOW the diff introduces — is deferred; MEDIUM+ defects the diff introduces are always fixed.
 
 **Before assigning any `merge_class`, read `references/merge-classification.md`** — establishing PR intent, the ordered decision tree, pre-existing findings, and the external-reviewer field map. Two rules bind even at a glance:
 
