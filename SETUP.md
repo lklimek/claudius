@@ -217,9 +217,9 @@ The `memcan` plugin requires Docker Compose for Qdrant (vector DB) and optionall
 |------|-------|
 | Claudius | `grand-admiral` — coordination |
 | Nagatha | `architecture` |
-| Adams | `review-changes` — structural pass |
+| Adams | `review-changes` — global-optimum and reuse pass |
 | Bilby | `coding-best-practices` — implementation |
-| Marvin | `review-changes` — requirements/correctness pass |
+| Marvin | `review-changes` — requirements, correctness, and consistency pass |
 | Smythe | `security-best-practices` — security audit pass |
 | Trillian | `technical-writing` |
 | Diziet | `product-design` |

@@ -23,7 +23,7 @@ The invoking coordinator runs this workflow. An assigned reviewer, including the
 4. If independent workers are unavailable, report that limitation; do not describe an author self-review as an independent basic review. A host-imposed budget does not permit sampling paths and calling the review complete.
 5. Collect the findings and coverage artifact, verify that every requirement and changed symbol is accounted for, and assemble the v4 report using `grumpy-review` § Consolidate Findings (report assembly only, no specialist dispatch). Supply the reviewer's file as `qa:<path>`, plus the lint file and caller-supplied files such as Pass C, to `prepare`. Always write `report.json`, even with no findings, and include the coverage status in the executive summary. An incomplete pass cannot receive a clean/complete verdict.
 
-Review is read-only for production files. Put any verification tests in a scratch copy or isolated worktree. Return fixes as recommendations.
+Review is read-only for production files. Write verification tests in an isolated worktree; commit those of lasting value (an uncovered contract, a found bug's reproduction) on a branch from the reviewed head so CI runs them later, report the commit, and never push — the coordinator decides on publishing. Return fixes as recommendations.
 
 ## Reviewer pass
 
@@ -31,7 +31,8 @@ Load [coding-best-practices](../coding-best-practices/SKILL.md), [report-format]
 
 - Verify each requirement against the live implementation and observable behavior. Include happy paths, failures, boundaries, state changes, and interactions with unchanged code.
 - Read the full changed functions and affected callers/callees, not just diff hunks. Follow the shared contract without function-count, depth, caller-count, or time sampling.
-- Run relevant tests and lints when practical; construct concrete counterexamples for suspected defects. A passing test does not replace path tracing. Record commands, results, and anything not executable.
+- **Execution, CI first**: when CI runs the relevant tests and lints for the reviewed head, do not re-run them locally; before finishing, check that head's CI (`gh pr checks <PR>` or `gh run list --commit <sha>`), wait for pending runs, and report failures. When automatic triggers miss the changed scope (path filters, manual or label-gated workflows), trigger the relevant workflow (`gh workflow run`, documented label or comment). Run tests and lints locally only when no CI exists, CI cannot cover the scope, or verifying new tests. Inside a CI review run, skip triggering and report CI status only where `gh` is permitted.
+- Construct concrete counterexamples for suspected defects. A passing test does not replace path tracing. Record commands, CI runs, results, and anything not executed.
 - For shared state, locks, tasks, or channels, enumerate access paths and reason through interleavings, lock order, cancellation, and retries; use race/stress tools where available.
 - Scan user-visible strings for misleading or alarming errors and apply the UX/DX lens.
 - For security-relevant code, load the language pitfalls from [security-best-practices](../security-best-practices/SKILL.md); its full security-audit pass applies only when assigned.
@@ -39,7 +40,7 @@ Load [coding-best-practices](../coding-best-practices/SKILL.md), [report-format]
 
 ## Specialist passes
 
-Full-review workers read [specialist-passes.md](references/specialist-passes.md) for the assigned **Adams** (structural) or **Marvin** (requirements/correctness) pass. Identity wrappers load these same passes; generic workers need only the skill. The full-review coordinator owns allocation and report assembly; workers never invoke the full workflow.
+Full-review workers read [specialist-passes.md](references/specialist-passes.md) for the assigned **Adams** (global optimum and reuse) or **Marvin** (requirements, correctness, and consistency) pass. Identity wrappers load these same passes; generic workers need only the skill. The full-review coordinator owns allocation and report assembly; workers never invoke the full workflow.
 
 ## QA authoring
 
