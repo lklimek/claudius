@@ -1979,6 +1979,13 @@ def cmd_regenerate(args: argparse.Namespace) -> int:
         )
         report["schema_version"] = SCHEMA_VERSION
 
+    # Floats are the source of truth: re-derive after the validation pass edits them.
+    for section in report.get("findings", []):
+        for finding in section.get("findings", []):
+            overall = _derive_overall(finding)
+            if overall is not None:
+                finding["overall_severity"] = overall
+                finding["severity"] = _derive_severity_int(overall)
     regenerate_derived(report)
     if not _validate_report(report):
         log.error("Regenerated report failed schema validation, not writing output")

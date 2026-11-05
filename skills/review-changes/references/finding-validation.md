@@ -22,18 +22,7 @@ For each finding without `ai_verdict`:
    - `ai_verdict_confidence` — float 0.0–1.0. Renderers fade the chip background as confidence drops; honest low values are useful.
 3. **Estimate missing floats** — when any of `likelihood`/`impact`/`relevance` is absent, score them per `severity` skill § 1 (Backstop zone) and § 3 (Severity floats). Fill only what the producer omitted; never overwrite an existing producer value.
    3a. **Merge-class coherence** — this pass is NOT the primary classifier (no PR/issue access to build a Context Digest); it only enforces coherence on what the coordinator assigned: when the new `ai_verdict` is `false_positive` or `duplicate` and `merge_class` is present and not `disputed`, flip it to `disputed`; when `merge_class` is `blocking` and `intent_basis` is absent/empty or does not name a blocker gate ID (`G-*`, per `severity` skill § 2), flag it in `ai_assessment` and set `ai_verdict: needs_investigation` unless a gate is evident. Never assign a fresh `blocking`.
-4. **Re-derive integer severity** — after writing or accepting floats, recompute `overall_severity` and the integer `severity` band. Arithmetic stays in Python, never in the LLM — reuse the coordinator's helpers:
-
-   ```python
-   # Import directly — no re-implementation:
-   from severity_util import derive_overall, derive_severity_int
-   overall = derive_overall(finding)
-   if overall is not None:
-       finding["overall_severity"] = overall
-       finding["severity"] = derive_severity_int(overall)
-   ```
-
-   If importing is impractical in the session, shell out to a one-liner invoking the same helpers from `scripts/severity_util.py`. Never recompute the band table inline.
+4. **Leave `overall_severity` and `severity` alone** — the post-loop `regenerate` re-derives both from the floats; never compute bands in the LLM.
 
 Write changes back with the `Edit` tool — single JSON file, in place.
 
@@ -45,7 +34,7 @@ Write changes back with the `Edit` tool — single JSON file, in place.
    python3 <PLUGIN_ROOT>/scripts/validate_report.py <REPORT_JSON>
    ```
 
-2. **Regenerate derived blocks** — any `merge_class` flip changes `remediation` membership and `top_findings`/stats:
+2. **Regenerate derived fields** — re-derives `overall_severity`/`severity` from the floats; any `merge_class` flip also changes `remediation` membership and `top_findings`/stats:
 
    ```bash
    python3 <PLUGIN_ROOT>/scripts/consolidate_reports.py regenerate <REPORT_JSON>
@@ -60,8 +49,7 @@ Write changes back with the `Edit` tool — single JSON file, in place.
 
 ## Scope and boundaries
 
-- Single-shot per invocation — no loops or follow-ups; call again on a different file if needed.
-- Producers and coordinator stay unchanged — this pass only adds AI fields and float estimates producers left empty.
+- One report per run. Producer fields stay unchanged; this pass only adds AI fields and floats producers left empty.
 - Never edit `metadata.repository`, `metadata.commit`, `location_permalink`, or `id` — coordinator-owned.
 - Never default `ai_verdict_confidence` to 1.0 — when uncertain, say so honestly; renderers communicate it visually.
 

@@ -882,6 +882,19 @@ class TestRegenerateDerived:
         assert report["summary_statistics"]["merge_class_counts"]["blocking"] == 0
         assert report["summary_statistics"]["merge_class_counts"]["non_blocking"] == 2
 
+    def test_regenerate_command_rederives_severity_from_edited_floats(self, tmp_path):
+        path = tmp_path / "report.json"
+        report = self._report()
+        finding = report["findings"][0]["findings"][0]
+        finding.update(likelihood=0.05, impact=0.05, relevance=0.05)
+        expected = cr.derive_overall(finding)
+        path.write_text(json.dumps(report), encoding="utf-8")
+
+        assert cr.cmd_regenerate(cr.parse_args(["regenerate", str(path)])) == 0
+        written = json.loads(path.read_text(encoding="utf-8"))["findings"][0]["findings"][0]
+        assert written["overall_severity"] == expected
+        assert written["severity"] == cr.derive_severity_int(expected)
+
     def test_regenerate_command_revalidates_and_writes_in_place(self, tmp_path):
         path = tmp_path / "report.json"
         report = self._report()
