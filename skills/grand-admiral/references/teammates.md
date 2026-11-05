@@ -2,6 +2,8 @@
 
 Detail behind `grand-admiral` § Spawning, § Terminating Teammates, and § Recovery → Reporting Channel Failures. Read before running coordinated (inter-agent) work, when a shutdown does not take, or when an agent that should have reported is silent.
 
+For native Codex workers use returned worker IDs and native message/status/wait tools. Load role skills in their briefs. The Claude-specific team/Monitor protocols below apply only when those APIs are present.
+
 ## Standalone vs Coordinated
 
 Every session has one implicit team — a named `Agent()` spawn joins it automatically; there is no create/destroy step (`TeamCreate`/`TeamDelete` don't exist). The only choice: do spawned agents need to talk to each other?
@@ -11,7 +13,7 @@ Every session has one implicit team — a named `Agent()` spawn joins it automat
 | **Standalone** | Parallel independent work, no shared files | Fire-and-forget `Agent()` calls, each writes to its own file |
 | **Coordinated** | Agents share files or could duplicate work | Named spawns + `SendMessage` claim/completion broadcasts |
 
-Coordinated lifecycle: spawn named teammates (`Agent(subagent_type=..., name=...)`); scope each agent's slice explicitly in its prompt (no shared task list exists); coordinate via `SendMessage`; shut down once the whole workflow is done. Production pattern for N named review agents with disjoint file scopes (claim → fix → completion broadcast; lead tracks, merges, shuts down): `ci-dance` § Inter-Stream Communication.
+Coordinated Claude lifecycle: spawn generic named teammates with explicit role-skill paths; scope each worker's slice in its prompt; coordinate via `SendMessage`; shut down once the workflow is done. Production pattern for disjoint scopes: `ci-dance` § Inter-Stream Communication.
 
 **Spawn-time trade-off**: a named agent can be steered mid-task via `SendMessage` but must be explicitly shut down; an unnamed `run_in_background` agent gets a `TaskStop`-able id but cannot be messaged mid-flight.
 

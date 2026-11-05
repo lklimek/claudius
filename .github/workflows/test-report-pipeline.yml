@@ -3,20 +3,20 @@ name: Report Pipeline Tests
 on:
   push:
     paths:
+      - 'agents/**'
       - 'hooks/**'
       - 'scripts/**'
       - 'schemas/**'
       - 'skills/**'
-      - 'agents/**'
       - 'tests/**'
       - '.github/workflows/test-report-pipeline.yml'
   pull_request:
     paths:
+      - 'agents/**'
       - 'hooks/**'
       - 'scripts/**'
       - 'schemas/**'
       - 'skills/**'
-      - 'agents/**'
       - 'tests/**'
       - '.github/workflows/test-report-pipeline.yml'
 

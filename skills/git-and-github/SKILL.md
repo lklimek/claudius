@@ -23,6 +23,10 @@ description: "This skill should be used when running git or gh commands, interac
 
 Create feature branches; NEVER commit to a base branch. [Conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`; `!` for breaking changes), message passed via HEREDOC, ending with the trailer `Co-Authored-By: Claude <your-model-name> <noreply@anthropic.com>` — your actual current model, never a version copied from a doc. Never create or edit `CHANGELOG.md` in a feature PR — concurrent PRs conflict on it; it is written at release time (`release` skill). Exception: a project policy that explicitly requires a per-PR entry.
 
+## Before Every Push
+
+Fetch the remote and resolve the current PR base from GitHub metadata; before a PR exists, use the documented target branch or repository default. Verify that the freshly fetched remote base is an ancestor of `HEAD` (`git merge-base --is-ancestor <remote>/<base> HEAD`). A stale local base or an earlier session check is insufficient. If behind, invoke [merge-base](../merge-base/SKILL.md) with that resolved remote/base ref, then validate the result, apply `coding-best-practices` § Workflow Discipline, and recheck ancestry before pushing. If fetching, base resolution, integration, or the final ancestry check fails, stop the push and report the blocker. Apply this gate to every push, including follow-ups and retries.
+
 ## Pull Requests
 
 ### Creating a PR

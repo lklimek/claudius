@@ -1,7 +1,7 @@
 {
   "name": "claudius",
-  "version": "9.0.1",
-  "description": "Collection of specialized development agents and skills for Claude Code",
+  "version": "10.0.0",
+  "description": "Development workflow skills for Claude Code and Codex, with basic and full code review",
   "author": {
     "name": "lklimek",
     "url": "https://github.com/lklimek"

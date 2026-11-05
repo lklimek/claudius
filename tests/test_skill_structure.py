@@ -32,11 +32,12 @@ REMOVED_SKILLS = (
     "python-best-practices",
     "go-best-practices",
     "frontend-best-practices",
+    "codex-crew",
 )
 
 # Files scanned for stale names (CHANGELOG.md is history and exempt).
 STALE_SCAN_ROOTS = ("skills", "agents", "hooks", "scripts")
-STALE_SCAN_FILES = ("README.md", "SETUP.md")
+STALE_SCAN_FILES = ("README.md", "SETUP.md", "CLAUDE.md")
 TEXT_SUFFIXES = {".md", ".sh", ".py", ".json", ".yml", ".yaml", ".txt"}
 
 # Files scanned for ``<skill> § <Section>`` citations.
@@ -158,23 +159,17 @@ def test_reference_has_no_claude_variables(path: Path) -> None:
     assert not found, f"{_rel(path)}: unsubstituted variables {sorted(set(found))}"
 
 
-# --------------------------------------------------------------------------- agents and removed skills
+# --------------------------------------------------------------------------- skill dependencies and removed skills
 
 
-def _agent_skills(path: Path) -> list[str]:
-    front, _ = _split_frontmatter(path)
-    value = (yaml.safe_load(front) or {}).get("skills") or []
-    if isinstance(value, str):
-        value = re.split(r"[,\s]+", value.strip())
-    return [s.removeprefix("claudius:") for s in value if s]
-
-
-@pytest.mark.parametrize("path", AGENT_FILES, ids=lambda p: p.name)
-def test_agent_preloaded_skills_exist(path: Path) -> None:
-    missing = [
-        s for s in _agent_skills(path) if not (SKILLS_DIR / s / "SKILL.md").is_file()
-    ]
-    assert not missing, f"{_rel(path)}: skills: names a missing skill {missing}"
+@pytest.mark.parametrize("path", SKILL_FILES, ids=_id)
+def test_linked_skill_dependencies_exist(path: Path) -> None:
+    for link in MD_LINK.finditer(path.read_text(encoding="utf-8")):
+        target = link.group(1)
+        if target.endswith("/SKILL.md") and not target.startswith("https://"):
+            assert (path.parent / target).resolve().is_file(), (
+                f"{_rel(path)}: missing skill dependency {target}"
+            )
 
 
 def _stale_scan_files() -> list[Path]:
@@ -198,6 +193,25 @@ def test_removed_skill_is_not_mentioned(name: str) -> None:
         if pattern.search(line)
     ]
     assert not offenders, f"removed skill {name!r} still mentioned at {offenders}"
+
+
+# The basic-review skill must not be called `review`: Claude Code's bundled `/review`
+# (alias of `/code-review`) wins over a plugin skill of that name.
+BARE_REVIEW_SKILL = re.compile(
+    r"`/?review`|(?<![\w-])/review(?![\w-])|claudius:review(?![\w-])"
+    r"|(?:skills|\.\.)/review/"
+)
+
+
+def test_basic_review_skill_never_referenced_by_bare_name() -> None:
+    offenders = [
+        f"{_rel(p)}:{n}"
+        for p in _stale_scan_files()
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+        if BARE_REVIEW_SKILL.search(line)
+    ]
+    assert not (SKILLS_DIR / "review").exists(), "skills/review collides with /review"
+    assert not offenders, f"bare `review` skill reference at {offenders}"
 
 
 # --------------------------------------------------------------------------- § citations
@@ -361,3 +375,22 @@ def test_matcher_rejects_renamed_section_but_tolerates_trailing_prose() -> None:
     assert _segment_resolves("5d", titles)
     assert not _segment_resolves("Merge Class Routing", titles)
     assert not _segment_resolves("7", titles)
+
+
+@pytest.mark.parametrize("path", SKILL_FILES, ids=_id)
+def test_description_is_third_person_trigger(path: Path) -> None:
+    front, _ = _split_frontmatter(path)
+    description = yaml.safe_load(front)["description"]
+    assert "This skill should be used" in description, (
+        f"{_rel(path)}: description must state when, in the third person"
+    )
+
+
+def test_execution_paths_forbid_repo_configured_tooling() -> None:
+    """Reviewers run on untrusted checkouts: these tools execute repo-controlled config."""
+    text = (
+        SKILLS_DIR / "review-changes" / "references" / "execution-paths.md"
+    ).read_text(encoding="utf-8")
+    for needle in ("`rg`", "ctags", "gtags", "tree-sitter", "gh search code"):
+        assert needle in text, f"execution-paths.md: tool-safety rule lacks {needle}"
+    assert "symbol/reference tooling" not in text

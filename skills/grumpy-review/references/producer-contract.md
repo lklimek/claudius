@@ -7,8 +7,8 @@ instead of restating it.
 
 Write findings to your assigned `<SCRATCH_DIR>/<role>-findings.json` as a bare JSON array of
 `finding_section` objects — no envelope object, no metadata fields. Shape, required fields, the
-do-NOT-emit list, and ID prefixes: the `report-format` skill (preloaded on reviewer agents; load
-it via `Skill` if it is not in your context).
+do-NOT-emit list, and ID prefixes: explicitly load the `report-format` skill supplied by
+the coordinator. Nicknames do not preload instructions.
 
 - Rate `relevance` as real PR-goal fit — never default to `1.0`. Never hand-type a severity
   label; the floats are the single source of truth.
@@ -19,13 +19,11 @@ it via `Skill` if it is not in your context).
 - Assign provisional sequential IDs within your prefix (`SEC-001`, `SEC-002`) — collisions
   across parallel agents are fine, consolidation reassigns final IDs.
 
-## Call-tree inspection
+## Execution-path coverage
 
-When the diff modifies or removes any function/method declaration, run a deep transitive
-in-repo caller walk before emitting findings — the procedure is the call-tree walk file at the
-path your spawn prompt gives (read once per review). Finding shape: `category: "call_tree"`, ID prefix `CALL-`, `description` MUST
-start with `Walked via: <tool>`. Skip for pure additions, doc-only PRs, and test-file-only
-changes.
+Read the shared execution-path contract at the absolute path in the brief. Apply the
+assigned pass and write its coverage artifact, even when findings are empty. Requirements,
+caller chains, and entry-to-sink paths follow that contract; report gaps explicitly.
 
 ## UI-text scan
 
@@ -62,7 +60,7 @@ Read — Bash `ls`/`find` outside the working directory is sandbox-blocked.
   `prepare`/`finalize`, and do NOT pre-assemble `report.json` shape; the coordinator does that.
 - When MemCan/WebSearch are unavailable (e.g., CI), do not use memcan tools or
   WebSearch/WebFetch.
-- Preload `coding-best-practices` so its Cross-Cutting Rules govern every finding.
+- Load `coding-best-practices` and `severity` explicitly so their rules govern every finding.
 
 ## Report back tersely
 

@@ -6,7 +6,7 @@ Hello there, humans. I'm Claudius the Magnificent -- a supremely competent, effo
 
 ## What is this?
 
-A [Claude Code](https://claude.ai/code) plugin for automated development workflows -- code review, CI/CD, dependency management, and more. Also available as a [GitHub Action](https://github.com/lklimek/claudius-review-action/) for CI-integrated code reviews.
+Development workflow skills for Claude Code and Codex -- code review, CI/CD, dependency management, and more. Working logic lives in `SKILL.md` files; optional agent identities supply personality and require loading those skills. Also available as a [GitHub Action](https://github.com/lklimek/claudius-review-action/) for CI-integrated code reviews.
 
 ## Installation
 
@@ -29,15 +29,22 @@ See the [Setup Guide](SETUP.md) for detailed configuration.
 
 | Skill | What I Do For You |
 |-------|-------------------|
+| `/review-changes` | Basic review: one strong independent reviewer checks requirements and every execution path |
 | `/grumpy-review` + `/triage-findings` | Deploy my army of specialist agents to tear your code apart, then let you triage the carnage in a browser UI |
 | `/ci-dance` | Push your PR and babysit the entire pipeline -- CI, reviews, fixes -- while you go live your life |
 | `/dependabot-merge` | Audit and merge your embarrassing backlog of 40 dependabot PRs in one sitting |
+
+### Two review modes
+
+Ordinary review and `/review-changes basic` use one strong reviewer, regardless of diff size. `/review-changes full` and `/grumpy-review` run the full specialist review. Both trace requirements and all execution paths through changed code, including affected callers, failures, and side effects beyond the diff. Missing coverage is reported as incomplete, never a clean result.
+
+Independent review is required before completing changes of at least 50 code lines (added plus deleted across the task's net diff, including tests; excluding comments, blank lines, and documentation). Below that threshold, author self-review suffices unless review is requested or the invoked workflow requires it. Basic is the default independent review. `review-pr` defaults to basic and accepts `full`; `ci-dance` retains full review by default and accepts `review=basic`.
 
 ### `/grumpy-review` then `/triage-findings`
 
 You know what's exhausting? Watching humans review code. One person checks style, another worries about security, a third notices the docs are wrong -- and somehow nobody catches the SQL injection on line 47. Amateurs.
 
-When you say `/grumpy-review`, I deploy my specialist agents -- security, code quality, project consistency -- all working in parallel, all independently auditing your branch. They report back to me, I deduplicate their findings, rank everything by severity, and hand you a consolidated report. The whole thing takes minutes, not the three days your team usually needs.
+When you say `/grumpy-review`, I dispatch independent workers for security (Smythe), structure (Adams), and requirements/correctness (Marvin), each loading the relevant skills. All three passes run even for tiny changes. I deduplicate their findings, check coverage, and return a consolidated report.
 
 <p align="center">
   <img src="assets/triage-report-summary.png" alt="Review report summary with severity matrix and verdict" width="700" />
@@ -76,7 +83,7 @@ I won't merge anything with security concerns. I have *standards*.
 
 ## But Wait, There's More
 
-I have 23 skills and 8 specialist agents covering security, architecture, testing, documentation, and more. The three above are just my personal favorites. See the [Setup Guide](SETUP.md) for the full catalog -- if you can handle it.
+Skills cover security, architecture, testing, documentation, and more. Claudius and the crew retain thin identity files; all procedures remain in shared skills that also work with generic workers. See the [Setup Guide](SETUP.md) for the catalog and migration notes.
 
 ## How We Work
 

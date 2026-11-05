@@ -14,7 +14,9 @@ Merge the remote base branch into the current feature branch: pre-merge analysis
 
 ## 2. Base Branch
 
-From PR metadata (prints the bare branch name `<base>`); fall back to the repo default branch (prints `origin/<base>` already — do not prefix it again); if neither resolves, ask the user:
+If the caller supplies an already resolved remote/base ref, use that ref after fetching its remote; do not rediscover or replace it with the default branch. Substitute that remote/base for `origin/<base>` in the following steps.
+
+Otherwise resolve from PR metadata (prints the bare branch name `<base>`); fall back to the repo default branch (prints `origin/<base>` already — do not prefix it again); if neither resolves, ask the user:
 
 ```bash
 gh pr view --json baseRefName -q .baseRefName

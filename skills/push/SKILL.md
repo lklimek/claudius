@@ -25,7 +25,7 @@ Load `claudius:git-and-github` skill first — all commit, push, PR, and attribu
    - Review changes, check for secrets — warn and exclude if found
    - Stage and commit per `git-and-github` conventions
 
-4. **Push** to remote
+4. **Sync and push** — complete `git-and-github` § Before Every Push, then push to remote.
 
 5. **PR**
    - PR body MUST follow the TL;DR → User story → Scenario → Detailed discussion skeleton per `git-and-github` §Creating a PR

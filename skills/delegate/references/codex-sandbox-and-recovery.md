@@ -1,6 +1,6 @@
 # Codex Sandbox, Job State & Recovery — Reference
 
-Deep mechanics behind `codex-crew`. Load when a Codex job misbehaves (write rejected, commit blocked, dispatch fails instantly, stuck at `running`), when arming a monitoring loop, or when hand-monitoring a job.
+Optional external Codex launcher mechanics, loaded through `delegate`. Applies to launcher jobs that reject writes/commits, fail instantly, or remain running; not to native workers.
 
 ## Contents
 
