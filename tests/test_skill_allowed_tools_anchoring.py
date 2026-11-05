@@ -23,7 +23,6 @@ ANCHORED_SKILLS = (
     "review-changes",
     "review-pr",
     "check-pr-comments",
-    "ci-dance",
     "triage-findings",
     "report-format",
 )

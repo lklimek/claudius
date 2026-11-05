@@ -33,7 +33,7 @@ Source priority for every field:
 3. MemCan architecture decisions for the repo
 4. Code evidence — the call-tree/entry-point walk
 
-🔴 **Unknown ≠ benign.** A field with no evidence is written `unknown` and never downgrades anything (`claudius:severity` § `likelihood` evidence rule). The digest adjusts scoring only where a claim carries evidence and **never suppresses reporting**. It feeds Pass C (§2), the reviewer spawns and merge classification in §3, and every fixer prompt downstream (`ci-dance`).
+🔴 **Unknown ≠ benign.** A field with no evidence is written `unknown` and never downgrades anything (`claudius:severity` § `likelihood` evidence rule). The digest adjusts scoring only where a claim carries evidence and **never suppresses reporting**. It feeds Pass C (§2), the reviewer spawns and merge classification in §3, and every downstream fixer prompt.
 
 ## 2. Pass C — Functional Promise Verification
 

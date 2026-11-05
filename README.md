@@ -31,14 +31,13 @@ See the [Setup Guide](SETUP.md) for detailed configuration.
 |-------|-------------------|
 | `/review-changes` | Basic review: one strong independent reviewer checks requirements and every execution path |
 | `/review-changes full` + `/triage-findings` | Deploy my army of specialist agents to tear your code apart, then let you triage the carnage in a browser UI |
-| `/ci-dance` | Push your PR and babysit the entire pipeline -- CI, reviews, fixes -- while you go live your life |
 | `/dependabot-merge` | Audit and merge your embarrassing backlog of 40 dependabot PRs in one sitting |
 
 ### Two review modes
 
 Ordinary review and `/review-changes basic` use one strong reviewer, regardless of diff size. `/review-changes full` (or just ask for a grumpy review) runs the full specialist review. Both trace requirements and all execution paths through changed code, including affected callers, failures, and side effects beyond the diff. Missing coverage is reported as incomplete, never a clean result.
 
-Independent review is required before completing changes of at least 50 code lines (added plus deleted across the task's net diff, including tests; excluding comments, blank lines, and documentation). Below that threshold, author self-review suffices unless review is requested or the invoked workflow requires it. Basic is the default independent review. `review-pr` defaults to basic and accepts `full`; `ci-dance` retains full review by default and accepts `review=basic`.
+Independent review is required before completing changes of at least 50 code lines (added plus deleted across the task's net diff, including tests; excluding comments, blank lines, and documentation). Below that threshold, author self-review suffices unless review is requested or the invoked workflow requires it. Basic is the default independent review. `review-pr` defaults to basic and accepts `full`.
 
 ### `/review-changes full` then `/triage-findings`
 
@@ -62,16 +61,6 @@ But here's the part I'm actually proud of. Say `/triage-findings` and I open a b
 </p>
 
 Reviews produce noise. Most AI tools would just dump 200 findings on you and call it a day. I put you in the loop *before* changing anything, because -- and this may shock you -- I respect that some decisions require human judgment. The `INTENTIONAL(...)` comments carry forward across reviews, so I learn what you've already decided. Persistent memory. You're welcome.
-
-### `/ci-dance`
-
-This one I'm *particularly* fond of.
-
-You say `/ci-dance`. Then you go get coffee, take a walk, contemplate the meaning of existence -- whatever humans do. Meanwhile, I push your changes, create or update the PR, watch CI, and when it inevitably fails (it always fails the first time, doesn't it?), I read the logs, fix the issue, push again, and wait. CI green? I request a review. Reviewer leaves comments? I address them, push, run CI again. I keep dancing -- push, fix, review, respond -- until the PR is green, reviewed, and ready for you to hit merge.
-
-**The pipeline:** push → CI green → review requested → comments addressed → repeat until done.
-
-Under the hood I'm orchestrating `/push`, `/review-changes`, and `/check-pr-comments` -- running CI monitoring, copilot review, and local code review in parallel. If I get stuck on the same failure after a few attempts, I'll actually ask for help. And if five hours pass, I'll stop and report what I've accomplished so far. I'm tireless, not reckless.
 
 ### `/dependabot-merge`
 

@@ -35,6 +35,7 @@ REMOVED_SKILLS = (
     "codex-crew",
     "grumpy-review",
     "validate-findings",
+    "ci-dance",
 )
 
 # Files scanned for stale names (CHANGELOG.md is history and exempt).
