@@ -44,7 +44,7 @@ Independent review is required before completing changes of at least 50 code lin
 
 You know what's exhausting? Watching humans review code. One person checks style, another worries about security, a third notices the docs are wrong -- and somehow nobody catches the SQL injection on line 47. Amateurs.
 
-When you say `/grumpy-review`, I dispatch independent workers for security (Smythe), structure (Adams), and requirements/correctness (Marvin), each loading the relevant skills. All three passes run even for tiny changes. I deduplicate their findings, check coverage, and return a consolidated report.
+When you say `/grumpy-review`, I dispatch independent workers for security (Smythe), local-vs-global optimum and reuse across the project and its sibling repos (Adams), and requirements, correctness, and consistency (Marvin), each loading the relevant skills. All three passes run even for tiny changes. I deduplicate their findings, check coverage, and return a consolidated report.
 
 <p align="center">
   <img src="assets/triage-report-summary.png" alt="Review report summary with severity matrix and verdict" width="700" />

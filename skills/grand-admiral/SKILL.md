@@ -39,8 +39,8 @@ Names are optional identities. In Claude, dispatch the `claudius:<identity>` age
 | Diziet | `product-design` |
 | Trillian | `technical-writing` |
 | Smythe | `security-best-practices` — audit pass |
-| Adams | `review-changes` — structural pass |
-| Marvin | `review-changes` — requirements/correctness pass |
+| Adams | `review-changes` — global-optimum and reuse pass |
+| Marvin | `review-changes` — requirements, correctness, and consistency pass |
 
 **Bilby builds, Marvin breaks.** Marvin reports findings but NEVER fixes; fixes go back to Bilby (SendMessage if still running, else a new spawn).
 
@@ -88,7 +88,7 @@ Read `references/worktree-isolation.md` when origin is required as the base (Opt
 
 ## Verification Economy
 
-- **Verification is a role, not a step every agent repeats.** Bilby runs the narrowest relevant scope once through `cargo-cached.sh` before committing; Marvin owns adversarial execution. Never mandate a full local suite — CI is the full-suite backstop.
+- **Verification is a role, not a step every agent repeats.** Bilby runs the narrowest relevant scope once through `cargo-cached.sh` before committing; Marvin owns adversarial execution and defers to CI where it covers the scope (`review-changes` § Reviewer pass). Never mandate a full local suite — CI is the full-suite backstop.
 - **A ledger record IS the verification**: `{command, tree key, exit 0, log path}` for the CURRENT tree. Require the ledger line in every code-mutating agent's report, plus the provenance check: the log names the new/changed tests and `passed + filtered == expected total` — a green that doesn't name your tests is not a green. An implausibly low `duration_s` for the scope means a corrupted fingerprint replayed a false green — the one case that warrants re-running with `CLAUDIUS_FORCE=1`.
 - **Never prescribe command chains.** Brief the OUTCOME ("clippy clean and tests green for `-p X`") — the cargo-discipline hook denies chains.
 

@@ -1,6 +1,6 @@
 ---
 name: grumpy-review
-description: "This skill should be used when the user asks for a \"full review\", \"grumpy review\", or a full code review, audit, or quality assessment, or when a workflow selects full review. It runs independent security, structural, and correctness passes in parallel and produces a deduplicated, severity-ranked report. Ordinary review defaults to basic mode in review-changes."
+description: "This skill should be used when the user asks for a \"full review\", \"grumpy review\", or a full code review, audit, or quality assessment, or when a workflow selects full review. It runs independent security, global-optimum/reuse, and correctness passes in parallel and produces a deduplicated, severity-ranked report. Ordinary review defaults to basic mode in review-changes."
 allowed-tools: Read, Grep, Glob, Write, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/grumpy-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Agent, SendMessage
 ---
 
@@ -47,13 +47,13 @@ Use all three core passes for every full review. For 50+ files / 5000+ lines, sp
 
 ### Core passes
 
-Dispatch through the host's native API: in Claude, the listed identity as the agent type; elsewhere, generic workers. Either way, explicitly supply the listed skill/pass paths and set each model per `delegate` § Token Economy — strong reasoning for all three passes (security, structure, requirements/path analysis). `<role>` is the token used for file names and `prepare` labels.
+Dispatch through the host's native API: in Claude, the listed identity as the agent type; elsewhere, generic workers. Either way, explicitly supply the listed skill/pass paths and set each model per `delegate` § Token Economy — strong reasoning for all three passes (security, global optimum and reuse, requirements/path analysis); Adams' cross-repository reading needs a large-context model (Claude: Opus, 1M). `<role>` is the token used for file names and `prepare` labels.
 
 | Name / Claude identity | `<role>` | Skill / pass | Focus |
 |---|---|---|---|
 | Smythe / `claudius:security-engineer-smythe` | `security` | `security-best-practices` — Security audit pass | Entry-to-sink security paths, trust boundaries, known vulnerabilities, secrets and dependencies |
-| Adams / `claudius:project-reviewer-adams` | `project` | `review-changes` — Adams specialist pass | Cross-artifact consistency, documentation, structure, idioms, maintainability |
-| Marvin / `claudius:qa-engineer-marvin` | `qa` | `review-changes` — Reviewer pass and Marvin specialist pass | Requirements, all execution paths, adversarial correctness, tests and lints |
+| Adams / `claudius:project-reviewer-adams` | `project` | `review-changes` — Adams specialist pass | Local-vs-global optimum: fix in the owning layer/repository across the organization; DRY of new code and tests |
+| Marvin / `claudius:qa-engineer-marvin` | `qa` | `review-changes` — Reviewer pass and Marvin specialist pass | Requirements, all execution paths, adversarial correctness, cross-artifact consistency, structure and idioms, CI status |
 
 Always include all three, including for tiny diffs. Workers report findings and never fix production code.
 
@@ -101,7 +101,7 @@ Metadata is coordinator-owned: resolve the actual reviewed commit (`git rev-pars
 
 ### Execution-path coverage
 
-Read [execution-paths.md](../review-changes/references/execution-paths.md). Marvin owns requirements/correctness coverage of every changed unit, Smythe owns security paths; Adams checks structural contracts. Reconcile their coverage artifacts against the full inventory before §5. Scaled scopes must account for cross-module paths. Missing artifacts or unresolved paths make the review incomplete and must appear in the executive summary; zero findings cannot override that status.
+Read [execution-paths.md](../review-changes/references/execution-paths.md). Marvin owns requirements/correctness coverage of every changed unit, Smythe owns security paths; Adams records the layers and repositories checked per changed unit. Reconcile their coverage artifacts against the full inventory before §5. Scaled scopes must account for cross-module paths. Missing artifacts or unresolved paths make the review incomplete and must appear in the executive summary; zero findings cannot override that status.
 
 ### Ephemeral-ID lint
 
