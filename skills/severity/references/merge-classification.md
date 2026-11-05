@@ -19,6 +19,8 @@ informational/praise (praise, INTENTIONAL downgrade,
 invalid (ai_verdict false_positive | duplicate)    → disputed
 trips any blocker gate (`severity` § 2) in PR scope
   (`severity` § 5)                                 → blocking
+in PR scope but disproportionate to the PR's
+  problem (`severity` § 5)                         → out_of_scope_follow_up
 relevance ≥ ~0.5 (in PR scope, `severity` § 5)   → non_blocking
 otherwise, whatever its severity or file           → out_of_scope_follow_up
 ```

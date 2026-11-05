@@ -65,6 +65,8 @@ Getting stuck, one-way migrations, protocol drift, compatibility breaks, agent a
 
 Three 0.0–1.0 numbers per finding; these definitions are the whole specification.
 
+**Rate real-world significance**: the floats measure how much the problem matters to real users and operators in practice — not how wrong the code looks or what could theoretically happen. A minor problem stays minor however the code reads.
+
 ### `likelihood` — how likely is this hit?
 
 Probability that a real user or attacker reaches this defect under zone-realistic usage. Include attacker pressure where an attacker exists; include plausible human error.
@@ -151,6 +153,8 @@ In finding JSON, `severity` is the integer, not the label.
 **Coordinator-owned** — fan-out producers never set it. Assigned during consolidation (`review-changes` § Decide) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments, review-dependency — each runs as the coordinator with no separate consolidation pass).
 
 **PR scope is narrow**: the PR's intent, defects its diff introduces, worsens, newly exposes, or relies on, and its own tests and docs. Anything else is out of scope regardless of severity or proximity, and review fixes never widen the PR beyond it.
+
+**Proportionate to the PR's problem**: what a PR must fix scales with how important the problem it solves is, judged from its intent and the Context Digest (`review-pr` § Context Digest). Below the gates, a finding whose fix outweighs a minor PR's own value — a pre-existing defect the diff worsens or exposes, or a LOW the diff introduces — is deferred; MEDIUM+ defects the diff introduces are always fixed.
 
 **Before assigning any `merge_class`, read `references/merge-classification.md`** — establishing PR intent, the ordered decision tree, pre-existing findings, and the external-reviewer field map. Two rules bind even at a glance:
 
