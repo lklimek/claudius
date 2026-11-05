@@ -1,15 +1,8 @@
----
-name: validate-findings
-description: "This skill should be used when a coordinator performs the LLM validation pass on a consolidated v4 findings report. It adds ai_assessment, ai_verdict, and ai_verdict_confidence and, in the rare partial-producer case, re-estimates missing likelihood, impact, and relevance. Coordinator-only."
-allowed-tools: Read, Edit, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(git show [0-9a-f]*), Bash(git rev-parse *)
-model: inherit
----
-
 # Validate Findings
 
 Opt-in coordinator-only LLM validation pass over a consolidated v4 report: adds AI assessment, verdict, and confidence per finding. Floats stay untouched unless the consolidator left them absent (partial producer output). NOT part of the automatic pipeline — invoke after `consolidate_reports.py finalize` (or `assemble`) when a triage-quality pass is wanted.
 
-**Argument**: `$ARGUMENTS` — path to the consolidated `report.json`. Edited in place.
+**Argument**: `<REPORT_JSON>` — path to the consolidated `report.json`. Edited in place.
 
 ## Inputs
 
@@ -28,47 +21,35 @@ For each finding without `ai_verdict`:
    - `ai_verdict` — one of `valid`, `false_positive`, `needs_investigation`, `out_of_scope`, `duplicate`.
    - `ai_verdict_confidence` — float 0.0–1.0. Renderers fade the chip background as confidence drops; honest low values are useful.
 3. **Estimate missing floats** — when any of `likelihood`/`impact`/`relevance` is absent, score them per `severity` skill § 1 (Backstop zone) and § 3 (Severity floats). Fill only what the producer omitted; never overwrite an existing producer value.
-   3a. **Merge-class coherence** — this skill is NOT the primary classifier (no PR/issue access to build a Context Digest); it only enforces coherence on what the coordinator assigned: when the new `ai_verdict` is `false_positive` or `duplicate` and `merge_class` is present and not `disputed`, flip it to `disputed`; when `merge_class` is `blocking` and `intent_basis` is absent/empty or does not name a blocker gate ID (`G-*`, per `severity` skill § 2), flag it in `ai_assessment` and set `ai_verdict: needs_investigation` unless a gate is evident. Never assign a fresh `blocking`.
-4. **Re-derive integer severity** — after writing or accepting floats, recompute `overall_severity` and the integer `severity` band. Arithmetic stays in Python, never in the LLM — reuse the coordinator's helpers:
+   3a. **Merge-class coherence** — this pass is NOT the primary classifier (no PR/issue access to build a Context Digest); it only enforces coherence on what the coordinator assigned: when the new `ai_verdict` is `false_positive` or `duplicate` and `merge_class` is present and not `disputed`, flip it to `disputed`; when `merge_class` is `blocking` and `intent_basis` is absent/empty or does not name a blocker gate ID (`G-*`, per `severity` skill § 2), flag it in `ai_assessment` and set `ai_verdict: needs_investigation` unless a gate is evident. Never assign a fresh `blocking`.
+4. **Leave `overall_severity` and `severity` alone** — the post-loop `regenerate` re-derives both from the floats; never compute bands in the LLM.
 
-   ```python
-   # Import directly — no re-implementation:
-   from severity_util import derive_overall, derive_severity_int
-   overall = derive_overall(finding)
-   if overall is not None:
-       finding["overall_severity"] = overall
-       finding["severity"] = derive_severity_int(overall)
-   ```
-
-   If importing is impractical in the session, shell out to a one-liner invoking the same helpers from `scripts/severity_util.py`. Never recompute the band table inline.
-
-Write changes back with the `Edit` tool — single JSON file, in place. No `Write` permission needed.
+Write changes back with the `Edit` tool — single JSON file, in place.
 
 ## Post-loop
 
 1. **Re-validate** against the schema — fail loudly on error; the AI updates must not break the report:
 
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py "$ARGUMENTS"
+   python3 <PLUGIN_ROOT>/scripts/validate_report.py <REPORT_JSON>
    ```
 
-2. **Regenerate derived blocks** — any `merge_class` flip changes `remediation` membership and `top_findings`/stats:
+2. **Regenerate derived fields** — re-derives `overall_severity`/`severity` from the floats; any `merge_class` flip also changes `remediation` membership and `top_findings`/stats:
 
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py regenerate "$ARGUMENTS"
+   python3 <PLUGIN_ROOT>/scripts/consolidate_reports.py regenerate <REPORT_JSON>
    ```
 
 3. **Re-sort** `findings[].findings` by `overall_severity` desc (then integer `severity` desc, then `id` asc) so the highest-impact items surface first after re-estimation.
 4. **Re-render** — `finalize` rendered before this pass, so every `report.md`/`.html`/`.pdf` next to the report is now stale. Re-render each one present:
 
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py "$ARGUMENTS" --format <md|html|pdf>
+   python3 <PLUGIN_ROOT>/scripts/generate_review_report.py <REPORT_JSON> --format <md|html|pdf>
    ```
 
 ## Scope and boundaries
 
-- Single-shot per invocation — no loops or follow-ups; call again on a different file if needed.
-- Producers and coordinator stay unchanged — this skill only adds AI fields and float estimates producers left empty.
+- One report per run. Producer fields stay unchanged; this pass only adds AI fields and floats producers left empty.
 - Never edit `metadata.repository`, `metadata.commit`, `location_permalink`, or `id` — coordinator-owned.
 - Never default `ai_verdict_confidence` to 1.0 — when uncertain, say so honestly; renderers communicate it visually.
 

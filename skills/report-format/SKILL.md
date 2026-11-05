@@ -39,7 +39,7 @@ Producers emit a JSON array of `finding_section` objects:
 ]
 ```
 
-**Required per finding**: `id`, `likelihood`, `impact`, `relevance`, `title`, `location`, `description`, `recommendation`. The three floats (0.0–1.0, rated per the `severity` skill) are the single source of truth for severity — the schema rejects a finding missing any, and `validate-findings` is the only path to re-estimate them post-hoc.
+**Required per finding**: `id`, `likelihood`, `impact`, `relevance`, `title`, `location`, `description`, `recommendation`. The three floats (0.0–1.0, rated per the `severity` skill) are the single source of truth for severity — the schema rejects a finding missing any, and the validation pass (`review-changes` § Reports and Validation) is the only path to re-estimate them post-hoc.
 
 - `location` — full file path with lines (`src/auth.rs:42-56`), never a bare line number.
 - `tags` (optional) — OWASP category, CWE, guideline IDs. `impact_description` (optional) — Markdown narrative paired with the `impact` float.
@@ -57,7 +57,7 @@ Populated downstream; producers must NOT set:
 - integer `severity` and `overall_severity` — Python-computed from `likelihood`/`impact` (`severity` skill § Derivation)
 - `location_permalink` — coordinator-derived. Exception for a standalone producer rendering its own final report: `check-pr-comments` § `location_permalink`
 - any `metadata` field (`repository`, `commit`, `date`, `branch`)
-- `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by `validate-findings`
+- `ai_assessment`, `ai_verdict`, `ai_verdict_confidence` — owned by the validation pass (`review-changes` § Reports and Validation)
 - `merge_class` (`blocking|non_blocking|out_of_scope_follow_up|disputed`) and `intent_basis` (string|null — for `blocking`, the gate ID plus one line of evidence, e.g. `"G-SECRET: seed phrase written to debug log at wallet/import.rs:88"`) — coordinator-assigned per `severity` skill § Merge Classification. **Exception**: coordinator-inline producers (review-pr Pass C `pr_promises`, check-pr-comments, review-dependency) emit them directly.
 
 ## File Output

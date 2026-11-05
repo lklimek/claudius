@@ -386,7 +386,7 @@ def _verdict_color(verdict: str | None, confidence: float | None) -> str:
     (washed out) and the verdict's base color (full saturation).
 
     ``confidence`` is clamped to ``[0, 1]``; ``None`` and ``NaN`` default to
-    ``1.0`` so a verdict from a producer that didn't run validate-findings (or
+    ``1.0`` so a verdict from a producer that didn't run the findings validation pass (or
     emitted a malformed value) still renders at full saturation. Unknown
     verdicts return ``BG_LIGHT`` regardless of confidence.
     """

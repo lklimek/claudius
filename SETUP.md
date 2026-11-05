@@ -229,9 +229,9 @@ Version 10 moves agent logic into skills. In Claude Code, the eight `agents/` id
 ### Review modes
 
 - **Basic**: `/review-changes` or `/review-changes basic` — one strong independent reviewer checks requirements and all execution paths.
-- **Full**: `/review-changes full` or `/grumpy-review` — independent security, global-optimum/reuse, and correctness passes, including for tiny diffs.
+- **Full**: `/review-changes full` (or ask for a "grumpy review") — independent security, global-optimum/reuse, and correctness passes, including for tiny diffs.
 
-`review-pr <PR>` defaults to basic; add `full` for the specialist audit. `ci-dance` defaults to full and accepts `review=basic`. Both modes report coverage and cannot claim completion with unresolved paths.
+`review-pr <PR>` defaults to basic; add `full` for the specialist audit. Both modes report coverage and cannot claim completion with unresolved paths.
 
 ### Optional Plugin Dependencies
 
@@ -312,7 +312,7 @@ See [ghsudo on GitHub](https://github.com/lklimek/ghsudo) for full documentation
 
 ## Recommended Permissions
 
-The autonomous skills (`ci-dance`, `review-dependency`, `review-pr`, `check-pr-comments`, `grumpy-review`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively -- which defeats the purpose of autonomous operation.
+The autonomous skills (`review-dependency`, `review-pr`, `check-pr-comments`, `review-changes`) issue git and GitHub CLI commands. Without pre-approved permissions, Claude Code will prompt you to confirm each command interactively -- which defeats the purpose of autonomous operation.
 
 Copy [`settings.example.json`](settings.example.json) into your project's `.claude/settings.json` to auto-approve the commands these skills need. The example includes a deny list that blocks destructive operations (force push, hard reset, branch force-delete) regardless of what is allowed.
 
@@ -325,21 +325,19 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `bug-investigation` | Investigate reported bugs, reproduce symptoms, and establish root cause |
 | `bye` | End-of-session teardown -- shut down agents, remove worktrees, reconcile work |
 | `check-pr-comments` | Verify that PR review comments are addressed in code, then reply to or resolve threads; optional triage-compatible report |
-| `ci-dance` | End-to-end PR pipeline -- push, CI monitoring, parallel reviews, fix, repeat until green |
 | `architecture` | System boundaries, design trade-offs, dependency evaluation, implementation plans |
 | `coding-best-practices` | Universal rules for TDD, self-review, quality-tool timing, comments, logging and review output, plus the Rust policy (typed errors, cargo wrapper discipline) |
 | `delegate` | Choose whether, how, and at what model tier to delegate work; agent prompt requirements, the single-agent plan/TDD/implement/self-review loop (≤1000 LOC), and durable tracking of delegated work |
 | `dependabot-merge` | Bulk-process dependabot PRs -- audit, comment, merge safe ones, rebase failures |
 | `git-and-github` | All git/gh commands, GitHub interactions, and access-denied issues |
 | `grand-admiral` | Multi-agent orchestration -- spawning, isolation, coordination, recovery |
-| `grumpy-review` | Multi-agent code review with consolidated severity-ranked report |
 | `lessons-learned` | Extract and save reusable learnings from the session |
 | `merge-base` | Careful merge of remote base branch into current feature branch |
 | `push` | Commit, push, and create/update PR -- auto-creates feature branch if on base |
 | `product-design` | Requirements, domain analysis, user flows, accessibility, developer experience |
 | `release` | Bump version (SemVer), update changelog, commit, push, and create GitHub release |
 | `report-format` | Unified review report format for all finding-producing agents |
-| `review-changes` | Basic review with one strong worker; full mode routes to grumpy-review |
+| `review-changes` | Basic review with one strong worker, or full multi-agent review with consolidated severity-ranked report and opt-in finding validation |
 | `review-dependency` | Security-focused dependency update review |
 | `review-pr` | Audit and review pull requests |
 | `security-best-practices` | Router to language-specific security pitfall references (Rust, Go, Python, TypeScript) beyond general OWASP knowledge; fixes the citation vocabulary for security findings |
@@ -347,7 +345,6 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `technical-writing` | Documentation authoring and review, verified examples, migration guides |
 | `triage` | Reproduce and root-cause GitHub issues, assess severity, and post status |
 | `triage-findings` | Interactive finding triage -- classify in browser, decisions feed back to Claude |
-| `validate-findings` | LLM validation pass for consolidated review findings |
 
 ## License
 

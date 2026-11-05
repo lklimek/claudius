@@ -13,7 +13,7 @@ Every session has one implicit team — a named `Agent()` spawn joins it automat
 | **Standalone** | Parallel independent work, no shared files | Fire-and-forget `Agent()` calls, each writes to its own file |
 | **Coordinated** | Agents share files or could duplicate work | Named spawns + `SendMessage` claim/completion broadcasts |
 
-Coordinated Claude lifecycle: spawn generic named teammates with explicit role-skill paths; scope each worker's slice in its prompt; coordinate via `SendMessage`; shut down once the workflow is done. Production pattern for disjoint scopes: `ci-dance` § Inter-Stream Communication.
+Coordinated Claude lifecycle: spawn generic named teammates with explicit role-skill paths; scope each worker's slice in its prompt; coordinate via `SendMessage`; shut down once the workflow is done.
 
 **Spawn-time trade-off**: a named agent can be steered mid-task via `SendMessage` but must be explicitly shut down; an unnamed `run_in_background` agent gets a `TaskStop`-able id but cannot be messaged mid-flight.
 

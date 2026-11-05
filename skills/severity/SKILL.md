@@ -123,7 +123,7 @@ Drives `merge_class` and report ordering. **Not** part of the severity math.
 
 `relevance` is deliberately excluded: a pre-existing catastrophe is still a catastrophe; averaging in PR-fit used to launder it down to MEDIUM.
 
-Producers emit `likelihood`/`impact`/`relevance`; the coordinator (or `validate-findings` when a producer omits them) writes `overall_severity` and integer `severity`. The floats are the **single source of truth** — producers MUST NOT hand-type a severity label anywhere; a parallel label drifts and is wrong by construction.
+Producers emit `likelihood`/`impact`/`relevance`; the coordinator (or the validation pass (`review-changes` § Reports and Validation) when a producer omits them) writes `overall_severity` and integer `severity`. The floats are the **single source of truth** — producers MUST NOT hand-type a severity label anywhere; a parallel label drifts and is wrong by construction.
 
 ## 4. Levels
 
@@ -148,7 +148,7 @@ In finding JSON, `severity` is the integer, not the label.
 
 `merge_class` enum: `blocking | non_blocking | out_of_scope_follow_up | disputed`, plus `intent_basis` (the gate ID and evidence, or the exact requirement; always present for `blocking`). Schema shape: `report-format`.
 
-**Coordinator-owned** — fan-out producers never set it. Assigned during consolidation (grumpy-review §5b) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments, review-dependency — each runs as the coordinator with no separate consolidation pass).
+**Coordinator-owned** — fan-out producers never set it. Assigned during consolidation (`review-changes` § Decide) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments, review-dependency — each runs as the coordinator with no separate consolidation pass).
 
 **Before assigning any `merge_class`, read `references/merge-classification.md`** — establishing PR intent, the ordered decision tree, pre-existing findings, and the external-reviewer field map. Two rules bind even at a glance:
 

@@ -20,13 +20,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # Skills that grant plugin scripts via allowed-tools: rules AND body invocations are pinned in lockstep.
 ANCHORED_SKILLS = (
-    "grumpy-review",
     "review-changes",
     "review-pr",
     "check-pr-comments",
-    "ci-dance",
     "triage-findings",
-    "validate-findings",
     "report-format",
 )
 ALL_SKILL_FILES = sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
@@ -77,7 +74,7 @@ def test_body_invocations_match_a_rule(skill: str) -> None:
 
 def test_invocation_regex_finds_known_invocations() -> None:
     """Sanity: an empty match list above must mean "no body scripts", not a broken regex."""
-    _, body = _split(REPO_ROOT / "skills" / "grumpy-review" / "SKILL.md")
+    _, body = _split(REPO_ROOT / "skills" / "review-changes" / "SKILL.md")
     assert len(SCRIPT_INVOCATION.findall(body)) >= 3, "regex broken?"
 
 
