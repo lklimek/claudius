@@ -1,6 +1,6 @@
 ---
 name: grumpy-review
-description: "This skill should be used when the user asks for a \"full review\", \"grumpy review\", or a full code review, audit, or quality assessment, or when a workflow selects full review. It runs independent security, structural, and correctness passes in parallel and produces a deduplicated, severity-ranked report. Ordinary review defaults to basic mode in review-changes."
+description: "This skill should be used when the user asks for a \"full review\", \"grumpy review\", or a full code review, audit, or quality assessment, or when a workflow selects full review. It runs independent security, global-optimum/reuse, and correctness passes in parallel and produces a deduplicated, severity-ranked report. Ordinary review defaults to basic mode in review-changes."
 allowed-tools: Read, Grep, Glob, Write, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/grumpy-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Agent, SendMessage
 ---
 
@@ -101,7 +101,7 @@ Metadata is coordinator-owned: resolve the actual reviewed commit (`git rev-pars
 
 ### Execution-path coverage
 
-Read [execution-paths.md](../review-changes/references/execution-paths.md). Marvin owns requirements/correctness coverage of every changed unit, Smythe owns security paths; Adams checks that each path is fixed in its owning layer. Reconcile their coverage artifacts against the full inventory before §5. Scaled scopes must account for cross-module paths. Missing artifacts or unresolved paths make the review incomplete and must appear in the executive summary; zero findings cannot override that status.
+Read [execution-paths.md](../review-changes/references/execution-paths.md). Marvin owns requirements/correctness coverage of every changed unit, Smythe owns security paths; Adams records the layers and repositories checked per changed unit. Reconcile their coverage artifacts against the full inventory before §5. Scaled scopes must account for cross-module paths. Missing artifacts or unresolved paths make the review incomplete and must appear in the executive summary; zero findings cannot override that status.
 
 ### Ephemeral-ID lint
 

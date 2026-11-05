@@ -229,7 +229,7 @@ Version 10 moves agent logic into skills. In Claude Code, the eight `agents/` id
 ### Review modes
 
 - **Basic**: `/review-changes` or `/review-changes basic` — one strong independent reviewer checks requirements and all execution paths.
-- **Full**: `/review-changes full` or `/grumpy-review` — independent security, structural, and correctness passes, including for tiny diffs.
+- **Full**: `/review-changes full` or `/grumpy-review` — independent security, global-optimum/reuse, and correctness passes, including for tiny diffs.
 
 `review-pr <PR>` defaults to basic; add `full` for the specialist audit. `ci-dance` defaults to full and accepts `review=basic`. Both modes report coverage and cannot claim completion with unresolved paths.
 
