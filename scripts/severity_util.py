@@ -358,7 +358,7 @@ class LegacyFloatMigration(NamedTuple):
             "finding(s). 'impact' is left exactly as the v3 producer rated it, and "
             "v3 rated impact EXCLUDING blast radius (which it carried separately "
             "in 'scope'), so wide-reaching findings are under-rated until a human "
-            f"or validate-findings re-rates them.{defaulted} "
+            f"or the findings validation pass re-rates them.{defaulted} "
             + _preview_ids(self.migrated)
         )
         return lines

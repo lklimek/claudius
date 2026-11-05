@@ -35,7 +35,7 @@ Other pre-existing issues block only when the PR relies on them, worsens them, o
 
 🔴 Deferral is not a plan — nothing files these findings (summary-only, never inline: review-pr § Part B), so they have a **low probability of ever being actioned**. Read the class as **"acceptable to never fix"**:
 
-- Deferrals MUST be surfaced by name when presenting results (grumpy-review §5c) — a user cannot accept a risk they never saw.
+- Deferrals MUST be surfaced by name when presenting results (`review-changes` § Finalize) — a user cannot accept a risk they never saw.
 - Deferring *because* someone will presumably pick it up later is a mis-classification. A finding that must be fixed is classified for fixing now: `blocking` when a gate trips, `non_blocking` otherwise.
 - Correct only where permanent non-fix is acceptable: unrelated pre-existing nits, speculative hardening, taste. The bias toward larger PRs is deliberate — better than laundering real defects into a backlog that does not exist.
 
@@ -50,4 +50,4 @@ Other pre-existing issues block only when the PR relies on them, worsens them, o
 | `intent_basis` | `intent_basis` |
 | `material_impact` | `impact_description` |
 | OWASP `risk` (schema v3) | `likelihood` — near-equivalent, migrates by rename |
-| OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which now folds into `impact`. It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or `validate-findings`. |
+| OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which now folds into `impact`. It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or the validation pass (`review-changes` § Reports and Validation). |

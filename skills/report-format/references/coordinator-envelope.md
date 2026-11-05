@@ -1,18 +1,18 @@
 # Coordinator Envelope & Pipeline Tools
 
-Coordinator/standalone-producer concerns — a fan-out producer in a `grumpy-review` review never touches this (`report-format` § Coordinator-derived / validator-owned fields: metadata is coordinator-owned).
+Coordinator/standalone-producer concerns — a fan-out producer in a full `review-changes` review never touches this (`report-format` § Coordinator-derived / validator-owned fields: metadata is coordinator-owned).
 
 ## Report Pipeline Tools
 
 In the plugin's `scripts/` directory; invoke by the absolute path the calling skill's `SKILL.md` provides:
 
 - `validate_report.py report.json` — schema validation
-- `consolidate_reports.py prepare` / `finalize` — dedup, merge, assemble, render (`grumpy-review` §5a/§5c)
+- `consolidate_reports.py prepare` / `finalize` — dedup, merge, assemble, render (`review-changes` § Consolidate Findings)
 - `generate_review_report.py --format {md,html,triage,pdf}` — re-render (HTML via `markdown` + `nh3`, PDF via ReportLab)
 
 ## Full Report Envelope
 
-For complete reports (grumpy-review, check-pr-comments), wrap finding sections in:
+For complete reports (review-changes, check-pr-comments), wrap finding sections in:
 
 ```json
 {
@@ -32,4 +32,4 @@ For complete reports (grumpy-review, check-pr-comments), wrap finding sections i
 
 ## Schema versions
 
-New reports MUST declare `4.0.0`. Versions 1.x and 2.x are rejected. `3.x` is accepted read-only for in-flight reports — legacy floats migrate to the v4 field names on load, `relevance` is defaulted and must be re-rated (`severity` skill; `validate-findings`).
+New reports MUST declare `4.0.0`. Versions 1.x and 2.x are rejected. `3.x` is accepted read-only for in-flight reports — legacy floats migrate to the v4 field names on load, `relevance` is defaulted and must be re-rated (`severity` skill; the validation pass (`review-changes` § Reports and Validation)).

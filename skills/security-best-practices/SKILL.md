@@ -11,7 +11,7 @@ Load [coding-best-practices](../coding-best-practices/SKILL.md). **Smythe** is t
 
 ## Security audit pass
 
-Apply this section when assigned a security audit or the security pass of `grumpy-review`. Ordinary implementation uses the language pitfalls and citation rules below.
+Apply this section when assigned a security audit or the security pass of a full `review-changes`. Ordinary implementation uses the language pitfalls and citation rules below.
 
 Load [report-format](../report-format/SKILL.md) and [severity](../severity/SKILL.md), then read [execution-paths.md](../review-changes/references/execution-paths.md). Trace every entry-to-sink path through the scope, beyond diff and file boundaries. At every hop, check what attacker-controlled input, timing, ordering, or a failing dependency can do. Inspect removed/moved validations, locks, and permission checks; preserve the shared coverage artifact, including unresolved paths. Outside CI, search project memories (`memcan:recall`) for security decisions and known pitfalls first; before finishing, save new durable lessons through `lessons-learned`.
 

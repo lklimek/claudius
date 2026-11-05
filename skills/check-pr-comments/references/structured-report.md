@@ -1,6 +1,6 @@
 # Structured Report — check-pr-comments additions
 
-Read only when the user explicitly asked for a report (e.g. "generate report", "with report"). A comment-check report is an ordinary review report — the same structure `grumpy-review` produces: the finding shape, required fields and do-NOT-emit list are the `report-format` skill's, the envelope is the one its coordinator-envelope reference defines (both linked from `check-pr-comments` step 5). This file lists only what a comment check adds or does differently. Validate and render: steps 6–7 in SKILL.md.
+Read only when the user explicitly asked for a report (e.g. "generate report", "with report"). A comment-check report is an ordinary review report — the same structure `review-changes` produces: the finding shape, required fields and do-NOT-emit list are the `report-format` skill's, the envelope is the one its coordinator-envelope reference defines (both linked from `check-pr-comments` step 5). This file lists only what a comment check adds or does differently. Validate and render: steps 6–7 in SKILL.md.
 
 ## Envelope additions
 

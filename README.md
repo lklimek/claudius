@@ -30,21 +30,21 @@ See the [Setup Guide](SETUP.md) for detailed configuration.
 | Skill | What I Do For You |
 |-------|-------------------|
 | `/review-changes` | Basic review: one strong independent reviewer checks requirements and every execution path |
-| `/grumpy-review` + `/triage-findings` | Deploy my army of specialist agents to tear your code apart, then let you triage the carnage in a browser UI |
+| `/review-changes full` + `/triage-findings` | Deploy my army of specialist agents to tear your code apart, then let you triage the carnage in a browser UI |
 | `/ci-dance` | Push your PR and babysit the entire pipeline -- CI, reviews, fixes -- while you go live your life |
 | `/dependabot-merge` | Audit and merge your embarrassing backlog of 40 dependabot PRs in one sitting |
 
 ### Two review modes
 
-Ordinary review and `/review-changes basic` use one strong reviewer, regardless of diff size. `/review-changes full` and `/grumpy-review` run the full specialist review. Both trace requirements and all execution paths through changed code, including affected callers, failures, and side effects beyond the diff. Missing coverage is reported as incomplete, never a clean result.
+Ordinary review and `/review-changes basic` use one strong reviewer, regardless of diff size. `/review-changes full` (or just ask for a grumpy review) runs the full specialist review. Both trace requirements and all execution paths through changed code, including affected callers, failures, and side effects beyond the diff. Missing coverage is reported as incomplete, never a clean result.
 
 Independent review is required before completing changes of at least 50 code lines (added plus deleted across the task's net diff, including tests; excluding comments, blank lines, and documentation). Below that threshold, author self-review suffices unless review is requested or the invoked workflow requires it. Basic is the default independent review. `review-pr` defaults to basic and accepts `full`; `ci-dance` retains full review by default and accepts `review=basic`.
 
-### `/grumpy-review` then `/triage-findings`
+### `/review-changes full` then `/triage-findings`
 
 You know what's exhausting? Watching humans review code. One person checks style, another worries about security, a third notices the docs are wrong -- and somehow nobody catches the SQL injection on line 47. Amateurs.
 
-When you say `/grumpy-review`, I dispatch independent workers for security (Smythe), local-vs-global optimum and reuse across the project and its sibling repos (Adams), and requirements, correctness, and consistency (Marvin), each loading the relevant skills. All three passes run even for tiny changes. I deduplicate their findings, check coverage, and return a consolidated report.
+When you say `/review-changes full`, I dispatch independent workers for security (Smythe), local-vs-global optimum and reuse across the project and its sibling repos (Adams), and requirements, correctness, and consistency (Marvin), each loading the relevant skills. All three passes run even for tiny changes. I deduplicate their findings, check coverage, and return a consolidated report.
 
 <p align="center">
   <img src="assets/triage-report-summary.png" alt="Review report summary with severity matrix and verdict" width="700" />
@@ -71,7 +71,7 @@ You say `/ci-dance`. Then you go get coffee, take a walk, contemplate the meanin
 
 **The pipeline:** push → CI green → review requested → comments addressed → repeat until done.
 
-Under the hood I'm orchestrating `/push`, `/grumpy-review`, and `/check-pr-comments` -- running CI monitoring, copilot review, and local code review in parallel. If I get stuck on the same failure after a few attempts, I'll actually ask for help. And if five hours pass, I'll stop and report what I've accomplished so far. I'm tireless, not reckless.
+Under the hood I'm orchestrating `/push`, `/review-changes`, and `/check-pr-comments` -- running CI monitoring, copilot review, and local code review in parallel. If I get stuck on the same failure after a few attempts, I'll actually ask for help. And if five hours pass, I'll stop and report what I've accomplished so far. I'm tireless, not reckless.
 
 ### `/dependabot-merge`
 

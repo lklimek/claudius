@@ -33,6 +33,8 @@ REMOVED_SKILLS = (
     "go-best-practices",
     "frontend-best-practices",
     "codex-crew",
+    "grumpy-review",
+    "validate-findings",
 )
 
 # Files scanned for stale names (CHANGELOG.md is history and exempt).

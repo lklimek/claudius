@@ -10,7 +10,7 @@ allowed-tools: Read, Write, Edit, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/val
 
 Start an interactive triage session: the user classifies each finding in a browser UI, and decisions are written back to the report JSON.
 
-**Argument**: `$ARGUMENTS` — path to the `report.json` produced by `grumpy-review` or `check-pr-comments`.
+**Argument**: `$ARGUMENTS` — path to the `report.json` produced by `review-changes` or `check-pr-comments`.
 
 ## Workflow
 

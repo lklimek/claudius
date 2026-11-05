@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/lklimek/claudius/schemas/review-report.schema.json",
   "title": "Claudius Review Report",
-  "description": "Intermediate format for code review and PR comment verification reports. Produced by grumpy-review and check-pr-comments, consumed by all renderers.",
+  "description": "Intermediate format for code review and PR comment verification reports. Produced by review-changes and check-pr-comments, consumed by all renderers.",
   "type": "object",
   "required": ["schema_version", "metadata", "executive_summary", "summary_statistics", "findings"],
   "additionalProperties": false,
@@ -277,7 +277,7 @@
         },
         "cross_domain_hint": {
           "type": "string",
-          "description": "Peer reviewer role whose primary domain owns an issue this producer noticed incidentally (grumpy-review §3), letting consolidation weigh the overlap."
+          "description": "Peer reviewer role whose primary domain owns an issue this producer noticed incidentally (review-changes § Agent prompts), letting consolidation weigh the overlap."
         },
         "location": { "type": "string", "minLength": 1, "description": "file:start_line-end_line" },
         "location_permalink": {

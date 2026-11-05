@@ -63,7 +63,7 @@ GitHub rejects inline comments on lines outside the diff (HTTP 422). Before post
 
 ## Post a Review from report.json
 
-For a consolidated `report.json` (`grumpy-review`), post with one command — the script handles
+For a consolidated `report.json` (`review-changes`), post with one command — the script handles
 selection, diff-bounds mapping, open-thread dedup, off-diff findings, the event, and 422 /
 rejected-APPROVE fallbacks (details: script docstring):
 

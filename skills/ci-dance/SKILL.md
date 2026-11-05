@@ -16,13 +16,13 @@ Load `claudius:git-and-github` first. Changes to push (or commits already on a r
 
 ## Unattended Mode
 
-Invocation is full consent to push, fix, and re-push — no confirmations, and skip the "ask user" steps of `/push`, `/grumpy-review`, `/check-pr-comments`. **NEVER merge** — merging is the user's.
+Invocation is full consent to push, fix, and re-push — no confirmations, and skip the "ask user" steps of `/push`, `/review-changes`, `/check-pr-comments`. **NEVER merge** — merging is the user's.
 
 ## Arguments
 
 - `timeout=N` minutes (default **300**) from invocation; check before each iteration — hard stop.
 - `bots=<name,...>` (optional) — the review bots to trigger this run; overrides discovery (Review Stream).
-- `review=basic|full` (optional) — local review mode; default **full** preserves the complete pipeline audit. Basic uses one strong local reviewer per iteration; full invokes `grumpy-review`.
+- `review=basic|full` (optional) — local review mode; default **full** preserves the complete pipeline audit. Basic uses one strong local reviewer per iteration; full runs its multi-agent mode.
 
 ## Main Loop
 
@@ -150,6 +150,6 @@ On exit (any condition), report:
 
 ## Notes
 
-- Delegate to `/push`, `/review-changes` (full → `/grumpy-review`), `/check-pr-comments` — never duplicate their logic
+- Delegate to `/push`, `/review-changes`, `/check-pr-comments` — never duplicate their logic
 - Wait ~5 s after a push before listing new workflow runs
 - **Not for GitHub Actions** — pushing commits from inside a workflow causes concurrency cancellation loops. CLI only.
