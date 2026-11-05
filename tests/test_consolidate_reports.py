@@ -891,7 +891,9 @@ class TestRegenerateDerived:
         path.write_text(json.dumps(report), encoding="utf-8")
 
         assert cr.cmd_regenerate(cr.parse_args(["regenerate", str(path)])) == 0
-        written = json.loads(path.read_text(encoding="utf-8"))["findings"][0]["findings"][0]
+        written = json.loads(path.read_text(encoding="utf-8"))["findings"][0][
+            "findings"
+        ][0]
         assert written["overall_severity"] == expected
         assert written["severity"] == cr.derive_severity_int(expected)
 
