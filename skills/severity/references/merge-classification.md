@@ -9,7 +9,7 @@ Detail behind `severity` § 5. Read before assigning `merge_class` — coordinat
 3. PR title and behavioral claims in its description
 4. Invariants necessarily implied by the requested behavior
 
-Incidental implementation details are NOT requirements unless presented as a behavior, guarantee, or security invariant.
+Incidental implementation details are NOT requirements unless presented as a behavior, guarantee, or security invariant. Review comments, human or bot, are not intent until the user or a human PR author accepts them.
 
 ## Decision tree (apply in order)
 
@@ -17,27 +17,21 @@ Incidental implementation details are NOT requirements unless presented as a beh
 informational/praise (praise, INTENTIONAL downgrade,
   RESOLVED comment, relevance 0.0)                 → omit merge_class
 invalid (ai_verdict false_positive | duplicate)    → disputed
-trips any blocker gate (`severity` § 2), reachable through
-  this PR's code paths                             → blocking
-relevance ≥ ~0.5 (in or adjacent to the change)    → non_blocking
-must not survive this review — leaving it in the
-  codebase indefinitely is unacceptable            → non_blocking
-otherwise (acceptable to leave permanently)        → out_of_scope_follow_up
+trips any blocker gate (`severity` § 2) in PR scope
+  (`severity` § 5)                                 → blocking
+relevance ≥ ~0.5 (in PR scope, `severity` § 5)   → non_blocking
+otherwise, whatever its severity or file           → out_of_scope_follow_up
 ```
 
 ## Pre-existing findings
 
 A gate tripped by code the PR did not touch does not automatically block — but 🔴 **a pre-existing finding tripping G-FUNDS, G-SECRET, G-CRYPTO, or G-DATA is never silently deferred.** Surface it to the human explicitly and let them decide; classifying it `out_of_scope_follow_up` without saying so out loud is a doctrine violation.
 
-Other pre-existing issues block only when the PR relies on them, worsens them, or newly exposes them, or when fixing them is necessary for an explicit stated goal. A residual gap after a partial improvement blocks only when the PR claims full closure of that gap.
+Other pre-existing issues are in scope only when the PR relies on them, worsens them, or newly exposes them, or when fixing them is necessary for an explicit stated goal — sharing a file or function with the diff is not enough. A residual gap after a partial improvement blocks only when the PR claims full closure of that gap.
 
-## `out_of_scope_follow_up` means "probably never fixed"
+## `out_of_scope_follow_up` — not in this PR
 
-🔴 Deferral is not a plan — nothing files these findings (summary-only, never inline: review-pr § Part B), so they have a **low probability of ever being actioned**. Read the class as **"acceptable to never fix"**:
-
-- Deferrals MUST be surfaced by name when presenting results (`review-changes` § Finalize) — a user cannot accept a risk they never saw.
-- Deferring *because* someone will presumably pick it up later is a mis-classification. A finding that must be fixed is classified for fixing now: `blocking` when a gate trips, `non_blocking` otherwise.
-- Correct only where permanent non-fix is acceptable: unrelated pre-existing nits, speculative hardening, taste. The bias toward larger PRs is deliberate — better than laundering real defects into a backlog that does not exist.
+Binding rule: `severity` § 5. A separate PR may be stacked on this one. Listing every deferral by name is mandatory — a user cannot accept a risk they never saw.
 
 ## External-reviewer compatibility map
 

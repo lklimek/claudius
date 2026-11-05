@@ -43,6 +43,8 @@ Replace `8741` with the actual port if `--port` was used.
    - Breakdown by action (fix, accept_risk, defer, false_positive, duplicate)
    - All `fix` decisions with finding IDs and titles
 
+Findings with `merge_class: out_of_scope_follow_up` never change this PR (`severity` § 5): `fix` means a separate branch and PR, `defer` means an issue, never a `TODO` in this PR's files.
+
 5. For findings marked `fix`: apply the recommended fixes using the finding's `location`, `description`, and `recommendation`. Work through them one at a time, verifying each achieves the desired end-user or developer experience (not just code correctness) before proceeding.
 
 6. `defer` → a `TODO(<slug>)` comment at the location with a descriptive slug and the finding's title (file's native comment syntax), e.g. `// TODO(banner-atomicity): BannerHandle is Send+Sync but read-modify-write is not atomic`. Never the finding ID (`coding-best-practices` bans ephemeral review IDs in committed code); traceability goes in the PR/commit description or a coordinator-kept ID→slug map.

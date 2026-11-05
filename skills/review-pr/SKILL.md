@@ -74,14 +74,15 @@ Triggers:
 - **Missing claim** — bullet with no matching diff hunk → `likelihood≈0.6, impact≈0.5` (reviewer trust degraded).
 - **Partial implementation** — claim broader than what landed → `likelihood≈0.4–0.6, impact≈0.3–0.5` by gap size.
 - **Unfulfilled promise** — claimed behavior/guarantee not actually delivered (a matching hunk exists but doesn't implement the claim, or a promised full closure leaves residual cases) → `likelihood≈0.5–0.8, impact≈0.4–0.7` by gap size; this trips `G-INTENT` — set `merge_class: "blocking"` with `intent_basis: "G-INTENT: <promise, quoted>"`.
-- **Undocumented change** — production-code hunk ≥ 50 LOC not *mentioned* anywhere in the body → `likelihood≈0.4–0.6, impact≈0.3–0.6` by size and risk surface. "Mentioned" is precise: keyword overlap with ≥ 1 Summary bullet OR coverage by a field-ownership-table row. Sub-50-LOC hunks and test-only/generated/non-production hunks never trigger this.
+- **Undocumented change** — production-code hunk ≥ 50 LOC not *mentioned* anywhere in the body → `likelihood≈0.4–0.6, impact≈0.3–0.6` by size and risk surface. "Mentioned" is precise: keyword overlap with ≥ 1 Summary bullet OR coverage by a field-ownership-table row. Sub-50-LOC hunks, test-only/generated/non-production hunks, and hunks flagged as scope drift (Axis 3) never trigger this.
 
 #### Axis 3 — Out-of-scope enforcement
 
-Input: out-of-scope bullets + diff.
-Process: search the diff for each deferred item's code/paths.
-Triggers:
-- **Scope creep** — deferred item appears in the diff. Scales with size and reversibility: 5-line touch → `likelihood≈0.3, impact≈0.3`; multi-file migration → `likelihood≈0.8, impact≈0.7`.
+Input: out-of-scope bullets + promises + diff.
+Process: search the diff for each deferred item's code/paths, then for hunks serving no promise (review-fix commits included).
+Triggers (both scale with size and reversibility: 5-line touch → `likelihood≈0.3, impact≈0.3`; multi-file migration → `likelihood≈0.8, impact≈0.7`):
+- **Scope creep** — deferred item appears in the diff.
+- **Scope drift** — production hunk serving no promise and outside `claudius:severity` § 5 PR scope (unrelated refactor, drive-by fix, a reviewer's suggestion beyond the PR's goal).
 
 ### Clean-pass shape
 
@@ -135,7 +136,7 @@ Both modes use [execution-paths.md](../review-changes/references/execution-paths
 
 ## 4. Post GitHub PR Review
 
-`out_of_scope_follow_up` findings are reported, never filed (`claudius:severity` § `out_of_scope_follow_up`): when reporting back, filter the consolidated findings for that class and name them as deferral candidates. Tracking one (GitHub issue, `memcan:todo`, or neither) is the user's decision, via `claudius:triage-findings` or by hand.
+List `out_of_scope_follow_up` findings per `review-changes` § 4 when reporting back.
 
 Ask if findings should be published as a GitHub PR review. Two parts:
 
@@ -145,8 +146,7 @@ A normal PR issue comment (draft reviews hide their body text), titled `## Audit
 - **Attribution**: name the actual host and selected mode (`basic` or `full`), then list the actual reviewers, models when known, and assigned skills/passes. Character names are optional labels; never claim a Claude host or custom agent type on another host.
 - Overall assessment (LLM-authored; must not contradict the merge classification — reflect every valid `blocking` finding)
 - Findings table (merge class, severity, tags, location, description) — `blocking` first
-- Deferred (`out_of_scope_follow_up`) findings, and any pre-existing finding tripping a universal gate (G-FUNDS/G-SECRET/G-CRYPTO/G-DATA) awaiting the user's disposition call
-- Pre-existing / outside-diff issues with details
+- Deferred (`out_of_scope_follow_up`) and other pre-existing / outside-diff findings with details, flagging any that trips a universal gate (G-FUNDS/G-SECRET/G-CRYPTO/G-DATA) as awaiting the user's disposition call
 - Positive observations
 
 ```bash

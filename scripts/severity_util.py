@@ -474,7 +474,7 @@ def migrate_legacy_floats(data: Any) -> LegacyFloatMigration:
     ``relevance`` is kept unchanged however low; a finding matching the v3
     informational convention takes the Informational floor of exact zeros
     (:func:`_is_v3_informational`); anything else gets
-    ``DEFAULT_MIGRATED_RELEVANCE`` ("adjacent to the change"), which classifies
+    ``DEFAULT_MIGRATED_RELEVANCE`` (in PR scope), which classifies
     ``non_blocking`` so the finding reaches a human rather than being
     auto-deferred.
 
