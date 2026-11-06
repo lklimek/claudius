@@ -1,6 +1,6 @@
 ---
 name: merge-base
-description: "This skill should be used when the user asks to \"merge the base branch\", \"update this feature branch from base\", or resolve conflicts while merging base into a feature branch. It merges (never rebases) the remote base, gates conflict resolutions on user approval, and reports behavioral risk."
+description: "This skill should be used when the user asks to \"merge the base branch\", \"update this feature branch from base\", or resolve conflicts while merging base into a feature branch. It merges (never rebases) the remote base, resolves conflicts without waiting for approval, and reports the resolutions and behavioral risk."
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git branch --show-current), Bash(git status*), Bash(git rev-parse *), Bash(git fetch --all --prune), Bash(git symbolic-ref refs/remotes/origin/HEAD*), Bash(git merge-base *), Bash(git log *), Bash(git diff *), Bash(git merge *), Bash(git add *), Bash(git commit --no-edit), Bash(gh pr view *)
 ---
 
@@ -41,7 +41,7 @@ On conflicts, per file: resolve preserving both sides' intent (when ambiguous, p
 |---|---|---|---|
 | `function_name()` | Added X | Changed Y | Combined: X + Y |
 
-**Ask for approval before committing.** On rejection, apply the feedback and re-present. Once every resolution is approved: `git commit --no-edit`.
+**Do not wait for approval**: once every conflict is resolved, `git commit --no-edit`; the table and the step 5 report are the deliverable.
 
 ## 5. Behavioral Change Report
 
