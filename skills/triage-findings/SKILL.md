@@ -3,7 +3,7 @@ name: triage-findings
 description: "This skill should be used when the user explicitly asks to \"triage findings\" through an interactive browser-based workflow. Only invoke when explicitly requested."
 user-invocable: true
 argument-hint: path/to/report.json
-allowed-tools: Read, Write, Edit, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/triage_server.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(fuser -k */tcp), Glob, Grep
+allowed-tools: Read, Write, Edit, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/triage_server.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(ghsudo ${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh *), Bash(fuser -k */tcp), Glob, Grep
 ---
 
 # Interactive Finding Triage
@@ -55,11 +55,8 @@ Findings with `merge_class: out_of_scope_follow_up` never change this PR (`sever
 
 For reports with `metadata.report_type == "comment_check"` (produced by `check-pr-comments`):
 
-- Triage actions apply to unresolved PR review comments instead of code review findings
-- **accept_risk / false_positive**: after triage, resolve the associated GitHub review thread using `${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh <PRRT_id>` with the finding's `thread_id`. Always ask user confirmation before resolving threads.
-- **fix**: apply the fix described in `recommendation`, then resolve the thread
-- **defer**: leave the thread unresolved; add a `TODO` comment as usual
-- The triage decision's `resolve_thread` field (boolean) indicates whether thread resolution is appropriate per decision
+- Triage actions apply to unresolved PR review comments instead of code review findings; each is a per-ID decision for `check-pr-comments` § 8 Table mode, which owns replies, resolves, and the gate-thread rule: `fix` → `fix here`, `false_positive`/`accept_risk` → `reject` with the triage reason, `duplicate` → the duplicated ID's decision, asking which ID when `rationale` does not name it (or `handled in #N` when it duplicates a PR/issue), `defer` → `follow-up PR` or `TODO` (ask which), replacing step 6 and the out-of-scope rule above
+- `resolve_thread: true` adds "resolve" to that decision (human threads included); otherwise § 8 alone decides
 
 ## Output
 

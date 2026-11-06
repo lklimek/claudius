@@ -1,12 +1,21 @@
 ---
 name: check-pr-comments
-description: "Fetches a PR's review comments, verifies each against the current code, summarizes the status, and replies to or resolves threads. This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
-allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr comment *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-list-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(ghsudo ${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh *), Bash(gh search code *)
+description: "Fetches a PR's review comments, verifies each against the current code, presents a per-comment decision table, and — after the user's decisions or in fix mode — fixes, replies to, or resolves threads. This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
+allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr comment *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-list-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(ghsudo ${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh *), Bash(gh search code *), Bash(gh search prs *), Bash(gh search issues *), Bash(gh pr list *), Bash(git for-each-ref *), Bash(git worktree list *)
 ---
 
 # Check PR Comments Workflow
 
 Workflow for checking/triaging/verifying existing PR review comments.
+
+## 0. Choose Mode
+
+Ask once per invocation (AskUserQuestion; elsewhere a plain question):
+
+- **Table, then wait** (default, recommended): analyse everything, show the step 4 table, change nothing — no code, replies, or resolves — until the user decides per ID (step 8).
+- **Fix without asking**: fix each Unresolved, in-scope comment that verification judged valid, per `coding-best-practices` (its independent-review threshold applies to the total diff); verify, commit, and push per `git-and-github`. Out-of-scope, disputed, and handled-elsewhere (step 3) comments get no fix. Then apply the step 8 matrix and show the step 4 table.
+
+Skip the question when this request, a standing user/project instruction, or the invoking skill already sets the mode. No preset mode and no reachable user (CI, headless, a subagent without a user channel) → Table, then wait, ending after the table. State the mode in one line.
 
 ## 1. Fetch All Comments
 
@@ -35,24 +44,32 @@ For every unresolved inline comment, read the code at the referenced location (a
 - Semantic satisfaction, not syntactic; every sub-item independently — resolved only when **all** are addressed; the intended end-user/developer experience, not just technical correctness.
 - **Trace touched functions**: for functions added, removed, or changed in the resolution commits (body or signature), apply [execution-paths.md](../review-changes/references/execution-paths.md) to the comment's affected scope. Check every affected call site; a caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up. Unresolved coverage must be reported, not treated as proof of a fix.
 
+**Pre-analysis** — for every unresolved thread and every review-body finding without a thread:
+
+- **Handled elsewhere?** Search shallowly (`--limit 10`) by keywords and paths: local branches and worktrees (`git for-each-ref`, `git worktree list`; uncommitted WIP via `git -C <worktree> status --short`, deliberately ungranted — a `git -C *` rule would also admit `-c <config>`), stacked/child and other open PRs (`gh pr list`, `gh search prs`), issues (`gh search issues`). Cite `#N`, `branch@SHA`, or `uncommitted WIP in <worktree>`.
+- **Earlier decisions**: honour decisions in the reply chain (e.g. "moved to #N", "deferred by maintainer").
+- **Duplicates**: merge threads about one problem into one ID, keeping all thread IDs.
+
 **Scope**: Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` § 5 (skip if loaded) and classify every `Unresolved` comment **in scope** or **out of scope** per its PR scope. A reviewer's request is not PR intent until the user or a human PR author accepts it; an out-of-scope comment is not fixed in this PR.
 
 **Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`), the API returns `type: "Bot"`, or the project instructions name the account as a review bot (some run under ordinary user accounts); **Human** — all others.
 
-## 4. Present Summary
+## 4. Decision Table
 
-Present concisely to the user:
+Both modes end with this table (fix mode: after step 8). Above it, one line: `PR #N: <one sentence on what the PR is for, from its title/TL;DR>`.
 
-- Total comments checked, resolved vs unresolved
-- Per comment, Claude's assessment:
-  - **Already resolved** (`isResolved: true` at fetch): report as resolved citing GitHub's status — do not restate a fix assessment you didn't perform (step 3).
-  - **Resolved by verification this session**: confirm the fix is adequate, or flag concerns when technically present but semantically incomplete. State whether the original comment was valid.
-  - **Unresolved**: your recommendation (priority, suggested approach). If you disagree with the reviewer's concern, say so with a brief reason.
-  - **Out of scope**: proposed disposition (separate PR, issue, or drop) for the user to decide.
-- Unresolved first, then out of scope, then resolved
-- Author type (bot/human) and planned action (auto-resolve, reply, etc.) per comment
+IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](references/structured-report.md) § Finding additions, rough severity standing in for floats when no report exists) and are fixed once shown: a later report and `triage-findings` reuse them, never re-sort. A requested report (steps 5-7) is built before the table; in fix mode, after step 8. Keep cells ≤ ~15 words:
 
-Default end of workflow, except step 8 (resolve threads).
+| ID | Problem | Scope | Elsewhere | Opinion | Recommendation |
+|----|---------|-------|-----------|---------|----------------|
+
+- **Problem**: plain language, concrete impact (who is hurt, how).
+- **Scope**: `in`/`out` (step 3) plus a short reason citing the PR's stated goal; if another PR fits better, `#M: <its scope>`.
+- **Elsewhere**: pre-analysis hit, or `—`.
+- **Opinion**: valid or not, rough severity, disagreement with the reviewer, `bot`/`human`; flag a tripped G-FUNDS/G-SECRET/G-CRYPTO/G-DATA.
+- **Recommendation**: `resolve: fixed in <sha>` (verified this session) / `fix here` / `reject: <reason>` / `follow-up PR` (new, or `#M`) / `TODO` / `handled in #N`. Fix mode: the action taken.
+
+Below the table: one line per merged ID listing its thread links, then `Resolved: N (CMT-…)` for threads resolved at fetch, instead of rows. Table mode ends the turn with "Decisions per ID?".
 
 ---
 
@@ -84,28 +101,52 @@ Present the rendered markdown (optionally `--format html`). The user can also ru
 
 ## 8. Resolve and Reply to Threads
 
-**Sequencing gate — decide fix/no-fix/out-of-scope before acting.** Do not reply to or resolve an `Unresolved` (step 3) comment while its fix is still pending in this pass. Settle each comment's disposition — `Fixed (verified this session)`, `Not fixed`, or `Out of scope` — then apply the matching matrix row. Replying during triage and fixing later leaves a redundant reply on every fixed thread; a fixed bot thread goes straight to auto-resolve with no intermediate reply.
+**Gate threads**: a thread whose concern trips G-FUNDS, G-SECRET, G-CRYPTO, or G-DATA is resolved only when that ID's user decision explicitly says resolve — never by the matrix.
 
-Apply the matrix **without asking for confirmation**, except where noted:
+### Fix mode
+
+**Sequencing gate — decide fix/no-fix/out-of-scope before acting.** Do not reply to or resolve an `Unresolved` (step 3) comment while its fix is still pending in this pass. Settle each comment's disposition — `Fixed (verified this session)`, `Not fixed`, `Disputed`, `Handled elsewhere`, or `Out of scope` — then apply the matching matrix row. Replying during triage and fixing later leaves a redundant reply on every fixed thread; a fixed bot thread goes straight to auto-resolve with no intermediate reply.
+
+Apply the matrix **without asking for confirmation**:
 
 | Author | Status | Action |
 |--------|--------|--------|
 | Any | Already resolved (`isResolved: true`) | No action — do not reply or resolve again |
-| Bot | Fixed (verified this session) | Auto-resolve the thread (no confirmation needed) |
+| Bot | Fixed (verified this session) | Auto-resolve the thread |
 | Bot | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
-| Bot | Out of scope | Reply "Out of scope for this PR; reported to the maintainer", then resolve. Exception: a concern tripping G-FUNDS, G-SECRET, G-CRYPTO, or G-DATA stays unresolved and goes to the user. |
+| Bot | Out of scope | Reply "Out of scope for this PR; reported to the maintainer", then resolve. |
+| Bot | Disputed | Reply with the reason, then resolve. |
+| Bot | Handled elsewhere (public `#N`) | Reply "Addressed in #N.", then resolve. |
 | Human | Fixed (verified this session) | Post a reply explaining what was done. Do NOT resolve. |
 | Human | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
-| Human | Out of scope | No reply, no resolve — list it with a proposed disposition; the user may accept it into PR intent, which makes it in scope. |
+| Human | Disputed | Reply with the reason. Do NOT resolve. |
+| Human | Handled elsewhere (public `#N`) | Reply "Addressed in #N." Do NOT resolve. |
+| Any | Handled elsewhere (local branch/WIP only) | No reply, no resolve — local state stays off GitHub; the table reports it. |
+| Human | Out of scope | No reply, no resolve — the table proposes a disposition; the user may accept it into PR intent, which makes it in scope. |
 
 **NEVER auto-resolve human-created threads** without explicit per-invocation permission (e.g. "resolve all fixed threads", "resolve human threads too"). Even when fully fixed, the human reviewer resolves their own threads.
+
+### Table mode — after the user's per-ID decisions
+
+Apply each decision exactly; never extend it to IDs the user did not name. A per-ID decision is the per-invocation permission above: every "resolve" below covers human threads too. Reply and resolve on every thread of a merged ID.
+
+| Decision | Action |
+|----------|--------|
+| `resolve` | Verified fixed: bot → resolve; human → reply what was done, then resolve. |
+| `fix here` | Fix, verify, commit, and push per `git-and-github`, then the matrix's Fixed row. |
+| `handled in #N` | Reply "Per maintainer decision, this is addressed in #N, which we treat as sufficient for #<this PR>.", then resolve. |
+| `follow-up PR` | Existing `#M`: reply with its link, then resolve. New: first create a draft skeleton per `git-and-github` § Commit, Push, PR Workflow (base: the default branch, unless the follow-up needs code from an open PR — then stack on that PR; empty commit; plain-language body linking the threads), reply with its link, and resolve now — do not wait for the implementation. |
+| `TODO` | Save it with `memcan:todo` (project = repo name), linking the threads. Reply "Per maintainer decision, out of scope for this PR." — never mention the TODO or its tracker (private, local) — then resolve. Save failed or `memcan:todo` unavailable → no reply, no resolve; report the item to the user. |
+| `reject` | Reply with the maintainer's reason. Resolve bot threads; leave human threads open unless the decision says resolve (e.g. "CMT-002 reject, resolve"). |
+
+Create GitHub issues only when the user asks.
 
 **Posting replies:**
 - Inline thread replies: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh <owner/repo> <pr> <comment_id> <body_file>` — `comment_id` = databaseId of the thread's first comment; body read from a Markdown file (no inline form); retries once via `ghsudo` on 403; outputs the reply's html_url
 - PR-level replies: `gh pr comment <pr> -R <owner/repo> --body-file <file>`
 - Keep replies concise: what was done, what remains, relevant commit reference
 
-**Resolving bot threads** (fixed or out of scope) via the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
+**Resolving threads** via the wrapper script (see `git-and-github` safety rule #10 for sandbox requirements):
 
 ```bash
 # GraphQL node IDs (PRRT_*) — pass directly:
