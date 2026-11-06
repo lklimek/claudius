@@ -1,6 +1,6 @@
 ---
 name: git-and-github
-description: "This skill should be used when running git or gh commands, interacting with GitHub, resolving git and gh access or permission-denied failures, or when the user asks to \"commit and push\", \"create a PR\", \"ship this\", \"open a pull request\", or \"publish this branch\". It defines commit, push, PR, issue, and review conventions, the commit-push-PR workflow, the attribution footer, and the safety rules for publishing."
+description: "This skill should be used when running git or gh commands, interacting with GitHub, resolving git and gh access or permission-denied failures, or when the user says \"push\" or asks to \"commit and push\", \"create a PR\", \"ship this\", \"open a pull request\", or \"publish this branch\". It defines commit, push, PR, issue, and review conventions, the commit-push-PR workflow, the attribution footer, and the safety rules for publishing."
 ---
 
 # GitHub Workflow
@@ -31,13 +31,13 @@ Create feature branches; NEVER commit to a base branch. [Conventional commits](h
 
 ## Commit, Push, PR Workflow
 
-On "commit and push", "create a PR", "ship this", or similar:
+On a bare "push", "commit and push", "create a PR", "ship this", or similar — always the full workflow, PR included:
 
 1. **Feature branch**: on a base branch (`gitStatus` "Main branch", else `git remote show origin`), fetch and create one (`feat/`, `fix/`, `chore/` …) per § Committing.
 2. **Version bump**: when the project's `CLAUDE.md` defines a versioning policy, the PR carries exactly one bump before merge — none again on a branch that has one, re-bumped only if the SemVer category grows (`coding-best-practices` § Unmerged code isn't released).
 3. **Commit** per § Committing and Safety Rule 3.
 4. **Push** after § Before Every Push.
-5. **PR**: existing → update title and description to the net final state; none → create a draft per § Creating a PR.
+5. **PR**: existing → update its title and description whenever they no longer match the net final state; none → create a draft per § Creating a PR.
 
 This workflow pushes once per request; rerun it only on a new request.
 
