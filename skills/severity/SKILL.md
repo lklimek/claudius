@@ -65,6 +65,8 @@ Getting stuck, one-way migrations, protocol drift, compatibility breaks, agent a
 
 Three 0.0–1.0 numbers per finding; these definitions are the whole specification.
 
+**Rate real-world significance**: the floats measure how much the problem matters to real users and operators in practice — not how wrong the code looks or what could theoretically happen. A minor problem stays minor however the code reads.
+
 ### `likelihood` — how likely is this hit?
 
 Probability that a real user or attacker reaches this defect under zone-realistic usage. Include attacker pressure where an attacker exists; include plausible human error.
@@ -93,7 +95,7 @@ Capped by the backstop zone (§1). Blast radius folds in here — a defect reach
 | `1.0` | Irreversible loss of funds, keys, or data |
 | `~0.7` | Recoverable loss, security degradation, or an unrecoverable-stuck user |
 | `~0.4` | Task fails, scary or confusing UX, restart fixes it |
-| `~0.1` | Cosmetic |
+| `~0.1` | Cosmetic, or brief confusion the user resolves alone |
 | `0.0` | No defect exists — informational only (see below) |
 
 **Informational floor.** A finding that reports no defect — praise, a verified-clean pass, a RESOLVED comment — uses `likelihood = 0.0, impact = 0.0`, `relevance = 0.0` → INFO, the only band meaning "no action required". Exact zeros, never a hedge like `0.05` (no defect means genuinely zero, and hedges drift across documents); a low `relevance` cannot sink a finding into INFO — it is not in the mean.
@@ -151,6 +153,8 @@ In finding JSON, `severity` is the integer, not the label.
 **Coordinator-owned** — fan-out producers never set it. Assigned during consolidation (`review-changes` § Decide) or inline by coordinator-run producers (review-pr Pass C, check-pr-comments, review-dependency — each runs as the coordinator with no separate consolidation pass).
 
 **PR scope is narrow**: the PR's intent, defects its diff introduces, worsens, newly exposes, or relies on, and its own tests and docs. Anything else is out of scope regardless of severity or proximity, and review fixes never widen the PR beyond it.
+
+**Proportionate to the PR's problem**: what a PR must fix scales with how important the problem it solves is (`references/merge-classification.md` § Rating the PR's problem); a minor PR is one whose problem bands LOW. Below the gates, a finding whose fix outweighs a minor PR's own value — a pre-existing defect the diff worsens or exposes, or a LOW the diff introduces — is deferred; MEDIUM+ defects the diff introduces are always fixed.
 
 **Before assigning any `merge_class`, read `references/merge-classification.md`** — establishing PR intent, the ordered decision tree, pre-existing findings, and the external-reviewer field map. Two rules bind even at a glance:
 
