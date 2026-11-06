@@ -12,7 +12,7 @@ Read only when the user explicitly asked for a report (e.g. "generate report", "
 
 ## Finding additions
 
-One finding per review comment, IDs `CMT-001`, `CMT-002`, …; unresolved first (severity descending; out of scope after in scope), then resolved. Beyond the standard fields:
+One finding per review comment, IDs `CMT-001`, `CMT-002`, … — the step 4 table's IDs; unresolved first (severity descending; out of scope after in scope), then resolved. A merged duplicate (step 3) is one finding: the first thread's `comment_id`/`thread_id`, the other thread links in `description`. Beyond the standard fields:
 
 ```json
 {
