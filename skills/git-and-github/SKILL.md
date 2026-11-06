@@ -1,6 +1,6 @@
 ---
 name: git-and-github
-description: "This skill should be used when running git or gh commands, interacting with GitHub, or resolving git and gh access or permission-denied failures. It defines commit, push, PR, issue, and review conventions, the attribution footer, and the safety rules for publishing."
+description: "This skill should be used when running git or gh commands, interacting with GitHub, resolving git and gh access or permission-denied failures, or when the user says \"push\" or asks to \"commit and push\", \"create a PR\", \"ship this\", \"open a pull request\", or \"publish this branch\". It defines commit, push, PR, issue, and review conventions, the commit-push-PR workflow, the attribution footer, and the safety rules for publishing."
 ---
 
 # GitHub Workflow
@@ -17,7 +17,7 @@ description: "This skill should be used when running git or gh commands, interac
 
 1. Verify you're on a base branch — if on an unrelated feature branch, switch to base or confirm with user.
 2. Pull (fast-forward only). On diverged history, rebase if trivial, otherwise alert user.
-3. Search open PRs for related fixes — don't duplicate in-progress work.
+3. **Always search for related work first**: open and closed issues and PRs on the same or a similar topic (keywords, error text, touched paths; `gh search issues`, `gh search prs` with `--limit`). Found → link it, build on it, or ask the user; never duplicate in-progress work.
 
 ## Committing
 
@@ -25,7 +25,21 @@ Create feature branches; NEVER commit to a base branch. [Conventional commits](h
 
 ## Before Every Push
 
-Fetch the remote and resolve the current PR base from GitHub metadata; before a PR exists, use the documented target branch or repository default. Verify that the freshly fetched remote base is an ancestor of `HEAD` (`git merge-base --is-ancestor <remote>/<base> HEAD`). A stale local base or an earlier session check is insufficient. If behind, invoke [merge-base](../merge-base/SKILL.md) with that resolved remote/base ref, then validate the result, apply `coding-best-practices` § Workflow Discipline, and recheck ancestry before pushing. If fetching, base resolution, integration, or the final ancestry check fails, stop the push and report the blocker. Apply this gate to every push, including follow-ups and retries.
+**Wait for bots.** Never push while an automated reviewer or agent is working on the PR — a new head makes it restart, review a stale diff, or conflict with its own commits; wait until it finishes. Bots differ per repo: any GitHub App or `[bot]` account, or an account the project instructions name. Working = a pending review request to it, an in-progress check run or status it owns (not ordinary CI build/test jobs), its latest comment announcing work in progress, or its commits still landing on the branch — check with bounded `gh pr view <pr> --json reviewRequests,reviews,statusCheckRollup,commits,comments`. Still working after ~30 min → report to the user instead of pushing.
+
+**Always merge the PR's base.** Fetch the remote and resolve the current PR base from GitHub metadata; before a PR exists, use the documented target branch or repository default. Verify that the freshly fetched remote base is an ancestor of `HEAD` (`git merge-base --is-ancestor <remote>/<base> HEAD`). A stale local base or an earlier session check is insufficient. If behind, invoke [merge-base](../merge-base/SKILL.md) with that resolved remote/base ref, then validate the result, apply `coding-best-practices` § Workflow Discipline, and recheck ancestry before pushing. If fetching, base resolution, integration, or the final ancestry check fails, stop the push and report the blocker. Apply this gate to every push, including follow-ups and retries.
+
+## Commit, Push, PR Workflow
+
+On a bare "push", "commit and push", "create a PR", "ship this", or similar — always the full workflow, PR included:
+
+1. **Feature branch**: on a base branch (`gitStatus` "Main branch", else `git remote show origin`), fetch and create one (`feat/`, `fix/`, `chore/` …) per § Committing.
+2. **Version bump**: when the project's `CLAUDE.md` defines a versioning policy, the PR carries exactly one bump before merge — none again on a branch that has one, re-bumped only if the SemVer category grows (`coding-best-practices` § Unmerged code isn't released).
+3. **Commit** per § Committing and Safety Rule 3.
+4. **Push** after § Before Every Push.
+5. **PR**: existing → update its title and description whenever they no longer match the net final state; none → create a draft per § Creating a PR.
+
+This workflow pushes once per request; rerun it only on a new request.
 
 ## Pull Requests
 
@@ -49,7 +63,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 ### Issues
 
-Before creating, search existing issues (open + closed) and PRs for duplicates — if found, show the user and ask before proceeding. If an issue template exists, fold its required content into the skeleton rather than replacing it.
+Before creating, run § Before Starting Work step 3 — duplicates found → show the user and ask before proceeding. If an issue template exists, fold its required content into the skeleton rather than replacing it.
 
 Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a PR): fill in [issue-body-template.md](references/issue-body-template.md) (fenced block only) — `TL;DR` → `User story` → `Scenario` → `Detailed discussion`. `User story`: "As a **\<role\>**, I want to ..., to achieve ..." — multiple personas fine, repeat the line. Append the attribution footer last.
 

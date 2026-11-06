@@ -135,7 +135,7 @@ Apply each decision exactly; never extend it to IDs the user did not name. A per
 | `resolve` | Verified fixed: bot → resolve; human → reply what was done, then resolve. |
 | `fix here` | Fix, verify, commit, and push per `git-and-github`, then the matrix's Fixed row. |
 | `handled in #N` | Reply "Per maintainer decision, this is addressed in #N, which we treat as sufficient for #<this PR>.", then resolve. |
-| `follow-up PR` | Existing `#M`: reply with its link, then resolve. New: first create a draft skeleton per `push` (base: the default branch, unless the follow-up needs code from an open PR — then stack on that PR; empty commit; plain-language body linking the threads), reply with its link, and resolve now — do not wait for the implementation. |
+| `follow-up PR` | Existing `#M`: reply with its link, then resolve. New: first create a draft skeleton per `git-and-github` § Commit, Push, PR Workflow (base: the default branch, unless the follow-up needs code from an open PR — then stack on that PR; empty commit; plain-language body linking the threads), reply with its link, and resolve now — do not wait for the implementation. |
 | `TODO` | Save it with `memcan:todo` (project = repo name), linking the threads. Reply "Per maintainer decision, out of scope for this PR." — never mention the TODO or its tracker (private, local) — then resolve. Save failed or `memcan:todo` unavailable → no reply, no resolve; report the item to the user. |
 | `reject` | Reply with the maintainer's reason. Resolve bot threads; leave human threads open unless the decision says resolve (e.g. "CMT-002 reject, resolve"). |
 

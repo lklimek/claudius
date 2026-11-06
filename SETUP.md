@@ -329,11 +329,10 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `coding-best-practices` | Universal rules for TDD, self-review, quality-tool timing, comments, logging and review output, plus the Rust policy (typed errors, cargo wrapper discipline) |
 | `delegate` | Choose whether, how, and at what model tier to delegate work; agent prompt requirements, the single-agent plan/TDD/implement/self-review loop (≤1000 LOC), and durable tracking of delegated work |
 | `dependabot-merge` | Bulk-process dependabot PRs -- audit, comment, merge safe ones, rebase failures |
-| `git-and-github` | All git/gh commands, GitHub interactions, and access-denied issues |
+| `git-and-github` | All git/gh commands, GitHub interactions, the commit-push-PR workflow, and access-denied issues |
 | `grand-admiral` | Multi-agent orchestration -- spawning, isolation, coordination, recovery |
 | `lessons-learned` | Extract and save reusable learnings from the session |
 | `merge-base` | Careful merge of remote base branch into current feature branch |
-| `push` | Commit, push, and create/update PR -- auto-creates feature branch if on base |
 | `product-design` | Requirements, domain analysis, user flows, accessibility, developer experience |
 | `release` | Bump version (SemVer), update changelog, commit, push, and create GitHub release |
 | `report-format` | Unified review report format for all finding-producing agents |
