@@ -17,7 +17,7 @@ description: "This skill should be used when running git or gh commands, interac
 
 1. Verify you're on a base branch — if on an unrelated feature branch, switch to base or confirm with user.
 2. Pull (fast-forward only). On diverged history, rebase if trivial, otherwise alert user.
-3. **Always search for related work first**: open and closed issues and PRs on the same or a similar topic (keywords, error text, touched paths; `gh search issues`, `gh search prs`). Found → link it, build on it, or ask the user; never duplicate in-progress work.
+3. **Always search for related work first**: open and closed issues and PRs on the same or a similar topic (keywords, error text, touched paths; `gh search issues`, `gh search prs` with `--limit`). Found → link it, build on it, or ask the user; never duplicate in-progress work.
 
 ## Committing
 
@@ -25,7 +25,7 @@ Create feature branches; NEVER commit to a base branch. [Conventional commits](h
 
 ## Before Every Push
 
-**Wait for bots.** Never push while an automated reviewer or agent is working on the PR — a new head makes it restart, review a stale diff, or conflict with its own commits; wait until it finishes. Bots differ per repo: any GitHub App or `[bot]` account, or an account the project instructions name. Working = a pending review request to it, an in-progress check run or status it owns (not ordinary CI build/test jobs), its latest comment announcing work in progress, or its commits still landing on the branch — check with bounded `gh pr view <pr> --json reviewRequests,statusCheckRollup,commits`. Still working after ~30 min → report to the user instead of pushing.
+**Wait for bots.** Never push while an automated reviewer or agent is working on the PR — a new head makes it restart, review a stale diff, or conflict with its own commits; wait until it finishes. Bots differ per repo: any GitHub App or `[bot]` account, or an account the project instructions name. Working = a pending review request to it, an in-progress check run or status it owns (not ordinary CI build/test jobs), its latest comment announcing work in progress, or its commits still landing on the branch — check with bounded `gh pr view <pr> --json reviewRequests,reviews,statusCheckRollup,commits,comments`. Still working after ~30 min → report to the user instead of pushing.
 
 **Always merge the PR's base.** Fetch the remote and resolve the current PR base from GitHub metadata; before a PR exists, use the documented target branch or repository default. Verify that the freshly fetched remote base is an ancestor of `HEAD` (`git merge-base --is-ancestor <remote>/<base> HEAD`). A stale local base or an earlier session check is insufficient. If behind, invoke [merge-base](../merge-base/SKILL.md) with that resolved remote/base ref, then validate the result, apply `coding-best-practices` § Workflow Discipline, and recheck ancestry before pushing. If fetching, base resolution, integration, or the final ancestry check fails, stop the push and report the blocker. Apply this gate to every push, including follow-ups and retries.
 
@@ -39,7 +39,7 @@ On "commit and push", "create a PR", "ship this", or similar:
 4. **Push** after § Before Every Push.
 5. **PR**: existing → update title and description to the net final state; none → create a draft per § Creating a PR.
 
-One request = one push; do not push again without a new request.
+This workflow pushes once per request; rerun it only on a new request.
 
 ## Pull Requests
 
@@ -63,7 +63,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 ### Issues
 
-Before creating, search existing issues (open + closed) and PRs for duplicates — if found, show the user and ask before proceeding. If an issue template exists, fold its required content into the skeleton rather than replacing it.
+Before creating, run § Before Starting Work step 3 — duplicates found → show the user and ask before proceeding. If an issue template exists, fold its required content into the skeleton rather than replacing it.
 
 Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a PR): fill in [issue-body-template.md](references/issue-body-template.md) (fenced block only) — `TL;DR` → `User story` → `Scenario` → `Detailed discussion`. `User story`: "As a **\<role\>**, I want to ..., to achieve ..." — multiple personas fine, repeat the line. Append the attribution footer last.
 
