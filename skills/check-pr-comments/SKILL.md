@@ -58,7 +58,7 @@ For every unresolved inline comment, read the code at the referenced location (a
 
 Both modes end with this table (fix mode: after step 8). Above it, one line: `PR #N: <one sentence on what the PR is for, from its title/TL;DR>`.
 
-IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](references/structured-report.md) § Finding additions; without a report, by the Opinion column's rough severity), so a later report and `triage-findings` share them. Keep cells ≤ ~15 words:
+IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](references/structured-report.md) § Finding additions, rough severity standing in for floats when no report exists) and are fixed once shown: a later report and `triage-findings` reuse them, never re-sort. A requested report (steps 5-7) is built before the table; in fix mode, after step 8. Keep cells ≤ ~15 words:
 
 | ID | Problem | Scope | Elsewhere | Opinion | Recommendation |
 |----|---------|-------|-----------|---------|----------------|
@@ -67,7 +67,7 @@ IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](refer
 - **Scope**: `in`/`out` (step 3) plus a short reason citing the PR's stated goal; if another PR fits better, `#M: <its scope>`.
 - **Elsewhere**: pre-analysis hit, or `—`.
 - **Opinion**: valid or not, rough severity, disagreement with the reviewer, `bot`/`human`; flag a tripped G-FUNDS/G-SECRET/G-CRYPTO/G-DATA.
-- **Recommendation**: `fix here` / `reject: <reason>` / `follow-up PR` (new, or `#M`) / `TODO` / `handled in #N`. Fix mode: the action taken.
+- **Recommendation**: `resolve: fixed in <sha>` (verified this session) / `fix here` / `reject: <reason>` / `follow-up PR` (new, or `#M`) / `TODO` / `handled in #N`. Fix mode: the action taken.
 
 Below the table: one line per merged ID listing its thread links, then `Resolved: N (CMT-…)` for threads resolved at fetch, instead of rows. Table mode ends the turn with "Decisions per ID?".
 
@@ -105,7 +105,7 @@ Present the rendered markdown (optionally `--format html`). The user can also ru
 
 ### Fix mode
 
-**Sequencing gate — decide fix/no-fix/out-of-scope before acting.** Do not reply to or resolve an `Unresolved` (step 3) comment while its fix is still pending in this pass. Settle each comment's disposition — `Fixed (verified this session)`, `Not fixed`, `Disputed`, or `Out of scope` — then apply the matching matrix row. Replying during triage and fixing later leaves a redundant reply on every fixed thread; a fixed bot thread goes straight to auto-resolve with no intermediate reply.
+**Sequencing gate — decide fix/no-fix/out-of-scope before acting.** Do not reply to or resolve an `Unresolved` (step 3) comment while its fix is still pending in this pass. Settle each comment's disposition — `Fixed (verified this session)`, `Not fixed`, `Disputed`, `Handled elsewhere`, or `Out of scope` — then apply the matching matrix row. Replying during triage and fixing later leaves a redundant reply on every fixed thread; a fixed bot thread goes straight to auto-resolve with no intermediate reply.
 
 Apply the matrix **without asking for confirmation**:
 
@@ -116,9 +116,12 @@ Apply the matrix **without asking for confirmation**:
 | Bot | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
 | Bot | Out of scope | Reply "Out of scope for this PR; reported to the maintainer", then resolve. |
 | Bot | Disputed | Reply with the reason, then resolve. |
+| Bot | Handled elsewhere (public `#N`) | Reply "Addressed in #N.", then resolve. |
 | Human | Fixed (verified this session) | Post a reply explaining what was done. Do NOT resolve. |
 | Human | Not fixed | Post a reply explaining what remains. Do NOT resolve. |
 | Human | Disputed | Reply with the reason. Do NOT resolve. |
+| Human | Handled elsewhere (public `#N`) | Reply "Addressed in #N." Do NOT resolve. |
+| Any | Handled elsewhere (local branch/WIP only) | No reply, no resolve — local state stays off GitHub; the table reports it. |
 | Human | Out of scope | No reply, no resolve — the table proposes a disposition; the user may accept it into PR intent, which makes it in scope. |
 
 **NEVER auto-resolve human-created threads** without explicit per-invocation permission (e.g. "resolve all fixed threads", "resolve human threads too"). Even when fully fixed, the human reviewer resolves their own threads.
@@ -129,10 +132,11 @@ Apply each decision exactly; never extend it to IDs the user did not name. A per
 
 | Decision | Action |
 |----------|--------|
+| `resolve` | Verified fixed: bot → resolve; human → reply what was done, then resolve. |
 | `fix here` | Fix, verify, commit, and push per `git-and-github`, then the matrix's Fixed row. |
 | `handled in #N` | Reply "Per maintainer decision, this is addressed in #N, which we treat as sufficient for #<this PR>.", then resolve. |
 | `follow-up PR` | Existing `#M`: reply with its link, then resolve. New: first create a draft skeleton per `push` (base: the default branch, unless the follow-up needs code from an open PR — then stack on that PR; empty commit; plain-language body linking the threads), reply with its link, and resolve now — do not wait for the implementation. |
-| `TODO` | Save it with `memcan:todo` (project = repo name), linking the threads. Reply "Per maintainer decision, out of scope for this PR." — never mention the TODO or its tracker (private, local) — then resolve. |
+| `TODO` | Save it with `memcan:todo` (project = repo name), linking the threads. Reply "Per maintainer decision, out of scope for this PR." — never mention the TODO or its tracker (private, local) — then resolve. Save failed or `memcan:todo` unavailable → no reply, no resolve; report the item to the user. |
 | `reject` | Reply with the maintainer's reason. Resolve bot threads; leave human threads open unless the decision says resolve (e.g. "CMT-002 reject, resolve"). |
 
 Create GitHub issues only when the user asks.
