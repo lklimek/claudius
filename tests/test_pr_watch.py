@@ -27,6 +27,16 @@ COMMENT_ROWS = [json.loads(ln) for ln in COMMENTS.splitlines()]
 REPO = "dashpay/dash-evo-tool"
 
 
+@pytest.fixture(autouse=True)
+def _no_env_defaults(monkeypatch):
+    for var in ("REPO", "GATE_BOT", "GATE_MARKER", "GATE_FEED_URL"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def no_network(url):
+    raise AssertionError(f"unexpected fetch of {url}")
+
+
 class FakeGh:
     """Answers gh calls by subcommand; a value is (rc, stdout, stderr) or a list of them."""
 
@@ -48,8 +58,7 @@ class FakeGh:
 
 def gh(body=BODY, pr=PR, checks=(0, "[]", ""), comments=(0, COMMENTS, "")):
     return FakeGh(
-        view=(0, body, ""),
-        graphql=(0, json.dumps(pr), ""),
+        graphql=(0, json.dumps(dict(pr, body=body)), ""),
         checks=checks,
         comments=comments,
     )
@@ -173,13 +182,15 @@ def test_is_reviewing(active, as_of, gate, expected):
 
 def test_reading_without_adapters():
     a = args("watch")
-    r = pw.Watcher(a, gh(body="no block")).reading(1167)
-    assert r == "state=OPEN decision=- draft=false unresolved=[] || ci: green"
+    expected = "state=OPEN decision=- draft=false unresolved=[] || ci: green"
+    assert pw.Watcher(a, gh(body="no block"), no_network).reading(1167) == expected
+    # An empty description is a PR without a block, not a failed reading.
+    assert pw.Watcher(a, gh(body=""), no_network).reading(1167) == expected
 
 
 def test_reading_with_hygiene_and_gate_ignore_pending():
     a = args("watch", "--gate-bot", "thepastaclaw", "--ignore-pending")
-    r = pw.Watcher(a, gh(), lambda url: None).reading(1167)
+    r = pw.Watcher(a, gh(), no_network).reading(1167)
     assert "hygiene: # PR Hygiene;- [x] Bots" in r
     assert "Build green" not in r
     assert r.endswith("gate: ✅ Final review complete — no blockers")
@@ -194,48 +205,54 @@ def test_reading_gate_pending_collapsed():
     ]
     comments = (0, "".join(json.dumps(x) + "\n" for x in rows), "")
     a = args("watch", "--gate-bot", "thepastaclaw", "--ignore-pending")
-    r = pw.Watcher(a, gh(comments=comments)).reading(1167)
+    r = pw.Watcher(a, gh(comments=comments), no_network).reading(1167)
     assert r.endswith("gate: review pending")
 
 
 def test_reading_skips_stale_hygiene_head():
     pr = dict(PR, headRefOid="aaaaaaa" + "0" * 33)
-    assert pw.Watcher(args("watch"), gh(pr=pr)).reading(1167) is None
+    assert pw.Watcher(args("watch"), gh(pr=pr), no_network).reading(1167) is None
 
 
 @pytest.mark.parametrize(
-    "fake",
+    ("graphql", "checks", "err"),
     [
-        FakeGh(view=(1, "", "HTTP 502"), graphql=(0, "{}", ""), checks=(0, "[]", "")),
-        FakeGh(view=(0, "", ""), graphql=(0, "{}", ""), checks=(0, "[]", "")),
-        FakeGh(view=(0, "x", ""), graphql=(1, "", "boom"), checks=(0, "[]", "")),
-        FakeGh(
-            view=(0, "x", ""),
-            graphql=(0, json.dumps(PR), ""),
-            checks=(1, "", "HTTP 502"),
+        (
+            (1, "", "HTTP 502: Bad Gateway\nmore"),
+            (0, "[]", ""),
+            "pull request: HTTP 502: Bad Gateway",
         ),
+        ((0, "null", ""), (0, "[]", ""), "pull request: no output"),
+        ((0, "not json", ""), (0, "[]", ""), "pull request: no output"),
+        ((0, json.dumps(PR), ""), (1, "", "HTTP 502"), "checks: HTTP 502"),
     ],
-    ids=["body-fail", "body-empty", "graphql-fail", "checks-fail"],
+    ids=["graphql-fail", "pr-null", "graphql-garbage", "checks-fail"],
 )
-def test_failed_fetch_is_skipped(fake):
-    assert pw.Watcher(args("watch"), fake).reading(1167) is None
+def test_failed_fetch_is_skipped_and_reported(graphql, checks, err, capsys):
+    w = pw.Watcher(args("watch"), FakeGh(graphql=graphql, checks=checks), no_network)
+    assert w.reading(1167) is None
+    assert w.reading(1167) is None
+    # Reported once per PR per distinct error, on stderr only.
+    cap = capsys.readouterr()
+    assert cap.out == "" and cap.err.splitlines() == [f"pr_watch: PR1167: {err}"]
 
 
 def test_failing_checks_nonzero_exit_still_read():
     checks = (8, json.dumps([{"name": "lint", "bucket": "fail"}]), "")
-    r = pw.Watcher(args("watch"), gh(body="x", checks=checks)).reading(1167)
+    r = pw.Watcher(args("watch"), gh(body="x", checks=checks), no_network).reading(1167)
     assert r.endswith("ci: lint=fail")
 
 
 def test_no_checks_reported_is_green():
     checks = (1, "", "no checks reported on the 'feat' branch")
-    r = pw.Watcher(args("watch"), gh(body="x", checks=checks)).reading(1167)
+    r = pw.Watcher(args("watch"), gh(body="x", checks=checks), no_network).reading(1167)
     assert r.endswith("ci: green")
 
 
 def test_gate_comments_failure_skips_reading():
     a = args("watch", "--gate-bot", "thepastaclaw")
-    assert pw.Watcher(a, gh(comments=(1, "", "HTTP 502"))).reading(1167) is None
+    w = pw.Watcher(a, gh(comments=(1, "", "HTTP 502")), no_network)
+    assert w.reading(1167) is None
 
 
 # --- watch loop ---------------------------------------------------------------
@@ -254,6 +271,24 @@ def _watch(extra, readings, passes=3):
 def test_watch_prints_changes_only():
     rc, lines = _watch([], ["a", "a", "b"])
     assert rc == 0 and lines == ["PR1167 a", "PR1167 b"]
+
+
+def test_watch_survives_malformed_response(capsys):
+    a = args("watch")
+    w = pw.Watcher(a, FakeGh())
+    seq = iter([KeyError("reviewThreads"), "a"])
+
+    def reading(n):
+        r = next(seq)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    w.reading = reading
+    out = io.StringIO()
+    assert pw.watch(w, [1167], out=out, sleep=lambda s: None, max_passes=2) == 0
+    assert out.getvalue() == "PR1167 a\n"
+    assert "PR1167: KeyError" in capsys.readouterr().err
 
 
 def test_watch_quiet_init_oneshot_exits_on_first_change():
@@ -289,16 +324,63 @@ def test_gate_cli_exit_codes(capsys):
     ]
     assert pw.main(feed_args, gh(), _fetch_feed_active_for_1167) == pw.EXIT_REVIEWING
     assert "ACTIVE" in capsys.readouterr().out
-    assert pw.main(base, gh(comments=(1, "", "x")), lambda url: None) == pw.EXIT_FAIL
+    assert pw.main(base, gh(comments=(1, "", "x")), no_network) == pw.EXIT_FAIL
+    assert "PR1167: comments: x" in capsys.readouterr().err
+    # Unreachable or malformed feed: reported, the gate comment still decides.
+    for raw in (
+        None,
+        "garbage",
+        json.dumps({"data_as_of": 5, "live": {"active": [1]}}),
+    ):
+        assert pw.main(feed_args, gh(), lambda url, raw=raw: raw) == pw.EXIT_IDLE
+        out = capsys.readouterr().out
+        assert out.startswith(("feed: unavailable", "feed: as_of=5 idle")), out
 
 
-def test_gate_cli_requires_bot(capsys, monkeypatch):
-    monkeypatch.delenv("GATE_BOT", raising=False)
+def test_gate_cli_unexpected_error_is_fetch_failure(capsys):
+    def boom(args):
+        raise RuntimeError("boom")
+
+    base = ["gate", "--repo", REPO, "--gate-bot", "thepastaclaw", "1167"]
+    assert pw.main(base, boom) == pw.EXIT_FAIL
+    assert "RuntimeError: boom" in capsys.readouterr().err
+
+
+def test_fetch_url_maps_http_protocol_errors(monkeypatch):
+    def bad(*a, **k):
+        raise pw.http.client.IncompleteRead(b"")
+
+    monkeypatch.setattr(pw.urllib.request, "urlopen", bad)
+    assert pw.fetch_url("https://example.invalid/s.json") is None
+
+
+def test_naive_timestamps_compare_as_utc():
+    gate = ("2026-11-06T10:00:00", "✅ Final review complete")
+    assert pw.is_reviewing(True, "2026-11-06T09:00:00Z", gate, "x") is False
+    assert pw.parse_ts(5) is None
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["watch", "--checks", "(", "1"],
+        ["watch", "--gate-pending", "[", "1"],
+        ["gate", "--gate-busy", "(", "1"],
+        ["watch", "--gate-feed-url", "https://x", "1"],
+    ],
+    ids=["checks", "gate-pending", "gate-busy", "feed-is-gate-only"],
+)
+def test_bad_options_rejected_by_argparse(argv):
+    with pytest.raises(SystemExit) as e:
+        pw.parse_args(argv)
+    assert e.value.code == 2
+
+
+def test_gate_cli_requires_bot(capsys):
     assert pw.main(["gate", "--repo", REPO, "1"], gh()) == pw.EXIT_FAIL
     assert "--gate-bot" in capsys.readouterr().err
 
 
-def test_repo_resolved_from_checkout_or_rejected(monkeypatch):
-    monkeypatch.delenv("REPO", raising=False)
+def test_repo_resolved_from_checkout_or_rejected():
     fake = FakeGh(repo=(1, "", "not a git repository"))
     assert pw.main(["gate", "--gate-bot", "b", "1"], fake) == pw.EXIT_FAIL
