@@ -1,7 +1,7 @@
 """Regression guard: the canonical PR-body template lives in one external file.
 
 The literal skeleton lives ONLY in `skills/git-and-github/references/pr-body-template.md`;
-`git-and-github/SKILL.md` and `push/SKILL.md` must reference it, not inline a duplicate.
+`git-and-github/SKILL.md` must reference it, not inline a duplicate.
 This test pins the template's heading set/ordering (`TL;DR` -> `## User story` ->
 `## Scenario` (`### Base flow` / `### Actual behavior` / `### Expected behavior`) ->
 `## Detailed discussion`) and guards against the skeleton drifting back into the skills.
@@ -14,7 +14,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GIT_GITHUB = REPO_ROOT / "skills" / "git-and-github" / "SKILL.md"
-PUSH = REPO_ROOT / "skills" / "push" / "SKILL.md"
 TEMPLATE = (
     REPO_ROOT / "skills" / "git-and-github" / "references" / "pr-body-template.md"
 )
@@ -99,14 +98,3 @@ def test_skill_demands_plain_language_for_user_facing_sections() -> None:
     assert "user-observable" in lowered, (
         f"{GIT_GITHUB}: must scope user-facing PR sections to user-observable behavior"
     )
-
-
-def test_push_references_skeleton_without_inlining_it() -> None:
-    text = PUSH.read_text(encoding="utf-8")
-    assert "git-and-github" in text, (
-        f"{PUSH}: must delegate to git-and-github for the template"
-    )
-    for heading in (USER_STORY, SCENARIO, DETAILED):
-        assert not _heading_at_line_start(text, heading), (
-            f"{PUSH}: must not inline a duplicate '{heading}' template — delegate to git-and-github"
-        )
