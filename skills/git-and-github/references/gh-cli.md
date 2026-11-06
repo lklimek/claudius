@@ -46,6 +46,13 @@ If none exists, fill in the issue-body skeleton (fenced block only; `git-and-git
 gh issue create --title "<title>" --body-file /path/to/filled-in-issue-body.md
 ```
 
+## PR waiter (`pr_watch.py`)
+
+`python3 <plugin-root>/scripts/pr_watch.py` — `--repo owner/name` (or `REPO`) outside a checkout, `--help` for all options:
+
+- `gate --gate-bot <login> [--gate-marker <text>] [--gate-feed-url <url>] <pr>` — push check for a bot that edits one status comment in place (default marker `<login>-gate`; optional JSON feed of its running reviews). A comment matching `--gate-busy` always holds; a feed ACTIVE entry holds unless the comment was edited later. Exit 3 = reviewing, hold the push; 0 = not, but `gate: none` (wrong login/marker?) or `feed: unavailable` means that source was not checked; 2 = comments fetch failure or bad usage, do not push blind. `GATE_BOT` / `GATE_MARKER` / `GATE_FEED_URL` set the defaults.
+- `watch [--quiet-init] [--oneshot] [--ignore-pending] [--checks <regex>] [gate options] <pr> [<pr> ...]` — polls every `--interval` (120 s) and prints one line per PR whose reading changed (state, review decision, unresolved threads, non-passing checks, `pr-hygiene` body block, gate line); `--oneshot` exits after the first printing pass; failed fetches and a Hygiene block older than the head are skipped. Run it with `run_in_background` and `--quiet-init --oneshot`, re-read the PR state right before relaunching after each event (`--quiet-init` takes the relaunch reading as the new baseline); set `--checks` to the required checks so flapping auxiliary ones do not wake it.
+
 ## Elevated Permissions (ghsudo) -- Optional
 
 If using a **read-only default token** with `gh`, install [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) for write operations. When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo. **Never fork the repository** — forking creates a separate repo and breaks push/PR workflows. GitHub may return 404 instead of 403 for private resources when the token lacks permissions.
