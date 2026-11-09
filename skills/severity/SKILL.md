@@ -71,6 +71,18 @@ Three 0.0–1.0 numbers per finding; these definitions are the whole specificati
 
 Rate the whole deployed project — production network, user base, operator fleet — never just the component the finding sits in. First read the project profile ([references/system-rating.md](references/system-rating.md) § Project profile), then open `impact_description` with the **incident headline**: who in production notices what, how often, in concrete units — e.g. *"One of ~400 mainnet validators processes blocks ~2 s late; network unaffected; requires ≥ 1/3 Byzantine voting power."*
 
+What "the system" is depends on the project type (profile `Project type`; mixed repos — judge the finding's code path):
+
+| Type | System | Scale unit | Local-view trap |
+|---|---|---|---|
+| Network / node | the whole network | nodes, voting power, network liveness/safety | one node's fault read as a network fault |
+| GUI app | the user base | share of users reaching the flow × how often | frustration rated cosmetic — friction on a frequent flow (confusing state, lost input, recurring scary errors, lag) erodes trust and drives users away: `impact ≥ 0.4`, not "brief confusion" |
+| SDK / library | every consuming app | consumers using the API in typical use | "only a library" — a bad default, footgun, or misleading error repeats in every consumer; developer frustration costs adoption like user frustration costs users |
+| Server service | its clients and owned data | requests, tenants, records | a single request's error vs. a hot-path failure for all |
+| Tooling / CLI | its operators | operators, frequency of use | a failure with a quick workaround rated as an outage |
+
+One user's irreversible loss stays Sovereign whatever the share of users.
+
 - **Local harm ≠ system harm**: where redundancy, replication, or consensus absorbs the failure (one node, worker, or replica), `impact` is what the system loses, not what the component loses.
 - **Dominance**: a precondition outside the project's threat model, or one that already grants a strictly worse outcome than the finding (≥ 1/3 Byzantine power already breaks BFT liveness), caps `likelihood` at `0.1` — state the dominating capability. Still reported.
 - **Conjunction**: list independent preconditions, adversarial or not; `likelihood` sits at or below the least likely one, and lower when several are each unlikely.

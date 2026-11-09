@@ -12,6 +12,7 @@ The project's own facts the floats are measured against. Sources, both optional;
 Fields, each a short claim with its source (doc link, maintainer statement, measured number):
 
 ```
+Project type: <network/node | GUI app | SDK/library | server service | tooling/CLI — `severity` § 3 System scale>
 System & scale: <what runs in production and how much — e.g. "mainnet: ~400 validators, BFT consensus">
 Threat model: <assumptions the design relies on — e.g. "< 1/3 Byzantine voting power", "partially synchronous network">
 Critical assets: <ranked, most important first — e.g. consensus safety > liveness > single-node performance > tooling>
