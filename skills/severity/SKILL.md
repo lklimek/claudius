@@ -71,17 +71,17 @@ Three 0.0–1.0 numbers per finding; these definitions are the whole specificati
 
 Rate the whole deployed project — production network, user base, operator fleet — never just the component the finding sits in. First read the project profile ([references/system-rating.md](references/system-rating.md) § Project profile), then open `impact_description` with the **incident headline**: who in production notices what, how often, in concrete units — e.g. *"One of ~400 mainnet validators processes blocks ~2 s late; network unaffected; requires ≥ 1/3 Byzantine voting power."*
 
-What "the system" is depends on the project type (profile `Project type`; mixed repos — judge the finding's code path):
+What "the system" is depends on the project type (profile `Project type`; mixed repos — the type owning the finding's code path):
 
 | Type | System | Scale unit | Local-view trap |
 |---|---|---|---|
 | Network / node | the whole network | nodes, voting power, network liveness/safety | one node's fault read as a network fault |
-| GUI app | the user base | share of users reaching the flow × how often | frustration rated cosmetic — friction on a frequent flow (confusing state, lost input, recurring scary errors, lag) erodes trust and drives users away: `impact ≥ 0.4`, not "brief confusion" |
-| SDK / library | every consuming app | consumers using the API in typical use | "only a library" — a bad default, footgun, or misleading error repeats in every consumer; developer frustration costs adoption like user frustration costs users |
-| Server service | its clients and owned data | requests, tenants, records | a single request's error vs. a hot-path failure for all |
-| Tooling / CLI | its operators | operators, frequency of use | a failure with a quick workaround rated as an outage |
+| GUI app | the user base | share of users reaching the flow (`likelihood`) | frustration read as cosmetic — friction that makes users abandon or redo a task (lost input, stuck or confusing state, recurring scary errors, blocking lag) is `impact ~0.4`; a one-off annoyance stays `~0.1` |
+| SDK / library (public API) | every consuming app | consumers hitting the API in typical use (`likelihood`) | "only a library" read as low impact — rate `impact` by the worst outcome in a typical consumer; a bad default, footgun, or misleading error that makes consumers ship bugs is that outcome, not DX polish |
+| Server service | its clients and owned data | requests, tenants, records | one request's error read as a hot-path outage, or the reverse |
+| Tooling / CLI | its operators | operators, frequency of use | a failure with a quick workaround read as an outage |
 
-One user's irreversible loss stays Sovereign whatever the share of users.
+Zones (§ 1) override share: irreversible loss in Sovereign or Boundary code — including SDK signing paths and one operator's keys — is rated by the harm to the party that suffers it (the end user of a consuming app, for an SDK), never diluted by the share of users, nodes, or consumers.
 
 - **Local harm ≠ system harm**: where redundancy, replication, or consensus absorbs the failure (one node, worker, or replica), `impact` is what the system loses, not what the component loses.
 - **Dominance**: a precondition outside the project's threat model, or one that already grants a strictly worse outcome than the finding (≥ 1/3 Byzantine power already breaks BFT liveness), caps `likelihood` at `0.1` — state the dominating capability. Still reported.
