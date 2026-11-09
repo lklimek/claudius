@@ -32,10 +32,11 @@ Resolve plugin/skill roots from the loaded skill before executing commands; subs
 - `<SPECIALIST_PASSES>` = `${CLAUDE_SKILL_DIR}/references/specialist-passes.md`
 - `<SECURITY_PATTERNS_DIR>` = `${CLAUDE_PLUGIN_ROOT}/skills/security-best-practices/references`
 - `<MERGE_CLASSIFICATION>` = `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md`
+- `<SYSTEM_RATING>` = `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/system-rating.md`
 
 ## 1. Scope the Review
 
-Gather the user's requirements, acceptance criteria, relevant specs, and changed files. Carry the caller's Context Digest verbatim when supplied (`review-pr` § Context Digest). Mark missing requirements as unknown; never infer intended behavior solely from the implementation.
+Gather the user's requirements, acceptance criteria, relevant specs, and changed files. Carry the caller's Context Digest verbatim when supplied (`review-pr` § Context Digest). Load the project profile (`<SYSTEM_RATING>` § Project profile) and give it to every reviewer, inside the digest when one exists. Mark missing requirements as unknown; never infer intended behavior solely from the implementation.
 
 **Bash hygiene** (coordinator; producers follow the producer contract's identical rule): commands use `<PLACEHOLDER>`s — substitute literal values, one plain command per call; no `$VAR`, `$(…)`, loops, pipes, redirects, `&&` chains, `cd`, `git -C` or `python3 -c` (restricted CI allowlists deny them, costing a round each); write files with the Write tool; read plugin files (skills, references, scripts) with Read, never Bash `ls`/`find`/`cp` — CI sandboxes block Bash outside the working directory.
 
