@@ -76,6 +76,8 @@ Rate the whole deployed project — production network, user base, operator flee
 - **Conjunction**: list independent preconditions, adversarial or not; `likelihood` sits at or below the least likely one, and lower when several are each unlikely.
 - **Attacker economics**: an attack costing more than any plausible gain, while a cheaper route to a worse outcome exists, is pathological (`~0.1`).
 
+Dominance and attacker economics lower floats only under the evidence rule below; with no profile, never assume a threat model.
+
 Coordinators re-rate every finding this way before merge classification (§ Rating pass in the reference).
 
 ### `likelihood` — how likely is this hit?

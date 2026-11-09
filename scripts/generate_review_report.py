@@ -1773,8 +1773,19 @@ _TRIAGE_EXTRA_JS = r"""
     return decisions;
   }
 
+  // Severity feedback is saved only with a decision (schema requires action)
+  function orphanFeedbackOk() {
+    const orphans = Array.from(findings).filter(f => {
+      const action = (f.querySelector(".triage-action") || {}).value;
+      const feedback = (f.querySelector(".triage-severity") || {}).value;
+      return feedback && (!action || action === "---");
+    }).length;
+    return !orphans || confirm(orphans + " severity rating(s) have no decision and will not be saved. Continue?");
+  }
+
   // Export decisions (download JSON)
   function doExport() {
+    if (!orphanFeedbackOk()) return;
     const decisions = collectDecisions();
     const payload = {
       report: document.title,
@@ -1801,6 +1812,7 @@ _TRIAGE_EXTRA_JS = r"""
   });
 
   async function doSubmit() {
+    if (!orphanFeedbackOk()) return;
     const decisions = collectDecisions();
     const payload = {
       report: document.title,

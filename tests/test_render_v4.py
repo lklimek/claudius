@@ -1204,7 +1204,13 @@ def test_triage_has_severity_feedback_control():
     assert 'class="triage-severity"' in html
     assert 'value="overrated"' in html
     assert 'value="underrated"' in html
-    assert "severity_feedback" in html
+    assert "decision.severity_feedback = severityFeedback" in html
+
+
+def test_triage_warns_before_dropping_feedback_without_decision():
+    html = grr.render_triage(_load("v4-minimal.json"))
+    assert "function orphanFeedbackOk()" in html
+    assert html.count("if (!orphanFeedbackOk()) return;") == 2
 
 
 @pytest.mark.parametrize("feedback", ["overrated", "underrated"])

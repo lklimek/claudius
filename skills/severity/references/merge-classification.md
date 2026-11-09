@@ -21,7 +21,7 @@ Score the problem the PR solves as one finding with the `severity` § 3 floats, 
 - **Hardening / prevention** — a risk not reachable today (it needs a future change or access grant) is LOW at most, whatever the floats give; one reachable today is scored as the defect it closes.
 - **Several problems** — rate the dominant one, not the worst symptom.
 
-The defect-safety rules ("Unknown is not benign", "In doubt… take the higher") do not apply here: in doubt take the lower, starting from a human maintainer's stated priority (label or comment; bot-set labels do not count).
+The defect-safety rules ("Unknown is not benign", the `severity` § 4 tie-break) do not apply here: in doubt take the lower, starting from a human maintainer's stated priority (label or comment; bot-set labels do not count).
 
 ## Decision tree (apply in order)
 
