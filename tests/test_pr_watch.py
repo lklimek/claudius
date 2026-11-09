@@ -384,3 +384,32 @@ def test_gate_cli_requires_bot(capsys):
 def test_repo_resolved_from_checkout_or_rejected():
     fake = FakeGh(repo=(1, "", "not a git repository"))
     assert pw.main(["gate", "--gate-bot", "b", "1"], fake) == pw.EXIT_FAIL
+
+
+# --- review regressions ---------------------------------------------------------
+
+
+def test_gate_comment_rows_survive_nel_in_body():
+    # gh --jq emits one compact JSON object per line (Go json escapes U+2028/9 but
+    # not U+0085); a raw NEL inside a body is valid JSON and must not split a row.
+    rows = [dict(COMMENT_ROWS[0], body=COMMENT_ROWS[0]["body"] + "\x85tail")]
+    rows.append(
+        {
+            "login": "someone",
+            "updated_at": "2026-11-06T10:00:00Z",
+            "body": "copy-pasted\x85text",
+        }
+    )
+    comments = (0, "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), "")
+    g = pw.Watcher(
+        args("gate", "--gate-bot", "thepastaclaw"), gh(comments=comments), no_network
+    ).gate(1167)
+    assert g is not None and "Final review complete" in g[1]
+
+
+def test_feed_repo_and_bot_login_match_case_insensitively():
+    # GitHub owner/repo names and logins are case-insensitive; a differently
+    # cased --repo / --gate-bot must not turn a running review into "idle".
+    feed = json.loads(_fetch_feed_active_for_1167(None))
+    assert pw.feed_status(feed, "DashPay/Dash-Evo-Tool", 1167)[1] is True
+    assert pw.gate_comment(COMMENT_ROWS, "ThePastaClaw", "thepastaclaw-gate")
