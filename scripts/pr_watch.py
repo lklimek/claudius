@@ -9,7 +9,8 @@ reading changed: state, review decision, draft flag, unresolved review threads,
 non-passing checks, plus the optional adapters below. A reading that could not
 be fetched, or whose Hygiene block describes an older head, is skipped for that
 pass, never reported as a change. ``--oneshot`` exits 0 after the first pass
-that printed; ``--quiet-init`` records the first reading without printing it.
+that printed, or 2 after ``ONESHOT_FAILED_PASSES`` passes in a row in which
+every fetch failed; ``--quiet-init`` records the first reading without printing it.
 
 ``gate`` prints ``feed: ...`` and ``gate: <updated_at> <status line>`` and exits
 3 while the gate bot is reviewing the PR (do not push), 0 when it is not, 2 on a
@@ -25,6 +26,7 @@ Adapters, both off unless their input exists:
   / ``GATE_FEED_URL`` also reads a JSON status feed shaped
   ``{"data_as_of", "live": {"active": [...], "queued": [...]}}`` with entries
   ``{"repo": "owner/name", "number", "sha", ...}``. Both lag; the newer wins.
+  Logins and repo names match case-insensitively, as on GitHub.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 EXIT_IDLE, EXIT_FAIL, EXIT_REVIEWING = 0, 2, 3
+ONESHOT_FAILED_PASSES = 5
 DEFAULT_BUSY = "Review in progress"
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
@@ -158,6 +161,11 @@ def summarize_checks(
     return " ".join(out) or "green"
 
 
+def same_name(value, name: str) -> bool:
+    """GitHub logins and owner/repo names are case-insensitive."""
+    return isinstance(value, str) and value.casefold() == name.casefold()
+
+
 def feed_status(feed: dict, repo: str, number: int) -> tuple[str, bool]:
     """Return ('as_of=... <status>', active) for one PR from the status feed."""
     live = feed.get("live")
@@ -168,7 +176,7 @@ def feed_status(feed: dict, repo: str, number: int) -> tuple[str, bool]:
 
     st, active = "idle", False
     for a in entries("active"):
-        if a.get("repo") == repo and a.get("number") == number:
+        if same_name(a.get("repo"), repo) and a.get("number") == number:
             st, active = (
                 f"ACTIVE sha={str(a.get('sha') or '')[:9]} started={a.get('started_at')} "
                 f"phase={a.get('phase')} progress={a.get('progress')}",
@@ -176,7 +184,7 @@ def feed_status(feed: dict, repo: str, number: int) -> tuple[str, bool]:
             )
     if not active:
         for q in entries("queued"):
-            if q.get("repo") == repo and q.get("number") == number:
+            if same_name(q.get("repo"), repo) and q.get("number") == number:
                 st = (
                     f"queued sha={str(q.get('sha') or '')[:9]} reason={q.get('reason')} "
                     f"eligible_at={q.get('eligible_at')}"
@@ -190,7 +198,7 @@ def gate_comment(comments: list, bot: str, marker: str) -> Optional[tuple[str, s
     best = None
     for c in comments:
         body = c.get("body") or ""
-        if c.get("login") != bot or marker not in body:
+        if not same_name(c.get("login"), bot) or marker not in body:
             continue
         text = re.sub(r"<!--.*?-->", "", body, flags=re.S).replace("\r", "")
         line = next((ln.strip() for ln in text.split("\n") if ln.strip()), "")
@@ -225,9 +233,11 @@ class Watcher:
         self.a, self.run, self.fetch = args, run, fetch
         self.owner, self.name = args.repo.split("/", 1)
         self.warned: dict = {}
+        self.failed: set = set()
 
     def warn(self, n: int, msg: str) -> None:
-        """Report a failed fetch on stderr, once per PR per distinct error."""
+        """Report a failed fetch on stderr, once per PR per outage and error."""
+        self.failed.add(n)
         if self.warned.get(n) != msg:
             self.warned[n] = msg
             print(f"pr_watch: PR{n}: {msg}", file=sys.stderr, flush=True)
@@ -257,7 +267,7 @@ class Watcher:
             ]
         )
         try:
-            comments = [json.loads(ln) for ln in out.splitlines() if ln.strip()]
+            comments = [json.loads(ln) for ln in out.split("\n") if ln.strip()]
         except ValueError:
             rc, err = 1, "unparseable comments response"
         if rc != 0:
@@ -339,23 +349,33 @@ def watch(
     max_passes: int = 0,
 ) -> int:
     prev: dict = {}
-    passes = 0
+    passes = failed_passes = 0
     while True:
         changed = False
+        w.failed = set()
         for n in prs:
             try:
                 cur = w.reading(n)
             except Exception as e:  # malformed response: a failed reading
                 w.warn(n, f"{type(e).__name__}: {e}")
                 cur = None
+            if n not in w.failed:
+                w.warned.pop(n, None)
             if cur is None or cur == prev.get(n):
                 continue
-            w.warned.pop(n, None)
             if not w.a.quiet_init or n in prev:
                 print(f"PR{n} {cur}", file=out, flush=True)
                 changed = True
             prev[n] = cur
         passes += 1
+        failed_passes = failed_passes + 1 if w.failed >= set(prs) else 0
+        if w.a.oneshot and failed_passes >= ONESHOT_FAILED_PASSES:
+            print(
+                f"pr_watch: every fetch failed for {failed_passes} passes; giving up",
+                file=sys.stderr,
+                flush=True,
+            )
+            return EXIT_FAIL
         if (w.a.oneshot and changed) or (max_passes and passes >= max_passes):
             return 0
         sleep(w.a.interval)

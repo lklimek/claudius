@@ -413,3 +413,48 @@ def test_feed_repo_and_bot_login_match_case_insensitively():
     feed = json.loads(_fetch_feed_active_for_1167(None))
     assert pw.feed_status(feed, "DashPay/Dash-Evo-Tool", 1167)[1] is True
     assert pw.gate_comment(COMMENT_ROWS, "ThePastaClaw", "thepastaclaw-gate")
+
+
+def test_watch_oneshot_gives_up_when_every_fetch_keeps_failing(capsys):
+    w = pw.Watcher(args("watch", "--oneshot"), FakeGh())
+
+    def reading(n):
+        w.warn(n, "pull request: HTTP 401")
+        return None
+
+    w.reading = reading
+    rc = pw.watch(w, [1, 2], out=io.StringIO(), sleep=lambda s: None)
+    err = capsys.readouterr().err
+    assert rc == pw.EXIT_FAIL
+    assert f"failed for {pw.ONESHOT_FAILED_PASSES} passes" in err
+    assert err.count("PR1: pull request: HTTP 401") == 1
+
+
+def test_watch_oneshot_keeps_waiting_while_one_pr_fetches():
+    w = pw.Watcher(args("watch", "--oneshot"), FakeGh())
+
+    def reading(n):
+        if n == 1:
+            w.warn(n, "pull request: HTTP 502")
+            return None
+        return "a"
+
+    w.reading = reading
+    passes = pw.ONESHOT_FAILED_PASSES + 2
+    rc = pw.watch(w, [1, 2], out=io.StringIO(), sleep=lambda s: None, max_passes=passes)
+    assert rc == 0
+
+
+def test_watch_reports_a_repeated_outage_after_recovery(capsys):
+    w = pw.Watcher(args("watch"), FakeGh())
+    seq = iter([None, "a", None, "a", None])
+
+    def reading(n):
+        r = next(seq)
+        if r is None:
+            w.warn(n, "pull request: HTTP 502")
+        return r
+
+    w.reading = reading
+    pw.watch(w, [7], out=io.StringIO(), sleep=lambda s: None, max_passes=5)
+    assert capsys.readouterr().err.count("PR7: pull request: HTTP 502") == 3
