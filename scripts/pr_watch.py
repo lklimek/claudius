@@ -4,13 +4,19 @@
     pr_watch.py watch [options] <pr> [<pr> ...]
     pr_watch.py gate  [options] <pr>
 
-``watch`` polls every ``--interval`` seconds and prints one line per PR whose
-reading changed: state, review decision, draft flag, unresolved review threads,
-non-passing checks, plus the optional adapters below. A reading that could not
+``watch`` takes a full reading of each PR every ``--interval`` seconds and
+prints one line per PR whose reading changed: state, review decision, draft
+flag, unresolved review threads, non-passing checks, plus the optional adapters
+below. A reading that could not
 be fetched, or whose Hygiene block describes an older head, is skipped for that
 pass, never reported as a change. ``--oneshot`` exits 0 after the first pass
-that printed, or 2 after ``ONESHOT_FAILED_PASSES`` passes in a row in which
-every fetch failed; ``--quiet-init`` records the first reading without printing it.
+that printed, or 2 once ``ONESHOT_FAILED_READS`` full readings in a row failed
+for every PR; ``--quiet-init`` records the first reading without printing it.
+Every ``--probe-interval`` seconds in between, conditional REST requests on the
+PR, its head's check runs and statuses, and (with a gate bot) the first page of
+comments answer 304 at no rate-limit cost while nothing changed; any change
+triggers a full reading at once. Changes the probes cannot see, such as a
+resolved review thread, show at the next full reading.
 
 ``gate`` prints ``feed: ...`` and ``gate: <updated_at> <status line>`` and exits
 3 while the gate bot is reviewing the PR (do not push), 0 when it is not, 2 on a
@@ -44,18 +50,19 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 EXIT_IDLE, EXIT_FAIL, EXIT_REVIEWING = 0, 2, 3
-ONESHOT_FAILED_PASSES = 5
+ONESHOT_FAILED_READS = 5
 DEFAULT_BUSY = "Review in progress"
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 HYGIENE_RE = re.compile(r"pr-hygiene:start(.*?)pr-hygiene:end", re.S)
 HYGIENE_SHA_RE = re.compile(r"^# PR Hygiene · `([0-9a-f]+)`")
 THREADS_QUERY = (
-    "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){"
+    "query($o:String!,$r:String!,$n:Int!,$c:String){repository(owner:$o,name:$r){"
     "pullRequest(number:$n){body headRefOid isDraft state reviewDecision "
-    "reviewThreads(first:100){nodes{isResolved path line "
-    "comments(first:1){nodes{author{login}}}}}}}}"
+    "reviewThreads(first:100,after:$c){pageInfo{hasNextPage endCursor} "
+    "nodes{isResolved path line comments(first:1){nodes{author{login}}}}}}}}"
 )
+MAX_THREAD_PAGES = 20
 
 # (returncode, stdout, stderr)
 Runner = Callable[[list], "tuple[int, str, str]"]
@@ -93,6 +100,32 @@ def parse_ts(ts: object) -> Optional[datetime]:
 
 def first_line(err: str) -> str:
     return (err.strip().splitlines() or ["no output"])[0][:200]
+
+
+def seconds(s: str) -> float:
+    try:
+        v = float(s)
+    except ValueError:
+        v = -1.0
+    if not v >= 0:
+        raise argparse.ArgumentTypeError(f"not a number of seconds: {s!r}")
+    return v
+
+
+def parse_http(out: str) -> tuple[int, str, str]:
+    """Split ``gh api -i`` output into (status code, ETag, body); code 0 if unparseable."""
+    head, _, body = out.replace("\r\n", "\n").partition("\n\n")
+    lines = head.split("\n")
+    m = re.match(r"HTTP/\S+ (\d{3})", lines[0])
+    etag = next(
+        (
+            ln.split(":", 1)[1].strip()
+            for ln in lines[1:]
+            if ln.lower().startswith("etag:")
+        ),
+        "",
+    )
+    return (int(m.group(1)) if m else 0), etag, body
 
 
 def regex(s: str) -> str:
@@ -193,12 +226,21 @@ def feed_status(feed: dict, repo: str, number: int) -> tuple[str, bool]:
     return f"as_of={feed.get('data_as_of')} {st}", active
 
 
-def gate_comment(comments: list, bot: str, marker: str) -> Optional[tuple[str, str]]:
-    """Return (updated_at, first non-blank line) of the bot's newest-edited gate comment."""
+def gate_comment(
+    comments: list, bot: str, marker: Optional[str] = None
+) -> Optional[tuple[str, str]]:
+    """Return (updated_at, first non-blank line) of the bot's newest-edited gate comment.
+
+    Without ``marker`` the default ``<bot>-gate`` matches in any case, like the login.
+    """
     best = None
     for c in comments:
         body = c.get("body") or ""
-        if not same_name(c.get("login"), bot) or marker not in body:
+        if marker is None:
+            found = f"{bot}-gate".casefold() in body.casefold()
+        else:
+            found = marker in body
+        if not same_name(c.get("login"), bot) or not found:
             continue
         text = re.sub(r"<!--.*?-->", "", body, flags=re.S).replace("\r", "")
         line = next((ln.strip() for ln in text.split("\n") if ln.strip()), "")
@@ -234,6 +276,8 @@ class Watcher:
         self.owner, self.name = args.repo.split("/", 1)
         self.warned: dict = {}
         self.failed: set = set()
+        self.etags: dict = {}  # pr -> {endpoint: etag}; "" = endpoint failed
+        self.heads: dict = {}
 
     def warn(self, n: int, msg: str) -> None:
         """Report a failed fetch on stderr, once per PR per outage and error."""
@@ -241,6 +285,53 @@ class Watcher:
         if self.warned.get(n) != msg:
             self.warned[n] = msg
             print(f"pr_watch: PR{n}: {msg}", file=sys.stderr, flush=True)
+
+    def probe(self, n: int) -> bool:
+        """Conditional GETs (304 is free); True when an endpoint seen before changed.
+
+        A failing endpoint is skipped until the PR's next successful full reading,
+        so a token without access costs one request per full reading, not per probe.
+        """
+        base = f"repos/{self.a.repo}"
+        changed, body = self._conditional(n, f"{base}/pulls/{n}")
+        if body:
+            try:
+                self.heads[n] = json.loads(body)["head"]["sha"]
+            except (ValueError, KeyError, TypeError):
+                pass
+        eps = []
+        if n in self.heads:
+            eps += [f"{base}/commits/{self.heads[n]}/check-runs?per_page=100"]
+            eps += [f"{base}/commits/{self.heads[n]}/status"]
+        if self.a.gate_bot:
+            eps += [f"{base}/issues/{n}/comments?per_page=100"]
+        for ep in eps:
+            changed = self._conditional(n, ep)[0] or changed
+        return changed
+
+    def _conditional(self, n: int, ep: str) -> tuple[bool, str]:
+        """Return (changed since last seen, body of a 200) for one endpoint."""
+        seen = self.etags.setdefault(n, {})
+        if seen.get(ep) == "":
+            return False, ""
+        cmd = ["api", "-i", ep]
+        if seen.get(ep):
+            cmd[2:2] = ["-H", f"If-None-Match: {seen[ep]}"]
+        code, etag, body = parse_http(self.run(cmd)[1])
+        if code == 304:
+            return False, ""
+        if code != 200 or not etag:
+            seen[ep] = ""
+            return False, ""
+        changed = ep in seen and seen[ep] != etag
+        seen[ep] = etag
+        return changed, body
+
+    def retry_probes(self, n: int) -> None:
+        """Forget failed endpoints so the next probe tries them again."""
+        seen = self.etags.get(n, {})
+        for ep in [ep for ep, etag in seen.items() if etag == ""]:
+            del seen[ep]
 
     def gate(self, n: int, feed: bool = True) -> Optional[tuple[str, str, bool]]:
         """Return (feed line, gate line, reviewing); None on a fetch failure."""
@@ -273,35 +364,42 @@ class Watcher:
         if rc != 0:
             self.warn(n, "comments: " + first_line(err))
             return None
-        g = gate_comment(comments, a.gate_bot, a.gate_marker or f"{a.gate_bot}-gate")
+        g = gate_comment(comments, a.gate_bot, a.gate_marker or None)
         gate_line = f"{g[0]} {g[1]}" if g else "none"
         busy = getattr(a, "gate_busy", DEFAULT_BUSY)
         return feed_line, gate_line, is_reviewing(active, as_of, g, busy)
 
+    def pull_request(self, n: int) -> Optional[dict]:
+        """GraphQL PR node with every review-thread page merged; None on failure."""
+        pr, threads, cursor = None, [], None
+        for _ in range(MAX_THREAD_PAGES):
+            cmd = ["api", "graphql", "-f", f"query={THREADS_QUERY}"]
+            cmd += ["-f", f"o={self.owner}", "-f", f"r={self.name}", "-F", f"n={n}"]
+            if cursor:
+                cmd += ["-f", f"c={cursor}"]
+            rc, out, err = self.run(cmd + ["--jq", ".data.repository.pullRequest"])
+            try:
+                page = json.loads(out) if rc == 0 else None
+            except ValueError:
+                page = None
+            if not isinstance(page, dict):
+                self.warn(n, "pull request: " + first_line(err))
+                return None
+            pr = pr or page
+            conn = page.get("reviewThreads") or {}
+            threads += conn.get("nodes") or []
+            info = conn.get("pageInfo") or {}
+            cursor = info.get("endCursor")
+            if not (info.get("hasNextPage") and cursor):
+                pr["reviewThreads"] = {"nodes": threads}
+                return pr
+        self.warn(n, f"pull request: over {MAX_THREAD_PAGES * 100} review threads")
+        return None
+
     def reading(self, n: int) -> Optional[str]:
         a = self.a
-        rc, out, err = self.run(
-            [
-                "api",
-                "graphql",
-                "-f",
-                f"query={THREADS_QUERY}",
-                "-f",
-                f"o={self.owner}",
-                "-f",
-                f"r={self.name}",
-                "-F",
-                f"n={n}",
-                "--jq",
-                ".data.repository.pullRequest",
-            ]
-        )
-        try:
-            pr = json.loads(out) if rc == 0 else None
-        except ValueError:
-            pr = None
-        if not isinstance(pr, dict):
-            self.warn(n, "pull request: " + first_line(err))
+        pr = self.pull_request(n)
+        if pr is None:
             return None
         head, state = summarize_pr(pr)
         hygiene, hsha = parse_hygiene(pr.get("body") or "")
@@ -348,19 +446,37 @@ def watch(
     sleep: Callable[[float], None] = time.sleep,
     max_passes: int = 0,
 ) -> int:
+    """Poll until a reading changes (oneshot) or max_passes ticks; see module doc."""
+    interval, step = w.a.interval, w.a.probe_interval
+    if not 0 < step < interval:
+        step = interval
+    per_full = max(1, round(interval / step)) if step else 1
     prev: dict = {}
-    passes = failed_passes = 0
+    since_full: dict = {}  # pr -> ticks since its last full reading
+    fails = dict.fromkeys(prs, 0)
+    passes = 0
     while True:
         changed = False
-        w.failed = set()
         for n in prs:
+            due = since_full.get(n, per_full) >= per_full
+            if step < interval:
+                hit = w.probe(n)  # also refreshes the baseline before a due reading
+                if not (due or hit):
+                    since_full[n] += 1
+                    continue
+            since_full[n] = 1
+            w.failed.discard(n)
             try:
                 cur = w.reading(n)
             except Exception as e:  # malformed response: a failed reading
                 w.warn(n, f"{type(e).__name__}: {e}")
                 cur = None
-            if n not in w.failed:
+            if n in w.failed:
+                fails[n] += 1
+            else:
+                fails[n] = 0
                 w.warned.pop(n, None)
+                w.retry_probes(n)
             if cur is None or cur == prev.get(n):
                 continue
             if not w.a.quiet_init or n in prev:
@@ -368,17 +484,16 @@ def watch(
                 changed = True
             prev[n] = cur
         passes += 1
-        failed_passes = failed_passes + 1 if w.failed >= set(prs) else 0
-        if w.a.oneshot and failed_passes >= ONESHOT_FAILED_PASSES:
+        if w.a.oneshot and min(fails.values()) >= ONESHOT_FAILED_READS:
             print(
-                f"pr_watch: every fetch failed for {failed_passes} passes; giving up",
+                f"pr_watch: every fetch failed {ONESHOT_FAILED_READS} times in a row; giving up",
                 file=sys.stderr,
                 flush=True,
             )
             return EXIT_FAIL
         if (w.a.oneshot and changed) or (max_passes and passes >= max_passes):
             return 0
-        sleep(w.a.interval)
+        sleep(step)
 
 
 def parse_args(argv: list) -> argparse.Namespace:
@@ -428,7 +543,17 @@ def parse_args(argv: list) -> argparse.Namespace:
         help="exit after the first pass that printed a change",
     )
     w.add_argument(
-        "--interval", type=float, default=120.0, help="seconds between passes"
+        "--interval",
+        type=seconds,
+        default=os.environ.get("PR_WATCH_INTERVAL", "120"),
+        help="seconds between full readings (env PR_WATCH_INTERVAL; default 120)",
+    )
+    w.add_argument(
+        "--probe-interval",
+        type=seconds,
+        default=os.environ.get("PR_WATCH_PROBE_INTERVAL", "30"),
+        help="seconds between free conditional probes; 0 or >= --interval disables "
+        "them (env PR_WATCH_PROBE_INTERVAL; default 30)",
     )
     g = sub.add_parser("gate", parents=[common], help="is the gate bot reviewing now")
     g.add_argument("pr", type=int)

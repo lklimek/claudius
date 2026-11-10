@@ -29,7 +29,14 @@ REPO = "dashpay/dash-evo-tool"
 
 @pytest.fixture(autouse=True)
 def _no_env_defaults(monkeypatch):
-    for var in ("REPO", "GATE_BOT", "GATE_MARKER", "GATE_FEED_URL"):
+    for var in (
+        "REPO",
+        "GATE_BOT",
+        "GATE_MARKER",
+        "GATE_FEED_URL",
+        "PR_WATCH_INTERVAL",
+        "PR_WATCH_PROBE_INTERVAL",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -46,7 +53,9 @@ class FakeGh:
 
     def __call__(self, args):
         self.calls.append(args)
-        if args[0] == "api":
+        if args[:2] == ["api", "-i"]:
+            key = "probe"
+        elif args[0] == "api":
             key = "graphql" if args[1] == "graphql" else "comments"
         elif args[0] == "repo":
             key = "repo"
@@ -259,7 +268,7 @@ def test_gate_comments_failure_skips_reading():
 
 
 def _watch(extra, readings, passes=3):
-    a = args("watch", *extra)
+    a = args("watch", "--probe-interval", "0", *extra)
     w = pw.Watcher(a, FakeGh())
     seq = iter(readings)
     w.reading = lambda n: next(seq)
@@ -274,7 +283,7 @@ def test_watch_prints_changes_only():
 
 
 def test_watch_survives_malformed_response(capsys):
-    a = args("watch")
+    a = args("watch", "--probe-interval", "0")
     w = pw.Watcher(a, FakeGh())
     seq = iter([KeyError("reviewThreads"), "a"])
 
@@ -416,7 +425,7 @@ def test_feed_repo_and_bot_login_match_case_insensitively():
 
 
 def test_watch_oneshot_gives_up_when_every_fetch_keeps_failing(capsys):
-    w = pw.Watcher(args("watch", "--oneshot"), FakeGh())
+    w = pw.Watcher(args("watch", "--oneshot", "--probe-interval", "0"), FakeGh())
 
     def reading(n):
         w.warn(n, "pull request: HTTP 401")
@@ -426,12 +435,12 @@ def test_watch_oneshot_gives_up_when_every_fetch_keeps_failing(capsys):
     rc = pw.watch(w, [1, 2], out=io.StringIO(), sleep=lambda s: None)
     err = capsys.readouterr().err
     assert rc == pw.EXIT_FAIL
-    assert f"failed for {pw.ONESHOT_FAILED_PASSES} passes" in err
+    assert f"failed {pw.ONESHOT_FAILED_READS} times in a row" in err
     assert err.count("PR1: pull request: HTTP 401") == 1
 
 
 def test_watch_oneshot_keeps_waiting_while_one_pr_fetches():
-    w = pw.Watcher(args("watch", "--oneshot"), FakeGh())
+    w = pw.Watcher(args("watch", "--oneshot", "--probe-interval", "0"), FakeGh())
 
     def reading(n):
         if n == 1:
@@ -440,13 +449,13 @@ def test_watch_oneshot_keeps_waiting_while_one_pr_fetches():
         return "a"
 
     w.reading = reading
-    passes = pw.ONESHOT_FAILED_PASSES + 2
+    passes = pw.ONESHOT_FAILED_READS + 2
     rc = pw.watch(w, [1, 2], out=io.StringIO(), sleep=lambda s: None, max_passes=passes)
     assert rc == 0
 
 
 def test_watch_reports_a_repeated_outage_after_recovery(capsys):
-    w = pw.Watcher(args("watch"), FakeGh())
+    w = pw.Watcher(args("watch", "--probe-interval", "0"), FakeGh())
     seq = iter([None, "a", None, "a", None])
 
     def reading(n):
@@ -458,3 +467,170 @@ def test_watch_reports_a_repeated_outage_after_recovery(capsys):
     w.reading = reading
     pw.watch(w, [7], out=io.StringIO(), sleep=lambda s: None, max_passes=5)
     assert capsys.readouterr().err.count("PR7: pull request: HTTP 502") == 3
+
+
+# --- conditional probes ---------------------------------------------------------
+
+
+def http(code, etag="", body=""):
+    reason = {200: "OK", 304: "Not Modified", 403: "Forbidden"}.get(code, "X")
+    head = f"HTTP/2.0 {code} {reason}\r\nContent-Type: application/json\r\n"
+    if etag:
+        head += f'Etag: "{etag}"\r\n'
+    return (0 if code == 200 else 1, head + "\r\n" + body, "")
+
+
+class ProbeGh:
+    """Serves ``gh api -i`` probes from {endpoint: [responses]}, recording headers."""
+
+    def __init__(self, routes):
+        self.routes, self.calls = routes, []
+
+    def __call__(self, args):
+        assert args[:2] == ["api", "-i"], args
+        self.calls.append(args)
+        r = self.routes[args[-1]]
+        return r.pop(0) if isinstance(r, list) else r
+
+
+PULL = "repos/dashpay/dash-evo-tool/pulls/1167"
+RUNS = "repos/dashpay/dash-evo-tool/commits/abc/check-runs?per_page=100"
+STATUS = "repos/dashpay/dash-evo-tool/commits/abc/status"
+ISSUE = "repos/dashpay/dash-evo-tool/issues/1167/comments?per_page=100"
+PULL_BODY = json.dumps({"head": {"sha": "abc"}})
+
+
+def test_parse_http_status_etag_and_body():
+    assert pw.parse_http(http(304, "e1")[1]) == (304, '"e1"', "")
+    assert pw.parse_http(http(200, "e2", PULL_BODY)[1]) == (200, '"e2"', PULL_BODY)
+    assert pw.parse_http("not http")[0] == 0
+
+
+def test_probe_baseline_then_304_then_change():
+    fake = ProbeGh(
+        {
+            PULL: [http(200, "p1", PULL_BODY), http(304), http(304)],
+            RUNS: [http(200, "r1", "{}"), http(304), http(200, "r2", "{}")],
+            STATUS: http(304),
+        }
+    )
+    w = pw.Watcher(args("watch"), fake, no_network)
+    assert w.probe(1167) is False  # first sight is the baseline, not a change
+    assert w.probe(1167) is False
+    assert w.probe(1167) is True
+    assert ["-H", 'If-None-Match: "r1"'] == fake.calls[-2][2:4]
+
+
+def test_probe_reads_comments_only_with_a_gate_bot():
+    routes = {PULL: http(304), ISSUE: http(304)}
+    w = pw.Watcher(args("watch", "--gate-bot", "thepastaclaw"), ProbeGh(routes))
+    w.probe(1167)
+    assert [c[-1] for c in w.run.calls] == [PULL, ISSUE]
+    w = pw.Watcher(args("watch"), ProbeGh(routes))
+    w.probe(1167)
+    assert [c[-1] for c in w.run.calls] == [PULL]
+
+
+def test_failed_probe_endpoint_skipped_until_retried():
+    fake = ProbeGh({PULL: [http(403), http(200, "p1", PULL_BODY)], RUNS: http(304)})
+    w = pw.Watcher(args("watch"), fake)
+    assert w.probe(1167) is False and w.probe(1167) is False
+    assert len(fake.calls) == 1  # the 403 endpoint is not hammered
+    w.retry_probes(1167)
+    fake.routes[STATUS] = http(304)
+    assert w.probe(1167) is False and fake.calls[1][-1] == PULL
+
+
+def _probe_watch(hits, ticks, *extra):
+    w = pw.Watcher(args("watch", "--interval", "120", *extra), FakeGh())
+    probes, reads = iter(hits), []
+    w.probe = lambda n: next(probes)
+    w.reading = lambda n: reads.append(len(reads)) or str(len(reads))
+    pw.watch(w, [1167], out=io.StringIO(), sleep=lambda s: None, max_passes=ticks)
+    return reads
+
+
+def test_watch_reads_on_probe_hit_and_every_interval():
+    # 30 s probes, 120 s full readings: tick 1 reads, a hit at tick 3 reads at
+    # once and restarts the 4-tick countdown, so the next full read is tick 7.
+    hits = [False, False, True, False, False, False, False]
+    assert len(_probe_watch(hits, 7)) == 3
+
+
+def test_probe_interval_zero_or_not_below_interval_disables_probes():
+    for v in ("0", "120", "300"):
+        w = pw.Watcher(args("watch", "--probe-interval", v), FakeGh())
+        w.probe = lambda n: pytest.fail("probed")
+        w.reading = lambda n: "a"
+        pw.watch(w, [1167], out=io.StringIO(), sleep=lambda s: None, max_passes=2)
+
+
+def test_intervals_from_env_and_validated(monkeypatch):
+    monkeypatch.setenv("PR_WATCH_INTERVAL", "300")
+    monkeypatch.setenv("PR_WATCH_PROBE_INTERVAL", "15")
+    a = args("watch")
+    assert (a.interval, a.probe_interval) == (300.0, 15.0)
+    assert args("watch", "--interval", "60").interval == 60.0
+    for bad in ("-1", "abc", "nan"):
+        with pytest.raises(SystemExit):
+            args("watch", "--interval", bad)
+
+
+def test_default_gate_marker_matches_any_case_explicit_marker_exact():
+    assert pw.gate_comment(COMMENT_ROWS, "ThePastaClaw")
+    assert pw.gate_comment(COMMENT_ROWS, "thepastaclaw", "ThePastaClaw-gate") is None
+
+
+def test_gate_cli_default_marker_with_differently_cased_bot(capsys):
+    fake = gh()
+    rc = pw.main(["gate", "--repo", REPO, "--gate-bot", "ThePastaClaw", "1167"], fake)
+    assert "gate: none" not in capsys.readouterr().out and rc in (0, 3)
+
+
+def _thread(login, line, resolved=False):
+    return {
+        "isResolved": resolved,
+        "path": "src/a.rs",
+        "line": line,
+        "comments": {"nodes": [{"author": {"login": login}}]},
+    }
+
+
+def test_review_threads_followed_across_pages():
+    page1 = dict(
+        PR,
+        body="",
+        reviewThreads={
+            "pageInfo": {"hasNextPage": True, "endCursor": "C1"},
+            "nodes": [_thread("a", 1, resolved=True)] * 100,
+        },
+    )
+    page2 = dict(
+        PR,
+        body="",
+        reviewThreads={
+            "pageInfo": {"hasNextPage": False, "endCursor": "C2"},
+            "nodes": [_thread("late-bot", 7)],
+        },
+    )
+    fake = FakeGh(
+        graphql=[(0, json.dumps(page1), ""), (0, json.dumps(page2), "")],
+        checks=(0, "[]", ""),
+    )
+    r = pw.Watcher(args("watch"), fake, no_network).reading(1167)
+    assert "unresolved=[late-bot@a.rs:7]" in r
+    gql = [c for c in fake.calls if c[1] == "graphql"]
+    assert "c=C1" in gql[1] and not any(x.startswith("c=") for x in gql[0])
+
+
+def test_review_thread_page_limit_is_a_failed_reading(capsys):
+    page = dict(
+        PR,
+        reviewThreads={
+            "pageInfo": {"hasNextPage": True, "endCursor": "X"},
+            "nodes": [],
+        },
+    )
+    fake = FakeGh(graphql=(0, json.dumps(page), ""))
+    assert pw.Watcher(args("watch"), fake, no_network).reading(1167) is None
+    assert "review threads" in capsys.readouterr().err
