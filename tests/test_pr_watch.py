@@ -634,3 +634,39 @@ def test_review_thread_page_limit_is_a_failed_reading(capsys):
     fake = FakeGh(graphql=(0, json.dumps(page), ""))
     assert pw.Watcher(args("watch"), fake, no_network).reading(1167) is None
     assert "review threads" in capsys.readouterr().err
+
+
+@pytest.mark.xfail(strict=True, reason="per_full = round(interval / step)")
+def test_full_readings_at_most_interval_apart():
+    for probe in ("50", "70", "80", "100"):
+        a = args("watch", "--interval", "120", "--probe-interval", probe)
+        w, now, reads = pw.Watcher(a, FakeGh()), [0.0], []
+        w.probe = lambda n: False
+        w.reading = lambda n: reads.append(now[0]) or "a"
+
+        def sleep(s):
+            now[0] += s
+
+        pw.watch(w, [1167], out=io.StringIO(), sleep=sleep, max_passes=12)
+        gaps = [b - a for a, b in zip(reads, reads[1:])]
+        assert gaps and max(gaps) <= 120, (probe, gaps)
+
+
+@pytest.mark.xfail(strict=True, reason="pulls ETag covers base.repo.pushed_at")
+def test_probe_ignores_repo_wide_push_in_embedded_repo():
+    def pull(pushed_at):
+        repo = {"full_name": REPO, "pushed_at": pushed_at}
+        return json.dumps(
+            {"head": {"sha": "abc", "repo": repo}, "base": {"repo": repo}}
+        )
+
+    fake = ProbeGh(
+        {
+            PULL: [http(200, "p1", pull("t1")), http(200, "p2", pull("t2"))],
+            RUNS: http(304),
+            STATUS: http(304),
+        }
+    )
+    w = pw.Watcher(args("watch"), fake, no_network)
+    assert w.probe(1167) is False
+    assert w.probe(1167) is False  # another branch was pushed; this PR is unchanged
