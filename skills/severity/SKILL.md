@@ -1,6 +1,6 @@
 ---
 name: severity
-description: "This skill should be used when rating findings in reviews, audits, and assessments, or deciding whether a finding blocks a merge. It defines the backstop zones, blocker gates, the likelihood/impact/relevance floats, severity bands, and merge classes. Load explicitly before producing findings."
+description: "This skill should be used when rating findings in reviews, audits, and assessments, or deciding whether a finding blocks a merge. It defines the backstop zones, system-scale rating against the project profile, blocker gates, the likelihood/impact/relevance floats, severity bands, and merge classes. Load explicitly before producing findings."
 ---
 
 # Severity Classification
@@ -67,6 +67,31 @@ Three 0.0–1.0 numbers per finding; these definitions are the whole specificati
 
 **Rate real-world significance**: the floats measure how much the problem matters to real users and operators in practice — not how wrong the code looks or what could theoretically happen. A minor problem stays minor however the code reads.
 
+### System scale
+
+Rate the whole deployed project — production network, user base, operator fleet — never just the component the finding sits in. First read the project profile ([references/system-rating.md](references/system-rating.md) § Project profile), then open `impact_description` with the **incident headline**: who in production notices what, how often, in concrete units — e.g. *"One of ~400 mainnet validators processes blocks ~2 s late; network unaffected; requires ≥ 1/3 Byzantine voting power."*
+
+What "the system" is depends on the project type (profile `Project type`; mixed repos — the type owning the finding's code path):
+
+| Type | System | Scale unit | Local-view trap |
+|---|---|---|---|
+| Network / node | the whole network | nodes, voting power, network liveness/safety | one node's fault read as a network fault |
+| GUI app | the user base | share of users reaching the flow (`likelihood`) | frustration read as cosmetic — friction that makes users abandon or redo a task (lost input, stuck or confusing state, recurring scary errors, blocking lag) is `impact ~0.4`; a one-off annoyance stays `~0.1` |
+| SDK / library (public API) | every consuming app | consumers hitting the API in typical use (`likelihood`) | "only a library" read as low impact — rate `impact` by the worst outcome in a typical consumer; a bad default, footgun, or misleading error that makes consumers ship bugs is that outcome, not DX polish |
+| Server service | its clients and owned data | requests, tenants, records | one request's error read as a hot-path outage, or the reverse |
+| Tooling / CLI | its operators | operators, frequency of use | a failure with a quick workaround read as an outage |
+
+Zones (§ 1) override share: irreversible loss in Sovereign or Boundary code — including SDK signing paths and one operator's keys — is rated by the harm to the party that suffers it (the end user of a consuming app, for an SDK), never diluted by the share of users, nodes, or consumers.
+
+- **Local harm ≠ system harm**: where redundancy, replication, or consensus absorbs the failure (one node, worker, or replica), `impact` is what the system loses, not what the component loses.
+- **Dominance**: a precondition outside the project's threat model, or one that already grants a strictly worse outcome than the finding (≥ 1/3 Byzantine power already breaks BFT liveness), caps `likelihood` at `0.1` — state the dominating capability. Still reported.
+- **Conjunction**: list independent preconditions, adversarial or not; `likelihood` sits at or below the least likely one, and lower when several are each unlikely.
+- **Attacker economics**: an attack costing more than any plausible gain, while a cheaper route to a worse outcome exists, is pathological (`~0.1`).
+
+Dominance and attacker economics lower floats only under the evidence rule below; with no profile, never assume a threat model.
+
+Coordinators re-rate every finding this way before merge classification (§ Rating pass in the reference).
+
 ### `likelihood` — how likely is this hit?
 
 Probability that a real user or attacker reaches this defect under zone-realistic usage. Include attacker pressure where an attacker exists; include plausible human error.
@@ -84,7 +109,7 @@ Probability that a real user or attacker reaches this defect under zone-realisti
 - **Precondition probability** — ordinary input high; unusual config/rare input mid; concurrent callers that structurally cannot exist bottom
 - **Triggering actor** — any user or untrusted automation high; internal automation mid; deliberate trusted-operator action low
 
-🔴 **Evidence rule** — a low rung on any factor MUST cite evidence: the reviewer's own execution-path trace (`review-changes` execution-paths contract), an evidenced Context Digest claim (`review-pr` § Context Digest), or an explicit human statement. **Unknown is not benign**: with no evidence, score generically. This axis lowers a score only on evidence, never suppresses a finding — adjusted floats, still reported.
+🔴 **Evidence rule** — a low rung on any factor MUST cite evidence: the reviewer's own execution-path trace (`review-changes` execution-paths contract), an evidenced Context Digest claim (`review-pr` § Context Digest), a project-profile claim, or an explicit human statement. **Unknown is not benign**: with no evidence, score generically. This axis lowers a score only on evidence, never suppresses a finding — adjusted floats, still reported.
 
 ### `impact` — how bad is the worst plausible outcome?
 
@@ -142,7 +167,7 @@ In finding JSON, `severity` is the integer, not the label.
 ### Rules
 
 - Anything that may require action is **LOW or higher**; **INFO** is exclusively praise and context — never a suggestion
-- In doubt between two levels, take the higher
+- In doubt between two levels: take the higher in Sovereign/Boundary zones or when the incident headline is unknown; otherwise take the lower — inflated bands bury the findings that matter
 - Severity never reflects effort to fix — a one-line fix can be CRITICAL
 - UX impact is a real severity input: a scary error dialog on the happy path is `likelihood = 1.0, impact ≈ 0.4` → HIGH, and it trips G-UI-TEXT
 

@@ -361,6 +361,11 @@
           "enum": ["fix", "accept_risk", "defer", "false_positive", "duplicate"]
         },
         "rationale": { "type": "string" },
+        "severity_feedback": {
+          "type": "string",
+          "enum": ["overrated", "underrated"],
+          "description": "Triager's judgment that the finding's severity is too high or too low at project scale; saved as a calibration example (severity skill, system-rating.md)"
+        },
         "assignee": { "type": "string" },
         "due_date": { "type": "string", "format": "date" },
         "ticket": { "type": "string", "description": "Issue tracker reference" },

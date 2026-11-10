@@ -20,7 +20,12 @@ from typing import Any
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import generate_review_report as grr
 import triage_server as ts
+
+SCHEMA_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
+)
 
 
 def _report(relevance: Any) -> dict:
@@ -149,3 +154,23 @@ class TestPostDecisionsRejectsNonFiniteBody:
         monkeypatch.setattr(ts, "REPORT_PATH", report_path)
         with pytest.raises(ValueError, match="Out of range float"):
             ts._save_triage([{"finding_id": "SEC-001", "confidence": float("nan")}])
+
+
+def test_save_triage_keeps_severity_feedback_and_report_stays_valid(
+    tmp_path, monkeypatch
+):
+    report_path = tmp_path / "report.json"
+    report_path.write_text(
+        (Path(__file__).parent / "fixtures" / "reports" / "v4-minimal.json").read_text()
+    )
+    monkeypatch.setattr(ts, "REPORT_PATH", report_path)
+    decision = {
+        "finding_id": "QA-001",
+        "action": "defer",
+        "rationale": "single-node delay only",
+        "severity_feedback": "overrated",
+    }
+    ts._save_triage([decision])
+    saved = json.loads(report_path.read_text())
+    assert saved["triage"]["decisions"] == [decision]
+    grr.validate_report(saved, SCHEMA_PATH)

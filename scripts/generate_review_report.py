@@ -1205,6 +1205,11 @@ details summary:hover{color:{{ ACCENT }}}
       <option value="false_positive">False Positive</option>
       <option value="duplicate">Duplicate</option>
     </select>
+    <select class="triage-severity" title="Severity at project scale">
+      <option value="">Severity OK</option>
+      <option value="overrated">Overrated</option>
+      <option value="underrated">Underrated</option>
+    </select>
     <input type="text" class="triage-rationale" placeholder="Rationale...">
     <span class="decision-hint" aria-live="polite"></span>
   </div>
@@ -1758,15 +1763,29 @@ _TRIAGE_EXTRA_JS = r"""
     findings.forEach(f => {
       const action = (f.querySelector(".triage-action") || {}).value;
       const rationale = (f.querySelector(".triage-rationale") || {}).value || "";
+      const severityFeedback = (f.querySelector(".triage-severity") || {}).value || "";
       if (action && action !== "---") {
-        decisions.push({finding_id: f.dataset.findingId, action, rationale});
+        const decision = {finding_id: f.dataset.findingId, action, rationale};
+        if (severityFeedback) decision.severity_feedback = severityFeedback;
+        decisions.push(decision);
       }
     });
     return decisions;
   }
 
+  // Severity feedback is saved only with a decision (schema requires action)
+  function orphanFeedbackOk() {
+    const orphans = Array.from(findings).filter(f => {
+      const action = (f.querySelector(".triage-action") || {}).value;
+      const feedback = (f.querySelector(".triage-severity") || {}).value;
+      return feedback && (!action || action === "---");
+    }).length;
+    return !orphans || confirm(orphans + " severity rating(s) have no decision and will not be saved. Continue?");
+  }
+
   // Export decisions (download JSON)
   function doExport() {
+    if (!orphanFeedbackOk()) return;
     const decisions = collectDecisions();
     const payload = {
       report: document.title,
@@ -1793,6 +1812,7 @@ _TRIAGE_EXTRA_JS = r"""
   });
 
   async function doSubmit() {
+    if (!orphanFeedbackOk()) return;
     const decisions = collectDecisions();
     const payload = {
       report: document.title,

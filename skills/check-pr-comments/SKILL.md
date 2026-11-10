@@ -71,6 +71,8 @@ IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](refer
 
 Below the table: one line per merged ID listing its thread links, then `Resolved: N (CMT-…)` for threads resolved at fetch, instead of rows. Table mode ends the turn with "Decisions per ID?".
 
+A user decision rejecting or re-rating a comment as unimportant (or more important) at project scale is a calibration example: save it per `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/system-rating.md` § Calibration memory.
+
 ---
 
 ## Optional: Structured Report (on request only)
