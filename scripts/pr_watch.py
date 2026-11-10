@@ -13,7 +13,7 @@ pass, never reported as a change. ``--oneshot`` exits 0 after the first pass
 that printed, or 2 once ``ONESHOT_FAILED_READS`` full readings in a row failed
 for every PR; ``--quiet-init`` records the first reading without printing it.
 Every ``--probe-interval`` seconds in between, conditional REST requests on the
-PR, its head's check runs and statuses, and (with a gate bot) the first page of
+PR's issue record, its last-read head's check runs and statuses, and (with a gate bot) the first page of
 comments answer 304 at no rate-limit cost while nothing changed; any change
 triggers a full reading at once. Changes the probes cannot see, such as a
 resolved review thread, show at the next full reading.
@@ -109,6 +109,13 @@ def seconds(s: str) -> float:
         v = -1.0
     if not v >= 0:
         raise argparse.ArgumentTypeError(f"not a number of seconds: {s!r}")
+    return v
+
+
+def positive_seconds(s: str) -> float:
+    v = seconds(s)
+    if v == 0:
+        raise argparse.ArgumentTypeError("must be more than 0 seconds")
     return v
 
 
@@ -289,43 +296,41 @@ class Watcher:
     def probe(self, n: int) -> bool:
         """Conditional GETs (304 is free); True when an endpoint seen before changed.
 
-        A failing endpoint is skipped until the PR's next successful full reading,
-        so a token without access costs one request per full reading, not per probe.
+        ``issues/{n}``, not ``pulls/{n}``: the latter embeds the repository's
+        ``pushed_at``, so a push to any branch would look like a PR change. The
+        head comes from the last full reading. A failing endpoint is skipped until
+        the PR's next good full reading, so a token without access costs one
+        request per full reading, not one per probe.
         """
         base = f"repos/{self.a.repo}"
-        changed, body = self._conditional(n, f"{base}/pulls/{n}")
-        if body:
-            try:
-                self.heads[n] = json.loads(body)["head"]["sha"]
-            except (ValueError, KeyError, TypeError):
-                pass
-        eps = []
+        eps = [f"{base}/issues/{n}"]
         if n in self.heads:
             eps += [f"{base}/commits/{self.heads[n]}/check-runs?per_page=100"]
             eps += [f"{base}/commits/{self.heads[n]}/status"]
         if self.a.gate_bot:
             eps += [f"{base}/issues/{n}/comments?per_page=100"]
+        changed = False
         for ep in eps:
-            changed = self._conditional(n, ep)[0] or changed
+            changed = self._conditional(n, ep) or changed
         return changed
 
-    def _conditional(self, n: int, ep: str) -> tuple[bool, str]:
-        """Return (changed since last seen, body of a 200) for one endpoint."""
+    def _conditional(self, n: int, ep: str) -> bool:
+        """True when ``ep`` answers 200 with an ETag other than the one seen last."""
         seen = self.etags.setdefault(n, {})
         if seen.get(ep) == "":
-            return False, ""
+            return False
         cmd = ["api", "-i", ep]
         if seen.get(ep):
             cmd[2:2] = ["-H", f"If-None-Match: {seen[ep]}"]
-        code, etag, body = parse_http(self.run(cmd)[1])
+        code, etag, _ = parse_http(self.run(cmd)[1])
         if code == 304:
-            return False, ""
+            return False
         if code != 200 or not etag:
             seen[ep] = ""
-            return False, ""
+            return False
         changed = ep in seen and seen[ep] != etag
         seen[ep] = etag
-        return changed, body
+        return changed
 
     def retry_probes(self, n: int) -> None:
         """Forget failed endpoints so the next probe tries them again."""
@@ -402,6 +407,7 @@ class Watcher:
         if pr is None:
             return None
         head, state = summarize_pr(pr)
+        self.heads[n] = head
         hygiene, hsha = parse_hygiene(pr.get("body") or "")
         # After a push the block lags behind the head; wait for it to catch up.
         if hsha and not head.startswith(hsha):
@@ -450,7 +456,7 @@ def watch(
     interval, step = w.a.interval, w.a.probe_interval
     if not 0 < step < interval:
         step = interval
-    per_full = max(1, round(interval / step)) if step else 1
+    per_full = max(1, int(interval // step)) if step else 1
     prev: dict = {}
     since_full: dict = {}  # pr -> ticks since its last full reading
     fails = dict.fromkeys(prs, 0)
@@ -544,7 +550,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     )
     w.add_argument(
         "--interval",
-        type=seconds,
+        type=positive_seconds,
         default=os.environ.get("PR_WATCH_INTERVAL", "120"),
         help="seconds between full readings (env PR_WATCH_INTERVAL; default 120)",
     )

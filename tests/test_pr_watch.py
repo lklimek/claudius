@@ -493,52 +493,70 @@ class ProbeGh:
         return r.pop(0) if isinstance(r, list) else r
 
 
-PULL = "repos/dashpay/dash-evo-tool/pulls/1167"
+RECORD = "repos/dashpay/dash-evo-tool/issues/1167"
 RUNS = "repos/dashpay/dash-evo-tool/commits/abc/check-runs?per_page=100"
 STATUS = "repos/dashpay/dash-evo-tool/commits/abc/status"
-ISSUE = "repos/dashpay/dash-evo-tool/issues/1167/comments?per_page=100"
-PULL_BODY = json.dumps({"head": {"sha": "abc"}})
+COMMENTS_EP = "repos/dashpay/dash-evo-tool/issues/1167/comments?per_page=100"
 
 
 def test_parse_http_status_etag_and_body():
     assert pw.parse_http(http(304, "e1")[1]) == (304, '"e1"', "")
-    assert pw.parse_http(http(200, "e2", PULL_BODY)[1]) == (200, '"e2"', PULL_BODY)
+    assert pw.parse_http(http(200, "e2", "{}")[1]) == (200, '"e2"', "{}")
     assert pw.parse_http("not http")[0] == 0
 
 
 def test_probe_baseline_then_304_then_change():
     fake = ProbeGh(
         {
-            PULL: [http(200, "p1", PULL_BODY), http(304), http(304)],
+            RECORD: [http(200, "i1", "{}"), http(304), http(304)],
             RUNS: [http(200, "r1", "{}"), http(304), http(200, "r2", "{}")],
             STATUS: http(304),
         }
     )
     w = pw.Watcher(args("watch"), fake, no_network)
+    w.heads[1167] = "abc"
     assert w.probe(1167) is False  # first sight is the baseline, not a change
     assert w.probe(1167) is False
     assert w.probe(1167) is True
     assert ["-H", 'If-None-Match: "r1"'] == fake.calls[-2][2:4]
 
 
+def test_probe_never_reads_the_pull_endpoint():
+    # pulls/{n} embeds the repo's pushed_at: a push to any branch changes its ETag.
+    fake = ProbeGh({RECORD: http(304), RUNS: http(304), STATUS: http(304)})
+    w = pw.Watcher(args("watch"), fake, no_network)
+    w.heads[1167] = "abc"
+    w.probe(1167)
+    assert not any("/pulls/" in c[-1] for c in fake.calls)
+
+
+def test_probe_checks_need_a_head_from_a_full_reading():
+    fake = ProbeGh({RECORD: http(304)})
+    w = pw.Watcher(args("watch"), fake, no_network)
+    w.probe(1167)
+    assert [c[-1] for c in fake.calls] == [RECORD]
+    w = pw.Watcher(args("watch"), gh(), no_network)
+    w.reading(1167)
+    assert w.heads[1167] == PR["headRefOid"]
+
+
 def test_probe_reads_comments_only_with_a_gate_bot():
-    routes = {PULL: http(304), ISSUE: http(304)}
+    routes = {RECORD: http(304), COMMENTS_EP: http(304)}
     w = pw.Watcher(args("watch", "--gate-bot", "thepastaclaw"), ProbeGh(routes))
     w.probe(1167)
-    assert [c[-1] for c in w.run.calls] == [PULL, ISSUE]
+    assert [c[-1] for c in w.run.calls] == [RECORD, COMMENTS_EP]
     w = pw.Watcher(args("watch"), ProbeGh(routes))
     w.probe(1167)
-    assert [c[-1] for c in w.run.calls] == [PULL]
+    assert [c[-1] for c in w.run.calls] == [RECORD]
 
 
 def test_failed_probe_endpoint_skipped_until_retried():
-    fake = ProbeGh({PULL: [http(403), http(200, "p1", PULL_BODY)], RUNS: http(304)})
+    fake = ProbeGh({RECORD: [http(403), http(200, "i1", "{}")]})
     w = pw.Watcher(args("watch"), fake)
     assert w.probe(1167) is False and w.probe(1167) is False
     assert len(fake.calls) == 1  # the 403 endpoint is not hammered
     w.retry_probes(1167)
-    fake.routes[STATUS] = http(304)
-    assert w.probe(1167) is False and fake.calls[1][-1] == PULL
+    assert w.probe(1167) is False and len(fake.calls) == 2
 
 
 def _probe_watch(hits, ticks, *extra):
@@ -571,9 +589,10 @@ def test_intervals_from_env_and_validated(monkeypatch):
     a = args("watch")
     assert (a.interval, a.probe_interval) == (300.0, 15.0)
     assert args("watch", "--interval", "60").interval == 60.0
-    for bad in ("-1", "abc", "nan"):
+    for bad in ("-1", "abc", "nan", "0"):
         with pytest.raises(SystemExit):
             args("watch", "--interval", bad)
+    assert args("watch", "--probe-interval", "0").probe_interval == 0
 
 
 def test_default_gate_marker_matches_any_case_explicit_marker_exact():
@@ -636,7 +655,6 @@ def test_review_thread_page_limit_is_a_failed_reading(capsys):
     assert "review threads" in capsys.readouterr().err
 
 
-@pytest.mark.xfail(strict=True, reason="per_full = round(interval / step)")
 def test_full_readings_at_most_interval_apart():
     for probe in ("50", "70", "80", "100"):
         a = args("watch", "--interval", "120", "--probe-interval", probe)
@@ -650,23 +668,3 @@ def test_full_readings_at_most_interval_apart():
         pw.watch(w, [1167], out=io.StringIO(), sleep=sleep, max_passes=12)
         gaps = [b - a for a, b in zip(reads, reads[1:])]
         assert gaps and max(gaps) <= 120, (probe, gaps)
-
-
-@pytest.mark.xfail(strict=True, reason="pulls ETag covers base.repo.pushed_at")
-def test_probe_ignores_repo_wide_push_in_embedded_repo():
-    def pull(pushed_at):
-        repo = {"full_name": REPO, "pushed_at": pushed_at}
-        return json.dumps(
-            {"head": {"sha": "abc", "repo": repo}, "base": {"repo": repo}}
-        )
-
-    fake = ProbeGh(
-        {
-            PULL: [http(200, "p1", pull("t1")), http(200, "p2", pull("t2"))],
-            RUNS: http(304),
-            STATUS: http(304),
-        }
-    )
-    w = pw.Watcher(args("watch"), fake, no_network)
-    assert w.probe(1167) is False
-    assert w.probe(1167) is False  # another branch was pushed; this PR is unchanged
