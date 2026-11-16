@@ -58,4 +58,4 @@ Binding rule: `severity` § 5. A separate PR may be stacked on this one. Listing
 | `intent_basis` | `intent_basis` |
 | `material_impact` | `impact_description` |
 | OWASP `risk` (schema v3) | `likelihood` — near-equivalent, migrates by rename |
-| OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which now folds into `impact`. It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or the validation pass (`review-changes` § Reports and Validation). |
+| OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which maps to `impact` (system-scale harm) and `likelihood` (reach). It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or the validation pass (`review-changes` § Reports and Validation). |

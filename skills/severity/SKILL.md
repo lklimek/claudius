@@ -81,7 +81,7 @@ What "the system" is depends on the project type (profile `Project type`; mixed 
 | Server service | its clients and owned data | requests, tenants, records | one request's error read as a hot-path outage, or the reverse |
 | Tooling / CLI | its operators | operators, frequency of use | a failure with a quick workaround read as an outage |
 
-Zones (§ 1) override share: irreversible loss in Sovereign or Boundary code — including SDK signing paths and one operator's keys — is rated by the harm to the party that suffers it (the end user of a consuming app, for an SDK), never diluted by the share of users, nodes, or consumers.
+Zones (§ 1) override share: irreversible loss in Sovereign or Boundary code — including SDK signing paths and one operator's keys — takes its `impact` from the harm to the party that suffers it (the end user of a consuming app, for an SDK), never diluted by the share of users, nodes, or consumers; share still sets `likelihood`.
 
 - **Local harm ≠ system harm**: where redundancy, replication, or consensus absorbs the failure (one node, worker, or replica), `impact` is what the system loses, not what the component loses.
 - **Dominance**: a precondition outside the project's threat model, or one that already grants a strictly worse outcome than the finding (≥ 1/3 Byzantine power already breaks BFT liveness), caps `likelihood` at `0.1` — state the dominating capability. Still reported.
@@ -113,7 +113,7 @@ Probability that a real user or attacker reaches this defect under zone-realisti
 
 ### `impact` — how bad is the worst plausible outcome?
 
-Capped by the backstop zone (§1). Blast radius folds in here — a defect reaching every user is worse than one reaching a rare code path.
+Capped by the backstop zone (§1). Rate the incident's harm at system scale (§ System scale); how many users, nodes, or consumers reach the triggering path is `likelihood`, not `impact`.
 
 | Value | Meaning |
 |---|---|

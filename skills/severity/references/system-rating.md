@@ -34,7 +34,7 @@ Per finding:
 2. **Preconditions** — list them; apply dominance, conjunction, and attacker economics (`severity` § 3 System scale).
 3. **Compare** (MEDIUM and above) — name the anchor it outranks and the one that outranks it. A finding rated above an anchor the maintainers would plainly fix first is overrated; lower the floats until the order holds.
 4. **Counter-argument** (HIGH and above) — write the strongest one-line case that the finding barely matters at project scale. Lower the floats only when that case rests on evidence (`severity` § 3 evidence rule); an unevidenced case leaves the band as it is.
-5. **Record** — per changed finding: new floats, and `impact_description` opening with the headline plus a one-line rating reason; the coordinator applies them as `finding_updates`.
+5. **Record** — per changed finding: new floats, and `impact_description` opening with the headline plus a one-line rating reason; the coordinator applies them per `review-changes` consolidation § Decide step 3 (`finding_updates`, or a merged cluster's `updates`).
 
 The rating pass may raise a finding too: a component-local bug can be system-wide (shared library, every node runs the same code path).
 
