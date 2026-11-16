@@ -1,0 +1,32 @@
+{
+ "data_as_of": "2026-11-06T15:57:01Z",
+ "live": {
+  "active": [
+   {
+    "repo": "dashpay/tenderdash",
+    "number": 1586,
+    "sha": "f8cecf6fe4584d8590770768f656b83d1bcf1936",
+    "started_at": "2026-11-06T13:12:17Z",
+    "phase": "phase1",
+    "progress": 0.99
+   },
+   {
+    "repo": "dashpay/dashwallet-ios",
+    "number": 1212,
+    "sha": "d6e4c1267dbe5b46548189c1eb1ab478da030736",
+    "started_at": "2026-11-06T15:52:19Z",
+    "phase": "phase2",
+    "progress": 0.211
+   }
+  ],
+  "queued": [
+   {
+    "repo": "dashpay/dash",
+    "number": 8062,
+    "sha": "b80040f5ac8f1f299c6a44f6179093401747d0f9",
+    "reason": "debounce (more pushes may follow)",
+    "eligible_at": "2026-11-06T16:13:40Z"
+   }
+  ]
+ }
+}
