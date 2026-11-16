@@ -113,7 +113,7 @@ Probability that a real user or attacker reaches this defect under zone-realisti
 
 ### `impact` — how bad is the worst plausible outcome?
 
-Capped by the backstop zone (§1). Rate the incident's harm at system scale (§ System scale); how many users, nodes, or consumers reach the triggering path is `likelihood`, not `impact`.
+Capped by the backstop zone (§1). Rate the incident's harm at system scale (§ System scale): what fails together in one incident is `impact`; how many users or consumers independently reach the triggering path is `likelihood`.
 
 | Value | Meaning |
 |---|---|

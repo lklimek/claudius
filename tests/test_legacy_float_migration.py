@@ -2,7 +2,7 @@
 
 v3 findings carried ``risk``/``impact``/``scope``; v4 carries
 ``likelihood``/``impact``/``relevance``. Only ``risk`` migrates by rename. v3
-``scope`` was blast radius — which v4 folds into ``impact`` — so it must never
+``scope`` was blast radius — split in v4 between ``impact`` and ``likelihood`` — so it must never
 be carried into ``relevance``, whose value decides ``merge_class``.
 """
 
