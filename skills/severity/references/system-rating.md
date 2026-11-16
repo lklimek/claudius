@@ -26,7 +26,7 @@ Profile claims are human statements: they satisfy the `severity` § 3 evidence r
 
 Runs in `review-changes` § Decide, after findings exist and before merge classification; skills rating inline (`check-pr-comments` reports, `triage`) apply `severity` § 3 System scale directly. The rater reads the finding text and the inputs below, never the producer's working, so the finder's investment in a finding does not leak into its rating.
 
-Inputs: each finding's full text (`title`, `location`, `description`, `impact_description`, `recommendation` — from `intermediate.json` `raw_findings`, not the clipped digest), project profile, anchors (§ Anchors), calibration examples (§ Calibration memory).
+Inputs: the keys to rate — findings surviving duplicate resolution and INTENTIONAL downgrades, as decided by the coordinator — each with its full text (`title`, `location`, `description`, `impact_description`, `recommendation` — from `intermediate.json` `raw_findings`, not the clipped digest; a merged cluster's merged text instead), project profile, anchors (§ Anchors), calibration examples (§ Calibration memory). Rate only those keys: `intermediate.json` predates merging, and an update for a merged-away key fails finalization.
 
 Per finding:
 
