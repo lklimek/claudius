@@ -2,7 +2,7 @@
 name: review-changes
 description: "This skill should be used when the user asks for a \"code review\", \"review this code\", \"review my changes\", \"review this branch\", \"basic review\", \"full review\", or \"grumpy review\", to \"validate findings\" in a report.json, or before completing changes of at least 50 code lines per coding-best-practices. Basic (default) uses one strong independent reviewer; full adds independent security, global-optimum/reuse, and correctness passes into one severity-ranked report. For GitHub PRs use review-pr."
 argument-hint: "[basic|full|validate] [scope|report.json]"
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/review-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Agent, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/review-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(gh issue list *), Agent, SendMessage
 ---
 
 # Review Changes
@@ -32,10 +32,11 @@ Resolve plugin/skill roots from the loaded skill before executing commands; subs
 - `<SPECIALIST_PASSES>` = `${CLAUDE_SKILL_DIR}/references/specialist-passes.md`
 - `<SECURITY_PATTERNS_DIR>` = `${CLAUDE_PLUGIN_ROOT}/skills/security-best-practices/references`
 - `<MERGE_CLASSIFICATION>` = `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md`
+- `<SYSTEM_RATING>` = `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/system-rating.md`
 
 ## 1. Scope the Review
 
-Gather the user's requirements, acceptance criteria, relevant specs, and changed files. Carry the caller's Context Digest verbatim when supplied (`review-pr` § Context Digest). Mark missing requirements as unknown; never infer intended behavior solely from the implementation.
+Gather the user's requirements, acceptance criteria, relevant specs, and changed files. Carry the caller's Context Digest verbatim when supplied (`review-pr` § Context Digest). Load the project profile (`<SYSTEM_RATING>` § Project profile) and give it to every reviewer, inside the digest when one exists. Mark missing requirements as unknown; never infer intended behavior solely from the implementation.
 
 **Bash hygiene** (coordinator; producers follow the producer contract's identical rule): commands use `<PLACEHOLDER>`s — substitute literal values, one plain command per call; no `$VAR`, `$(…)`, loops, pipes, redirects, `&&` chains, `cd`, `git -C` or `python3 -c` (restricted CI allowlists deny them, costing a round each); write files with the Write tool; read plugin files (skills, references, scripts) with Read, never Bash `ls`/`find`/`cp` — CI sandboxes block Bash outside the working directory.
 

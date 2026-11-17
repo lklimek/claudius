@@ -34,9 +34,12 @@ _INTERMEDIATE_ONLY_FIELDS = {"agent", "category", "section_title", "positives"}
 _FLOAT_FIELDS = ("likelihood", "impact", "relevance")
 # Used when merge decisions omit executive_summary (the schema requires the key).
 DEFAULT_EXECUTIVE_SUMMARY: dict[str, str] = {"overall_assessment": ""}
-# The per-finding override table carries judgment only — classification and
-# re-rated floats. Text edits belong to a cluster merge's ``updates``.
-_FINDING_UPDATE_FIELDS = frozenset({"merge_class", "intent_basis", *_FLOAT_FIELDS})
+# The per-finding override table carries judgment only — classification,
+# re-rated floats, and the rating pass's incident headline. Other text edits
+# belong to a cluster merge's ``updates``.
+_FINDING_UPDATE_FIELDS = frozenset(
+    {"merge_class", "intent_basis", "impact_description", *_FLOAT_FIELDS}
+)
 
 
 def _load_json(path: Path) -> Any:
@@ -230,6 +233,12 @@ def _validate_finding_update(label: str, update: Any) -> dict[str, Any]:
     if intent_basis is not None and not isinstance(intent_basis, str):
         raise ValueError(
             f"finding_updates[{label!r}]: intent_basis must be a string or null"
+        )
+    if "impact_description" in update and not isinstance(
+        update["impact_description"], str
+    ):
+        raise ValueError(
+            f"finding_updates[{label!r}]: impact_description must be a string"
         )
     for field in _FLOAT_FIELDS:
         if field not in update:

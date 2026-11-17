@@ -24,6 +24,7 @@ Operational profile: <per touched area: invocation (user action / cron / admin o
   concurrency reality, failure cost — each claim WITH its evidence: entry-point trace,
   doc link, or explicit human statement>
 Architecture rationale / UX-DX priorities: <relevant prior decisions — MemCan, session>
+Project profile: <claims per `claudius:severity` system-rating.md § Project profile, or none>
 ```
 
 Source priority for every field:

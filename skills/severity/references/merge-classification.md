@@ -21,7 +21,7 @@ Score the problem the PR solves as one finding with the `severity` § 3 floats, 
 - **Hardening / prevention** — a risk not reachable today (it needs a future change or access grant) is LOW at most, whatever the floats give; one reachable today is scored as the defect it closes.
 - **Several problems** — rate the dominant one, not the worst symptom.
 
-The defect-safety rules ("Unknown is not benign", "In doubt… take the higher") do not apply here: in doubt take the lower, starting from a human maintainer's stated priority (label or comment; bot-set labels do not count).
+The defect-safety rules ("Unknown is not benign", the `severity` § 4 tie-break) do not apply here: in doubt take the lower, starting from a human maintainer's stated priority (label or comment; bot-set labels do not count).
 
 ## Decision tree (apply in order)
 
@@ -58,4 +58,4 @@ Binding rule: `severity` § 5. A separate PR may be stacked on this one. Listing
 | `intent_basis` | `intent_basis` |
 | `material_impact` | `impact_description` |
 | OWASP `risk` (schema v3) | `likelihood` — near-equivalent, migrates by rename |
-| OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which now folds into `impact`. It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or the validation pass (`review-changes` § Reports and Validation). |
+| OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which maps to `impact` (what fails together) and `likelihood` (independent reach). It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or the validation pass (`review-changes` § Reports and Validation). |

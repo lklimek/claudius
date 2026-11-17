@@ -261,7 +261,7 @@
           "description": "Justification for a blocking class; null or absent otherwise. For merge_class=blocking this MUST cite the tripped blocker gate as 'G-ID: evidence' (e.g. 'G-SECRET: seed phrase written to debug log at wallet/import.rs:88') using a gate ID from severity_util.GATE_IDS \u2014 see skills/severity/SKILL.md \u00a72. A bare requirement quote is flagged by validate_report.py's consistency gate."
         },
         "likelihood": { "$ref": "#/$defs/severity_float", "description": "Probability a real user or attacker reaches this defect under zone-realistic usage (1.0 happy path, ~0.7 workflow-plausible, ~0.4 edge case, ~0.1 pathological). See skills/severity/SKILL.md (source of truth)." },
-        "impact": { "$ref": "#/$defs/severity_float", "description": "Worst plausible outcome, capped by the finding's backstop zone; blast radius folds in here (1.0 irreversible loss of funds/keys/data, ~0.7 recoverable loss or unrecoverable-stuck user, ~0.4 failed task or scary UX, ~0.1 cosmetic)." },
+        "impact": { "$ref": "#/$defs/severity_float", "description": "Worst plausible outcome, capped by the finding's backstop zone; rated at system scale — what fails together in one incident; independent reach is likelihood (1.0 irreversible loss of funds/keys/data, ~0.7 recoverable loss or unrecoverable-stuck user, ~0.4 failed task or scary UX, ~0.1 cosmetic)." },
         "relevance": { "$ref": "#/$defs/severity_float", "description": "Fit to what this PR set out to do (1.0 the very thing, ~0.5 pre-existing but worsened, exposed, or relied on by the diff, ~0.1 pre-existing and untouched, 0.0 informational). Drives merge_class and report ordering; deliberately NOT an input to overall_severity." },
         "overall_severity": { "$ref": "#/$defs/severity_float", "description": "Coordinator-computed mean of likelihood and impact." },
         "author_type": {
@@ -361,6 +361,11 @@
           "enum": ["fix", "accept_risk", "defer", "false_positive", "duplicate"]
         },
         "rationale": { "type": "string" },
+        "severity_feedback": {
+          "type": "string",
+          "enum": ["overrated", "underrated"],
+          "description": "Triager's judgment that the finding's severity is too high or too low at project scale; saved as a calibration example (severity skill, system-rating.md)"
+        },
         "assignee": { "type": "string" },
         "due_date": { "type": "string", "format": "date" },
         "ticket": { "type": "string", "description": "Issue tracker reference" },

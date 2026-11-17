@@ -42,6 +42,7 @@ Replace `8741` with the actual port if `--port` was used.
    - How many findings were triaged
    - Breakdown by action (fix, accept_risk, defer, false_positive, duplicate)
    - All `fix` decisions with finding IDs and titles
+   - Every `severity_feedback` (`overrated`/`underrated`) — save each as a calibration example (`${CLAUDE_PLUGIN_ROOT}/skills/severity/references/system-rating.md` § Calibration memory)
 
 Findings with `merge_class: out_of_scope_follow_up` never change this PR (`severity` § 5): `fix` means a separate branch and PR, `defer` means an issue, never a `TODO` in this PR's files.
 

@@ -1192,3 +1192,45 @@ def test_triage_does_not_load_chartjs_from_unpinned_cdn():
     html = grr.render_triage(data)
     assert 'src="https://cdn.jsdelivr.net/npm/chart.js"' not in html
     assert "Chart.js v4.5.1" in html
+
+
+SCHEMA_PATH = (
+    Path(__file__).resolve().parent.parent / "schemas" / "review-report.schema.json"
+)
+
+
+def test_triage_has_severity_feedback_control():
+    html = grr.render_triage(_load("v4-minimal.json"))
+    assert 'class="triage-severity"' in html
+    assert 'value="overrated"' in html
+    assert 'value="underrated"' in html
+    assert "decision.severity_feedback = severityFeedback" in html
+
+
+def test_triage_warns_before_dropping_feedback_without_decision():
+    html = grr.render_triage(_load("v4-minimal.json"))
+    assert "function orphanFeedbackOk()" in html
+    assert html.count("if (!orphanFeedbackOk()) return;") == 2
+
+
+@pytest.mark.parametrize("feedback", ["overrated", "underrated"])
+def test_schema_accepts_triage_severity_feedback(feedback):
+    data = _load("v4-minimal.json")
+    data["triage"] = {
+        "decisions": [
+            {"finding_id": "QA-001", "action": "defer", "severity_feedback": feedback}
+        ]
+    }
+    grr.validate_report(data, SCHEMA_PATH)
+
+
+def test_schema_rejects_unknown_triage_severity_feedback(caplog):
+    data = _load("v4-minimal.json")
+    data["triage"] = {
+        "decisions": [
+            {"finding_id": "QA-001", "action": "defer", "severity_feedback": "meh"}
+        ]
+    }
+    with pytest.raises(SystemExit):
+        grr.validate_report(data, SCHEMA_PATH)
+    assert "'meh' is not one of" in caplog.text

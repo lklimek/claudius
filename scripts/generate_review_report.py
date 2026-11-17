@@ -1173,7 +1173,7 @@ details summary:hover{color:{{ ACCENT }}}
     {% if f.merge_class %}<span class="merge-class-chip" style="background-color: {{ merge_class_colors[f.merge_class] }}; color: {{ merge_class_text_colors[f.merge_class] }}">{{ merge_class_labels[f.merge_class] }}</span>{% endif %}
     {% if f.overall_severity is number %}<span class="metric-chip metric-overall" title="Overall severity (mean of likelihood and impact)">Overall {{ '%.2f' % f.overall_severity }}</span>{% endif %}
     {% if f.likelihood is number %}<span class="metric-chip metric-likelihood" title="Likelihood a real user or attacker reaches this defect">L {{ '%.2f' % f.likelihood }}</span>{% endif %}
-    {% if f.impact is number %}<span class="metric-chip metric-impact" title="Worst plausible outcome, blast radius included">I {{ '%.2f' % f.impact }}</span>{% endif %}
+    {% if f.impact is number %}<span class="metric-chip metric-impact" title="Worst plausible outcome at system scale">I {{ '%.2f' % f.impact }}</span>{% endif %}
     {% if f.relevance is number %}<span class="metric-chip metric-relevance" title="Fit to this PR's stated goal (1.0 the very thing, ~0.5 worsened or exposed by the diff, ~0.1 pre-existing) — not part of the severity math">R {{ '%.2f' % f.relevance }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
     {{ f.id }}: {{ f.title }}
@@ -1204,6 +1204,11 @@ details summary:hover{color:{{ ACCENT }}}
       <option value="defer">Defer</option>
       <option value="false_positive">False Positive</option>
       <option value="duplicate">Duplicate</option>
+    </select>
+    <select class="triage-severity" title="Severity at project scale">
+      <option value="">Severity OK</option>
+      <option value="overrated">Overrated</option>
+      <option value="underrated">Underrated</option>
     </select>
     <input type="text" class="triage-rationale" placeholder="Rationale...">
     <span class="decision-hint" aria-live="polite"></span>
@@ -1758,15 +1763,29 @@ _TRIAGE_EXTRA_JS = r"""
     findings.forEach(f => {
       const action = (f.querySelector(".triage-action") || {}).value;
       const rationale = (f.querySelector(".triage-rationale") || {}).value || "";
+      const severityFeedback = (f.querySelector(".triage-severity") || {}).value || "";
       if (action && action !== "---") {
-        decisions.push({finding_id: f.dataset.findingId, action, rationale});
+        const decision = {finding_id: f.dataset.findingId, action, rationale};
+        if (severityFeedback) decision.severity_feedback = severityFeedback;
+        decisions.push(decision);
       }
     });
     return decisions;
   }
 
+  // Severity feedback is saved only with a decision (schema requires action)
+  function orphanFeedbackOk() {
+    const orphans = Array.from(findings).filter(f => {
+      const action = (f.querySelector(".triage-action") || {}).value;
+      const feedback = (f.querySelector(".triage-severity") || {}).value;
+      return feedback && (!action || action === "---");
+    }).length;
+    return !orphans || confirm(orphans + " severity rating(s) have no decision and will not be saved. Continue?");
+  }
+
   // Export decisions (download JSON)
   function doExport() {
+    if (!orphanFeedbackOk()) return;
     const decisions = collectDecisions();
     const payload = {
       report: document.title,
@@ -1793,6 +1812,7 @@ _TRIAGE_EXTRA_JS = r"""
   });
 
   async function doSubmit() {
+    if (!orphanFeedbackOk()) return;
     const decisions = collectDecisions();
     const payload = {
       report: document.title,

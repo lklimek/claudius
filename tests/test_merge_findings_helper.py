@@ -234,6 +234,22 @@ def test_resolve_findings_applies_updates_before_cluster_merge():
     assert resolved[0]["description"] == "Merged."
 
 
+def test_finding_update_rewrites_impact_description():
+    resolved = helper.resolve_findings(
+        [_finding("security", "SEC-001")],
+        {
+            "finding_updates": {
+                "security:SEC-001": {
+                    "likelihood": 0.1,
+                    "impact_description": "One node lags; network unaffected.",
+                }
+            }
+        },
+    )
+    assert resolved[0]["impact_description"] == "One node lags; network unaffected."
+    assert resolved[0]["likelihood"] == 0.1
+
+
 def test_finding_update_on_merged_away_member_is_rejected():
     raw = [_finding("security", "SEC-001"), _finding("qa", "QA-003")]
     with pytest.raises(ValueError, match="qa:QA-003.*merged away"):
@@ -266,6 +282,7 @@ def test_finding_update_on_merged_away_member_is_rejected():
         ({"security:SEC-001": {"likelihood": 1.5}}, "likelihood"),
         ({"security:SEC-001": {"impact": True}}, "impact"),
         ({"security:SEC-001": {"intent_basis": 3}}, "intent_basis"),
+        ({"security:SEC-001": {"impact_description": 3}}, "impact_description"),
         ({"security:SEC-001": "blocking"}, "must be an object"),
     ],
 )

@@ -267,8 +267,9 @@ def _partial_dimension_band(finding: dict[str, Any]) -> int | None:
 # ---------------------------------------------------------------------------
 # v3 findings carried ``risk``/``impact``/``scope``. v4 carries
 # ``likelihood``/``impact``/``relevance``. Only ``risk`` survives as a rename;
-# v3 ``scope`` was blast radius, which v4 expects folded into ``impact``, so its
-# value is discarded rather than carried into ``relevance`` (PR-goal fit).
+# v3 ``scope`` was blast radius, which v4 splits between ``impact`` and
+# ``likelihood``, so its value is discarded rather than carried into
+# ``relevance`` (PR-goal fit).
 # Remove this shim once no v3 producer output remains in flight.
 DEFAULT_MIGRATED_RELEVANCE = 0.5
 # Exact zeros on every axis: the Informational floor, the only rating whose
