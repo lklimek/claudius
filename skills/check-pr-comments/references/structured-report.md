@@ -12,7 +12,7 @@ Read only when the user explicitly asked for a report (e.g. "generate report", "
 
 ## Finding additions
 
-One finding per review comment, IDs `CMT-001`, `CMT-002`, … — reuse the step 4 table's IDs once shown, never re-sort; otherwise unresolved first (severity descending; out of scope after in scope), then resolved. A merged duplicate (step 3) is one finding: the first thread's `comment_id`/`thread_id`, the other thread links in `description`. Beyond the standard fields:
+One finding per review comment or item, IDs `CMT-001`, `CMT-002`, … — reuse the step 4 table's IDs once shown, never re-sort; otherwise unresolved first (severity descending; out of scope after in scope), then resolved. A merged duplicate (step 3) is one finding: the first thread's `comment_id`/`thread_id`, the other thread links in `description`. Beyond the standard fields:
 
 ```json
 {
@@ -25,6 +25,8 @@ One finding per review comment, IDs `CMT-001`, `CMT-002`, … — reuse the step
   "location_permalink": "https://github.com/<owner>/<repo>/blob/<commit>/path/to/file.rs#L42-L56"
 }
 ```
+
+Review-body and PR-comment items (SKILL.md step 3) have no thread: omit `comment_id` and `thread_id`; `comment_url` = the review's or comment's URL; `location` = the code the request concerns, else `PR #<number>` (no permalink).
 
 `description` = what the comment asked for; `recommendation` = what was done (RESOLVED) or what remains (UNRESOLVED). `thread_id` comes from `gh-list-review-threads.sh` and is needed for step 8.
 
