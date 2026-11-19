@@ -42,7 +42,7 @@
             {% if row.finding_id %}<small><a href="#finding-{{ row.finding_id }}">Risk details ↗</a></small>{% endif %}</td>
           <td class="assessment-prose">{{ row.reasoning | markdown }}{% if row.evidence %}<div class="assessment-evidence"><strong>Evidence</strong>{{ row.evidence | markdown }}</div>{% endif %}</td>
           <td class="assessment-prose">{{ row.proposed_action | markdown }}
-            {% if row.proposed_reply %}<div class="assessment-reply"><strong>Proposed reply</strong><p>{{ row.proposed_reply }}</p></div>{% endif %}
+            {% if row.proposed_reply %}<div class="assessment-reply"><strong>Proposed reply</strong><div class="literal-prose">{{ row.proposed_reply | e | fold_literal }}</div></div>{% endif %}
             {% if row.action_taken %}<div class="assessment-done"><strong>Action taken</strong>{{ row.action_taken | markdown }}</div>{% endif %}</td>
         </tr>
       {% endfor %}</tbody>

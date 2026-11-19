@@ -314,17 +314,16 @@ def _location_link(finding: dict[str, Any]) -> dict[str, Any]:
 
 
 def _severity_tooltip(finding: dict[str, Any]) -> str:
-    """Return ``"overall=.. likelihood=.. impact=.. relevance=.."`` when all
-    floats present, else ``""``. The numeric tooltip surfaces the breakdown for
-    the HTML severity badge (no hover affordance in Markdown/PDF)."""
-    keys = ("overall_severity", "likelihood", "impact", "relevance")
-    if not all(isinstance(finding.get(k), (int, float)) for k in keys):
-        return ""
-    return (
-        f"overall={finding['overall_severity']:.2f} "
-        f"likelihood={finding['likelihood']:.2f} "
-        f"impact={finding['impact']:.2f} "
-        f"relevance={finding['relevance']:.2f}"
+    """Return the available numeric score dimensions for a severity tooltip."""
+    return " ".join(
+        f"{label}={finding[key]:.2f}"
+        for label, key in [
+            ("overall", "overall_severity"),
+            ("likelihood", "likelihood"),
+            ("impact", "impact"),
+            ("relevance", "relevance"),
+        ]
+        if isinstance(finding.get(key), (int, float))
     )
 
 
@@ -716,6 +715,103 @@ def _comment_assessment_markdown(data: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _normalize_html_whitespace(root: Any) -> None:
+    """Collapse HTML whitespace across inline nodes while preserving pre blocks."""
+    from bs4 import NavigableString
+
+    blocks = {
+        "p",
+        "div",
+        "blockquote",
+        "pre",
+        "li",
+        "ul",
+        "ol",
+        "table",
+        "thead",
+        "tbody",
+        "tr",
+        "td",
+        "th",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "br",
+        "hr",
+    }
+    context = None
+    previous_space = True
+    last = None
+
+    def trim_tail() -> None:
+        nonlocal last
+        if last is not None:
+            last.replace_with(NavigableString(str(last).rstrip(" ")))
+            last = None
+
+    for node in list(root.find_all(string=True)):
+        if node.find_parent("pre"):
+            trim_tail()
+            context, previous_space = None, True
+            continue
+        parent = node.find_parent(list(blocks)) or root
+        if parent is not context:
+            trim_tail()
+            context, previous_space = parent, True
+        text = re.sub(r"[ \t\r\n\f]+", " ", str(node))
+        if previous_space:
+            text = text.lstrip(" ")
+        if text:
+            previous_space = text.endswith(" ")
+        replacement = NavigableString(text)
+        node.replace_with(replacement)
+        if text:
+            last = replacement
+    trim_tail()
+
+
+def _fold_long_html(
+    rendered: Any, *, inline: bool = False, preserve_whitespace: bool = False
+) -> Any:
+    """Shorten text nodes in already-safe HTML; retain the complete fragment."""
+    from bs4 import BeautifulSoup, NavigableString
+    from markupsafe import Markup
+
+    if not isinstance(rendered, Markup):
+        rendered = Markup.escape(rendered)
+    tag = "span" if inline else "div"
+    preview = BeautifulSoup(f"<{tag}>{rendered}</{tag}>", "html.parser").find(tag)
+    if not preserve_whitespace:
+        _normalize_html_whitespace(preview)
+    if len(preview.get_text()) <= 1000:
+        return rendered
+    remaining = 1000
+
+    pending = list(reversed(list(preview.children)))
+    while pending:
+        child = pending.pop()
+        if remaining == 0:
+            child.extract()
+        elif isinstance(child, NavigableString):
+            text = str(child)
+            child.replace_with(NavigableString(text[:remaining]))
+            remaining = max(0, remaining - len(text))
+        else:
+            pending.extend(reversed(list(child.children)))
+    preview.append(NavigableString("…"))
+    return Markup(
+        f'<{tag} class="folded-text"><{tag} class="text-preview">'
+        + str(preview)
+        + f'</{tag}><{tag} class="text-full" hidden>'
+        + str(rendered)
+        + f'</{tag}><button type="button" class="text-toggle" aria-expanded="false">'
+        f"Show all</button></{tag}>"
+    )
+
+
 def _html_environment() -> Any:
     from jinja2 import Environment, FileSystemLoader
 
@@ -724,7 +820,14 @@ def _html_environment() -> Any:
         loader=FileSystemLoader(Path(__file__).resolve().parent / "templates"),
     )
     env.filters["sev_label"] = sev_label
-    env.filters["markdown"] = render_markdown_to_html
+    env.filters["markdown"] = lambda text: _fold_long_html(
+        render_markdown_to_html(text)
+    )
+    env.filters["fold"] = _fold_long_html
+    env.filters["fold_inline"] = functools.partial(_fold_long_html, inline=True)
+    env.filters["fold_literal"] = functools.partial(
+        _fold_long_html, preserve_whitespace=True
+    )
     env.filters["safe_url"] = _safe_url
     return env
 
@@ -1121,7 +1224,7 @@ details summary:hover{color:{{ ACCENT }}}
 <body>
 <div class="header-bar">
   <div class="container">
-    <h1>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}: {{ scope }}</h1>
+    <h1>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}: {{ scope | e | fold_inline }}</h1>
     <div class="meta">{{ meta.project }} &middot; {{ meta.date }}{% if meta.branch %} &middot; {{ meta.branch }}{% endif %}</div>
   </div>
 </div>
@@ -1130,7 +1233,7 @@ details summary:hover{color:{{ ACCENT }}}
   {% if comment_assessments %}<a href="#comment-assessments">Comments</a>{% endif %}
   <a href="#summary">Summary</a>
   {% if top_findings %}<a href="#top-findings">Top Findings</a>{% endif %}
-  {% for sec in findings %}<a href="#section-{{ loop.index }}" data-finding-category="{{ sec.category }}">{{ sec.title }}</a>{% endfor %}
+  {% for sec in findings %}<a href="#section-{{ loop.index }}" data-finding-category="{{ sec.category }}" title="{{ sec.title }}">{{ category_labels.get(sec.category, 'Findings') }}</a>{% endfor %}
   {% if dependencies %}<a href="#dependencies">Dependencies</a>{% endif %}
   {% if remediation %}<a href="#remediation">Remediation</a>{% endif %}
   <a href="#charts">Charts</a>
@@ -1144,14 +1247,14 @@ details summary:hover{color:{{ ACCENT }}}
 <div class="assessment-heading report-heading">
   <div><div class="eyebrow">REVIEW WORKSPACE / {{ report_type | replace('_', ' ') | upper }}</div>
     <h1>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}</h1>
-    <p>{{ scope }}</p></div>
+    <p>{{ scope | e | fold_inline }}</p></div>
   <div class="assessment-total">{{ stats.total_findings }}<small>findings reviewed</small></div>
 </div>
 {% endif %}
 
 <!-- Executive Summary -->
 <h2 id="summary">Executive Summary</h2>
-<div class="exec-summary report-assessment">{{ executive_summary.overall_assessment }}</div>
+<div class="exec-summary report-assessment">{{ executive_summary.overall_assessment | e | fold }}</div>
 {% if executive_summary.summary_text %}<details class="report-context"><summary>Context and verification</summary><div class="exec-summary">{{ executive_summary.summary_text | markdown }}</div></details>{% endif %}
 
 <div class="kpi-row">
@@ -1178,7 +1281,7 @@ details summary:hover{color:{{ ACCENT }}}
 <h3 id="verdict">Verdict</h3>
 <div class="verdict">
   {% if executive_summary.verdict_text %}<div class="exec-summary">{{ executive_summary.verdict_text | markdown }}</div>{% endif %}
-  {% if executive_summary.verdict_action %}<p><strong>Action:</strong> {{ executive_summary.verdict_action }}</p>{% endif %}
+  {% if executive_summary.verdict_action %}<p><strong>Action:</strong> {{ executive_summary.verdict_action | e | fold_inline }}</p>{% endif %}
 </div>
 
 <!-- Top findings -->
@@ -1190,7 +1293,7 @@ details summary:hover{color:{{ ACCENT }}}
 <tr>
   <td>{% if tf.merge_class == "blocking" %}🔴 BLOCKING {% endif %}<a href="#finding-{{ tf.id }}">{{ tf.id }}</a></td>
   <td><span class="badge badge-{{ tf.severity|sev_label }}">{{ tf.severity|sev_label }}</span></td>
-  <td>{{ tf.title }}</td>
+  <td>{{ tf.title | e | fold }}</td>
   <td>{% if tf.location_permalink and tf.location_permalink.startswith(('https://', 'http://')) %}<a href="{{ tf.location_permalink }}" target="_blank" rel="noopener"><code>{{ tf.location }}</code></a>{% else %}<code>{{ tf.location }}</code>{% endif %}</td>
   {% if triage %}<td class="no-print"><select class="triage-action-top" data-finding-id="{{ tf.id }}">
     <option value="---">---</option>
@@ -1213,8 +1316,8 @@ details summary:hover{color:{{ ACCENT }}}
 {% for d in dependencies %}
 <tr>
   <td>{{ d.package }}</td><td>{{ d.version }}</td>
-  <td>{{ d.advisories | default("None") }}</td>
-  <td>{{ d.applicable | default("N/A") }}</td>
+  <td>{{ d.advisories | default("None") | e | fold }}</td>
+  <td>{{ d.applicable | default("N/A") | e | fold }}</td>
   <td>{% if d.ok %}Yes{% else %}<strong style="color:{{ RED }}">No</strong>{% endif %}</td>
 </tr>
 {% endfor %}
@@ -1223,6 +1326,7 @@ details summary:hover{color:{{ ACCENT }}}
 
 <!-- Detailed findings by section -->
 {% if not triage %}
+<div class="review-decision-bar no-print"><button type="button" id="exportReviewDecisions">Export decisions</button><span id="reviewDecisionCount" aria-live="polite">0 decisions</span></div>
 <div class="report-toolbar no-print" id="reportToolbar">
   <select id="filterSeverity">
     <option value="">All Severities</option>
@@ -1266,8 +1370,8 @@ details summary:hover{color:{{ ACCENT }}}
 <div id="findingsContainer">
 {% for sec in findings %}
 <div class="findings-section" data-section-category="{{ sec.category }}">
-<h2 id="section-{{ loop.index }}">{{ sec.title }}</h2>
-{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}
+<h2 id="section-{{ loop.index }}">{{ sec.title | e | fold_inline }}</h2>
+{% if sec.subtitle %}<p><em>{{ sec.subtitle | e | fold_inline }}</em></p>{% endif %}
 
 <details open>
 <summary>{{ sec.findings | length }} finding{{ "s" if sec.findings | length != 1 else "" }}</summary>
@@ -1285,7 +1389,7 @@ details summary:hover{color:{{ ACCENT }}}
     {% if f.impact is number %}<span class="metric-chip metric-impact" title="Worst plausible outcome at system scale">I {{ '%.2f' % f.impact }}</span>{% endif %}
     {% if f.relevance is number %}<span class="metric-chip metric-relevance" title="Fit to this PR's stated goal (1.0 the very thing, ~0.5 worsened or exposed by the diff, ~0.1 pre-existing) — not part of the severity math">R {{ '%.2f' % f.relevance }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
-    {{ f.id }}: {{ f.title }}
+    {{ f.id }}: {{ f.title | e | fold_inline }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
   </h3>
   <dl>
@@ -1328,7 +1432,7 @@ details summary:hover{color:{{ ACCENT }}}
 {% endif %}
 
 {% if sec.positives %}
-<p class="positives"><strong>Positive observations:</strong> {{ sec.positives }}</p>
+<p class="positives"><strong>Positive observations:</strong> {{ sec.positives | e | fold_inline }}</p>
 {% endif %}
 </details>
 </div>
@@ -1342,9 +1446,9 @@ details summary:hover{color:{{ ACCENT }}}
 <tr><th>Priority</th><th>Count</th><th>Finding IDs</th></tr>
 {% for r in remediation %}
 <tr>
-  <td><span class="priority-{{ r.priority }}">{{ r.label }}</span></td>
+  <td><span class="priority-{{ r.priority }}">{{ r.label | e | fold_inline }}</span></td>
   <td>{{ r.count }}</td>
-  <td>{{ r.finding_ids | default([]) | join(", ") }}</td>
+  <td>{{ r.finding_ids | default([]) | join(", ") | e | fold }}</td>
 </tr>
 {% endfor %}
 </table>
@@ -1523,6 +1627,8 @@ details summary:hover{color:{{ ACCENT }}}
 })();
 </script>
 
+<script>{% include 'report-interactions.js' %}</script>
+
 {% if not triage %}
 <script>
 (function(){
@@ -1574,7 +1680,8 @@ details summary:hover{color:{{ ACCENT }}}
       if (ct && f.dataset.category !== ct) show = false;
       if (mc && f.dataset.mergeClass !== mc) show = false;
       if (av && f.dataset.aiVerdict !== av) show = false;
-      if (q && !f.textContent.toLowerCase().includes(q)) show = false;
+      const searchable = Array.from(f.querySelectorAll('.finding-data')).map(cell => cell.textContent).join(' ');
+      if (q && !searchable.toLowerCase().includes(q)) show = false;
       f.style.display = show ? "" : "none";
     });
     // Hide entire section when all its findings are filtered out
@@ -1634,6 +1741,7 @@ details summary:hover{color:{{ ACCENT }}}
         sections.forEach(section => container.appendChild(section));
       }
       applyFilters();
+      document.dispatchEvent(new Event('report:render'));
       return;
     }
 
@@ -1695,6 +1803,7 @@ details summary:hover{color:{{ ACCENT }}}
     }
 
     applyFilters();
+    document.dispatchEvent(new Event('report:render'));
   }
 
   if (sevFilter) sevFilter.addEventListener("change", applyFilters);
@@ -2070,6 +2179,7 @@ def _build_html_context(
         "comment_assessments": data.get("comment_assessments", []),
         "assessment_labels": ASSESSMENT_LABELS,
         "source_labels": SOURCE_LABELS,
+        "review_decisions": data.get("triage", {}).get("decisions", []),
         "dependencies": data.get("dependencies", []),
         "agent_stats": data.get("agent_stats", []),
         "remediation": data.get("remediation", []),
@@ -2294,9 +2404,7 @@ def render_triage(data: dict[str, Any]) -> str:
 </div>
 """
     # Insert toolbar inside the findings section, after the heading
-    toolbar_anchor = (
-        "{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}"
-    )
+    toolbar_anchor = "{% if sec.subtitle %}<p><em>{{ sec.subtitle | e | fold_inline }}</em></p>{% endif %}"
     toolbar_block = "{% if loop.first %}\n" + toolbar_html + "{% endif %}"
     triage_template = triage_template.replace(
         toolbar_anchor,

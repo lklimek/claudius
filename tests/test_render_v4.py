@@ -383,9 +383,8 @@ def test_html_code_snippet_content_is_escaped():
     assert "<script>alert('xss')</script>" not in html
 
 
-def test_html_renders_visible_float_chips():
-    """Each finding with likelihood/impact/relevance/overall_severity must
-    surface them as visible chips in HTML, not just hover-tooltip."""
+def test_html_renders_scores_in_badge_tooltip():
+    """The compact table keeps scores on hover rather than separate chips."""
     finding = {
         "id": "X-001",
         "likelihood": 0.6,
@@ -399,12 +398,7 @@ def test_html_renders_visible_float_chips():
         "recommendation": "R",
     }
     html = grr.render_html(_wrap_section(finding))
-    # Chip text — visible, not just tooltip-attribute.
-    assert "Overall 0.77" in html
-    assert "L 0.60" in html
-    assert "I 0.70" in html
-    assert "R 1.00" in html
-    # Tooltip-as-belt-and-braces still present.
+    assert 'class="metric-chip' not in html
     assert 'title="overall=0.77 likelihood=0.60 impact=0.70 relevance=1.00"' in html
 
 
@@ -455,9 +449,8 @@ def test_html_chips_omit_when_floats_are_non_numeric():
     assert 'class="metric-chip metric-relevance"' not in html
 
 
-def test_html_chips_partial_numeric_renders_only_numeric_dimensions():
-    """When some float dimensions are numeric and others are strings, only
-    the numeric ones become chips. Guards must be per-field, not all-or-none."""
+def test_html_tooltip_partial_numeric_renders_only_numeric_dimensions():
+    """Only numeric dimensions belong in the compact score tooltip."""
     finding = {
         "id": "X-001",
         "overall_severity": 0.55,  # numeric — chip expected
@@ -471,8 +464,7 @@ def test_html_chips_partial_numeric_renders_only_numeric_dimensions():
         "recommendation": "R",
     }
     html = grr.render_html(_wrap_section(finding))
-    assert "Overall 0.55" in html
-    assert "I 0.80" in html
+    assert 'title="overall=0.55 impact=0.80"' in html
     assert 'class="metric-chip metric-likelihood"' not in html
     assert 'class="metric-chip metric-relevance"' not in html
 
@@ -549,7 +541,7 @@ def test_html_minimal_fixture_renders_cleanly():
     data = _load("v4-minimal.json")
     html = grr.render_html(data)
     assert "ai-verdict-chip" not in html  # no AI fields
-    assert "<details><summary>" not in html  # no snippets
+    assert 'class="code-snippet"' not in html
     # Plain text location (no anchor wrapping the location code).
     assert "<code>src/example.rs:10-20</code>" in html
     assert 'href="None"' not in html
