@@ -25,7 +25,7 @@ One PR addresses **one problem**; include only its necessary implementation, tes
 
 Target **fewer than 3000 changed code lines**; **5000 is the hard maximum**. Count added plus deleted code lines, including tests and generated/vendored code, across the PR's merge-base (three-dot) diff against its intended base; exclude comments, blank lines, and documentation. For a stacked PR, use its immediate parent branch, not the root base, so ancestor changes are not counted again.
 
-Apply this during planning: at 3000–5000 lines, seek smaller coherent PRs; above 5000, split the plan into separate PRs **before implementation**. Use dependency-ordered stacks when needed; each PR must have a focused, reviewable scope. Recheck scope and actual size before each push; if the cap is exceeded, split before publishing.
+Apply this during planning: at 3000–5000 lines, seek smaller coherent PRs; above 5000, split the plan into separate PRs **before implementation**. Use dependency-ordered stacks when needed; each PR must have a focused, reviewable scope. Recheck scope and actual size before each push; if the cap is exceeded, propose a split plan and obtain human feedback before restructuring or publishing.
 
 ## Committing
 
