@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -122,7 +123,9 @@ def test_renderers_agree_with_the_recomputed_band(report):
 
     html = grr.render_html(report)
     assert 'data-severity="5"' in html
-    assert "L 1.00" in html
+    badge = BeautifulSoup(html, "html.parser").select_one(".finding .badge[title]")
+    assert badge is not None
+    assert "likelihood=1.00" in badge["title"]
 
 
 if __name__ == "__main__":
