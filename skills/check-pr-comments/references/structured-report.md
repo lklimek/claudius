@@ -1,6 +1,6 @@
 # Structured Report — check-pr-comments additions
 
-Read only when the user explicitly asked for a report (e.g. "generate report", "with report"). A comment-check report is an ordinary review report — the same structure `review-changes` produces: the finding shape, required fields and do-NOT-emit list are the `report-format` skill's, the envelope is the one its coordinator-envelope reference defines (both linked from `check-pr-comments` step 5). This file lists only what a comment check adds or does differently. Validate and render: steps 6–7 in SKILL.md.
+Read for a requested report or comment-table file. A comment-check report uses the ordinary review envelope and finding contract from `report-format`, extended by its comment-assessment contract (loaded from `check-pr-comments` step 5). This file lists only comment-check additions. Validate and render: steps 6–7 in SKILL.md.
 
 ## Envelope additions
 
@@ -8,11 +8,11 @@ Read only when the user explicitly asked for a report (e.g. "generate report", "
 - `executive_summary`: `overall_assessment` = "X of Y review comments resolved", `verdict_action` = "N comments require attention".
 - `summary_statistics`: add `verdict_counts: {"RESOLVED": <n>, "UNRESOLVED": <n>}` next to `severity_counts`.
 - `findings`: one section — `title: "PR Comment Verification"`, `category: "pr_comments"`.
-- `schema_version` is always `4.0.0`: this skill has no coordinator derive-pass to correct a stale version.
+- Emit `schema_version: "4.1.0"` and `comment_assessments` per the `report-format` contract loaded in step 5. Existing 4.0 comment-check reports remain readable. Statistics count scored findings, not context rows; omit `verdict_counts` when the binary finding verdict is unused.
 
 ## Finding additions
 
-One finding per review comment or item, IDs `CMT-001`, `CMT-002`, … — reuse the step 4 table's IDs once shown, never re-sort; otherwise unresolved first (severity descending; out of scope after in scope), then resolved. A merged duplicate (step 3) is one finding: the first thread's `comment_id`/`thread_id`, the other thread links in `description`. Beyond the standard fields:
+One scored finding per actual remaining concern; other comments live only in assessment rows. IDs `CMT-001`, `CMT-002`, … — reuse the step 4 table's IDs once shown, never re-sort; otherwise unresolved first (severity descending; out of scope after in scope), then resolved/context. A merged duplicate (step 3) is one finding: the first thread's `comment_id`/`thread_id`, the other thread links in `description`. Beyond the standard fields:
 
 ```json
 {
@@ -42,6 +42,6 @@ This skill renders its own final report, so it emits what a coordinator would ot
 
 ### Scoring and classification
 
-- **Resolved**: floats and `recommendation` rule are in SKILL.md step 5.
+- **Already fixed/dismissed/context**: assessment rows need no scored finding. Legacy RESOLVED findings remain readable with zero floats and an informational band.
 - **Unresolved**: `likelihood` and `impact` per `claudius:severity`. Rate `relevance` as PR-goal fit per the `claudius:severity` § 3 scale, not blast radius — do NOT default to `1.0`. `verdict: "UNRESOLVED"`.
 - **Merge class** (coordinator-inline producer exception — `claudius:report-format`): RESOLVED comments omit `merge_class`. Classify UNRESOLVED per `claudius:severity` § Merge Classification — `blocking` only when the concern trips a blocker gate (`intent_basis` names the gate ID plus the reviewer's request as evidence); otherwise `non_blocking` (in PR scope) or `out_of_scope_follow_up` — reported for the user's decision, never filed anywhere by this skill (`claudius:severity` § 5).

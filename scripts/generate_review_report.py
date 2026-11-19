@@ -271,6 +271,11 @@ def validate_report(data: dict[str, Any], schema_path: Path) -> None:
             path = ".".join(str(p) for p in err.absolute_path) or "(root)"
             log.error("Validation error at %s: %s", path, err.message)
         sys.exit(1)
+    from validate_report import comment_assessment_errors
+
+    for error in comment_assessment_errors(data):
+        log.error("%s", error)
+        sys.exit(1)
 
 
 # ===================================================================
@@ -530,11 +535,14 @@ def _rl_inline(node: Any) -> str:
         elif name == "br":
             parts.append("<br/>")
         elif name == "a":
-            href = child.get("href", "")
-            safe_href = xml_escape(href, {chr(34): "&quot;"})
-            parts.append(
-                f'<link href="{safe_href}" color="{ACCENT}">{_rl_inline(child)}</link>'
-            )
+            href = _safe_url(child.get("href", ""), allow_mailto=True)
+            if href:
+                safe_href = xml_escape(href, {chr(34): "&quot;"})
+                parts.append(
+                    f'<link href="{safe_href}" color="{ACCENT}">{_rl_inline(child)}</link>'
+                )
+            else:
+                parts.append(_rl_inline(child))
         else:
             # Unknown inline element -- fall through to its children's text.
             parts.append(_rl_inline(child))
@@ -565,6 +573,17 @@ def _rl_block(node: Any) -> list[tuple[str, str]]:
             marker = f"{idx}." if ordered else "&#8226;"
             items.append(("para", f"{marker}&nbsp;{_rl_inline(li)}"))
         return items
+    if name == "table":
+        return [
+            (
+                "para",
+                " | ".join(
+                    _rl_inline(cell)
+                    for cell in row.find_all(["th", "td"], recursive=False)
+                ),
+            )
+            for row in node.find_all("tr")
+        ]
     if name in ("strong", "b", "em", "i", "code", "a", "br") or name is None:
         # Naked inline content at the top level -- wrap as a paragraph.
         return [("para", _rl_inline(node))]
@@ -631,6 +650,85 @@ def render_markdown_to_reportlab(s: str) -> list[tuple[str, str]]:
 # ===================================================================
 # FORMAT: Markdown
 # ===================================================================
+ASSESSMENT_LABELS = {
+    "valid": "Valid",
+    "already_fixed": "Already fixed",
+    "out_of_scope": "Out of scope",
+    "wrong": "Wrong",
+}
+SOURCE_LABELS = {
+    "inline": "Inline comment",
+    "review_body": "Review body",
+    "pr_comment": "PR comment",
+    "reply": "Reply",
+    "status": "Status",
+}
+
+
+def _safe_url(value: Any, *, allow_mailto: bool = False) -> str:
+    """Allow HTTP(S) links, plus email links only for PDF prose."""
+    from urllib.parse import urlsplit
+
+    if not isinstance(value, str) or any(ord(c) <= 32 or ord(c) == 127 for c in value):
+        return ""
+    try:
+        url = urlsplit(value)
+        if url.scheme in {"https", "http"} and url.hostname:
+            return value
+        if allow_mailto and url.scheme == "mailto" and url.path:
+            return value
+        return ""
+    except ValueError:
+        return ""
+
+
+def _comment_assessment_markdown(data: dict[str, Any]) -> list[str]:
+    rows = data.get("comment_assessments", [])
+    if not rows:
+        return []
+    lines = ["## Comment assessments", ""]
+    for row in rows:
+        lines.extend([f"### {row['id']} — {row['reviewer']}", ""])
+        for label, value in [
+            ("Source", SOURCE_LABELS[row["source_kind"]]),
+            ("Source URL", _safe_url(row.get("comment_url"))),
+            ("Location", row.get("location")),
+            ("Code URL", _safe_url(row.get("location_permalink"))),
+            ("Comment", row["description"]),
+            ("Assessment", ASSESSMENT_LABELS.get(row.get("assessment"), "Context")),
+            ("Thread state", row.get("thread_state")),
+            ("Reasoning", row["reasoning"]),
+            ("Evidence", row.get("evidence")),
+            ("Proposed action", row["proposed_action"]),
+            ("Proposed reply", row.get("proposed_reply")),
+            ("Action taken", row.get("action_taken")),
+        ]:
+            if value:
+                if label == "Proposed reply":
+                    fence = "`" * max(
+                        3,
+                        max((len(m[0]) for m in re.finditer(r"`+", value)), default=0)
+                        + 1,
+                    )
+                    lines.extend([f"**{label}:**", "", fence, value, fence, ""])
+                else:
+                    lines.extend([f"**{label}:** {value}", ""])
+    return lines
+
+
+def _html_environment() -> Any:
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(
+        autoescape=True,
+        loader=FileSystemLoader(Path(__file__).resolve().parent / "templates"),
+    )
+    env.filters["sev_label"] = sev_label
+    env.filters["markdown"] = render_markdown_to_html
+    env.filters["safe_url"] = _safe_url
+    return env
+
+
 def render_markdown(data: dict[str, Any]) -> str:
     """Render the report as a Markdown string."""
     _normalize_report(data)
@@ -646,6 +744,8 @@ def render_markdown(data: dict[str, Any]) -> str:
     else:
         lines.append(f"# Code Review Report: {scope}")
     lines.append("")
+
+    lines.extend(_comment_assessment_markdown(data))
 
     # Metadata table
     lines.append("| Field | Value |")
@@ -1014,6 +1114,7 @@ details summary:hover{color:{{ ACCENT }}}
 .finding dd a,.exec-summary a{color:{{ ACCENT }}}
 .exec-summary{margin:.5rem 0}
 .exec-summary p{margin:.4rem 0}
+{% include 'report-theme.css' %}
 {% block extra_css %}{% endblock %}
 </style>
 </head>
@@ -1026,6 +1127,7 @@ details summary:hover{color:{{ ACCENT }}}
 </div>
 
 <nav class="toc no-print" id="toc">
+  {% if comment_assessments %}<a href="#comment-assessments">Comments</a>{% endif %}
   <a href="#summary">Summary</a>
   {% if top_findings %}<a href="#top-findings">Top Findings</a>{% endif %}
   {% for sec in findings %}<a href="#section-{{ loop.index }}">{{ sec.title }}</a>{% endfor %}
@@ -1035,6 +1137,8 @@ details summary:hover{color:{{ ACCENT }}}
 </nav>
 
 <div class="container">
+
+{% include 'comment-assessments.html' %}
 
 <!-- Executive Summary -->
 <h2 id="summary">Executive Summary</h2>
@@ -1931,6 +2035,9 @@ def _build_html_context(
         "matrix": stats.get("severity_category_matrix", []),
         "top_findings": data.get("top_findings", []),
         "findings": findings_sections,
+        "comment_assessments": data.get("comment_assessments", []),
+        "assessment_labels": ASSESSMENT_LABELS,
+        "source_labels": SOURCE_LABELS,
         "dependencies": data.get("dependencies", []),
         "agent_stats": data.get("agent_stats", []),
         "remediation": data.get("remediation", []),
@@ -2036,11 +2143,7 @@ def _mark_safe_values(ctx: dict[str, Any]) -> None:
 
 def render_html(data: dict[str, Any]) -> str:
     """Render the report as a self-contained HTML string."""
-    from jinja2 import Environment
-
-    env = Environment(autoescape=True)
-    env.filters["sev_label"] = sev_label
-    env.filters["markdown"] = render_markdown_to_html
+    env = _html_environment()
     template = env.from_string(_HTML_TEMPLATE)
     ctx = _build_html_context(data, triage=False)
     _mark_safe_values(ctx)
@@ -2057,8 +2160,6 @@ def render_triage(data: dict[str, Any]) -> str:
     Every `.replace()` below carries a post-replace assert so any future
     template drift fails loudly instead of silently dropping UI.
     """
-    from jinja2 import Environment
-
     # Inject triage-specific CSS / JS into the two empty Jinja blocks.
     triage_template = _HTML_TEMPLATE.replace(
         "{% block extra_css %}{% endblock %}",
@@ -2173,9 +2274,7 @@ def render_triage(data: dict[str, Any]) -> str:
         "Template patch failed: triage toolbar anchor (sec.subtitle line) not found"
     )
 
-    env = Environment(autoescape=True)
-    env.filters["sev_label"] = sev_label
-    env.filters["markdown"] = render_markdown_to_html
+    env = _html_environment()
     template = env.from_string(triage_template)
     ctx = _build_html_context(data, triage=True)
     _mark_safe_values(ctx)
@@ -3317,6 +3416,41 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
                 )
             )
         story.append(_hr())
+
+    # Comment-only context must survive an explicitly requested PDF too.
+    for row in data.get("comment_assessments", []):
+        story.append(Paragraph(xml_escape(row["id"]), s["h2"]))
+        for label, value in [
+            ("Author", row["reviewer"]),
+            ("Source", row["comment_url"]),
+            ("Location", row.get("location")),
+            ("Code URL", row.get("location_permalink")),
+            ("Assessment", ASSESSMENT_LABELS.get(row.get("assessment"), "Context")),
+            ("Thread state", row.get("thread_state")),
+            ("Comment", row["description"]),
+            ("Reasoning", row["reasoning"]),
+            ("Evidence", row.get("evidence")),
+            ("Proposed action", row["proposed_action"]),
+            ("Proposed reply", row.get("proposed_reply")),
+            ("Action taken", row.get("action_taken")),
+        ]:
+            if value:
+                story.append(Paragraph(f"<b>{label}</b>", s["body"]))
+                if label in {
+                    "Author",
+                    "Source",
+                    "Location",
+                    "Code URL",
+                    "Proposed reply",
+                }:
+                    literal = xml_escape(value).replace("\n", "<br/>")
+                    url = _safe_url(value)
+                    if url and label in {"Source", "Code URL"}:
+                        safe_url = xml_escape(url, {chr(34): "&quot;"})
+                        literal = f'<link href="{safe_url}">{literal}</link>'
+                    story.append(Paragraph(literal, s["body"]))
+                else:
+                    story.extend(_md_body(value, s["body"]))
 
     # Verdict
     story.append(Spacer(1, 10))

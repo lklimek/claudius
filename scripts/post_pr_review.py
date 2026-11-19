@@ -408,6 +408,14 @@ def validate_report(report: Any) -> list[dict[str, Any]]:
     """
     if not isinstance(report, dict):
         raise ReportError("expected a report object")
+    meta = report.get("metadata")
+    if "comment_assessments" in report or (
+        isinstance(meta, dict) and meta.get("report_type") == "comment_check"
+    ):
+        raise ReportError(
+            "comment assessments require check-pr-comments decisions; "
+            "they cannot be posted as an automatic code-review verdict"
+        )
     missing = [
         key
         for key, kind in (

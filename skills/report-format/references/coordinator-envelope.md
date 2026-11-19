@@ -32,4 +32,4 @@ For complete reports (review-changes, check-pr-comments), wrap finding sections 
 
 ## Schema versions
 
-New reports MUST declare `4.0.0`. Versions 1.x and 2.x are rejected. `3.x` is accepted read-only for in-flight reports — legacy floats migrate to the v4 field names on load, `relevance` is defaulted and must be re-rated (`severity` skill; the validation pass (`review-changes` § Reports and Validation)).
+Ordinary reports declare `4.0.0`; reports using `comment_assessments` declare `4.1.0` per `report-format`. Versions 1.x and 2.x are rejected. `3.x` is accepted read-only for in-flight reports — legacy floats migrate to the v4 field names on load, `relevance` is defaulted and must be re-rated (`severity` skill; the validation pass (`review-changes` § Reports and Validation)).

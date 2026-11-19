@@ -194,6 +194,7 @@ def test_minimal_round_trips_through_all_renderers(tmp_path):
 def test_v32_merge_class_round_trips_through_pdf(tmp_path):
     import json as _json
 
+    # TODO: Run PDF text assertions on hosts with the optional pypdf dependency.
     pypdf = pytest.importorskip("pypdf")
     fixture = (
         Path(__file__).resolve().parent / "fixtures" / "reports" / "v4-merge-class.json"

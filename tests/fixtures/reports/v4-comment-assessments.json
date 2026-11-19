@@ -1,0 +1,70 @@
+{
+  "schema_version": "4.1.0",
+  "metadata": {
+    "project": "example/repo",
+    "date": "2026-11-19",
+    "scope": "PR #42 comment verification",
+    "report_type": "comment_check",
+    "pr_number": 42
+  },
+  "executive_summary": {"overall_assessment": "Six comments assessed; one concern remains."},
+  "summary_statistics": {"total_findings": 1, "severity_counts": {"MEDIUM": 1}},
+  "findings": [{
+    "title": "PR Comment Verification",
+    "category": "pr_comments",
+    "findings": [{
+      "id": "CMT-001",
+      "title": "Validate the input before saving",
+      "location": "src/input.py:12",
+      "description": "Invalid input can be stored.",
+      "recommendation": "Validate before writing.",
+      "likelihood": 0.5,
+      "impact": 0.5,
+      "relevance": 0.8
+    }]
+  }],
+  "comment_assessments": [
+    {
+      "id": "CMT-001", "finding_id": "CMT-001",
+      "reviewer": "review-bot", "author_type": "bot", "source_kind": "inline",
+      "comment_id": 101, "comment_url": "https://github.com/example/repo/pull/42#discussion_r101",
+      "thread_id": "PRRT_example", "thread_state": "resolved",
+      "location": "src/input.py:12", "location_permalink": "https://github.com/example/repo/blob/abc/src/input.py#L12",
+      "description": "Validate input before saving.", "assessment": "valid",
+      "reasoning": "The write still accepts invalid input.", "evidence": "The caller passes unchecked data.\n\n| Caller | Input |\n|---|---|\n| save | unchecked |",
+      "proposed_action": "Fix the validation.", "proposed_reply": "Validation will be added."
+    },
+    {
+      "id": "CMT-002", "reviewer": "alice", "author_type": "human", "source_kind": "review_body",
+      "comment_url": "https://github.com/example/repo/pull/42#pullrequestreview-102",
+      "description": "Avoid a duplicate request.", "assessment": "already_fixed",
+      "reasoning": "The request is now cached.", "proposed_action": "Explain the existing fix.",
+      "action_taken": "Recorded as complete"
+    },
+    {
+      "id": "CMT-003", "reviewer": "bob", "source_kind": "pr_comment", "comment_id": "IC_example",
+      "comment_url": "https://github.com/example/repo/pull/42#issuecomment-103",
+      "description": "Replace the storage layer.", "assessment": "out_of_scope",
+      "reasoning": "The migration belongs to another PR.", "proposed_action": "Refer to the tracked work.",
+      "proposed_reply": "https://github.com/example/repo/issues/9"
+    },
+    {
+      "id": "CMT-004", "reviewer": "charlie", "source_kind": "inline", "thread_state": "unresolved",
+      "comment_url": "https://github.com/example/repo/pull/42#discussion_r104",
+      "description": "Reject empty values.", "assessment": "wrong",
+      "reasoning": "Empty values are explicitly supported.", "proposed_action": "Explain the documented contract."
+    },
+    {
+      "id": "CMT-005", "reviewer": "alice", "source_kind": "reply",
+      "comment_url": "https://github.com/example/repo/pull/42#discussion_r105",
+      "description": "Thanks for the clarification.",
+      "reasoning": "This is an acknowledgement.", "proposed_action": "No action."
+    },
+    {
+      "id": "CMT-006", "reviewer": "ci-bot", "source_kind": "status",
+      "comment_url": "https://github.com/example/repo/pull/42#issuecomment-106",
+      "description": "Checks completed.",
+      "reasoning": "This reports a completed check.", "proposed_action": "No action."
+    }
+  ]
+}

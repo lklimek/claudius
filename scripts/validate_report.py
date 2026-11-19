@@ -53,7 +53,7 @@ _AXIS_SHARE_THRESHOLD = 0.8
 _RATED_AXES = ("likelihood", "impact", "relevance")
 
 # Schema versions that define merge_class / intent_basis.
-_MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0")
+_MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0", "4.1.0")
 _MERGE_CLASS_VERSIONS_TEXT = " or ".join(_MERGE_CLASS_SCHEMA_VERSIONS)
 
 
@@ -206,6 +206,25 @@ def _mentioned_gate(text: str) -> str | None:
         if re.search(rf"\b{re.escape(gate)}\b", text):
             return gate
     return None
+
+
+def comment_assessment_errors(report: dict) -> list[str]:
+    """Check row identity and links to the canonical scored findings."""
+    findings = {f["id"] for f in _iter_findings(report)}
+    seen = set()
+    errors = []
+    for row in report.get("comment_assessments", []):
+        rid = row["id"]
+        if rid in seen:
+            errors.append(f"Duplicate comment assessment ID: {rid}")
+        seen.add(rid)
+        if row.get("finding_id") and row["finding_id"] not in findings:
+            errors.append(f"{rid}: unknown finding_id {row['finding_id']}")
+        if row.get("finding_id") and row["finding_id"] != rid:
+            errors.append(f"{rid}: assessment and finding_id must share the same ID")
+        if rid in findings and row.get("finding_id") != rid:
+            errors.append(f"{rid}: scored finding ID requires an explicit finding_id")
+    return errors
 
 
 def check_consistency(report: dict) -> list[str]:
@@ -396,6 +415,12 @@ def main() -> int:
         checker = None
     validator = validator_cls(schema, format_checker=checker)
     errors = sorted(validator.iter_errors(report), key=lambda e: list(e.absolute_path))
+
+    if not errors and not args.producer:
+        row_errors = comment_assessment_errors(report)
+        if row_errors:
+            print("\n".join(row_errors), file=sys.stderr)
+            return 1
 
     if not errors:
         # Consistency gate: advisory only — never changes the exit code.

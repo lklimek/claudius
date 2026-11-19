@@ -1,12 +1,20 @@
 ---
 name: report-format
-description: "This skill should be used when emitting or consuming review findings. It defines the finding JSON shape (schema v4), the fields producers must and must not emit, and the ID prefixes, for every finding-producing agent."
+description: "This skill should be used when emitting or consuming review findings, generating comment-assessment reports, or saving a requested table as a file. It defines the shared review schema and file-output defaults."
 allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *)
 ---
 
 # Review Report Format
 
-Unified format for all review findings. Schema: `schemas/review-report.schema.json`; new reports declare `schema_version` `4.0.0`.
+Unified format for all review findings. Schema: `schemas/review-report.schema.json`; ordinary reports declare `4.0.0`; comment-assessment reports declare `4.1.0`.
+
+Resolve script paths from the loaded skill: Claude substitutes `${CLAUDE_PLUGIN_ROOT}`; Codex uses the installed absolute script paths in `allowed-tools`. Otherwise locate the plugin tree containing `scripts/` and `schemas/` (Codex commonly `~/.codex/claudius`); the installed skills directory and project checkout need not be that tree. Never pass unresolved placeholders to the shell.
+
+## Table files and comment assessments
+
+Keep ordinary table requests in chat. When asked for a table **as a file**, default to one self-contained HTML file with sticky headers, search and applicable filters; explicit format/layout requests win. Do not additionally export Markdown/CSV. Generic tables need no review JSON; reuse presentation where useful without forcing them into the finding model.
+
+For `check-pr-comments` reports and comment tables, read [references/comment-assessments.md](references/comment-assessments.md). It extends this envelope without changing scored findings or validation-owned `ai_verdict`.
 
 ## Finding Structure
 
