@@ -28,7 +28,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh <owner/repo> <pr>           # 
 gh pr view <pr> -R <owner/repo> --json comments     # PR-level comments
 ```
 
-Carry `isResolved` forward per thread — step 3 skips already-resolved ones. The wrappers paginate to the end.
+All four are mandatory — review bodies and PR comments can carry requests with no inline thread. Carry `isResolved` forward per thread — step 3 skips already-resolved ones. The wrappers paginate to the end.
 
 ## 2. Checkout and Pull the PR Branch
 
@@ -38,17 +38,19 @@ Skip when `git rev-parse HEAD` already equals the PR head (e.g. a CI checkout). 
 
 **Trust GitHub's resolved status — do not re-verify already-resolved threads.** Classify any thread fetched with `isResolved: true` as **Resolved** and skip the rest of this section for it: no re-reading code, no call-tree walk, no second-guessing a prior resolution. Verify only `isResolved: false` threads.
 
-For every unresolved inline comment, read the code at the referenced location (applying `coding-best-practices` Cross-Cutting Rules to the change) and **verify the identified issue is actually fixed** — not just that the code changed:
+For every unresolved inline comment and review-body/PR-comment item (below), read the code at the referenced location (applying `coding-best-practices` Cross-Cutting Rules to the change) and **verify the identified issue is actually fixed** — not just that the code changed:
 
 - **Verify state before resolving — broad instructions are not authorization** (`coding-best-practices` "Verify facts before acting on broad instructions"). Never mark a thread resolved on a blanket "just resolve everything" or a commit message that *claims* a fix; unverifiable against current code → `Unresolved` with an explicit "needs verification" recommendation. Governs threads resolved this session only — never reopens threads already resolved on GitHub.
 - Semantic satisfaction, not syntactic; every sub-item independently — resolved only when **all** are addressed; the intended end-user/developer experience, not just technical correctness.
 - **Trace touched functions**: for functions added, removed, or changed in the resolution commits (body or signature), apply [execution-paths.md](../review-changes/references/execution-paths.md) to the comment's affected scope. Check every affected call site; a caller still depending on the old contract turns "fixed" into Unresolved with a CALL-tagged follow-up. Unresolved coverage must be reported, not treated as proof of a fix.
 
-**Pre-analysis** — for every unresolved thread and every review-body finding without a thread:
+**Review-body and PR-comment items** — first-class rows, never only context. Split into itemised requests the non-empty bodies of: every `CHANGES_REQUESTED` review not superseded by a later `APPROVED` from its author; each human author's latest review; human PR-level comments; bot bodies only for findings with no matching thread. Each item gets its own ID and is verified like an unresolved thread. With no `isResolved`, an item is **Resolved** only when verified fixed in current code, or when a later reply in the PR by its author or a maintainer explicitly withdraws or settles it.
+
+**Pre-analysis** — for every unresolved thread and every unresolved review-body/PR-comment item:
 
 - **Handled elsewhere?** Search shallowly (`--limit 10`) by keywords and paths: local branches and worktrees (`git for-each-ref`, `git worktree list`; uncommitted WIP via `git -C <worktree> status --short`, deliberately ungranted — a `git -C *` rule would also admit `-c <config>`), stacked/child and other open PRs (`gh pr list`, `gh search prs`), issues (`gh search issues`). Cite `#N`, `branch@SHA`, or `uncommitted WIP in <worktree>`.
 - **Earlier decisions**: honour decisions in the reply chain (e.g. "moved to #N", "deferred by maintainer").
-- **Duplicates**: merge threads about one problem into one ID, keeping all thread IDs.
+- **Duplicates**: merge threads and items about one problem into one ID, keeping every thread ID and source link.
 
 **Scope**: Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` § 5 (skip if loaded) and classify every `Unresolved` comment **in scope** or **out of scope** per its PR scope. A reviewer's request is not PR intent until the user or a human PR author accepts it; an out-of-scope comment is not fixed in this PR.
 
@@ -60,16 +62,17 @@ Both modes end with this table (fix mode: after step 8). Above it, one line: `PR
 
 IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](references/structured-report.md) § Finding additions, rough severity standing in for floats when no report exists) and are fixed once shown: a later report and `triage-findings` reuse them, never re-sort. A requested report (steps 5-7) is built before the table; in fix mode, after step 8. Keep cells ≤ ~15 words:
 
-| ID | Problem | Scope | Elsewhere | Opinion | Recommendation |
-|----|---------|-------|-----------|---------|----------------|
+| ID | Source | Problem | Scope | Elsewhere | Opinion | Recommendation |
+|----|--------|---------|-------|-----------|---------|----------------|
 
+- **Source**: `thread` / `review-body` / `PR comment`.
 - **Problem**: plain language, concrete impact (who is hurt, how).
 - **Scope**: `in`/`out` (step 3) plus a short reason citing the PR's stated goal; if another PR fits better, `#M: <its scope>`.
 - **Elsewhere**: pre-analysis hit, or `—`.
 - **Opinion**: valid or not, rough severity, disagreement with the reviewer, `bot`/`human`; flag a tripped G-FUNDS/G-SECRET/G-CRYPTO/G-DATA.
 - **Recommendation**: `resolve: fixed in <sha>` (verified this session) / `fix here` / `reject: <reason>` / `follow-up PR` (new, or `#M`) / `TODO` / `handled in #N`. Fix mode: the action taken.
 
-Below the table: one line per merged ID listing its thread links, then `Resolved: N (CMT-…)` for threads resolved at fetch, instead of rows. Table mode ends the turn with "Decisions per ID?".
+Below the table: one line per merged ID listing its thread/source links, then `Resolved: N (CMT-…)` for threads resolved at fetch and items settled by a reply, instead of rows. Table mode ends the turn with "Decisions per ID?".
 
 A user decision rejecting or re-rating a comment as unimportant (or more important) at project scale is a calibration example: save it per `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/system-rating.md` § Calibration memory.
 
@@ -142,6 +145,10 @@ Apply each decision exactly; never extend it to IDs the user did not name. A per
 | `reject` | Reply with the maintainer's reason. Resolve bot threads; leave human threads open unless the decision says resolve (e.g. "CMT-002 reject, resolve"). |
 
 Create GitHub issues only when the user asks.
+
+**Review-body and PR-comment items** follow the same matrix and decisions, but have no thread to reply to or resolve: post one PR-level comment per source review/comment listing, per item, the reply text — or "done" where the row only resolves; omit no-reply items.
+
+**Re-review gate**: never request or report a `CHANGES_REQUESTED` reviewer's re-review as due until every item of their latest such review, threads and body items alike, is Fixed (verified this session), Resolved, or closed by a user decision; otherwise list what remains.
 
 **Posting replies:**
 - Inline thread replies: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh <owner/repo> <pr> <comment_id> <body_file>` — `comment_id` = databaseId of the thread's first comment; body read from a Markdown file (no inline form); retries once via `ghsudo` on 403; outputs the reply's html_url
