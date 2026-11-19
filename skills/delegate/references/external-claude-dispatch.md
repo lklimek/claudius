@@ -4,7 +4,7 @@ Use when Anthropic is selected by `delegate` § Review Providers and no eligible
 
 ## Read-only CLI route
 
-Prepare a prompt file and an MCP config containing `{"mcpServers": {}}` in the review scratch directory. Supply the scope/head, diff and source paths, requirements, known authorship, relevant CI evidence, absolute role-skill paths and producer contract. Identify a leaf reviewer; prohibit peer dispatch and GitHub/production writes. Ask for a JSON object containing the producer `findings` array and `coverage` Markdown in its final response. Tools below permit source inspection; the coordinator supplies command/CI evidence and owns validation.
+Prepare a prompt file and an MCP config containing `{"mcpServers": {}}` in the review scratch directory. Supply the scope/head, diff and source paths, requirements, known authorship, relevant CI evidence, absolute role-skill paths and output contract. Identify a leaf reviewer; prohibit peer dispatch and GitHub/production writes. For review findings, request the producer contract's `findings` array and `coverage` Markdown as JSON; for comment verification, request the caller's per-item verdicts, evidence and coverage instead. Tools below permit source inspection; the coordinator supplies command/CI evidence and owns validation.
 
 Run from the reviewed checkout, choosing an available strong model (e.g. `opus`) and high effort. Feed the prompt on stdin and capture stdout/stderr with the host's process tool; shell equivalent:
 
@@ -23,4 +23,4 @@ This route has no Bash, Write, Edit, Agent or MCP tools. If required role capabi
 
 Track the returned process/session ID and collect completion in the same turn, also in headless mode. Use bounded waits; inspect that process's stderr/status for failures. A successful CLI exit alone is insufficient: reject error results, malformed output, missing coverage, or a response that did not perform the assigned pass.
 
-Parse the CLI JSON envelope's `result` into findings and coverage. The coordinator writes the assigned producer files, runs `consolidate_reports.py gate`, and records actual provider/model and reviewed scope. Report unavailable/failed routes through the provider policy; never count them as completed passes. Do not end with the reviewer still running.
+Parse the CLI JSON envelope's `result` using the caller's output contract. The coordinator writes the assigned files and records actual provider/model and reviewed scope; run `consolidate_reports.py gate` only for review-finding producers, not per-item comment verdicts. Report unavailable/failed routes through the provider policy; never count them as completed passes. Do not end with the reviewer still running.

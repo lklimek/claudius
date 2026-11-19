@@ -46,7 +46,7 @@ node "$CODEX_ROOT/scripts/codex-companion.mjs" task \
   --model gpt-6-astra --effort high
 ```
 
-**Read-only reviews**: omit `--write`, use the selected review model instead of the implementation default, and ask for findings/coverage in the job result; the coordinator writes their producer files and runs `gate`. Never grant production writes just to save reports. Collect the terminal job result in the same turn, including in headless runs; `--background` does not authorize leaving it uncollected. New tests or other writes require a separate isolated worktree per `grand-admiral`.
+**Read-only reviews**: omit `--write`, use the selected review model instead of the implementation default, and ask for findings/coverage or the caller's per-item comment verdicts in the job result. The coordinator writes the assigned files and runs `gate` only for review-finding producers. Never grant production writes just to save reports. Collect the terminal job result in the same turn, including in headless runs; `--background` does not authorize leaving it uncollected. New tests or other writes require a separate isolated worktree per `grand-admiral`.
 
 Non-review security task: swap the model flag per § Routing (same shape; Astra fallback on unknown-model/access-gate failure).
 
