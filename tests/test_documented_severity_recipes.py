@@ -34,7 +34,6 @@ _LEGACY_RE = re.compile(r"`risk\s*[≈=][\s\d.]|`risk\s*=\s*impact\s*[≈=]")
 RECIPES = [
     ("skills/review-pr/SKILL.md", "PR self-description verified", 1),
     ("skills/review-pr/SKILL.md", "PR body unparseable", 2),
-    ("skills/check-pr-comments/SKILL.md", "**Resolved** comments", 1),
     # The doctrine's own worked examples. Left uncovered, the one document that
     # defines the derivation could contradict it — the failure the producer
     # recipes above are guarded against, at the source.

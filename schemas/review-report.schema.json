@@ -9,8 +9,13 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["3.0.0", "3.1.0", "3.2.0", "4.0.0"],
-      "description": "Schema version (SemVer). Renderers check this for compatibility. 4.0.0 is the only version emitted; 3.x is accepted read-only for in-flight reports, whose findings are migrated to the 4.0.0 float names on load."
+      "enum": ["3.0.0", "3.1.0", "3.2.0", "4.0.0", "4.1.0"],
+      "description": "4.1.0 adds optional comment_assessments; ordinary findings retain the 4.0.0 contract. 3.x is accepted read-only after float migration."
+    },
+    "comment_assessments": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/comment_assessment"},
+      "description": "Comment-check rows; actual concerns reference scored findings, while replies and status messages need no risk scores."
     },
     "metadata": {
       "type": "object",
@@ -227,7 +232,51 @@
       }
     }
   },
+  "allOf": [{
+    "if": {"required": ["comment_assessments"]},
+    "then": {
+      "properties": {
+        "schema_version": {"const": "4.1.0"},
+        "metadata": {"required": ["report_type"], "properties": {"report_type": {"const": "comment_check"}}}
+      }
+    }
+  }],
   "$defs": {
+    "comment_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reviewer", "source_kind", "comment_url", "description", "reasoning", "proposed_action"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^CMT-\\d{3}$"},
+        "finding_id": {"type": "string", "pattern": "^CMT-\\d{3}$"},
+        "reviewer": {"type": "string", "minLength": 1},
+        "author_type": {"enum": ["bot", "human"]},
+        "source_kind": {"enum": ["inline", "review_body", "pr_comment", "reply", "status"]},
+        "comment_id": {"type": ["integer", "string"], "minimum": 1, "minLength": 1},
+        "comment_url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+        "thread_id": {"type": "string", "minLength": 1},
+        "thread_state": {"enum": ["resolved", "unresolved", "unknown"]},
+        "location": {"type": "string", "minLength": 1},
+        "location_permalink": {"type": "string", "format": "uri", "pattern": "^https?://"},
+        "description": {"type": "string", "minLength": 1},
+        "assessment": {"enum": ["valid", "already_fixed", "out_of_scope", "wrong"]},
+        "reasoning": {"type": "string", "minLength": 1},
+        "evidence": {"type": "string"},
+        "proposed_action": {"type": "string", "minLength": 1},
+        "proposed_reply": {"type": "string"},
+        "action_taken": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"source_kind": {"enum": ["inline", "review_body", "pr_comment"]}}},
+          "then": {"required": ["assessment"]}
+        },
+        {
+          "if": {"required": ["assessment"], "properties": {"assessment": {"const": "valid"}}},
+          "then": {"required": ["finding_id"]}
+        }
+      ]
+    },
     "severity": {
       "type": "integer",
       "minimum": 1,

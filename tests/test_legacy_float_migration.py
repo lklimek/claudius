@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -415,10 +416,12 @@ class TestRendererApiPathMigrates:
         assert "likelihood=1.00" in markdown
         assert "(INFO)" not in markdown
 
-    def test_html_renders_the_v4_band_and_chips(self):
+    def test_html_renders_the_v4_band_and_score_tooltip(self):
         html = grr.render_html(self._v3_report())
         assert 'data-severity="5"' in html
-        assert "L 1.00" in html
+        badge = BeautifulSoup(html, "html.parser").select_one(".finding .badge[title]")
+        assert badge is not None
+        assert "likelihood=1.00" in badge["title"]
 
     def test_triage_renders_the_v4_band(self):
         assert 'data-severity="5"' in grr.render_triage(self._v3_report())

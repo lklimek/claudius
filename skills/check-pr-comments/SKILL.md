@@ -8,6 +8,8 @@ allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr comment *
 
 Workflow for checking/triaging/verifying existing PR review comments.
 
+On Codex/other hosts, resolve commands from the installed absolute script paths in `allowed-tools`, or locate the plugin tree containing `scripts/` and `schemas/` (Codex commonly `~/.codex/claudius`). Resolve relative references from the loaded skill; never pass unresolved Claude placeholders to a shell.
+
 ## 0. Choose Mode
 
 Ask once per invocation (AskUserQuestion; elsewhere a plain question):
@@ -28,7 +30,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh <owner/repo> <pr>           # 
 gh pr view <pr> -R <owner/repo> --json comments     # PR-level comments
 ```
 
-All four are mandatory — review bodies and PR comments can carry requests with no inline thread. Carry `isResolved` forward per thread — step 3 skips already-resolved ones. The wrappers paginate to the end.
+All four are mandatory — review bodies and PR comments can carry requests with no inline thread. Carry `isResolved` forward per thread — step 3 skips already-resolved ones in chat-only checks; report/table-file checks assess them independently. The wrappers paginate to the end.
 
 ## 2. Checkout and Pull the PR Branch
 
@@ -36,7 +38,7 @@ Skip when `git rev-parse HEAD` already equals the PR head (e.g. a CI checkout). 
 
 ## 3. Verify Each Comment Against Current Code
 
-**Trust GitHub's resolved status — do not re-verify already-resolved threads.** Classify any thread fetched with `isResolved: true` as **Resolved** and skip the rest of this section for it: no re-reading code, no call-tree walk, no second-guessing a prior resolution. Verify only `isResolved: false` threads.
+**Chat-only checks trust GitHub's resolved status:** classify `isResolved: true` threads as **Resolved** and skip verification. For a requested report/table file, assess their current code too, keeping GitHub `thread_state` independent from the assessment per `report-format`. Never reopen or re-resolve an already-resolved thread automatically.
 
 For every unresolved inline comment and review-body/PR-comment item (below), read the code at the referenced location (applying `coding-best-practices` Cross-Cutting Rules to the change) and **verify the identified issue is actually fixed** — not just that the code changed:
 
@@ -72,7 +74,7 @@ IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](refer
 - **Opinion**: valid or not, rough severity, disagreement with the reviewer, `bot`/`human`; flag a tripped G-FUNDS/G-SECRET/G-CRYPTO/G-DATA.
 - **Recommendation**: `resolve: fixed in <sha>` (verified this session) / `fix here` / `reject: <reason>` / `follow-up PR` (new, or `#M`) / `TODO` / `handled in #N`. Fix mode: the action taken.
 
-Below the table: one line per merged ID listing its thread/source links, then `Resolved: N (CMT-…)` for threads resolved at fetch and items settled by a reply, instead of rows. Table mode ends the turn with "Decisions per ID?".
+Below the table: one line per merged ID listing its thread/source links. Chat-only checks summarize threads resolved at fetch and items settled by a reply as `Resolved: N (CMT-…)` instead of rows. Report/table-file checks retain their assessment rows, including any remaining concern in a resolved thread. Table mode ends the turn with "Decisions per ID?".
 
 A user decision rejecting or re-rating a comment as unimportant (or more important) at project scale is a calibration example: save it per `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/system-rating.md` § Calibration memory.
 
@@ -80,13 +82,13 @@ A user decision rejecting or re-rating a comment as unimportant (or more importa
 
 ## Optional: Structured Report (on request only)
 
-Steps 5-7 run only on explicit request (e.g. "generate report", "with report"). Step 8 applies to both flows.
+Steps 5-7 run on an explicit report request or a request to save the comment table as a file. Ordinary tables stay in chat. File output defaults to one self-contained HTML; explicit format/layout requests win. Load `report-format` and its [comment assessment contract](../report-format/references/comment-assessments.md). Step 8 applies to both flows; file generation itself authorizes no GitHub actions.
 
 ## 5. Build Structured Report JSON
 
 The report has the same structure as a `review-changes` report — one definition, not a parallel one: finding shape per the `report-format` skill (load it), envelope per its [coordinator-envelope.md](../report-format/references/coordinator-envelope.md). Floats and `merge_class` are this skill's to assign, so first Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` and `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (skip what this session already loaded). [references/structured-report.md](references/structured-report.md) lists only what a comment check adds (comment fields, title, permalink and scoring rules). Recipe pinned here:
 
-- **Resolved** comments: `likelihood=0.0, impact=0.0, relevance=0.0` — the Informational floor (`claudius:severity` § 3), `verdict: "RESOLVED"`. `recommendation` describes what was done — for threads trusted via `isResolved: true` (step 3), say it was already resolved on GitHub rather than inventing an unverified fix. The coordinator derives `severity = 1` (INFO).
+- Build `comment_assessments` for requests and relevant replies/status messages. Verify before assigning `already_fixed`; GitHub resolution alone does not prove a fix. Actual remaining defects go into scored `findings`, linked by `finding_id`; keep assessment and thread state separate. Record proposals before step 8; set `action_taken` only after execution. For already tracked topics, the proposed reply contains only the public PR/issue URL.
 
 ## 6. Validate Report
 
@@ -99,10 +101,10 @@ If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid d
 ## 7. Render and Present
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py report.json --format md
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py report.json --format html
 ```
 
-Present the rendered markdown (optionally `--format html`). The user can also run `triage-findings report.json` for interactive triage of unresolved comments.
+Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can also run `triage-findings report.json` for interactive triage of scored concerns; unscored context rows remain visible as evidence.
 
 ## 8. Resolve and Reply to Threads
 

@@ -271,6 +271,11 @@ def validate_report(data: dict[str, Any], schema_path: Path) -> None:
             path = ".".join(str(p) for p in err.absolute_path) or "(root)"
             log.error("Validation error at %s: %s", path, err.message)
         sys.exit(1)
+    from validate_report import comment_assessment_errors
+
+    for error in comment_assessment_errors(data):
+        log.error("%s", error)
+        sys.exit(1)
 
 
 # ===================================================================
@@ -309,17 +314,16 @@ def _location_link(finding: dict[str, Any]) -> dict[str, Any]:
 
 
 def _severity_tooltip(finding: dict[str, Any]) -> str:
-    """Return ``"overall=.. likelihood=.. impact=.. relevance=.."`` when all
-    floats present, else ``""``. The numeric tooltip surfaces the breakdown for
-    the HTML severity badge (no hover affordance in Markdown/PDF)."""
-    keys = ("overall_severity", "likelihood", "impact", "relevance")
-    if not all(isinstance(finding.get(k), (int, float)) for k in keys):
-        return ""
-    return (
-        f"overall={finding['overall_severity']:.2f} "
-        f"likelihood={finding['likelihood']:.2f} "
-        f"impact={finding['impact']:.2f} "
-        f"relevance={finding['relevance']:.2f}"
+    """Return the available numeric score dimensions for a severity tooltip."""
+    return " ".join(
+        f"{label}={finding[key]:.2f}"
+        for label, key in [
+            ("overall", "overall_severity"),
+            ("likelihood", "likelihood"),
+            ("impact", "impact"),
+            ("relevance", "relevance"),
+        ]
+        if isinstance(finding.get(key), (int, float))
     )
 
 
@@ -530,11 +534,14 @@ def _rl_inline(node: Any) -> str:
         elif name == "br":
             parts.append("<br/>")
         elif name == "a":
-            href = child.get("href", "")
-            safe_href = xml_escape(href, {chr(34): "&quot;"})
-            parts.append(
-                f'<link href="{safe_href}" color="{ACCENT}">{_rl_inline(child)}</link>'
-            )
+            href = _safe_url(child.get("href", ""), allow_mailto=True)
+            if href:
+                safe_href = xml_escape(href, {chr(34): "&quot;"})
+                parts.append(
+                    f'<link href="{safe_href}" color="{ACCENT}">{_rl_inline(child)}</link>'
+                )
+            else:
+                parts.append(_rl_inline(child))
         else:
             # Unknown inline element -- fall through to its children's text.
             parts.append(_rl_inline(child))
@@ -565,6 +572,17 @@ def _rl_block(node: Any) -> list[tuple[str, str]]:
             marker = f"{idx}." if ordered else "&#8226;"
             items.append(("para", f"{marker}&nbsp;{_rl_inline(li)}"))
         return items
+    if name == "table":
+        return [
+            (
+                "para",
+                " | ".join(
+                    _rl_inline(cell)
+                    for cell in row.find_all(["th", "td"], recursive=False)
+                ),
+            )
+            for row in node.find_all("tr")
+        ]
     if name in ("strong", "b", "em", "i", "code", "a", "br") or name is None:
         # Naked inline content at the top level -- wrap as a paragraph.
         return [("para", _rl_inline(node))]
@@ -631,6 +649,192 @@ def render_markdown_to_reportlab(s: str) -> list[tuple[str, str]]:
 # ===================================================================
 # FORMAT: Markdown
 # ===================================================================
+ASSESSMENT_LABELS = {
+    "valid": "Valid",
+    "already_fixed": "Already fixed",
+    "out_of_scope": "Out of scope",
+    "wrong": "Wrong",
+}
+SOURCE_LABELS = {
+    "inline": "Inline comment",
+    "review_body": "Review body",
+    "pr_comment": "PR comment",
+    "reply": "Reply",
+    "status": "Status",
+}
+
+
+def _safe_url(value: Any, *, allow_mailto: bool = False) -> str:
+    """Allow HTTP(S) links, plus email links only for PDF prose."""
+    from urllib.parse import urlsplit
+
+    if not isinstance(value, str) or any(ord(c) <= 32 or ord(c) == 127 for c in value):
+        return ""
+    try:
+        url = urlsplit(value)
+        if url.scheme in {"https", "http"} and url.hostname:
+            return value
+        if allow_mailto and url.scheme == "mailto" and url.path:
+            return value
+        return ""
+    except ValueError:
+        return ""
+
+
+def _comment_assessment_markdown(data: dict[str, Any]) -> list[str]:
+    rows = data.get("comment_assessments", [])
+    if not rows:
+        return []
+    lines = ["## Comment assessments", ""]
+    for row in rows:
+        lines.extend([f"### {row['id']} — {row['reviewer']}", ""])
+        for label, value in [
+            ("Source", SOURCE_LABELS[row["source_kind"]]),
+            ("Source URL", _safe_url(row.get("comment_url"))),
+            ("Location", row.get("location")),
+            ("Code URL", _safe_url(row.get("location_permalink"))),
+            ("Comment", row["description"]),
+            ("Assessment", ASSESSMENT_LABELS.get(row.get("assessment"), "Context")),
+            ("Thread state", row.get("thread_state")),
+            ("Reasoning", row["reasoning"]),
+            ("Evidence", row.get("evidence")),
+            ("Proposed action", row["proposed_action"]),
+            ("Proposed reply", row.get("proposed_reply")),
+            ("Action taken", row.get("action_taken")),
+        ]:
+            if value:
+                if label == "Proposed reply":
+                    fence = "`" * max(
+                        3,
+                        max((len(m[0]) for m in re.finditer(r"`+", value)), default=0)
+                        + 1,
+                    )
+                    lines.extend([f"**{label}:**", "", fence, value, fence, ""])
+                else:
+                    lines.extend([f"**{label}:** {value}", ""])
+    return lines
+
+
+def _normalize_html_whitespace(root: Any) -> None:
+    """Collapse HTML whitespace across inline nodes while preserving pre blocks."""
+    from bs4 import NavigableString
+
+    blocks = {
+        "p",
+        "div",
+        "blockquote",
+        "pre",
+        "li",
+        "ul",
+        "ol",
+        "table",
+        "thead",
+        "tbody",
+        "tr",
+        "td",
+        "th",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "br",
+        "hr",
+    }
+    context = None
+    previous_space = True
+    last = None
+
+    def trim_tail() -> None:
+        nonlocal last
+        if last is not None:
+            last.replace_with(NavigableString(str(last).rstrip(" ")))
+            last = None
+
+    for node in list(root.find_all(string=True)):
+        if node.find_parent("pre"):
+            trim_tail()
+            context, previous_space = None, True
+            continue
+        parent = node.find_parent(list(blocks)) or root
+        if parent is not context:
+            trim_tail()
+            context, previous_space = parent, True
+        text = re.sub(r"[ \t\r\n\f]+", " ", str(node))
+        if previous_space:
+            text = text.lstrip(" ")
+        if text:
+            previous_space = text.endswith(" ")
+        replacement = NavigableString(text)
+        node.replace_with(replacement)
+        if text:
+            last = replacement
+    trim_tail()
+
+
+_TEXT_PREVIEW_LIMIT = 600
+
+
+def _fold_long_html(
+    rendered: Any, *, inline: bool = False, preserve_whitespace: bool = False
+) -> Any:
+    """Shorten text nodes in already-safe HTML; retain the complete fragment."""
+    from bs4 import BeautifulSoup, NavigableString
+    from markupsafe import Markup
+
+    if not isinstance(rendered, Markup):
+        rendered = Markup.escape(rendered)
+    tag = "span" if inline else "div"
+    preview = BeautifulSoup(f"<{tag}>{rendered}</{tag}>", "html.parser").find(tag)
+    if not preserve_whitespace:
+        _normalize_html_whitespace(preview)
+    if len(preview.get_text()) <= _TEXT_PREVIEW_LIMIT:
+        return rendered
+    remaining = _TEXT_PREVIEW_LIMIT
+
+    pending = list(reversed(list(preview.children)))
+    while pending:
+        child = pending.pop()
+        if remaining == 0:
+            child.extract()
+        elif isinstance(child, NavigableString):
+            text = str(child)
+            child.replace_with(NavigableString(text[:remaining]))
+            remaining = max(0, remaining - len(text))
+        else:
+            pending.extend(reversed(list(child.children)))
+    preview.append(NavigableString("…"))
+    return Markup(
+        f'<{tag} class="folded-text"><{tag} class="text-preview">'
+        + str(preview)
+        + f'</{tag}><{tag} class="text-full" hidden>'
+        + str(rendered)
+        + f'</{tag}><button type="button" class="text-toggle" aria-expanded="false">'
+        f"Show all</button></{tag}>"
+    )
+
+
+def _html_environment() -> Any:
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(
+        autoescape=True,
+        loader=FileSystemLoader(Path(__file__).resolve().parent / "templates"),
+    )
+    env.filters["sev_label"] = sev_label
+    env.filters["markdown"] = lambda text: _fold_long_html(
+        render_markdown_to_html(text)
+    )
+    env.filters["fold"] = _fold_long_html
+    env.filters["fold_inline"] = functools.partial(_fold_long_html, inline=True)
+    env.filters["fold_literal"] = functools.partial(
+        _fold_long_html, preserve_whitespace=True
+    )
+    env.filters["safe_url"] = _safe_url
+    return env
+
+
 def render_markdown(data: dict[str, Any]) -> str:
     """Render the report as a Markdown string."""
     _normalize_report(data)
@@ -646,6 +850,8 @@ def render_markdown(data: dict[str, Any]) -> str:
     else:
         lines.append(f"# Code Review Report: {scope}")
     lines.append("")
+
+    lines.extend(_comment_assessment_markdown(data))
 
     # Metadata table
     lines.append("| Field | Value |")
@@ -1014,21 +1220,23 @@ details summary:hover{color:{{ ACCENT }}}
 .finding dd a,.exec-summary a{color:{{ ACCENT }}}
 .exec-summary{margin:.5rem 0}
 .exec-summary p{margin:.4rem 0}
+{% include 'report-theme.css' %}
 {% block extra_css %}{% endblock %}
 </style>
 </head>
 <body>
 <div class="header-bar">
   <div class="container">
-    <h1>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}: {{ scope }}</h1>
+    <h1>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}: {{ scope | e | fold_inline }}</h1>
     <div class="meta">{{ meta.project }} &middot; {{ meta.date }}{% if meta.branch %} &middot; {{ meta.branch }}{% endif %}</div>
   </div>
 </div>
 
 <nav class="toc no-print" id="toc">
+  {% if comment_assessments %}<a href="#comment-assessments">Comments</a>{% endif %}
   <a href="#summary">Summary</a>
   {% if top_findings %}<a href="#top-findings">Top Findings</a>{% endif %}
-  {% for sec in findings %}<a href="#section-{{ loop.index }}">{{ sec.title }}</a>{% endfor %}
+  {% for sec in findings %}<a href="#section-{{ loop.index }}" data-finding-category="{{ sec.category }}" title="{{ sec.title }}">{{ category_labels.get(sec.category, 'Findings') }}</a>{% endfor %}
   {% if dependencies %}<a href="#dependencies">Dependencies</a>{% endif %}
   {% if remediation %}<a href="#remediation">Remediation</a>{% endif %}
   <a href="#charts">Charts</a>
@@ -1036,10 +1244,21 @@ details summary:hover{color:{{ ACCENT }}}
 
 <div class="container">
 
+{% include 'comment-assessments.html' %}
+
+{% if not comment_assessments %}
+<div class="assessment-heading report-heading">
+  <div><div class="eyebrow">REVIEW WORKSPACE / {{ report_type | replace('_', ' ') | upper }}</div>
+    <h1>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}</h1>
+    <p>{{ scope | e | fold_inline }}</p></div>
+  <div class="assessment-total">{{ stats.total_findings }}<small>findings reviewed</small></div>
+</div>
+{% endif %}
+
 <!-- Executive Summary -->
 <h2 id="summary">Executive Summary</h2>
-<div class="exec-summary"><strong>{{ executive_summary.overall_assessment }}</strong></div>
-{% if executive_summary.summary_text %}<div class="exec-summary">{{ executive_summary.summary_text | markdown }}</div>{% endif %}
+<div class="exec-summary report-assessment">{{ executive_summary.overall_assessment | e | fold }}</div>
+{% if executive_summary.summary_text %}<details class="report-context"><summary>Context and verification</summary><div class="exec-summary">{{ executive_summary.summary_text | markdown }}</div></details>{% endif %}
 
 <div class="kpi-row">
   <div class="kpi-box"><div class="val" style="color:{{ ACCENT }}">{{ stats.total_findings }}</div><div class="label">Total Findings</div></div>
@@ -1065,7 +1284,7 @@ details summary:hover{color:{{ ACCENT }}}
 <h3 id="verdict">Verdict</h3>
 <div class="verdict">
   {% if executive_summary.verdict_text %}<div class="exec-summary">{{ executive_summary.verdict_text | markdown }}</div>{% endif %}
-  {% if executive_summary.verdict_action %}<p><strong>Action:</strong> {{ executive_summary.verdict_action }}</p>{% endif %}
+  {% if executive_summary.verdict_action %}<p><strong>Action:</strong> {{ executive_summary.verdict_action | e | fold_inline }}</p>{% endif %}
 </div>
 
 <!-- Top findings -->
@@ -1077,7 +1296,7 @@ details summary:hover{color:{{ ACCENT }}}
 <tr>
   <td>{% if tf.merge_class == "blocking" %}🔴 BLOCKING {% endif %}<a href="#finding-{{ tf.id }}">{{ tf.id }}</a></td>
   <td><span class="badge badge-{{ tf.severity|sev_label }}">{{ tf.severity|sev_label }}</span></td>
-  <td>{{ tf.title }}</td>
+  <td>{{ tf.title | e | fold }}</td>
   <td>{% if tf.location_permalink and tf.location_permalink.startswith(('https://', 'http://')) %}<a href="{{ tf.location_permalink }}" target="_blank" rel="noopener"><code>{{ tf.location }}</code></a>{% else %}<code>{{ tf.location }}</code>{% endif %}</td>
   {% if triage %}<td class="no-print"><select class="triage-action-top" data-finding-id="{{ tf.id }}">
     <option value="---">---</option>
@@ -1100,8 +1319,8 @@ details summary:hover{color:{{ ACCENT }}}
 {% for d in dependencies %}
 <tr>
   <td>{{ d.package }}</td><td>{{ d.version }}</td>
-  <td>{{ d.advisories | default("None") }}</td>
-  <td>{{ d.applicable | default("N/A") }}</td>
+  <td>{{ d.advisories | default("None") | e | fold }}</td>
+  <td>{{ d.applicable | default("N/A") | e | fold }}</td>
   <td>{% if d.ok %}Yes{% else %}<strong style="color:{{ RED }}">No</strong>{% endif %}</td>
 </tr>
 {% endfor %}
@@ -1110,6 +1329,7 @@ details summary:hover{color:{{ ACCENT }}}
 
 <!-- Detailed findings by section -->
 {% if not triage %}
+<div class="review-decision-bar no-print"><button type="button" id="exportReviewDecisions">Export decisions</button><span id="reviewDecisionCount" aria-live="polite">0 decisions</span></div>
 <div class="report-toolbar no-print" id="reportToolbar">
   <select id="filterSeverity">
     <option value="">All Severities</option>
@@ -1121,14 +1341,7 @@ details summary:hover{color:{{ ACCENT }}}
   </select>
   <select id="filterCategory">
     <option value="">All Categories</option>
-    <option value="security">Security</option>
-    <option value="project">Project</option>
-    <option value="code_quality">Code Quality</option>
-    <option value="call_tree">Call-Tree Inspection</option>
-    <option value="documentation">Documentation</option>
-    <option value="dependencies">Dependencies</option>
-    <option value="pr_comments">PR Comments</option>
-    <option value="pr_promises">PR Promises</option>
+    {% for slug, label in category_labels.items() %}<option value="{{ slug }}">{{ label }}</option>{% endfor %}
   </select>
   <select id="filterMergeClass">
     <option value="">All Merge Classes</option>
@@ -1160,12 +1373,15 @@ details summary:hover{color:{{ ACCENT }}}
 <div id="findingsContainer">
 {% for sec in findings %}
 <div class="findings-section" data-section-category="{{ sec.category }}">
-<h2 id="section-{{ loop.index }}">{{ sec.title }}</h2>
-{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}
+<h2 id="section-{{ loop.index }}">{{ sec.title | e | fold_inline }}</h2>
+{% if sec.subtitle %}<p><em>{{ sec.subtitle | e | fold_inline }}</em></p>{% endif %}
 
 <details open>
 <summary>{{ sec.findings | length }} finding{{ "s" if sec.findings | length != 1 else "" }}</summary>
 
+{% if not triage %}
+{% include 'review-findings-table.html' %}
+{% else %}
 {% for f in sec.findings %}
 <div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ f._category if f._category else sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}"{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}>
   <h3>
@@ -1176,7 +1392,7 @@ details summary:hover{color:{{ ACCENT }}}
     {% if f.impact is number %}<span class="metric-chip metric-impact" title="Worst plausible outcome at system scale">I {{ '%.2f' % f.impact }}</span>{% endif %}
     {% if f.relevance is number %}<span class="metric-chip metric-relevance" title="Fit to this PR's stated goal (1.0 the very thing, ~0.5 worsened or exposed by the diff, ~0.1 pre-existing) — not part of the severity math">R {{ '%.2f' % f.relevance }}</span>{% endif %}
     {% if f.ai_verdict %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 700;" title="confidence: {{ '%.2f' % (f.ai_verdict_confidence|default(1.0, true)) }}">{{ f.ai_verdict }}</span>{% endif %}
-    {{ f.id }}: {{ f.title }}
+    {{ f.id }}: {{ f.title | e | fold_inline }}
     {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
   </h3>
   <dl>
@@ -1216,9 +1432,10 @@ details summary:hover{color:{{ ACCENT }}}
   {% endif %}
 </div>
 {% endfor %}
+{% endif %}
 
 {% if sec.positives %}
-<p class="positives"><strong>Positive observations:</strong> {{ sec.positives }}</p>
+<p class="positives"><strong>Positive observations:</strong> {{ sec.positives | e | fold_inline }}</p>
 {% endif %}
 </details>
 </div>
@@ -1232,9 +1449,9 @@ details summary:hover{color:{{ ACCENT }}}
 <tr><th>Priority</th><th>Count</th><th>Finding IDs</th></tr>
 {% for r in remediation %}
 <tr>
-  <td><span class="priority-{{ r.priority }}">{{ r.label }}</span></td>
+  <td><span class="priority-{{ r.priority }}">{{ r.label | e | fold_inline }}</span></td>
   <td>{{ r.count }}</td>
-  <td>{{ r.finding_ids | default([]) | join(", ") }}</td>
+  <td>{{ r.finding_ids | default([]) | join(", ") | e | fold }}</td>
 </tr>
 {% endfor %}
 </table>
@@ -1413,11 +1630,14 @@ details summary:hover{color:{{ ACCENT }}}
 })();
 </script>
 
+<script>{% include 'report-interactions.js' %}</script>
+
 {% if not triage %}
 <script>
 (function(){
   const container = document.getElementById("findingsContainer");
   const originalHTML = container.innerHTML;
+  const tableHeader = container.querySelector('.review-findings-table thead');
   const sevFilter = document.getElementById("filterSeverity");
   const catFilter = document.getElementById("filterCategory");
   const mergeClassFilter = document.getElementById("filterMergeClass");
@@ -1431,11 +1651,7 @@ details summary:hover{color:{{ ACCENT }}}
 
   const sevLabels = {5:"CRITICAL",4:"HIGH",3:"MEDIUM",2:"LOW",1:"INFO"};
   const sevColors = {{ sev_colors_json }};
-  const catLabels = {"security":"Security","project":"Project Consistency",
-    "code_quality":"Code Quality","call_tree":"Call-Tree Inspection",
-    "documentation":"Documentation",
-    "dependencies":"Dependencies","pr_comments":"PR Comments",
-    "pr_promises":"PR Promises"};
+  const catLabels = {{ category_labels | tojson }};
 
   function getFindings() {
     return container.querySelectorAll(".finding[data-finding-id]");
@@ -1467,7 +1683,8 @@ details summary:hover{color:{{ ACCENT }}}
       if (ct && f.dataset.category !== ct) show = false;
       if (mc && f.dataset.mergeClass !== mc) show = false;
       if (av && f.dataset.aiVerdict !== av) show = false;
-      if (q && !f.textContent.toLowerCase().includes(q)) show = false;
+      const searchable = Array.from(f.querySelectorAll('.finding-data')).map(cell => cell.textContent).join(' ');
+      if (q && !searchable.toLowerCase().includes(q)) show = false;
       f.style.display = show ? "" : "none";
     });
     // Hide entire section when all its findings are filtered out
@@ -1492,7 +1709,23 @@ details summary:hover{color:{{ ACCENT }}}
     const sum = document.createElement("summary");
     sum.textContent = findingEls.length + " finding" + (findingEls.length !== 1 ? "s" : "");
     det.appendChild(sum);
-    findingEls.forEach(f => det.appendChild(f));
+    if (tableHeader) {
+      const wrap = document.createElement('div');
+      wrap.className = 'assessment-table-wrap review-table-wrap';
+      wrap.tabIndex = 0;
+      wrap.setAttribute('role', 'region');
+      wrap.setAttribute('aria-label', title + ' findings');
+      const table = document.createElement('table');
+      table.className = 'assessment-table review-findings-table';
+      table.appendChild(tableHeader.cloneNode(true));
+      const tbody = document.createElement('tbody');
+      findingEls.forEach(f => tbody.appendChild(f));
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      det.appendChild(wrap);
+    } else {
+      findingEls.forEach(f => det.appendChild(f));
+    }
     sec.appendChild(det);
     return sec;
   }
@@ -1505,7 +1738,13 @@ details summary:hover{color:{{ ACCENT }}}
     if (!key || key === "category") {
       // Restore original category-based layout
       container.innerHTML = originalHTML;
+      if (key === "category") {
+        const sections = Array.from(container.querySelectorAll('.findings-section'));
+        sections.sort((a, b) => (catLabels[a.dataset.sectionCategory] || a.dataset.sectionCategory).localeCompare(catLabels[b.dataset.sectionCategory] || b.dataset.sectionCategory) * (ascending ? 1 : -1));
+        sections.forEach(section => container.appendChild(section));
+      }
       applyFilters();
+      document.dispatchEvent(new Event('report:render'));
       return;
     }
 
@@ -1567,6 +1806,7 @@ details summary:hover{color:{{ ACCENT }}}
     }
 
     applyFilters();
+    document.dispatchEvent(new Event('report:render'));
   }
 
   if (sevFilter) sevFilter.addEventListener("change", applyFilters);
@@ -1583,6 +1823,14 @@ details summary:hover{color:{{ ACCENT }}}
     sortOrderBtn.innerHTML = ascending ? "&#9650;" : "&#9660;";
     sortOrderBtn.title = ascending ? "Ascending (click to reverse)" : "Descending (click to reverse)";
     rebuildView();
+  });
+  document.querySelectorAll('#toc a[data-finding-category]').forEach(link => {
+    link.addEventListener('click', () => {
+      currentSort = 'category';
+      if (sortSelect) sortSelect.value = currentSort;
+      if (catFilter) catFilter.value = link.dataset.findingCategory;
+      rebuildView();
+    });
   });
 
   // Apply the default sort (Overall Severity) on load so the page reflects
@@ -1931,6 +2179,10 @@ def _build_html_context(
         "matrix": stats.get("severity_category_matrix", []),
         "top_findings": data.get("top_findings", []),
         "findings": findings_sections,
+        "comment_assessments": data.get("comment_assessments", []),
+        "assessment_labels": ASSESSMENT_LABELS,
+        "source_labels": SOURCE_LABELS,
+        "review_decisions": data.get("triage", {}).get("decisions", []),
         "dependencies": data.get("dependencies", []),
         "agent_stats": data.get("agent_stats", []),
         "remediation": data.get("remediation", []),
@@ -2036,11 +2288,7 @@ def _mark_safe_values(ctx: dict[str, Any]) -> None:
 
 def render_html(data: dict[str, Any]) -> str:
     """Render the report as a self-contained HTML string."""
-    from jinja2 import Environment
-
-    env = Environment(autoescape=True)
-    env.filters["sev_label"] = sev_label
-    env.filters["markdown"] = render_markdown_to_html
+    env = _html_environment()
     template = env.from_string(_HTML_TEMPLATE)
     ctx = _build_html_context(data, triage=False)
     _mark_safe_values(ctx)
@@ -2057,8 +2305,6 @@ def render_triage(data: dict[str, Any]) -> str:
     Every `.replace()` below carries a post-replace assert so any future
     template drift fails loudly instead of silently dropping UI.
     """
-    from jinja2 import Environment
-
     # Inject triage-specific CSS / JS into the two empty Jinja blocks.
     triage_template = _HTML_TEMPLATE.replace(
         "{% block extra_css %}{% endblock %}",
@@ -2161,9 +2407,7 @@ def render_triage(data: dict[str, Any]) -> str:
 </div>
 """
     # Insert toolbar inside the findings section, after the heading
-    toolbar_anchor = (
-        "{% if sec.subtitle %}<p><em>{{ sec.subtitle }}</em></p>{% endif %}"
-    )
+    toolbar_anchor = "{% if sec.subtitle %}<p><em>{{ sec.subtitle | e | fold_inline }}</em></p>{% endif %}"
     toolbar_block = "{% if loop.first %}\n" + toolbar_html + "{% endif %}"
     triage_template = triage_template.replace(
         toolbar_anchor,
@@ -2173,9 +2417,7 @@ def render_triage(data: dict[str, Any]) -> str:
         "Template patch failed: triage toolbar anchor (sec.subtitle line) not found"
     )
 
-    env = Environment(autoescape=True)
-    env.filters["sev_label"] = sev_label
-    env.filters["markdown"] = render_markdown_to_html
+    env = _html_environment()
     template = env.from_string(triage_template)
     ctx = _build_html_context(data, triage=True)
     _mark_safe_values(ctx)
@@ -3317,6 +3559,41 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
                 )
             )
         story.append(_hr())
+
+    # Comment-only context must survive an explicitly requested PDF too.
+    for row in data.get("comment_assessments", []):
+        story.append(Paragraph(xml_escape(row["id"]), s["h2"]))
+        for label, value in [
+            ("Author", row["reviewer"]),
+            ("Source", row["comment_url"]),
+            ("Location", row.get("location")),
+            ("Code URL", row.get("location_permalink")),
+            ("Assessment", ASSESSMENT_LABELS.get(row.get("assessment"), "Context")),
+            ("Thread state", row.get("thread_state")),
+            ("Comment", row["description"]),
+            ("Reasoning", row["reasoning"]),
+            ("Evidence", row.get("evidence")),
+            ("Proposed action", row["proposed_action"]),
+            ("Proposed reply", row.get("proposed_reply")),
+            ("Action taken", row.get("action_taken")),
+        ]:
+            if value:
+                story.append(Paragraph(f"<b>{label}</b>", s["body"]))
+                if label in {
+                    "Author",
+                    "Source",
+                    "Location",
+                    "Code URL",
+                    "Proposed reply",
+                }:
+                    literal = xml_escape(value).replace("\n", "<br/>")
+                    url = _safe_url(value)
+                    if url and label in {"Source", "Code URL"}:
+                        safe_url = xml_escape(url, {chr(34): "&quot;"})
+                        literal = f'<link href="{safe_url}">{literal}</link>'
+                    story.append(Paragraph(literal, s["body"]))
+                else:
+                    story.extend(_md_body(value, s["body"]))
 
     # Verdict
     story.append(Spacer(1, 10))

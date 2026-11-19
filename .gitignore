@@ -20,4 +20,5 @@ tmp/
 # Test build artifacts
 test/
 scripts/__pycache__/
+scripts/visual-diff/__pycache__/
 tests/__pycache__/

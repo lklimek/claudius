@@ -1590,8 +1590,7 @@ class TestCmdAssemble:
 # Schema-version derivation
 # ---------------------------------------------------------------------------
 class TestSchemaVersionDerivation:
-    """``SCHEMA_VERSION`` and ``ACCEPTED_SCHEMA_VERSIONS`` must both be derived
-    from the schema enum — a hard-coded accepted set drifts on the next bump."""
+    """Accepted versions follow the schema; emission uses its documented baseline."""
 
     def _schema_enum(self) -> list[str]:
         schema_path = (
@@ -1606,8 +1605,8 @@ class TestSchemaVersionDerivation:
         """Anti-drift guard: the accepted set is exactly the schema enum."""
         assert cr.ACCEPTED_SCHEMA_VERSIONS == set(self._schema_enum())
 
-    def test_schema_version_is_newest_enum_entry(self):
-        assert cr.SCHEMA_VERSION == self._schema_enum()[-1]
+    def test_schema_version_is_supported_finding_baseline(self):
+        assert cr.SCHEMA_VERSION == "4.0.0"
         assert cr.SCHEMA_VERSION in cr.ACCEPTED_SCHEMA_VERSIONS
 
 

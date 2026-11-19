@@ -1720,6 +1720,13 @@ def _validate_report(report: dict[str, Any]) -> bool:
             log.error("Schema validation error at %s: %s", path, err.message)
         log.error("Report has %d validation error(s)", len(errors))
         return False
+    from validate_report import comment_assessment_errors
+
+    row_errors = comment_assessment_errors(report)
+    for error in row_errors:
+        log.error("%s", error)
+    if row_errors:
+        return False
     return True
 
 
@@ -1971,7 +1978,7 @@ def cmd_regenerate(args: argparse.Namespace) -> int:
     # ship a report whose stated version contradicts its own findings — and any
     # downstream v3 reader would then choke on the renamed floats.
     declared = report.get("schema_version")
-    if declared != SCHEMA_VERSION:
+    if declared != SCHEMA_VERSION and declared != "4.1.0":
         log.info(
             "Restamping schema_version %s -> %s (report is written in v4 form)",
             declared,

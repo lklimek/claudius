@@ -1,0 +1,33 @@
+<div class="assessment-table-wrap review-table-wrap" tabindex="0" role="region" aria-label="{{ sec.title }} findings">
+<table class="assessment-table review-findings-table">
+  <caption class="sr-only">{{ sec.title }}: findings, evidence, recommendations and decisions</caption>
+  <thead><tr><th scope="col">ID / source / code</th><th scope="col">Finding / assessment</th><th scope="col">Analysis / evidence</th><th scope="col">Recommendation</th><th scope="col">Decision</th></tr></thead>
+  <tbody>{% for f in sec.findings %}
+    <tr class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}"{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}>
+      <td class="finding-data"><a class="assessment-id" href="#finding-{{ f.id }}">{{ f.id }}</a>
+        {% if f.reviewer %}<small>{% if f.comment_url | safe_url %}<a href="{{ f.comment_url | safe_url }}">{{ f.reviewer }}</a>{% else %}{{ f.reviewer }}{% endif %}</small>{% endif %}
+        <div class="finding-location">{% if f.location_permalink | safe_url %}<a href="{{ f.location_permalink | safe_url }}"><code>{{ f.location }}</code></a>{% else %}<code>{{ f.location }}</code>{% endif %}</div></td>
+      <td class="finding-data"><div class="finding-head">
+        <span class="badge badge-{{ f.severity|sev_label }}"{% if f._severity_tooltip %} title="{{ f._severity_tooltip }}"{% endif %}>{{ f.severity|sev_label }}</span>
+        {% if f.merge_class %}<span class="merge-class-chip" style="background-color: {{ merge_class_colors[f.merge_class] }}; color: {{ merge_class_text_colors[f.merge_class] }}"{% if f.intent_basis %} title="{{ f.intent_basis }}"{% endif %}>{{ merge_class_labels[f.merge_class] }}</span>{% endif %}
+        {% if f.verdict %}<span class="assessment-badge assessment-context">{{ f.verdict }}</span>{% endif %}
+        {% if f.ai_verdict %}{% set confidence = f.ai_verdict_confidence if f.ai_verdict_confidence is number else 1.0 %}<span class="ai-verdict-chip" style="background-color: {{ f._verdict_chip_bg }}; color: #fff; padding: 2px 8px; border-radius: 5px" title="confidence: {{ '%.2f' % confidence }}">{{ f.ai_verdict }}</span>{% endif %}
+        <strong class="finding-title">{{ f.title | e | fold_inline }}</strong>
+        {% for tag in f.tags | default([]) %}<span class="tag">{{ tag }}</span>{% endfor %}
+      </div></td>
+      <td class="assessment-prose finding-data">{{ f.description | markdown }}
+        {% if f.intent_basis %}<div class="assessment-evidence"><strong>Classification basis</strong>{{ f.intent_basis | markdown }}</div>{% endif %}
+        {% if f.impact_description %}<div class="assessment-evidence"><strong>Impact</strong>{{ f.impact_description | markdown }}</div>{% endif %}
+        {% if f.ai_assessment %}<div class="assessment-evidence"><strong>AI assessment</strong>{{ f.ai_assessment | markdown }}</div>{% endif %}
+        {% for snip in f.code_snippets | default([]) %}<details class="code-snippet"><summary>{{ snip.caption or snip.language or 'Code snippet' }}</summary><pre><code class="language-{{ snip.language | default('') }}">{{ snip.content }}</code></pre></details>{% endfor %}</td>
+      <td class="assessment-prose finding-data">{{ f.recommendation | markdown }}</td>
+      <td class="review-decision-controls">
+        <select class="review-action" aria-label="Decision for {{ f.id }}">
+          <option value="---">No decision</option><option value="fix">Fix</option><option value="accept_risk">Accept risk</option><option value="defer">Defer</option><option value="false_positive">False positive</option><option value="duplicate">Duplicate</option>
+        </select>
+        <details><summary>Rationale</summary><textarea class="review-rationale" rows="3" aria-label="Rationale for {{ f.id }}"></textarea></details>
+      </td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+</div>

@@ -1,0 +1,80 @@
+{% if comment_assessments %}
+<section id="comment-assessments" aria-labelledby="assessments-title">
+  <div class="assessment-heading">
+    <div><div class="eyebrow">REVIEW WORKSPACE / {{ meta.pr_number | default('COMMENTS') }}</div>
+    <h2 id="assessments-title">Comment assessments</h2>
+    <p>Evidence, assessment and next action. Thread status is shown separately.</p></div>
+    <div class="assessment-total">{{ comment_assessments | length }}<small>comments assessed</small></div>
+  </div>
+  <div class="assessment-controls no-print">
+    <label class="assessment-search">Search comments<input id="assessment-search" type="search" placeholder="Author, code, reasoning or action…"></label>
+    <label>Assessment<select id="assessment-filter">
+      <option value="">All assessments</option>
+      {% for key, label in assessment_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      <option value="context">Reply / status</option>
+    </select></label>
+    <label>Thread state<select id="thread-state-filter">
+      <option value="">All thread states</option><option value="resolved">Resolved</option>
+      <option value="unresolved">Unresolved</option><option value="unknown">Unknown</option>
+      <option value="none">No thread</option>
+    </select></label>
+    <label>Source<select id="assessment-source-filter">
+      <option value="">All sources</option>
+      {% for key, label in source_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select></label>
+    <output id="assessment-count" aria-live="polite"></output>
+  </div>
+  <div class="assessment-table-wrap" tabindex="0" role="region" aria-label="Comment assessments table">
+    <table class="assessment-table">
+      <caption class="sr-only">Review comments with evidence and proposed actions</caption>
+      <thead><tr><th scope="col">Source / ID</th><th scope="col">Author</th><th scope="col">Code</th>
+        <th scope="col">Comment</th><th scope="col">Assessment</th><th scope="col">Reasoning / evidence</th><th scope="col">Proposed action</th></tr></thead>
+      <tbody>{% for row in comment_assessments %}
+        {% set thread_state = row.thread_state | default('unknown' if row.thread_id or row.source_kind == 'inline' else 'none') %}
+        <tr id="assessment-{{ row.id }}" data-assessment="{{ row.assessment | default('context') }}" data-thread-state="{{ thread_state }}" data-source="{{ row.source_kind }}">
+          <td><a class="assessment-id" {% if row.comment_url | safe_url %}href="{{ row.comment_url | safe_url }}"{% endif %}>{{ row.id }}</a>
+            <small>{{ source_labels[row.source_kind] }}</small>{% if row.comment_id %}<small>#{{ row.comment_id }}</small>{% endif %}</td>
+          <td><strong>{{ row.reviewer }}</strong>{% if row.author_type %}<small>{{ row.author_type }}</small>{% endif %}</td>
+          <td>{% if row.location %}{% if row.location_permalink | safe_url %}<a href="{{ row.location_permalink | safe_url }}">{{ row.location }}</a>{% else %}{{ row.location }}{% endif %}{% else %}<span class="muted">No code location</span>{% endif %}</td>
+          <td class="assessment-prose">{{ row.description | markdown }}</td>
+          <td><span class="assessment-badge assessment-{{ row.assessment | default('context') }}">{{ assessment_labels.get(row.assessment, 'Context') }}</span>
+            {% if thread_state != 'none' %}<small class="thread-state">Thread: {{ thread_state }}</small>{% endif %}
+            {% if row.finding_id %}<small><a href="#finding-{{ row.finding_id }}">Risk details ↗</a></small>{% endif %}</td>
+          <td class="assessment-prose">{{ row.reasoning | markdown }}{% if row.evidence %}<div class="assessment-evidence"><strong>Evidence</strong>{{ row.evidence | markdown }}</div>{% endif %}</td>
+          <td class="assessment-prose">{{ row.proposed_action | markdown }}
+            {% if row.proposed_reply %}<div class="assessment-reply"><strong>Proposed reply</strong><div class="literal-prose">{{ row.proposed_reply | e | fold_literal }}</div></div>{% endif %}
+            {% if row.action_taken %}<div class="assessment-done"><strong>Action taken</strong>{{ row.action_taken | markdown }}</div>{% endif %}</td>
+        </tr>
+      {% endfor %}</tbody>
+    </table>
+  </div>
+  <p id="assessment-empty" hidden>No comments match these filters.</p>
+</section>
+<script>
+(() => {
+  const root = document.getElementById('comment-assessments');
+  const search = root.querySelector('#assessment-search');
+  const assessment = root.querySelector('#assessment-filter');
+  const thread = root.querySelector('#thread-state-filter');
+  const source = root.querySelector('#assessment-source-filter');
+  const rows = Array.from(root.querySelectorAll('.assessment-table > tbody > tr'));
+  const count = root.querySelector('#assessment-count');
+  function filterComments() {
+    const query = search.value.trim().toLocaleLowerCase();
+    let visible = 0;
+    for (const row of rows) {
+      row.hidden = !((!assessment.value || row.dataset.assessment === assessment.value) &&
+        (!thread.value || row.dataset.threadState === thread.value) &&
+        (!source.value || row.dataset.source === source.value) &&
+        row.textContent.toLocaleLowerCase().includes(query));
+      if (!row.hidden) visible++;
+    }
+    count.textContent = `${visible} / ${rows.length} comments`;
+    root.querySelector('#assessment-empty').hidden = visible !== 0;
+  }
+  search.addEventListener('input', filterComments);
+  for (const select of [assessment, thread, source]) select.addEventListener('change', filterComments);
+  filterComments();
+})();
+</script>
+{% endif %}
