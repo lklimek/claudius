@@ -50,7 +50,7 @@ def test_actual_findings_still_require_risk_scores(report):
 @pytest.mark.parametrize("renderer", [grr.render_html, grr.render_triage])
 def test_html_keeps_reasoning_and_proposed_action_in_each_row(report, renderer):
     soup = BeautifulSoup(renderer(report), "html.parser")
-    rows = soup.select(".assessment-table > tbody > tr")
+    rows = soup.select("#comment-assessments .assessment-table > tbody > tr")
     assert len(rows) == len(report["comment_assessments"])
     for row, item in zip(rows, report["comment_assessments"]):
         assert item["id"] in row.get_text()

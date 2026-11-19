@@ -233,6 +233,10 @@ Version 10 moves agent logic into skills. In Claude Code, the eight `agents/` id
 
 `review-pr <PR>` defaults to basic; add `full` for the specialist audit. Both modes report coverage and cannot claim completion with unresolved paths.
 
+### Visual comparisons
+
+Invoke `visual-diff` with OLD, NEW and OUTPUT (`/visual-diff` in Claude, `$visual-diff` in Codex) to compare web pages, generated reports, desktop apps or supplied screenshots. It produces spotlight annotations and an offline gallery, with old/new sliders when paired captures exist. It requires Python 3, Pillow and NumPy; capture uses the host's browser or desktop tooling. Outputs stay outside the repository.
+
 ### Optional Plugin Dependencies
 
 Some workflows use external plugins for specialized capabilities. These plugins are optional.

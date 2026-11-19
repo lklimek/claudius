@@ -735,7 +735,9 @@ def test_html_includes_call_tree_in_filter_chip_and_js_labels():
     # Filter <option> for category dropdown.
     assert '<option value="call_tree">Call-Tree Inspection</option>' in html
     # JS catLabels lookup carries the slug.
-    assert '"call_tree":"Call-Tree Inspection"' in html
+    labels = re.search(r"const catLabels\s*=\s*(\{[^;]+\});", html)
+    assert labels
+    assert json.loads(labels.group(1))["call_tree"] == "Call-Tree Inspection"
     # Chart.js category-label list (CATEGORY_LABELS values) carries the label.
     assert "Call-Tree Inspection" in html
     # The finding card data-category attribute reflects the new category.

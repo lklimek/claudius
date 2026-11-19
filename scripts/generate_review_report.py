@@ -1130,7 +1130,7 @@ details summary:hover{color:{{ ACCENT }}}
   {% if comment_assessments %}<a href="#comment-assessments">Comments</a>{% endif %}
   <a href="#summary">Summary</a>
   {% if top_findings %}<a href="#top-findings">Top Findings</a>{% endif %}
-  {% for sec in findings %}<a href="#section-{{ loop.index }}">{{ sec.title }}</a>{% endfor %}
+  {% for sec in findings %}<a href="#section-{{ loop.index }}" data-finding-category="{{ sec.category }}">{{ sec.title }}</a>{% endfor %}
   {% if dependencies %}<a href="#dependencies">Dependencies</a>{% endif %}
   {% if remediation %}<a href="#remediation">Remediation</a>{% endif %}
   <a href="#charts">Charts</a>
@@ -1140,10 +1140,19 @@ details summary:hover{color:{{ ACCENT }}}
 
 {% include 'comment-assessments.html' %}
 
+{% if not comment_assessments %}
+<div class="assessment-heading report-heading">
+  <div><div class="eyebrow">REVIEW WORKSPACE / {{ report_type | replace('_', ' ') | upper }}</div>
+    <h1>{{ "PR Comment Verification" if report_type == "comment_check" else "Code Review Report" }}</h1>
+    <p>{{ scope }}</p></div>
+  <div class="assessment-total">{{ stats.total_findings }}<small>findings reviewed</small></div>
+</div>
+{% endif %}
+
 <!-- Executive Summary -->
 <h2 id="summary">Executive Summary</h2>
-<div class="exec-summary"><strong>{{ executive_summary.overall_assessment }}</strong></div>
-{% if executive_summary.summary_text %}<div class="exec-summary">{{ executive_summary.summary_text | markdown }}</div>{% endif %}
+<div class="exec-summary report-assessment">{{ executive_summary.overall_assessment }}</div>
+{% if executive_summary.summary_text %}<details class="report-context"><summary>Context and verification</summary><div class="exec-summary">{{ executive_summary.summary_text | markdown }}</div></details>{% endif %}
 
 <div class="kpi-row">
   <div class="kpi-box"><div class="val" style="color:{{ ACCENT }}">{{ stats.total_findings }}</div><div class="label">Total Findings</div></div>
@@ -1225,14 +1234,7 @@ details summary:hover{color:{{ ACCENT }}}
   </select>
   <select id="filterCategory">
     <option value="">All Categories</option>
-    <option value="security">Security</option>
-    <option value="project">Project</option>
-    <option value="code_quality">Code Quality</option>
-    <option value="call_tree">Call-Tree Inspection</option>
-    <option value="documentation">Documentation</option>
-    <option value="dependencies">Dependencies</option>
-    <option value="pr_comments">PR Comments</option>
-    <option value="pr_promises">PR Promises</option>
+    {% for slug, label in category_labels.items() %}<option value="{{ slug }}">{{ label }}</option>{% endfor %}
   </select>
   <select id="filterMergeClass">
     <option value="">All Merge Classes</option>
@@ -1270,6 +1272,9 @@ details summary:hover{color:{{ ACCENT }}}
 <details open>
 <summary>{{ sec.findings | length }} finding{{ "s" if sec.findings | length != 1 else "" }}</summary>
 
+{% if not triage %}
+{% include 'review-findings-table.html' %}
+{% else %}
 {% for f in sec.findings %}
 <div class="finding finding-{{ f.severity|sev_label }}" id="finding-{{ f.id }}" data-finding-id="{{ f.id }}" data-severity="{{ f.severity }}" data-category="{{ f._category if f._category else sec.category }}" data-overall="{{ f.overall_severity if f.overall_severity is not none else '' }}" data-ai-verdict="{{ f.ai_verdict | default('', true) }}"{% if f.merge_class %} data-merge-class="{{ f.merge_class }}"{% endif %}>
   <h3>
@@ -1320,6 +1325,7 @@ details summary:hover{color:{{ ACCENT }}}
   {% endif %}
 </div>
 {% endfor %}
+{% endif %}
 
 {% if sec.positives %}
 <p class="positives"><strong>Positive observations:</strong> {{ sec.positives }}</p>
@@ -1522,6 +1528,7 @@ details summary:hover{color:{{ ACCENT }}}
 (function(){
   const container = document.getElementById("findingsContainer");
   const originalHTML = container.innerHTML;
+  const tableHeader = container.querySelector('.review-findings-table thead');
   const sevFilter = document.getElementById("filterSeverity");
   const catFilter = document.getElementById("filterCategory");
   const mergeClassFilter = document.getElementById("filterMergeClass");
@@ -1535,11 +1542,7 @@ details summary:hover{color:{{ ACCENT }}}
 
   const sevLabels = {5:"CRITICAL",4:"HIGH",3:"MEDIUM",2:"LOW",1:"INFO"};
   const sevColors = {{ sev_colors_json }};
-  const catLabels = {"security":"Security","project":"Project Consistency",
-    "code_quality":"Code Quality","call_tree":"Call-Tree Inspection",
-    "documentation":"Documentation",
-    "dependencies":"Dependencies","pr_comments":"PR Comments",
-    "pr_promises":"PR Promises"};
+  const catLabels = {{ category_labels | tojson }};
 
   function getFindings() {
     return container.querySelectorAll(".finding[data-finding-id]");
@@ -1596,7 +1599,23 @@ details summary:hover{color:{{ ACCENT }}}
     const sum = document.createElement("summary");
     sum.textContent = findingEls.length + " finding" + (findingEls.length !== 1 ? "s" : "");
     det.appendChild(sum);
-    findingEls.forEach(f => det.appendChild(f));
+    if (tableHeader) {
+      const wrap = document.createElement('div');
+      wrap.className = 'assessment-table-wrap review-table-wrap';
+      wrap.tabIndex = 0;
+      wrap.setAttribute('role', 'region');
+      wrap.setAttribute('aria-label', title + ' findings');
+      const table = document.createElement('table');
+      table.className = 'assessment-table review-findings-table';
+      table.appendChild(tableHeader.cloneNode(true));
+      const tbody = document.createElement('tbody');
+      findingEls.forEach(f => tbody.appendChild(f));
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      det.appendChild(wrap);
+    } else {
+      findingEls.forEach(f => det.appendChild(f));
+    }
     sec.appendChild(det);
     return sec;
   }
@@ -1609,6 +1628,11 @@ details summary:hover{color:{{ ACCENT }}}
     if (!key || key === "category") {
       // Restore original category-based layout
       container.innerHTML = originalHTML;
+      if (key === "category") {
+        const sections = Array.from(container.querySelectorAll('.findings-section'));
+        sections.sort((a, b) => (catLabels[a.dataset.sectionCategory] || a.dataset.sectionCategory).localeCompare(catLabels[b.dataset.sectionCategory] || b.dataset.sectionCategory) * (ascending ? 1 : -1));
+        sections.forEach(section => container.appendChild(section));
+      }
       applyFilters();
       return;
     }
@@ -1687,6 +1711,14 @@ details summary:hover{color:{{ ACCENT }}}
     sortOrderBtn.innerHTML = ascending ? "&#9650;" : "&#9660;";
     sortOrderBtn.title = ascending ? "Ascending (click to reverse)" : "Descending (click to reverse)";
     rebuildView();
+  });
+  document.querySelectorAll('#toc a[data-finding-category]').forEach(link => {
+    link.addEventListener('click', () => {
+      currentSort = 'category';
+      if (sortSelect) sortSelect.value = currentSort;
+      if (catFilter) catFilter.value = link.dataset.findingCategory;
+      rebuildView();
+    });
   });
 
   // Apply the default sort (Overall Severity) on load so the page reflects
