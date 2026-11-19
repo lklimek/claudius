@@ -8,12 +8,13 @@
     "pr_number": 42
   },
   "executive_summary": {"overall_assessment": "Six comments assessed; one concern remains."},
-  "summary_statistics": {"total_findings": 1, "severity_counts": {"MEDIUM": 1}},
+  "summary_statistics": {"total_findings": 1, "severity_counts": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 1, "LOW": 0, "INFO": 0}},
   "findings": [{
     "title": "PR Comment Verification",
     "category": "pr_comments",
     "findings": [{
       "id": "CMT-001",
+      "severity": 3,
       "title": "Validate the input before saving",
       "location": "src/input.py:12",
       "description": "Invalid input can be stored.",
