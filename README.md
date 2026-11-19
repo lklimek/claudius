@@ -35,7 +35,7 @@ See the [Setup Guide](SETUP.md) for detailed configuration.
 
 ### Two review modes
 
-Ordinary review and `/review-changes basic` use one strong reviewer, regardless of diff size. `/review-changes full` (or just ask for a grumpy review) runs the full specialist review. Both trace requirements and all execution paths through changed code, including affected callers, failures, and side effects beyond the diff. Missing coverage is reported as incomplete, never a clean result.
+Ordinary review and `/review-changes basic` use one strong reviewer, regardless of diff size, from a different provider than the known code author whenever available. `/check-pr-comments` applies the same rule to the original review author. `/review-changes full` (or just ask for a grumpy review) includes every available provider and all specialist passes. Native and configured external routes count; unknown authorship, unavailable providers, and failed passes are disclosed. Both review modes trace requirements and all execution paths through changed code, including affected callers, failures, and side effects beyond the diff. Missing coverage is reported as incomplete, never a clean result.
 
 Independent review is required before completing changes of at least 50 code lines (added plus deleted across the task's net diff, including tests; excluding comments, blank lines, and documentation). Below that threshold, author self-review suffices unless review is requested or the invoked workflow requires it. Basic is the default independent review. `review-pr` defaults to basic and accepts `full`.
 

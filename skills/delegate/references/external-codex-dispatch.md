@@ -16,11 +16,12 @@ Optional `codex-companion.mjs` bridge. Load through `delegate` only when Codex a
 
 ## When to Enlist Codex
 
-- **Opt-in, not default**: only on user request or a stated coding-routing preference. Native dispatch need not fail first.
-- **Non-coding roles stay native** — review, QA, security, architecture, and docs — unless the user opts them into Codex. Role skills work on either host.
+- **Opt-in**, except review dispatch selected by `delegate` § Review Providers: user request, a stated coding-routing preference, or that review policy authorizes Codex. Native dispatch need not fail first.
+- **Non-coding roles stay native** unless the user opts them into Codex or the review provider policy selects it. Role skills work on either host.
 
 ## Routing — Model Selection, High Effort
 
+- **Review jobs**: choose an accessible strong model per `delegate` § Token Economy and honor user restrictions; provider selection does not opt into request-only models. This overrides the defaults below for review dispatch.
 - **Default: Codex Astra = `--model gpt-6-astra --effort high`. Always high effort.** State both flags on every dispatch — omitting either drops to the runtime default, not Astra.
 - **Security-related dispatch: `--model gpt-daybreak-blue-latest --effort high` instead of Astra, when available** — for Codex tasks that are themselves security work (audits/reviews, auth/crypto/secrets handling, vulnerability triage/remediation, dependency security review), not ordinary code that happens to touch an authenticated endpoint. Availability is unconfirmed: if the job record shows `status: failed` with an unknown-model or access-gate/auth error, redispatch the same prompt on Astra and tell the user. Never retry Daybreak Blue more than once per dispatch.
 - Not the lighter `spark` alias.
@@ -45,7 +46,9 @@ node "$CODEX_ROOT/scripts/codex-companion.mjs" task \
   --model gpt-6-astra --effort high
 ```
 
-Security-related task: swap the model flag per § Routing (same shape; Astra fallback on unknown-model/access-gate failure).
+**Read-only reviews**: omit `--write`, use the selected review model instead of the implementation default, and ask for findings/coverage in the job result; the coordinator writes their producer files and runs `gate`. Never grant production writes just to save reports. Collect the terminal job result in the same turn, including in headless runs; `--background` does not authorize leaving it uncollected. New tests or other writes require a separate isolated worktree per `grand-admiral`.
+
+Non-review security task: swap the model flag per § Routing (same shape; Astra fallback on unknown-model/access-gate failure).
 
 - **`--cwd <worktree-abs-path>` binds the broker/workspace slug to the intended worktree** — pass it on every dispatch; never rely on the shell's cwd or on prompt text telling Codex to `cd` (zero effect — rule 3).
 - **`--write` is not implied** — without it the run is silently read-only (completes normally, touches zero files).
