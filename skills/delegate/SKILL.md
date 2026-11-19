@@ -29,6 +29,11 @@ Resolve relative links from the loaded skill file. If the host does not substitu
 3. **Read discipline**: Grep/Glob first, Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary (`git-and-github` § Context Management).
 4. **Coordinator context**: the inline-vs-spawn axis is bounded-vs-bulk, not small-vs-large. Inline only BOUNDED work; anything pulling in bulk or unbounded data (large files, logs, wide searches) goes to a disposable subagent so those bytes never enter the coordinator's context. For long sessions, summarise completed work to the tracking file and rely on compaction rather than carrying full history.
 
+## Independent Verification
+
+1. Identify who performed the work being checked (implementation, review, or any other artifact), including its model/provider when known.
+2. If an alternative tool/provider is available, use it to verify that work (Codex → Claude, Claude → Codex).
+
 ## Context Preparation
 
 Before dispatching a high-capability worker, assemble a concise context packet proportional to the task. Reuse known context; bound discovery to what removes likely repeated searches. For a small, obvious task, existing paths and references may suffice; skip a separate discovery worker when its dispatch and handoff would cost more than direct execution.

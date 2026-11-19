@@ -38,6 +38,8 @@ Skip when `git rev-parse HEAD` already equals the PR head (e.g. a CI checkout). 
 
 ## 3. Verify Each Comment Against Current Code
 
+Apply [delegate](../delegate/SKILL.md) § Independent Verification to the review comments.
+
 **Chat-only checks trust GitHub's resolved status:** classify `isResolved: true` threads as **Resolved** and skip verification. For a requested report/table file, assess their current code too, keeping GitHub `thread_state` independent from the assessment per `report-format`. Never reopen or re-resolve an already-resolved thread automatically.
 
 For every unresolved inline comment and review-body/PR-comment item (below), read the code at the referenced location (applying `coding-best-practices` Cross-Cutting Rules to the change) and **verify the identified issue is actually fixed** — not just that the code changed:

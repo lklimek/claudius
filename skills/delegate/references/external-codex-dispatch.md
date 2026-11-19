@@ -16,8 +16,8 @@ Optional `codex-companion.mjs` bridge. Load through `delegate` only when Codex a
 
 ## When to Enlist Codex
 
-- **Opt-in, not default**: only on user request or a stated coding-routing preference. Native dispatch need not fail first.
-- **Non-coding roles stay native** — review, QA, security, architecture, and docs — unless the user opts them into Codex. Role skills work on either host.
+- **Opt-in**, or selected by the independent-verification/full-review rules. Native dispatch need not fail first.
+- **Non-coding roles stay native** unless the user or the verification/review rules select Codex. Role skills work on either host.
 
 ## Routing — Model Selection, High Effort
 

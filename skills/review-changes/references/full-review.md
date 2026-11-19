@@ -1,10 +1,10 @@
 # Full Review
 
-Run in a coordinator context with native worker dispatch. If independent workers are unavailable, report that full review cannot run; never silently substitute basic review or a self-review.
+Run in a coordinator context. Apply `delegate` § Independent Verification. If independent workers are unavailable, report that full review cannot run; never silently substitute basic review or a self-review.
 
 ## Core passes
 
-Dispatch through the host's native API: in Claude, the listed identity as the agent type; elsewhere, generic workers. Either way, explicitly supply the listed skill/pass paths and set each model per `delegate` § Token Economy — strong reasoning for all three passes (security, global optimum and reuse, requirements/path analysis); Adams' cross-repository reading needs a large-context model (Claude: Opus, 1M). `<role>` is the token used for file names and `prepare` labels.
+Use the host's worker API or an available alternative tool: in Claude, the listed identity as the agent type; elsewhere, generic workers. Either way, explicitly supply the listed skill/pass paths and set each model per `delegate` § Token Economy — strong reasoning for all three passes (security, global optimum and reuse, requirements/path analysis); Adams' cross-repository reading needs a large-context model (Claude: Opus, 1M). `<role>` is the token used for file names and `prepare` labels.
 
 | Name / Claude identity | `<role>` | Skill / pass | Focus |
 |---|---|---|---|
@@ -13,6 +13,8 @@ Dispatch through the host's native API: in Claude, the listed identity as the ag
 | Marvin / `claudius:qa-engineer-marvin` | `qa` | `review-changes` — Reviewer pass and Marvin specialist pass | Requirements, all execution paths, adversarial correctness, cross-artifact consistency, structure and idioms, CI status |
 
 Always include all three, including for tiny diffs. Documentation-heavy changes add Trillian / `claudius:technical-writer-trillian` (`docs`, `technical-writing`: accuracy, completeness, API docs, changelog). For crypto-heavy code or significant dependency changes, expand the security prompt to crypto soundness and dependency audit — do NOT spawn a second instance. For 50+ files / 5000+ lines, spawn multiple agents of the same type with different file scopes, preserving coverage across boundaries.
+
+Always add a Codex reviewer when Codex is available, using the Reviewer pass on the same scope. Use `qa-codex` for its producer files and consolidation label. Keep all core passes above.
 
 ## Agent prompts
 
