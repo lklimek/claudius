@@ -19,6 +19,14 @@ description: "This skill should be used when running git or gh commands, interac
 2. Pull (fast-forward only). On diverged history, rebase if trivial, otherwise alert user.
 3. **Always search for related work first**: open and closed issues and PRs on the same or a similar topic (keywords, error text, touched paths; `gh search issues`, `gh search prs` with `--limit`). Found → link it, build on it, or ask the user; never duplicate in-progress work.
 
+## PR Scope and Size
+
+One PR addresses **one problem**; include only its necessary implementation, tests, and documentation. Separate unrelated fixes even when their combined diff is small.
+
+Target **fewer than 3000 changed code lines**; **5000 is the hard maximum**. Count added plus deleted code lines, including tests and generated/vendored code, across the PR's merge-base (three-dot) diff against its intended base; exclude comments, blank lines, and documentation. For a stacked PR, use its immediate parent branch, not the root base, so ancestor changes are not counted again.
+
+Apply this during planning: at 3000–5000 lines, seek smaller coherent PRs; above 5000, split the plan into separate PRs **before implementation**. Use dependency-ordered stacks when needed; each PR must have a focused, reviewable scope. Recheck scope and actual size before each push; if the cap is exceeded, split before publishing.
+
 ## Committing
 
 Create feature branches; NEVER commit to a base branch. [Conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`; `!` for breaking changes), message passed via HEREDOC, ending with the trailer `Co-Authored-By: Claude <your-model-name> <noreply@anthropic.com>` — your actual current model, never a version copied from a doc. Never create or edit `CHANGELOG.md` in a feature PR — concurrent PRs conflict on it; it is written at release time (`release` skill). Exception: a project policy that explicitly requires a per-PR entry.

@@ -11,6 +11,8 @@ Resolve relative links from the loaded skill file. If the host does not substitu
 
 ## Pre-Delegation Checklist
 
+Before sizing or dispatching workers, apply [git-and-github](../git-and-github/SKILL.md) § PR Scope and Size to the plan. Identify one problem and estimated code-line count per proposed PR; split oversized or unrelated work into smaller PRs before implementation. Worker batching or file-scope splitting does not replace PR decomposition.
+
 1. **Total scope size** — sum the estimated diff (excluding comments) across the whole batch, not per item. Under ~300 lines total (soft): do it in the coordinator, or reuse a worker already live in scope through native messaging. An explicitly required independent review is exempt: basic review still gets one strong independent reviewer.
 2. **Genuine parallelism** — a real wall-clock or file-independence need, or would sequential merely take "a bit longer"? No real need → one agent, sequential. Tightly coupled cross-file work → one agent, never a parallel split.
 3. **Reuse** — an agent already live in the same file/domain scope? → `SendMessage` it (`grand-admiral` § Agent Reuse).
