@@ -10,7 +10,7 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *),
 ## Modes
 
 - **Basic** (default, including an unspecified “review”): exactly one independent, high-capability reviewer. Verify requirements and all execution paths through the changed code, regardless of diff size.
-- **Full** (explicit “full review” or “grumpy review”): all available providers, with independent security, global-optimum/reuse, and adversarial passes on the same coverage baseline. Never downgrade a full review because the diff is small.
+- **Full** (explicit “full review” or “grumpy review”): independent security, global-optimum/reuse, and adversarial passes on the same coverage baseline. Never downgrade a full review because the diff is small.
 - **Validate** (“validate findings”, `validate <report.json>`): skip §1–§4; run the opt-in AI validation pass of §5 on an existing consolidated report.
 
 Arguments: `[basic|full|validate] [scope|report.json]` — scope e.g. "feat/zk branch", "packages/auth/", "last 5 commits". Scope defaults to the current branch against its base, including working-tree and untracked changes for local work; PR wrappers supply exact refs. Record the compared refs/commit and local changes.
@@ -63,7 +63,7 @@ It scans the diff, not findings: run it once before dispatch, batched with the s
 
 ## 2. Basic Review
 
-1. Load [delegate](../delegate/SKILL.md), apply its **Review Providers** policy, then dispatch **one** worker with a strong available reasoning model at high effort where supported, setting the model explicitly (Claude: Opus, preferably the `claudius:qa-engineer-marvin` identity; Codex: a high-capability model available through the selected route). Use a different provider from the known implementation author whenever available; never substitute a lightweight model for a small diff. Give it the requirements, scope, § Reviewer pass, and absolute paths to the references it names.
+1. Load [delegate](../delegate/SKILL.md), then dispatch **one** worker with a strong available reasoning model at high effort where supported, setting the model explicitly (Claude: Opus, preferably the `claudius:qa-engineer-marvin` identity; Codex: a high-capability model available in the current session). Apply `delegate` § Independent Verification when selecting the reviewer; never substitute a lightweight model for a small diff. Give it the requirements, scope, § Reviewer pass, and absolute paths to the references it names.
 2. If independent workers are unavailable, report that limitation; do not describe an author self-review as an independent basic review. A host-imposed budget does not permit sampling paths and calling the review complete.
 3. Collect the findings and coverage artifact, verify that every requirement and changed symbol is accounted for, and run §4 with the reviewer's file as `qa:<path>`, plus the lint file and caller-supplied files such as Pass C. Include the coverage status in the executive summary.
 

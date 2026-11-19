@@ -38,9 +38,9 @@ Skip when `git rev-parse HEAD` already equals the PR head (e.g. a CI checkout). 
 
 ## 3. Verify Each Comment Against Current Code
 
-**Chat-only checks trust GitHub's resolved status:** classify `isResolved: true` threads as **Resolved** and skip verification. For a requested report/table file, assess their current code too, keeping GitHub `thread_state` independent from the assessment per `report-format`. Never reopen or re-resolve an already-resolved thread automatically.
+Apply [delegate](../delegate/SKILL.md) § Independent Verification to the review comments.
 
-Load [delegate](../delegate/SKILL.md) and apply its **Review Providers** policy to items requiring verification. When the original review's model/provider is known, verify with another available provider (OpenAI review → Anthropic verification, and vice versa); the coordinator may do this directly when eligible. For a known provider, when the coordinator does not qualify, dispatch leaf, read-only verifiers with the source comments, current PR head, step 3 rules, and output paths for per-item verdicts, evidence, and coverage. Keep human/unknown-author verification with the coordinator; route mixed-provider sources before merging duplicate rows. The coordinator retains the decision table and GitHub actions; record provider limitations with the results.
+**Chat-only checks trust GitHub's resolved status:** classify `isResolved: true` threads as **Resolved** and skip verification. For a requested report/table file, assess their current code too, keeping GitHub `thread_state` independent from the assessment per `report-format`. Never reopen or re-resolve an already-resolved thread automatically.
 
 For every unresolved inline comment and review-body/PR-comment item (below), read the code at the referenced location (applying `coding-best-practices` Cross-Cutting Rules to the change) and **verify the identified issue is actually fixed** — not just that the code changed:
 

@@ -5,7 +5,7 @@ description: "This skill should be used before delegating work to an agent (one 
 
 # Delegate
 
-Load before the first worker dispatch of a session; re-read after compaction. Use the host's available tools (`spawn_agent`/native messaging in Codex, `Agent` workers in Claude), or a configured external route when provider selection requires it. Supply skill paths explicitly. Named identities (Claude `claudius:<identity>` agent types) add personality, a least-privilege tool list (the coordinator is unrestricted), preloaded skills, and a model fallback, but no working logic; in Claude prefer the matching identity over a generic worker. Other hosts use generic workers with the same skills.
+Load before the first native worker dispatch of a session; re-read after compaction. Use the host's available tools (`spawn_agent`/native messaging in Codex, `Agent` workers in Claude). Supply skill paths explicitly. Named identities (Claude `claudius:<identity>` agent types) add personality, a least-privilege tool list (the coordinator is unrestricted), preloaded skills, and a model fallback, but no working logic; in Claude prefer the matching identity over a generic worker. Other hosts use generic workers with the same skills.
 
 Resolve relative links from the loaded skill file. If the host does not substitute `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_SKILL_DIR}`, replace them with the verified installation paths before running a command. Never assume they are shell environment variables.
 
@@ -29,17 +29,10 @@ Resolve relative links from the loaded skill file. If the host does not substitu
 3. **Read discipline**: Grep/Glob first, Read with offset/limit. Delegate unavoidably large fetches to a disposable sonnet subagent that returns a summary (`git-and-github` § Context Management).
 4. **Coordinator context**: the inline-vs-spawn axis is bounded-vs-bulk, not small-vs-large. Inline only BOUNDED work; anything pulling in bulk or unbounded data (large files, logs, wide searches) goes to a disposable subagent so those bytes never enter the coordinator's context. For long sessions, summarise completed work to the tracking file and rely on compaction rather than carrying full history.
 
-## Review Providers
+## Independent Verification
 
-Identify the authoring model/provider from explicit provenance: review attribution, documented GitHub App identity, or a project account-to-provider mapping. Use the implementation author for basic review and the original reviewer for comment verification. Model variants from one supplier are one provider (GPT = OpenAI, Claude = Anthropic); a different agent or host does not change the model's provider. Do not guess from an arbitrary GitHub username; mark missing provenance unknown.
-
-Check the actual model catalog and configured, authenticated native/external routes at the required capability tier. Use an eligible native worker when possible; otherwise use an available external launcher/CLI. Do not install or configure providers just to enlarge the roster.
-
-- **Basic review**: dispatch one independent reviewer from a different provider than the known implementation author whenever available. With unknown authorship, do not claim cross-provider verification; with only the author's provider available, disclose the limitation. No independent worker means incomplete review.
-- **Comment verification**: use a different provider from the known original reviewer whenever available; the coordinator may verify directly when it qualifies. For human or unknown authors, retain coordinator verification without claiming provider diversity. With no alternative provider, verify using the available provider and disclose the limitation. Route mixed-source comments per original author before merging duplicate rows; verification of subsequent code fixes follows `coding-best-practices`' independent-review rule.
-- **Full review**: include every available provider, including the implementation author's, with independent passes over the same complete scope. Distribute the required specialist passes across that roster; add reviewers when needed to include every provider. Do not silently restrict full review to the coordinator's provider or drop specialist coverage.
-
-On dispatch failure, try another eligible route/provider, applying the same fallback rules; do not retry a failed route indefinitely. Preserve every specialist pass using the remaining providers. Record known authorship, selected providers/models, and unavailable or failed routes in coverage and the review summary. A replacement restores specialist coverage, not the missing provider's participation; report that gap in full mode. Honor explicit user model/provider constraints and state when they prevent this policy. Provider selection by a review skill authorizes read-only external review dispatch, not restricted models or broader write access; other external work remains opt-in.
+1. Identify who performed the work being checked (implementation, review, or any other artifact), including its model/provider when known.
+2. If an alternative tool/provider is available, use it to verify that work (Codex → Claude, Claude → Codex).
 
 ## Context Preparation
 
@@ -123,7 +116,3 @@ This skill owns whether/how to dispatch, capability selection, briefs, and track
 Optional integration: first check whether external Codex dispatch is available through the host's tools or an installed launcher. If unavailable, skip these references and continue with available native workers; do not install Codex or block ordinary delegation.
 
 When Codex is available and external dispatch is relevant, load [external-codex-dispatch.md](references/external-codex-dispatch.md) for the `codex-companion.mjs` bridge. Load [codex-sandbox-and-recovery.md](references/codex-sandbox-and-recovery.md) only when that bridge needs sandbox, monitoring, collision, or broker guidance. Native Codex workers do not need these references. The integration does not override role skills or select the default host.
-
-## External Claude reviews
-
-When provider selection needs Anthropic outside a Claude host, use a configured launcher or the installed, authenticated CLI per [external-claude-dispatch.md](references/external-claude-dispatch.md). Do not install it or configure credentials as part of a review.

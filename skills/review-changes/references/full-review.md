@@ -1,10 +1,10 @@
 # Full Review
 
-Run in a coordinator context. Apply `delegate` § Review Providers: include every available provider through native or configured external routes, even when the implementation author used one of them. If independent workers are unavailable, report that full review cannot run; never silently substitute basic review or a self-review.
+Run in a coordinator context. Apply `delegate` § Independent Verification. If independent workers are unavailable, report that full review cannot run; never silently substitute basic review or a self-review.
 
 ## Core passes
 
-Distribute the passes across all available providers, each reviewing the complete scope. Match role capabilities first; additional providers get a Reviewer/Marvin pass. Use Claude identities on Claude routes and generic workers elsewhere. Supply the listed skill/pass paths and set each model per `delegate` § Token Economy — strong reasoning for all three passes (security, global optimum and reuse, requirements/path analysis); Adams' cross-repository reading needs a large-context model (Claude: Opus, 1M). `<role>` is the token used for file names and `prepare` labels; when a role has multiple producers, suffix each with its provider or worker name to keep outputs and labels unique.
+Use the host's worker API or an available alternative tool: in Claude, the listed identity as the agent type; elsewhere, generic workers. Either way, explicitly supply the listed skill/pass paths and set each model per `delegate` § Token Economy — strong reasoning for all three passes (security, global optimum and reuse, requirements/path analysis); Adams' cross-repository reading needs a large-context model (Claude: Opus, 1M). `<role>` is the token used for file names and `prepare` labels.
 
 | Name / Claude identity | `<role>` | Skill / pass | Focus |
 |---|---|---|---|
@@ -14,12 +14,14 @@ Distribute the passes across all available providers, each reviewing the complet
 
 Always include all three, including for tiny diffs. Documentation-heavy changes add Trillian / `claudius:technical-writer-trillian` (`docs`, `technical-writing`: accuracy, completeness, API docs, changelog). For crypto-heavy code or significant dependency changes, expand the security prompt to crypto soundness and dependency audit — do NOT spawn a second instance. For 50+ files / 5000+ lines, spawn multiple agents of the same type with different file scopes, preserving coverage across boundaries.
 
+Always add a Codex reviewer when Codex is available, using the Reviewer pass on the same scope. Use `qa-codex` for its producer files and consolidation label. Keep all core passes above.
+
 ## Agent prompts
 
 The invariant producer rules — finding format, execution-path coverage, UI-text scan, UX/DX lens, cross-domain hints, collision preservation, Bash hygiene, CI context, process and report-back rules — live in the producer contract (`<PRODUCER_READS>`); producers read it in place. Never restate them per spawn (measured: ~2500 lines of coordinator output across 5 producers on one large review); `report.json`'s `metadata.plugin_version` pins which version applied. Beyond the general agent prompt requirements (`delegate`), each spawn prompt carries only what varies:
 
 1. **Comparison base**: how to see what changed (`git show <BASE_REF>:<file>`, `git diff <BASE_REF>...HEAD`).
-2. **Full roster**: every assigned worker's name, provider/model, role/focus, scope, and running/queued status. The coordinator owns dispatch; workers never pause for peers or spawn duplicates.
+2. **Full roster**: every assigned worker's name, role/focus, scope, and running/queued status. The coordinator owns dispatch; workers never pause for peers or spawn duplicates.
 3. **Context Digest** (verbatim, when the invoker supplied one — defined in `review-pr` § Context Digest; never restate or reinvent its contents), with this rule attached — *the digest adjusts scoring (via `claudius:severity`'s non-adversarial `likelihood` recipe), it never suppresses reporting: report the finding with context-adjusted floats, never drop it; a field marked `unknown` changes nothing.*
 4. **Worktree isolation (mandatory upfront, not reactive)**: any agent instructed to `git checkout`/build/test the reviewed branch MUST be told to work in a pre-created isolated worktree in its FIRST spawn prompt (`grand-admiral` § Worktree Isolation for setup). A reactive correction arrives too late: the checkout already happened, flipping HEAD under any other agent concurrently reading the same shared tree.
 5. **Cross-branch isolation, reviewing sibling PRs in one session**: tell every agent to verify any symbol, function, or API it cites — in findings, positives, or recommendations — actually exists on the branch it was assigned (`git show <its-target-ref>:<file>`), not a sibling branch reviewed in the same session. A shared "positives" blurb or boilerplate recommendation reused across findings is exactly where a sibling branch's content leaks in unnoticed.
@@ -46,7 +48,7 @@ Metadata is coordinator-owned: resolve the actual reviewed commit (`git rev-pars
 
 ## Execution-path coverage
 
-Per the execution-paths contract (`<PRODUCER_READS>`): Marvin owns requirements/correctness coverage of every changed unit, Smythe owns security paths; Adams records the layers and repositories checked per changed unit. Reconcile their coverage artifacts against the full inventory and provider roster before consolidation. Scaled scopes must account for cross-module paths; each available provider must have completed its assigned pass. Report failed provider passes as incomplete coverage.
+Per the execution-paths contract (`<PRODUCER_READS>`): Marvin owns requirements/correctness coverage of every changed unit, Smythe owns security paths; Adams records the layers and repositories checked per changed unit. Reconcile their coverage artifacts against the full inventory before consolidation. Scaled scopes must account for cross-module paths.
 
 ## Spawn
 
