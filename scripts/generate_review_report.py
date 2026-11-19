@@ -773,6 +773,9 @@ def _normalize_html_whitespace(root: Any) -> None:
     trim_tail()
 
 
+_TEXT_PREVIEW_LIMIT = 600
+
+
 def _fold_long_html(
     rendered: Any, *, inline: bool = False, preserve_whitespace: bool = False
 ) -> Any:
@@ -786,9 +789,9 @@ def _fold_long_html(
     preview = BeautifulSoup(f"<{tag}>{rendered}</{tag}>", "html.parser").find(tag)
     if not preserve_whitespace:
         _normalize_html_whitespace(preview)
-    if len(preview.get_text()) <= 1000:
+    if len(preview.get_text()) <= _TEXT_PREVIEW_LIMIT:
         return rendered
-    remaining = 1000
+    remaining = _TEXT_PREVIEW_LIMIT
 
     pending = list(reversed(list(preview.children)))
     while pending:

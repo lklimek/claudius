@@ -96,13 +96,13 @@ def test_combined_cells_and_final_decision_column():
 def test_long_markdown_is_folded_by_text_length_without_cutting_html():
     env = grr._html_environment()
     render = env.filters["markdown"]
-    assert "folded-text" not in str(render("x" * 1000))
-    html = str(render("**" + "ą" * 1001 + "**\n\n[tail](https://example.org/path)"))
+    assert "folded-text" not in str(render("x" * 600))
+    html = str(render("**" + "ą" * 601 + "**\n\n[tail](https://example.org/path)"))
     soup = BeautifulSoup(html, "html.parser")
-    assert len(soup.select_one(".text-preview").get_text()) == 1001
+    assert len(soup.select_one(".text-preview").get_text()) == 601
     full = soup.select_one(".text-full")
     assert full.has_attr("hidden")
-    assert full.select_one("strong").get_text() == "ą" * 1001
+    assert full.select_one("strong").get_text() == "ą" * 601
     assert full.select_one("a")["href"] == "https://example.org/path"
     assert soup.select_one("button.text-toggle")["aria-expanded"] == "false"
     long_url = "https://example.org/" + "x" * 1500
@@ -112,14 +112,14 @@ def test_long_markdown_is_folded_by_text_length_without_cutting_html():
 def test_collapsing_counts_visible_whitespace_and_preserves_literal_text():
     env = grr._html_environment()
     spaces = "A" + " " * 1500 + "B"
-    assert "folded-text" not in str(env.filters["markdown"]("x" * 1000 + " <em> </em>"))
+    assert "folded-text" not in str(env.filters["markdown"]("x" * 600 + " <em> </em>"))
     assert "folded-text" not in str(env.filters["markdown"](spaces))
     assert "folded-text" in str(env.filters["markdown"]("```\n" + spaces + "\n```"))
     assert "folded-text" in str(env.filters["fold_literal"](spaces))
-    assert "folded-text" not in str(env.filters["markdown"]("x" * 998 + " <em> B</em>"))
-    assert "folded-text" in str(env.filters["markdown"]("x" * 999 + " <em> B</em>"))
+    assert "folded-text" not in str(env.filters["markdown"]("x" * 598 + " <em> B</em>"))
+    assert "folded-text" in str(env.filters["markdown"]("x" * 599 + " <em> B</em>"))
     assert "folded-text" not in str(
-        env.filters["markdown"]("<p>" + "x" * 1000 + " </p>")
+        env.filters["markdown"]("<p>" + "x" * 600 + " </p>")
     )
 
 
