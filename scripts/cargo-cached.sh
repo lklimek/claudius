@@ -139,34 +139,6 @@ if [[ -z "$caller_target_dir" ]]; then
 fi
 effective_target_dir="${cli_target_dir:-${CARGO_TARGET_DIR:-}}"
 
-# Keep per-checkout isolation cheap: sccache does NOT cache linker-invoking crates
-# (bin/dylib/cdylib/proc-macro — a test binary is a bin, exactly what a test loop
-# re-links) and keys on the absolute source path by default, so isolated target
-# dirs would each pay a COLD rlib rebuild instead of a relink. SCCACHE_BASEDIRS
-# strips the checkout root ($toplevel) from cached paths so the remainder
-# (src/lib.rs, ...) is IDENTICAL across checkouts and the rlib cache is shared.
-# $HOME would be wrong here — it's a common ancestor of all checkouts, so the
-# distinguishing subpath (git/a/... vs git/b/...) still differs after stripping.
-# SCCACHE_BASEDIRS landed in sccache 0.14.0 (mozilla/sccache#35); on older builds
-# it's silently ignored, so version-gate to avoid claiming an effect we don't get.
-version_at_least() {
-  local got_major got_minor got_patch min_major min_minor min_patch
-  IFS=. read -r got_major got_minor got_patch <<<"$1"
-  IFS=. read -r min_major min_minor min_patch <<<"$2"
-  got_major=$(( 10#$got_major )); got_minor=$(( 10#$got_minor )); got_patch=$(( 10#$got_patch ))
-  min_major=$(( 10#$min_major )); min_minor=$(( 10#$min_minor )); min_patch=$(( 10#$min_patch ))
-  (( got_major > min_major \
-     || (got_major == min_major && got_minor > min_minor) \
-     || (got_major == min_major && got_minor == min_minor && got_patch >= min_patch) ))
-}
-
-if command -v sccache >/dev/null 2>&1 && [[ -z "${SCCACHE_BASEDIRS:-}" ]]; then
-  scv=$(sccache --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  if [[ -n "$scv" ]] && version_at_least "$scv" 0.14.0; then
-    export SCCACHE_BASEDIRS="$toplevel"
-  fi
-fi
-
 # --- Cache key: everything that determines the result ----------------------
 head_oid=$(git rev-parse HEAD 2>/dev/null) || exec cargo "$@"
 diff_hash=$(git diff HEAD 2>/dev/null | sha256sum | cut -d' ' -f1)

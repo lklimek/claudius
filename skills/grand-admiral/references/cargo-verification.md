@@ -32,5 +32,4 @@ Knobs: `CLAUDIUS_TARGET_PREFIX` places the path-hashed dirs under a chosen root 
 
 Caveats:
 
-1. rlib sharing across isolated dirs (relink instead of cold rebuild) needs sccache >= 0.14.0 (`SCCACHE_BASEDIRS`); on older sccache it is a no-op, so each checkout pays its own cold rlib build.
-2. Derived dirs accumulate PERMANENTLY with no automatic GC (deleting build dirs is destructive) — periodic manual pruning is the coordinator's/user's job.
+1. Derived dirs accumulate PERMANENTLY with no automatic GC (deleting build dirs is destructive) — periodic manual pruning is the coordinator's/user's job.
