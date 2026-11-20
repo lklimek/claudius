@@ -30,13 +30,11 @@
 #   K23 identical tree, 2 checkouts -> distinct ledger keys (no cross-replay)
 #   K24 fake-green banner (auto-isolated) -> names own dir, no manual recipe
 #   K25 two DIFFERENT explicit CARGO_TARGET_DIRs -> must NOT cross-replay (in key)
-#   K26 sccache present + HOME unset -> no crash (SCCACHE_BASEDIRS=toplevel)
-#   K27 sccache < 0.14.0 -> SCCACHE_BASEDIRS NOT set (version gate)
+#   K26 sccache present          -> SCCACHE_BASEDIRS not set (cache shared as configured)
 #   K28 underivable target dir (mkdir fails) -> wrapper aborts before cargo
 #   K29 cargo metadata resolution fails twice -> wrapper aborts before cargo
 #   K30 fake-green run in other checkout -> banner names that checkout's dir
 #   K31 explicit (shared) override -> banner says hazard LIVE, not "auto-isolated"
-#   K32 BSD sort rejects -V        -> sccache >= 0.14.0 gate still evaluates true
 #   K33 timeout absent             -> wrapper aborts without blocking
 #   K34 target prefix set          -> unique per checkout and stable on repeat
 #   K35 explicit target + prefix   -> explicit CARGO_TARGET_DIR wins unchanged
@@ -127,9 +125,7 @@ exit "${STUB_RC:-0}"
 EOF
 chmod +x "$STUBDIR/cargo"
 
-# Stub sccache (only prepended to PATH for the sccache-specific cases). Reports
-# SCC_VER (default 0.14.0, the version SCCACHE_BASEDIRS support landed in) so the
-# wrapper's version gate can be exercised both above and below the threshold.
+# Stub sccache (only prepended to PATH for the sccache-specific case).
 SCCDIR="$WORK/sccbin"; mkdir -p "$SCCDIR"
 cat > "$SCCDIR/sccache" <<'EOF'
 #!/usr/bin/env bash
@@ -137,20 +133,6 @@ cat > "$SCCDIR/sccache" <<'EOF'
 exit 0
 EOF
 chmod +x "$SCCDIR/sccache"
-
-# BSD/macOS sort has no -V. This shim preserves ordinary sort behavior but
-# rejects -V exactly as a BSD implementation would.
-REAL_SORT=$(command -v sort); export REAL_SORT
-BSDSORTDIR="$WORK/bsd-sort-bin"; mkdir -p "$BSDSORTDIR"
-cat > "$BSDSORTDIR/sort" <<'EOF'
-#!/usr/bin/env bash
-if [ "${1:-}" = -V ]; then
-  echo "sort: illegal option -- V" >&2
-  exit 2
-fi
-exec "$REAL_SORT" "$@"
-EOF
-chmod +x "$BSDSORTDIR/sort"
 
 # Throwaway git repo (the tree the wrapper keys on).
 REPO="$WORK/repo"; mkdir -p "$REPO"
@@ -540,36 +522,19 @@ else
   bad "K25 (before=$BEFORE mid=$MID after=$AFTER outB='${OUTB//$'\n'/ }')"
 fi
 
-echo "=== K26: sccache present with HOME unset does not crash the wrapper ==="
-# Old code exported SCCACHE_BASEDIRS=\"\$HOME\" under set -u; an unset HOME aborted
-# the whole wrapper instead of falling through. $toplevel (always non-empty) fixes
-# it. Stub sccache reports 0.14.0 so the export path actually executes.
+echo "=== K26: wrapper leaves SCCACHE_BASEDIRS to the caller (sccache stays shared) ==="
+# sccache is one machine-wide cache; the wrapper must not inject per-checkout
+# SCCACHE_BASEDIRS. A caller-provided value passes through unchanged.
 bust k26
-BEFORE=$(counter)
-OUT=$( cd "$REPO" && env -u HOME PATH="$SCCDIR:$STUBDIR:$PATH" SCC_VER=0.14.0 \
-       CLAUDIUS_CACHE_DIR="$CLAUDIUS_CACHE_DIR" COUNTER="$COUNTER" \
-       STUB_TARGET_DIR="$STUB_TARGET_DIR" CLAUDIUS_FORCE=0 \
-       "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
-AFTER=$(counter)
-tl_expected=$(cd "$REPO" && git rev-parse --show-toplevel)
-if [ "$AFTER" = "$((BEFORE + 1))" ] && [ "$RC" = "0" ] \
-   && grep -q "STUB CARGO INVOCATION" <<<"$OUT" \
-   && grep -q "STUB_SCC_BASEDIRS=$tl_expected" <<<"$OUT"; then
-  ok "K26 HOME unset + sccache present: wrapper ran (SCCACHE_BASEDIRS=toplevel, no crash)"
+OUT=$( cd "$REPO" && env -u SCCACHE_BASEDIRS PATH="$SCCDIR:$STUBDIR:$PATH" SCC_VER=0.14.0 \
+       CLAUDIUS_FORCE=1 "$BASHBIN" "$WRAPPER" test 2>&1 ); RC=$?
+OUT2=$( cd "$REPO" && env PATH="$SCCDIR:$STUBDIR:$PATH" SCC_VER=0.14.0 SCCACHE_BASEDIRS=/caller \
+       CLAUDIUS_FORCE=1 "$BASHBIN" "$WRAPPER" test 2>&1 )
+if [ "$RC" = "0" ] && grep -q "STUB_SCC_BASEDIRS=$" <<<"$OUT" \
+   && grep -q "STUB_SCC_BASEDIRS=/caller$" <<<"$OUT2"; then
+  ok "K26 sccache present: SCCACHE_BASEDIRS not injected, caller value kept"
 else
-  bad "K26 (before=$BEFORE after=$AFTER rc=$RC out='${OUT//$'\n'/ }')"
-fi
-
-echo "=== K27: SCCACHE_BASEDIRS is version-gated (skipped below sccache 0.14.0) ==="
-# The installed host sccache (0.7.7) predates SCCACHE_BASEDIRS (mozilla/sccache#35,
-# 0.14.0). Setting it there is a silent no-op, so the wrapper must NOT set it.
-bust k27
-OUT=$( cd "$REPO" && env PATH="$SCCDIR:$STUBDIR:$PATH" SCC_VER=0.7.7 CLAUDIUS_FORCE=1 \
-       "$BASHBIN" "$WRAPPER" test 2>&1 )
-if grep -q "STUB_SCC_BASEDIRS=$" <<<"$OUT"; then
-  ok "K27 sccache 0.7.7: SCCACHE_BASEDIRS left unset (version gate holds)"
-else
-  bad "K27 (out='${OUT//$'\n'/ }')"
+  bad "K26 (rc=$RC out='${OUT//$'\n'/ }' out2='${OUT2//$'\n'/ }')"
 fi
 
 echo "=== K28: an underivable target dir aborts before cargo can use a shared dir ==="
@@ -638,17 +603,6 @@ if grep -q "$WARN" <<<"$OUT" \
   ok "K31 explicit-override banner flags the live hazard, does not falsely claim isolation"
 else
   bad "K31 (out='${OUT//$'\n'/ }')"
-fi
-
-echo "=== K32: the sccache version gate works when sort rejects GNU-only -V ==="
-bust k32
-OUT=$( cd "$REPO" && env -u SCCACHE_BASEDIRS PATH="$BSDSORTDIR:$SCCDIR:$STUBDIR:$PATH" \
-       SCC_VER=0.14.0 CLAUDIUS_FORCE=1 "$BASHBIN" "$WRAPPER" test 2>&1 )
-if grep -q "STUB_SCC_BASEDIRS=$REPO" <<<"$OUT" \
-   && ! grep -q "illegal option -- V" <<<"$OUT"; then
-  ok "K32 BSD-style sort: sccache 0.14.0 gate passed without invoking sort -V"
-else
-  bad "K32 (out='${OUT//$'\n'/ }')"
 fi
 
 echo "=== K33: without timeout, the wrapper aborts immediately instead of sharing ==="

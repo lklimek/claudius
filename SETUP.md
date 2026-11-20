@@ -50,7 +50,7 @@ cargo install cargo-vet --locked
 ```
 
 - `cargo` and `rustc` have no fallback for Rust projects or the cargo-discipline hook.
-- `cargo-nextest` falls back to `cargo test`. The cross-worktree `SCCACHE_BASEDIRS` optimization is skipped when `sccache` is missing or older than 0.14.0.
+- `cargo-nextest` falls back to `cargo test`.
 - Tree-sitter is also the third fallback in caller lookup.
 
 #### Go projects
