@@ -68,10 +68,31 @@ Both modes end with this table (fix mode: after step 8). Above it, one line: `PR
 
 IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](references/structured-report.md) § Finding additions, rough severity standing in for floats when no report exists) and are fixed once shown: a later report and `triage-findings` reuse them, never re-sort. A requested report (steps 5-7) is built before the table; in fix mode, after step 8. Keep cells ≤ ~15 words:
 
-| ID | Source | Problem | Scope | Elsewhere | Opinion | Recommendation |
-|----|--------|---------|-------|-----------|---------|----------------|
+| ID | Source | Category | Problem | Scope | Elsewhere | Opinion | Recommendation |
+|----|--------|----------|---------|-------|-----------|---------|----------------|
 
 - **Source**: `thread` / `review-body` / `PR comment`.
+- **Category**: exactly one slug from the closed catalog below — the most severe match, gate-mapped first; `other: <2–3 words>` only when none fits.
+
+  | Slug | Covers | Gates |
+  |---|---|---|
+  | `funds` | Loss or misdirection of funds, wrong amounts, double spends | G-FUNDS, G-AMOUNT, G-DOUBLE |
+  | `security` | Crypto, secrets, injection, authorization, unsafe defaults, spoofable UI | G-CRYPTO, G-SECRET, G-PHISH, G-DEFAULTS |
+  | `privacy` | Identifying or financial data leaks short of secrets | G-PRIVACY |
+  | `data-loss` | Data loss or corruption, bricked profile | G-DATA, G-BRICK |
+  | `correctness` | Wrong result or logic; PR goal not met | G-INTENT |
+  | `concurrency` | Races, ordering, deadlocks | — |
+  | `error-handling` | Swallowed or unclear errors, missing recovery, logging | G-SILENT |
+  | `performance` | Speed, resource use, unbounded growth | G-GROWTH |
+  | `state-freshness` | Delayed refresh, stale cache or view | — |
+  | `migration` | Schema/data migration, upgrade path | — |
+  | `api-contract` | Public interface, contract, compatibility | — |
+  | `ux` | UI behavior, user-visible text, accessibility | G-UI-BROKEN, G-UI-TEXT, G-WYSIWYS |
+  | `maintainability` | Structure, duplication, naming, style | — |
+  | `tests` | Missing or weak tests | — |
+  | `docs` | Documentation, code comments | — |
+  | `build-ci` | Build, dependencies, CI, tooling | — |
+  | `other` | Nothing above fits | — |
 - **Problem**: plain language, concrete impact (who is hurt, how).
 - **Scope**: `in`/`out` (step 3) plus a short reason citing the PR's stated goal — for `in`, the necessity evidence; if another PR fits better, `#M: <its scope>`.
 - **Elsewhere**: pre-analysis hit, or `—`.

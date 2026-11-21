@@ -26,6 +26,8 @@ One scored finding per actual remaining concern; other comments live only in ass
 }
 ```
 
+`tags` carries the step 4 category as `category:<slug>` (`category:other:<label>` for `other`).
+
 Review-body and PR-comment items (SKILL.md step 3) have no thread: omit `comment_id` and `thread_id`; `comment_url` = the review's or comment's URL; `location` = the code the request concerns, else `PR #<number>` (no permalink).
 
 `description` = what the comment asked for; `recommendation` = what was done (RESOLVED) or what remains (UNRESOLVED). `thread_id` comes from `gh-list-review-threads.sh` and is needed for step 8.
