@@ -37,7 +37,7 @@ Create feature branches; NEVER commit to a base branch. [Conventional commits](h
 
 **Always merge the PR's base.** Fetch the remote and resolve the current PR base from GitHub metadata; before a PR exists, use the documented target branch or repository default. Verify that the freshly fetched remote base is an ancestor of `HEAD` (`git merge-base --is-ancestor <remote>/<base> HEAD`). A stale local base or an earlier session check is insufficient. If behind, invoke [merge-base](../merge-base/SKILL.md) with that resolved remote/base ref, then validate the result, apply `coding-best-practices` § Workflow Discipline, and recheck ancestry before pushing. If fetching, base resolution, integration, or the final ancestry check fails, stop the push and report the blocker. Apply this gate to every push, including follow-ups and retries.
 
-**Stacked PRs** (base is another PR's branch): read [stacked-prs.md](references/stacked-prs.md) before creating, updating, or merging one. A native stack replaces this base-merge gate with its own sync rules; a manual stack applies the gate to the parent branch.
+**Stacked PRs** (base is another PR's branch): read [stacked-prs.md](references/stacked-prs.md) before creating, updating, or merging one. The gate's base is the parent branch; a native stack rebases onto it instead of merging.
 
 ## Commit, Push, PR Workflow
 
@@ -86,7 +86,7 @@ Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a
 ## Safety Rules
 
 1. **Pushing is coordinator-only.** Spawned/specialist agents never push — they commit and stop, and the coordinator pushes on their behalf. A coordinator push to a feature branch needs no confirmation, its own discretion. Publishing anything else to GitHub (PRs, issues, comments, reviews) still requires explicit confirmation, even if the user agreed earlier. **Never push to a base/protected branch** (main, master, vX.Y-dev, or whatever the repo's configured base is) — that's not a confirmation gate, it's an outright block; if a base-branch push is ever genuinely warranted, the human does it.
-2. **Never force-push. Never amend commits.** Always create new commits. If force-push is needed, ask the user to do it manually. Sole exception: the coordinator's `gh stack` rebase/sync/push on a native stack ([stacked-prs.md](references/stacked-prs.md)).
+2. **Never force-push. Never amend commits.** Always create new commits. If force-push is needed, ask the user to do it manually. Sole exception: the coordinator's leased rebase pushes on a native stack ([stacked-prs.md](references/stacked-prs.md)).
 3. **Never `git add .` or `git add -A`** — stage specific files; check for `.env`, credentials, or secret files before staging and warn if found.
 4. **Never use interactive flags** (`-i`); **never skip hooks** (`--no-verify`) unless explicitly requested.
 5. **Avoid `gh api`** — prefer high-level `gh` subcommands and the wrapper scripts. Use `gh api` only for read-only queries with no subcommand equivalent (with `--jq`, not `| jq` — `!` triggers shell history expansion); never for writes. Exception: `gh api graphql` for mutations with no CLI equivalent (e.g., thread resolution).
