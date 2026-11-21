@@ -33,9 +33,11 @@ Create feature branches; NEVER commit to a base branch. [Conventional commits](h
 
 ## Before Every Push
 
-**Wait for bots.** Never push while an automated reviewer or agent is working on the PR — a new head makes it restart, review a stale diff, or conflict with its own commits; wait until it finishes. Bots differ per repo: any GitHub App or `[bot]` account, or an account the project instructions name. Working = a pending review request to it, an in-progress check run or status it owns (not ordinary CI build/test jobs), its latest comment announcing work in progress, or its commits still landing on the branch — check with bounded `gh pr view <pr> --json reviewRequests,reviews,statusCheckRollup,commits,comments`. A bot that edits one status comment in place: `pr_watch.py gate`; waiting for PRs to change: `pr_watch.py watch` ([gh-cli.md](references/gh-cli.md) § PR waiter). Still working after ~30 min → report to the user instead of pushing.
+**Wait for bots.** Never push while an automated reviewer or agent is working on the PR — a new head makes it restart, review a stale diff, or conflict with its own commits; wait until it finishes. Bots differ per repo: any GitHub App or `[bot]` account, or an account the project instructions name. Working = a pending review request to it, an in-progress check run or status it owns (not ordinary CI build/test jobs), its latest comment announcing work in progress, or its commits still landing on the branch — check with bounded `gh pr view <pr> --json reviewRequests,reviews,statusCheckRollup,commits,comments`. A bot that edits one status comment in place: `pr_watch.py gate`; waiting for PRs to change: `pr_watch.py watch` ([gh-cli.md](references/gh-cli.md) § PR waiter). Meanwhile hold commits locally; push once it finishes. Still working after ~30 min → report to the user instead of pushing.
 
 **Always merge the PR's base.** Fetch the remote and resolve the current PR base from GitHub metadata; before a PR exists, use the documented target branch or repository default. Verify that the freshly fetched remote base is an ancestor of `HEAD` (`git merge-base --is-ancestor <remote>/<base> HEAD`). A stale local base or an earlier session check is insufficient. If behind, invoke [merge-base](../merge-base/SKILL.md) with that resolved remote/base ref, then validate the result, apply `coding-best-practices` § Workflow Discipline, and recheck ancestry before pushing. If fetching, base resolution, integration, or the final ancestry check fails, stop the push and report the blocker. Apply this gate to every push, including follow-ups and retries.
+
+**Stacked PRs** (base is another PR's branch): the gate's base is the parent branch, merged in only when the stacked PR is pushed for its own changes. Never cascade a parent change up the stack: the bottom PR (targeting the base branch) merges first, then the next PR is updated from the base branch, and so on up. Agents never merge a parent into a stacked branch on their own; the coordinator resets such a stray merge to the branch's pushed head when it holds no other unpushed work.
 
 ## Commit, Push, PR Workflow
 
@@ -61,7 +63,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 **`Detailed discussion` is for implementors and AI agents** — as technical as needed.
 
-`TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts.
+`TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts, then mark ready every PR that targets the base branch, is not blocked by another PR, and is not labelled `postponed`; all others stay draft. Where CI skips drafts, dispatch the needed workflows on demand (`gh workflow run`).
 
 **PR descriptions describe net final state only** — no development history, changelog, or iteration/debugging narrative; that belongs in commit messages. `### Actual behavior` (the pre-existing problem being solved) and concise final `### Testing` results describe state, not history, and are expected.
 
@@ -88,6 +90,7 @@ Issue bodies use the same plain-language-first skeleton as PRs (see §Creating a
 5. **Avoid `gh api`** — prefer high-level `gh` subcommands and the wrapper scripts. Use `gh api` only for read-only queries with no subcommand equivalent (with `--jq`, not `| jq` — `!` triggers shell history expansion); never for writes. Exception: `gh api graphql` for mutations with no CLI equivalent (e.g., thread resolution).
 6. **Never fork repositories** — forking creates a separate repo and breaks the workflow. On 403/404 or "Resource not accessible" from `gh` or `git push`, retry the same command through [ghsudo](https://github.com/lklimek/ghsudo) if installed, else ask the user.
 7. **Sandbox**: `gh`/`ghsudo` need network access to `api.github.com`. Preferred fix: add `"api.github.com"` to `sandbox.network.allowedDomains` in `settings.json`. If unconfigured and `gh` fails with network errors, fall back to `dangerouslyDisableSandbox: true` on the Bash call.
+8. **User-only actions** — ask one question per action; earlier or blanket consent does not carry over: dismissing a bot's `CHANGES_REQUESTED` review; posting a bot-override command (e.g. `/skip-bots`); retargeting, unstacking, or merging a PR (a user-confirmed `dependabot-merge` run covers its merges). Editing `.github/workflows/` when the permission classifier blocks it: ask for one-time consent, then make the edit.
 
 ## Context Management — Large GitHub Responses
 
