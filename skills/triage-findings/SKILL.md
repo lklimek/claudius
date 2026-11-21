@@ -56,7 +56,7 @@ Findings with `merge_class: out_of_scope_follow_up` never change this PR (`sever
 
 For reports with `metadata.report_type == "comment_check"` (produced by `check-pr-comments`):
 
-- Triage actions apply to unresolved PR review comments instead of code review findings; each is a per-ID decision for `check-pr-comments` § 8 Table mode, which owns replies, resolves, and the gate-thread rule: `fix` → `fix here`, `false_positive`/`accept_risk` → `reject` with the triage reason, `duplicate` → the duplicated ID's decision, asking which ID when `rationale` does not name it (or `handled in #N` when it duplicates a PR/issue), `defer` → `follow-up PR` or `TODO` (ask which), replacing step 6 and the out-of-scope rule above
+- Triage actions apply to unresolved PR review comments instead of code review findings; each is a per-ID decision for `check-pr-comments` § 8 Executing decisions, which owns replies, resolves, and the gate-thread rule: `fix` → `fix here`, `false_positive`/`accept_risk` → `reject` with the triage reason, `duplicate` → the duplicated ID's decision, asking which ID when `rationale` does not name it (or `handled in #N` when it duplicates a PR/issue), `defer` → `follow-up PR`, `upstream issue`, or `TODO` (ask which), replacing step 6 and the out-of-scope rule above
 - `resolve_thread: true` adds "resolve" to that decision (human threads included); otherwise § 8 alone decides
 
 ## Output
