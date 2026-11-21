@@ -83,7 +83,7 @@ Every code-mutating spawned agent MUST work in an isolated git worktree — no e
 
 **Post-wave push (coordinator discretion, feature branches only):** once the merged feature branch is verified, the coordinator may push it without user authorization (`git-and-github` § Safety Rules). Never a base/protected branch — outright block, human-only. **Always the coordinator itself** (verify with `git ls-remote`) — never relay the push to a spawned agent, which loops or refuses.
 
-**Native stacked PRs**: `gh stack` state is shared by all worktrees of a clone; only the coordinator rebases or syncs a stack, with every worktree on its branches idle (`git-and-github` [stacked-prs.md](../git-and-github/references/stacked-prs.md)).
+**Native stacked PRs**: post-wave integration into a stack branch is cherry-pick or fast-forward, never merge; `gh stack` state is shared by all worktrees of a clone; only the coordinator rebases or syncs a stack, with every worktree on its branches idle (`git-and-github` [stacked-prs.md](../git-and-github/references/stacked-prs.md)).
 
 **Cargo target-dir isolation is automatic** — every invocation through `cargo-cached.sh` derives a per-checkout target dir; never assign `CARGO_TARGET_DIR` per agent.
 

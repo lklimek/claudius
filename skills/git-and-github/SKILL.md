@@ -63,7 +63,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 **`Detailed discussion` is for implementors and AI agents** — as technical as needed.
 
-`TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts; a native stack's PRs come from `gh stack submit --auto` (drafts), then get this body via `gh pr edit`.
+`TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts; native stack layers per [stacked-prs.md](references/stacked-prs.md) § Creating PRs.
 
 **Readiness**: a PR is ready when it targets the base branch, is not blocked by another PR, and is not labelled `postponed`; otherwise draft. Reconcile on creation, on every update, and when its blockers, target, or label change — in both directions. Where CI skips drafts, dispatch the needed workflows on demand (`gh workflow run`).
 
