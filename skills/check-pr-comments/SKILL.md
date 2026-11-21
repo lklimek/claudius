@@ -58,6 +58,8 @@ For every unresolved inline comment and review-body/PR-comment item (below), rea
 
 **Scope**: Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` § 5 (skip if loaded) and classify every `Unresolved` comment **in scope** or **out of scope** per its PR scope. A reviewer's request is not PR intent until the user or a human PR author accepts it; an out-of-scope comment is not fixed in this PR.
 
+**Necessity gate**: an `Unresolved` comment is **in scope** only with evidence that its fix is (1) necessary to achieve the PR's stated goal — without it the goal fails or a blocker gate (`severity` § 2) trips — and (2) not achievable in a higher system layer (caller, UI, user action, operational process). No such evidence → **out of scope**, even when valid. Unnecessary by default: performance optimisation, delayed state refresh, client-side races from the user's own conflicting operations, complex migration of easily recreated data — none trips a gate on its own.
+
 **Author classification**: **Bot** — username ends with `[bot]` (e.g. `dependabot[bot]`), the API returns `type: "Bot"`, or the project instructions name the account as a review bot (some run under ordinary user accounts); **Human** — all others.
 
 ## 4. Decision Table
@@ -71,7 +73,7 @@ IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](refer
 
 - **Source**: `thread` / `review-body` / `PR comment`.
 - **Problem**: plain language, concrete impact (who is hurt, how).
-- **Scope**: `in`/`out` (step 3) plus a short reason citing the PR's stated goal; if another PR fits better, `#M: <its scope>`.
+- **Scope**: `in`/`out` (step 3) plus a short reason citing the PR's stated goal — for `in`, the necessity evidence; if another PR fits better, `#M: <its scope>`.
 - **Elsewhere**: pre-analysis hit, or `—`.
 - **Opinion**: valid or not, rough severity, disagreement with the reviewer, `bot`/`human`; flag a tripped G-FUNDS/G-SECRET/G-CRYPTO/G-DATA.
 - **Recommendation**: `resolve: fixed in <sha>` (verified this session) / `fix here` / `reject: <reason>` / `follow-up PR` (new, or `#M`) / `TODO` / `handled in #N`. Fix mode: the action taken.
