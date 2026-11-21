@@ -6,7 +6,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash(git branch --show-current), B
 
 # Merge Base Branch
 
-Merge the remote base branch into the current feature branch: pre-merge analysis, conflict resolution, behavioral change report. **Output**: summaries only — never dump raw diffs, file contents, or initial state unless asked.
+Merge the remote base branch into the current feature branch: pre-merge analysis, conflict resolution, behavioral change report. **Native stacked PR** (`git-and-github` [stacked-prs.md](../git-and-github/references/stacked-prs.md) § Detect the kind): stop without merging and update it per that file instead — a merge commit blocks the stack's merge. **Output**: summaries only — never dump raw diffs, file contents, or initial state unless asked.
 
 ## 1. Sync
 
