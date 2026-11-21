@@ -7,7 +7,7 @@ description: "This skill should be used when running git or gh commands, interac
 
 **Tooling**: `git` for repository operations; `gh` CLI and the `scripts/gh-*.sh` wrappers for all GitHub API operations — see [gh-cli.md](references/gh-cli.md) for the wrapper catalog, `ghsudo` usage, and exit codes.
 
-**Attribution**: every commit, PR, issue, and comment posted to GitHub **must** include this footer (blank line before it):
+**Attribution**: every commit, PR, issue, and comment posted to GitHub **must** include this footer (blank line before it) — except a bot command whose protocol requires an exact body (e.g. `/skip-bots`):
 
 ```
 <sub>🤖 Co-authored by [Claudius the Magnificent](https://github.com/lklimek/claudius) AI Agent</sub>
@@ -47,7 +47,7 @@ On a bare "push", "commit and push", "create a PR", "ship this", or similar — 
 2. **Version bump**: when the project's `CLAUDE.md` defines a versioning policy, the PR carries exactly one bump before merge — none again on a branch that has one, re-bumped only if the SemVer category grows (`coding-best-practices` § Unmerged code isn't released).
 3. **Commit** per § Committing and Safety Rule 3.
 4. **Push** after § Before Every Push.
-5. **PR**: existing → update its title and description whenever they no longer match the net final state; none → create a draft per § Creating a PR.
+5. **PR**: existing → update its title and description whenever they no longer match the net final state; none → create a draft per § Creating a PR. Either way, reconcile § Readiness.
 
 This workflow pushes once per request; rerun it only on a new request.
 
@@ -63,7 +63,9 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 **`Detailed discussion` is for implementors and AI agents** — as technical as needed.
 
-`TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts, then mark ready every PR that targets the base branch, is not blocked by another PR, and is not labelled `postponed`; all others stay draft. Where CI skips drafts, dispatch the needed workflows on demand (`gh workflow run`).
+`TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts.
+
+**Readiness**: a PR is ready when it targets the base branch, is not blocked by another PR, and is not labelled `postponed`; otherwise draft. Reconcile on creation, on every update, and when its blockers, target, or label change — in both directions. Where CI skips drafts, dispatch the needed workflows on demand (`gh workflow run`).
 
 **PR descriptions describe net final state only** — no development history, changelog, or iteration/debugging narrative; that belongs in commit messages. `### Actual behavior` (the pre-existing problem being solved) and concise final `### Testing` results describe state, not history, and are expected.
 
