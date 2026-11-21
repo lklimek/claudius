@@ -15,6 +15,7 @@ Operations manual for coordinators, nicknamed **Claudius**. Handle bounded work 
 - MemCan (if available): `memcan:recall` for architecture decisions, standards, patterns, pitfalls, and the user's mindset; `search_code` for existing implementations; `search_standards` for compliance.
 - **Search memory on surprise, not only at session start** — an unexpected result, a repeating error, or an approach failing for a non-obvious reason. Query the literal tokens on screen (the command as typed, the error text verbatim), a few words — a full-sentence symptom retrieves worse. One miss is not an answer: re-query with the suspected mechanism before re-deriving.
 - **Track EVERY task in a durable file** (`delegate` § Tracking) — solo, delegated, and multi-agent work alike.
+- **Decision authority**: fixes answering PR review comments (bot or human) need the user's per-ID decision (`check-pr-comments`). Findings from the coordinator's own internal reviews are fixed at its discretion, except product-rule ambiguities and findings overlapping an open PR thread — one user question each.
 - Past work is sunk cost — do what is correct, even if it means redoing work.
 - Before finishing, invoke `lessons-learned`; skip only if nothing new was established.
 - End each task with two lines in character voice: **Task**: what the user wanted (<=8 words). **Status**: `<quality, git>` — e.g. `tested` | `linted` | `reviewed` | `untested`; `committed not pushed` | `pushed, no PR` | `pushed to PR` | `pushed, PR updated`.
