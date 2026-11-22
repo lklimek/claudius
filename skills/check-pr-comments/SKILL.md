@@ -15,7 +15,7 @@ On Codex/other hosts, resolve commands from the installed absolute script paths 
 Every comment fix, reply, and resolve needs a per-ID decision: the user's, except in Auto mode. Workers verify and propose only.
 
 - **Interview** (default when the user is reachable): verify everything first, then ask one decision at a time (step 4) and execute each answer before the next question (step 8).
-- **Table**: show the step 4 table, change nothing until the user decides per ID (step 8). Use it on request, and always when no user is reachable (CI, headless, a subagent without a user channel) — the run then ends after the table.
+- **Table**: show the step 4 table, change nothing until the user decides per ID (step 8). Use it on request, and always when no user is reachable (CI, headless, a subagent without a user channel) and Auto is not enabled — the run then ends after the table.
 - **Auto** — only on the user's explicit request or a standing user/project instruction, never on an invoking skill's: verify everything, then decide each ID yourself by its step 4 recommendation and execute it (step 8). Auto decides only `resolve`, `fix here` (in scope), `handled in #N`, `TODO`, and `reject` of bot comments; every other ID — a gate override, `follow-up PR`, `upstream issue`, a rejected human comment, a product-rule ambiguity — goes to the user afterwards as an Interview question, or stays undecided in the table when no user is reachable.
 
 State the mode in one line.
@@ -141,7 +141,7 @@ Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can 
 
 ### Executing decisions
 
-Apply each decision exactly; never extend it to IDs the user did not name. Every "resolve" below covers human threads too. Reply and resolve on every thread of a merged ID. Never act on an already resolved (`isResolved: true`) thread, and keep local-only state (branches, WIP) off GitHub. Reply text for any decision other than `fix here` and `resolve` starts "Per maintainer decision" — in Auto, "Per automated triage" replaces it in every reply below. Post a fix's reply only after the fix lands.
+Apply each decision exactly; never extend it to IDs it was not made for (Auto executes only its own permitted decisions). Every "resolve" below covers human threads too. Reply and resolve on every thread of a merged ID. Never act on an already resolved (`isResolved: true`) thread, and keep local-only state (branches, WIP) off GitHub. Reply text for any decision other than `fix here` and `resolve` starts "Per maintainer decision" — in Auto, "Per automated triage" replaces it in every reply below. Post a fix's reply only after the fix lands.
 
 **Fix commits awaiting a decision** (e.g. a worker briefed before a correction fixed anyway): before the first decision, move each onto its own local branch (record ID → commit) and drop only those commits from the PR branch, keeping its other unpushed work. Approved → apply that ID's commits to the PR branch; moved to a follow-up → that branch becomes the follow-up; rejected → delete it. Before each push, confirm the PR branch holds no undecided ID's commits.
 
