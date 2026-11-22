@@ -121,7 +121,10 @@ def test_summarize_pr_tolerates_deleted_author():
         (False, None, "lint=fail build=pending"),
         (True, None, "lint=fail"),
         (False, "^build$", "build=pending"),
-        (True, "^build$", "green"),
+        (True, "^build$", "pending ignored"),
+        (True, "^test$", "green"),
+        (False, "^docs$", "none"),
+        (False, "^nomatch$", "none"),
     ],
 )
 def test_summarize_checks(ignore_pending, want, expected):
@@ -191,7 +194,7 @@ def test_is_reviewing(active, as_of, gate, expected):
 
 def test_reading_without_adapters():
     a = args("watch")
-    expected = "state=OPEN decision=- draft=false unresolved=[] || ci: green"
+    expected = "state=OPEN decision=- draft=false unresolved=[] || ci: none"
     assert pw.Watcher(a, gh(body="no block"), no_network).reading(1167) == expected
     # An empty description is a PR without a block, not a failed reading.
     assert pw.Watcher(a, gh(body=""), no_network).reading(1167) == expected
@@ -252,10 +255,10 @@ def test_failing_checks_nonzero_exit_still_read():
     assert r.endswith("ci: lint=fail")
 
 
-def test_no_checks_reported_is_green():
+def test_no_checks_reported_is_not_green():
     checks = (1, "", "no checks reported on the 'feat' branch")
     r = pw.Watcher(args("watch"), gh(body="x", checks=checks), no_network).reading(1167)
-    assert r.endswith("ci: green")
+    assert r.endswith("ci: none")
 
 
 def test_gate_comments_failure_skips_reading():
@@ -305,6 +308,15 @@ def test_watch_quiet_init_oneshot_exits_on_first_change():
         ["--quiet-init", "--oneshot"], ["a", None, "a", "b", "c"], passes=0
     )
     assert rc == 0 and lines == ["PR1167 b"]
+
+
+def test_watch_ignore_pending_ci_settling_is_not_a_change():
+    s = "state=OPEN || ci: "
+    seq = [s + "none", s + "pending ignored", s + "green", s + "green || gate: done"]
+    _, lines = _watch(["--ignore-pending"], seq, passes=4)
+    assert lines == [f"PR1167 {seq[0]}", f"PR1167 {seq[3]}"]
+    _, lines = _watch([], seq, passes=4)
+    assert lines == [f"PR1167 {x}" for x in seq]
 
 
 # --- CLI ----------------------------------------------------------------------

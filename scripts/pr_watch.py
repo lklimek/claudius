@@ -6,7 +6,9 @@
 
 ``watch`` takes a full reading of each PR every ``--interval`` seconds and
 prints one line per PR whose reading changed: state, review decision, draft
-flag, unresolved review threads, non-passing checks, plus the optional adapters
+flag, unresolved review threads, non-passing checks (``green`` only once a
+relevant check passed and none is pending; else ``none`` or, with
+``--ignore-pending``, ``pending ignored``), plus the optional adapters
 below. A reading that could not
 be fetched, or whose Hygiene block describes an older head, is skipped for that
 pass, never reported as a change. ``--oneshot`` exits 0 after the first pass
@@ -56,6 +58,8 @@ EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 HYGIENE_RE = re.compile(r"pr-hygiene:start(.*?)pr-hygiene:end", re.S)
 HYGIENE_SHA_RE = re.compile(r"^# PR Hygiene · `([0-9a-f]+)`")
+# CI values that --ignore-pending reads as one: checks settling is not a change.
+SETTLING_CI_RE = re.compile(r" \|\| ci: (?:none|pending ignored|green)(?= \|\| |$)")
 THREADS_QUERY = (
     "query($o:String!,$r:String!,$n:Int!,$c:String){repository(owner:$o,name:$r){"
     "pullRequest(number:$n){body headRefOid isDraft state reviewDecision "
@@ -185,20 +189,25 @@ def summarize_pr(pr: dict) -> tuple[str, str]:
 def summarize_checks(
     checks: list, want: Optional[str] = None, ignore_pending: bool = False
 ) -> str:
-    out, seen = [], set()
+    """Non-passing relevant checks; 'green' only once one passed and none is pending."""
+    out, seen, passed, ignored = [], set(), False, False
     for c in checks:
         name, bucket = c.get("name") or "", c.get("bucket") or ""
-        if not name or bucket in ("pass", "skipping"):
+        if not name or (want and not re.search(want, name)):
             continue
-        if want and not re.search(want, name):
+        if bucket in ("pass", "skipping"):
+            passed = passed or bucket == "pass"
             continue
         if ignore_pending and bucket == "pending":
+            ignored = True
             continue
         key = f"{name}={bucket}"
         if key not in seen:
             seen.add(key)
             out.append(key)
-    return " ".join(out) or "green"
+    if out:
+        return " ".join(out)
+    return "pending ignored" if ignored else "green" if passed else "none"
 
 
 def same_name(value, name: str) -> bool:
@@ -483,12 +492,15 @@ def watch(
                 fails[n] = 0
                 w.warned.pop(n, None)
                 w.retry_probes(n)
-            if cur is None or cur == prev.get(n):
+            key = cur
+            if cur and w.a.ignore_pending:
+                key = SETTLING_CI_RE.sub(" || ci: settling", cur, 1)
+            if cur is None or key == prev.get(n):
                 continue
             if not w.a.quiet_init or n in prev:
                 print(f"PR{n} {cur}", file=out, flush=True)
                 changed = True
-            prev[n] = cur
+            prev[n] = key
         passes += 1
         if w.a.oneshot and min(fails.values()) >= ONESHOT_FAILED_READS:
             print(
