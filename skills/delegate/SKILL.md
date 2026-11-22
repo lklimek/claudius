@@ -35,6 +35,7 @@ Before sizing or dispatching workers, apply [git-and-github](../git-and-github/S
 
 1. Identify who performed the work being checked (implementation, review, or any other artifact), including its model/provider when known.
 2. If an alternative tool/provider is available, use it to verify that work (Codex → Claude, Claude → Codex).
+3. PR-comment verification workers get the `check-pr-comments` [verify-only brief](../check-pr-comments/references/verify-worker.md).
 
 ## Context Preparation
 
