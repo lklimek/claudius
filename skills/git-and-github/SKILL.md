@@ -21,7 +21,7 @@ description: "This skill should be used when running git or gh commands, interac
 
 ## PR Scope and Size
 
-One PR addresses **one problem**; include only its necessary implementation, tests, and documentation. Separate unrelated fixes even when their combined diff is small.
+One PR addresses **one problem**; include only its necessary implementation, tests, and documentation. Separate unrelated fixes even when their combined diff is small. Keep it one thread from creation: scripts, dev tooling, and docs apart from product features; refactors apart from behaviour fixes.
 
 Target **fewer than 3000 changed code lines**; **5000 is the hard maximum**. Count added plus deleted code lines, including tests and generated/vendored code, across the PR's merge-base (three-dot) diff against its intended base; exclude comments, blank lines, and documentation. For a stacked PR, use its immediate parent branch, not the root base, so ancestor changes are not counted again.
 
@@ -61,7 +61,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 **`TL;DR` / `User story` / `Scenario` are user-facing** — plain language only: no specialized terms, internal implementation details, or code identifiers. Describe strictly user-observable behavior (for an API/CLI, the calling developer *is* the user). `User story` uses the same "As a `<role>`..." shape as Issues below, phrased for a change already made. `Scenario` isn't only for bugs: for a new feature, `Actual behavior` is what's missing/impossible today, `Expected behavior` is what becomes possible after this PR — no failure required. For a pure internal change with no user-observable effect, drop `User story` and `Scenario` and say so in `Detailed discussion`. Note blocking relationships (prerequisite for / depends on / stacked atop PR #N) in `Detailed discussion`.
 
-**`Detailed discussion` is for implementors and AI agents** — as technical as needed.
+**`Detailed discussion` is for implementors and AI agents** — as technical as needed. Fill its `Out of scope` and `Known limitations` from creation (`None` when empty), plus `Threat model` when the PR touches security-sensitive code.
 
 `TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts; native stack layers per [stacked-prs.md](references/stacked-prs.md) § Creating PRs.
 

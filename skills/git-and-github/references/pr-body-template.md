@@ -25,6 +25,15 @@ As a **<role>**, I want to <what-to-do>, to achieve <user-goal>.
 ### What was done
 <description of changes; add `Closes #<issue-number>` here if applicable>
 
+### Out of scope
+<related work this PR deliberately leaves out, with links; `None` if empty>
+
+### Known limitations
+<accepted gaps of this change, with links; `None` if empty>
+
+### Threat model
+<only for security-sensitive changes: assets, attackers considered, attackers out of model>
+
 ### Testing
 ### Breaking changes
 ### Checklist
