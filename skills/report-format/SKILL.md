@@ -72,6 +72,8 @@ Populated downstream; producers must NOT set:
 
 Write findings files with the Write tool — never `cat > file`, `tee`, heredocs, or inline `python3`; Bash file writes are typically blocked by tool allowlists.
 
+Outside CI, when a finished report's directory is ephemeral (scratch wiped on reboot, tmpfs), copy `report.json`, its renders, and any `comments.json`/`body.md` to the user's or project's durable artifact location right after the round, before presenting results.
+
 ## ID Prefixes
 
 | Prefix | Category | Used by |
