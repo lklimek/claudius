@@ -143,7 +143,7 @@ Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can 
 
 Apply each decision exactly; never extend it to IDs the user did not name. Every "resolve" below covers human threads too. Reply and resolve on every thread of a merged ID. Never act on an already resolved (`isResolved: true`) thread, and keep local-only state (branches, WIP) off GitHub. Reply text for any decision other than `fix here` and `resolve` starts "Per maintainer decision" — in Auto, "Per automated triage" replaces it in every reply below. Post a fix's reply only after the fix lands.
 
-**Fix commits awaiting a decision** (e.g. a worker briefed before a correction fixed anyway): before the first decision, move each onto its own local branch (record ID → commit) and reset the PR branch to its pushed head. Approved → apply that ID's commits to the PR branch; moved to a follow-up → that branch becomes the follow-up; rejected → delete it. Before each push, confirm the PR branch holds no undecided ID's commits.
+**Fix commits awaiting a decision** (e.g. a worker briefed before a correction fixed anyway): before the first decision, move each onto its own local branch (record ID → commit) and drop only those commits from the PR branch, keeping its other unpushed work. Approved → apply that ID's commits to the PR branch; moved to a follow-up → that branch becomes the follow-up; rejected → delete it. Before each push, confirm the PR branch holds no undecided ID's commits.
 
 | Decision | Action |
 |----------|--------|
