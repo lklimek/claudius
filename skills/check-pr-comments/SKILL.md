@@ -54,7 +54,7 @@ For every unresolved inline comment and review-body/PR-comment item (below), rea
 **Pre-analysis** — for every unresolved thread and every unresolved review-body/PR-comment item:
 
 - **Handled elsewhere?** Search shallowly (`--limit 10`) by keywords and paths: local branches and worktrees (`git for-each-ref`, `git worktree list`; uncommitted WIP via `git -C <worktree> status --short`, deliberately ungranted — a `git -C *` rule would also admit `-c <config>`), stacked/child and other open PRs (`gh pr list`, `gh search prs`), issues (`gh search issues`). Cite `#N`, `branch@SHA`, or `uncommitted WIP in <worktree>`.
-- **Earlier decisions**: honour decisions in the reply chain (e.g. "moved to #N", "deferred by maintainer").
+- **Earlier decisions**: honour decisions in the reply chain (e.g. "moved to #N", "deferred by maintainer"). An item repeating an already-decided concern at the same location, with no new evidence, is listed as `repeat of <ID>` under that decision and never asked again.
 - **Duplicates**: merge threads and items about one problem into one ID, keeping every thread ID and source link.
 - **Architectural root cause?** Answer for every item: is the problem a symptom of a broader design flaw (wrong layer, missing abstraction, duplicated logic, leaky contract)? `no`, or the flaw with evidence and its other symptoms (`file:line`). If yes, recommend fixing the flaw (`follow-up PR` / `upstream issue`) over patching this symptom, unless the necessity gate keeps the symptom fix in scope.
 
