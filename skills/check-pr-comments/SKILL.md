@@ -111,7 +111,7 @@ A user decision rejecting or re-rating a comment as unimportant (or more importa
 
 ## Optional: Structured Report (on request only)
 
-Steps 5-7 run on an explicit report request or a request to save the comment table as a file. Ordinary tables stay in chat. File output defaults to one self-contained HTML; explicit format/layout requests win. Load `report-format` and its [comment assessment contract](../report-format/references/comment-assessments.md). Step 8 applies to both flows; file generation itself authorizes no GitHub actions.
+Steps 5-7 run on an explicit report request or a request to save the comment table as a file. Ordinary tables stay in chat. File output defaults to one self-contained HTML in a `<REPORT_DIR>` chosen per `review-changes` § 1 (mode `comments`); explicit format/layout requests win. Load `report-format` and its [comment assessment contract](../report-format/references/comment-assessments.md). Step 8 applies to both flows; file generation itself authorizes no GitHub actions.
 
 ## 5. Build Structured Report JSON
 
