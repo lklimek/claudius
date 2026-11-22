@@ -7,13 +7,15 @@
 # Run `gh "$@"`, retrying once via `ghsudo gh` on 403/404/permission errors.
 # Buffers a stdin payload once so a ghsudo retry replays the SAME payload instead
 # of reading an already-drained pipe (EOF -> silent empty request body). Reads
-# stdin only when the arguments request it (`--input -`, `-F key=@-`): an
-# inherited non-TTY stdin may stay open without data and block `cat` forever.
+# stdin only when the arguments request it (`--input -`, `-F/--field key=@-`;
+# `-f/--raw-field key=@-` is a literal): an inherited non-TTY stdin may stay
+# open without data and block `cat` forever.
 run_gh() {
   local buffered="" has_stdin=0 prev="" arg
   for arg in "$@"; do
-    if [[ "$arg" == "--input=-" || "$arg" == *=@- ]] \
-        || [[ "$prev" == "--input" && "$arg" == "-" ]]; then
+    if [[ "$arg" == "--input=-" || "$arg" == -F?*=@- || "$arg" == --field=*=@- ]] \
+        || [[ "$prev" == "--input" && "$arg" == "-" ]] \
+        || [[ ("$prev" == "-F" || "$prev" == "--field") && "$arg" == *=@- ]]; then
       has_stdin=1
     fi
     prev="$arg"

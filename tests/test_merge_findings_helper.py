@@ -361,6 +361,44 @@ def test_find_missing_merge_class_exempts_info_band_findings():
     assert helper.find_missing_merge_class(findings) == ["qa:QA-002"]
 
 
+def test_null_merge_class_update_clears_classification():
+    blocking = _finding(
+        "qa", "QA-001", merge_class="blocking", intent_basis="G-DATA: loses rows"
+    )
+    [resolved] = helper.resolve_findings(
+        [blocking],
+        {
+            "finding_updates": {
+                "qa:QA-001": {
+                    "merge_class": None,
+                    "likelihood": 0.0,
+                    "impact": 0.0,
+                    "relevance": 0.0,
+                }
+            }
+        },
+    )
+    assert "merge_class" not in resolved and "intent_basis" not in resolved
+    assert helper.find_missing_merge_class([resolved]) == []
+
+
+def test_null_merge_class_on_non_info_finding_still_needs_a_class():
+    [resolved] = helper.resolve_findings(
+        [_finding("qa", "QA-001", merge_class="non_blocking")],
+        {"finding_updates": {"qa:QA-001": {"merge_class": None}}},
+    )
+    assert helper.find_missing_merge_class([resolved]) == ["qa:QA-001"]
+
+
+def test_info_finding_cannot_stay_blocking():
+    blocking = _finding(
+        "qa", "QA-001", merge_class="blocking", intent_basis="G-DATA: loses rows"
+    )
+    update = {"likelihood": 0.0, "impact": 0.0, "relevance": 0.0}
+    with pytest.raises(ValueError, match="merge_class.*null"):
+        helper.resolve_findings([blocking], {"finding_updates": {"qa:QA-001": update}})
+
+
 def test_main_fails_listing_findings_without_merge_class(tmp_path, caplog):
     intermediate_path = tmp_path / "intermediate.json"
     decisions_path = tmp_path / "merge-decisions.json"

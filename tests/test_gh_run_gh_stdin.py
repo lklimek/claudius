@@ -82,6 +82,19 @@ def test_run_gh_without_payload_ignores_open_stdin(tmp_path):
 
 
 @pytest.mark.parametrize(
+    "raw_args",
+    [["-f", "body=@-"], ["-fbody=@-"], ["--raw-field", "body=@-"]],
+)
+def test_run_gh_raw_field_at_dash_is_not_a_payload(tmp_path, raw_args):
+    env = _env(tmp_path, 'echo "ok $*"', "exit 99")
+    argv = ["bash", "-c", 'source "$1"; shift; run_gh api x "$@"', "_"]
+    rc, out, err = _run_with_open_stdin(
+        argv + [str(GH_COMMON), *raw_args], env, tmp_path
+    )
+    assert (rc, out.strip()) == (0, "ok api x " + " ".join(raw_args)), err
+
+
+@pytest.mark.parametrize(
     "args",
     [
         ["o/r", "1", "--id", "PRRT_kwDOabc"],
@@ -98,7 +111,14 @@ def test_resolve_review_threads_ignores_open_stdin(tmp_path, args):
 
 @pytest.mark.parametrize(
     "payload_args",
-    [["--input", "-"], ["--input=-"], ["-F", "body=@-"]],
+    [
+        ["--input", "-"],
+        ["--input=-"],
+        ["-F", "body=@-"],
+        ["-Fbody=@-"],
+        ["--field", "body=@-"],
+        ["--field=body=@-"],
+    ],
 )
 def test_run_gh_replays_stdin_payload_on_ghsudo_retry(tmp_path, payload_args):
     env = _env(

@@ -224,10 +224,10 @@ def _validate_finding_update(label: str, update: Any) -> dict[str, Any]:
             f"{', '.join(sorted(_FINDING_UPDATE_FIELDS))}"
         )
     merge_class = update.get("merge_class")
-    if "merge_class" in update and merge_class not in MERGE_CLASS_ORDER:
+    if merge_class is not None and merge_class not in MERGE_CLASS_ORDER:
         raise ValueError(
             f"finding_updates[{label!r}]: merge_class must be one of "
-            f"{', '.join(MERGE_CLASS_ORDER)}"
+            f"{', '.join(MERGE_CLASS_ORDER)}, or null to clear it"
         )
     intent_basis = update.get("intent_basis")
     if intent_basis is not None and not isinstance(intent_basis, str):
@@ -323,7 +323,7 @@ def _check_classification(finding: dict[str, Any]) -> None:
 
     Cluster updates may set any field, so the finding_updates rules are
     re-applied to the result: valid merge_class and floats, and ``blocking``
-    only with an intent_basis.
+    only with an intent_basis and never on an INFO finding.
     """
     label = f"{finding.get('agent')}:{finding.get('original_id')}"
     rated = {k: finding[k] for k in _FINDING_UPDATE_FIELDS if k in finding}
@@ -333,6 +333,11 @@ def _check_classification(finding: dict[str, Any]) -> None:
         isinstance(basis, str) and basis.strip()
     ):
         raise ValueError(f"{label}: merge_class blocking requires an intent_basis")
+    if finding.get("merge_class") == "blocking" and effective_severity(finding) == 1:
+        raise ValueError(
+            f"{label}: an INFO finding cannot be blocking — set merge_class null "
+            "to clear it, or re-rate its floats"
+        )
 
 
 def _apply_finding_update(
@@ -360,8 +365,11 @@ def _drop_stale_intent_basis(finding: dict[str, Any], update: dict[str, Any]) ->
     """Drop ``intent_basis`` when ``update`` leaves the finding non-blocking.
 
     Applies only when ``update`` touches the classification and supplies no
-    new intent_basis; shared by finding_updates and cluster ``updates``.
+    new intent_basis; shared by finding_updates and cluster ``updates``. A null
+    ``merge_class`` clears the classification.
     """
+    if "merge_class" in update and update["merge_class"] is None:
+        finding.pop("merge_class", None)
     touched = "merge_class" in update or "intent_basis" in update
     if (
         touched

@@ -638,6 +638,46 @@ class TestFinalize:
         ]
         assert "merge_class" not in info
 
+    def test_blocking_finding_downgraded_to_info_leaves_merge_lists(self, tmp_path):
+        reports = {
+            "qa": [
+                {
+                    "title": "QA",
+                    "category": "code_quality",
+                    "findings": [
+                        _f(
+                            "QA-001",
+                            0.9,
+                            0.9,
+                            merge_class="blocking",
+                            intent_basis="G-DATA: drops rows",
+                        )
+                    ],
+                }
+            ]
+        }
+        intermediate = _prepare(tmp_path, digest=False, reports=reports)
+        downgrade = {
+            "merge_class": None,
+            "likelihood": 0.0,
+            "impact": 0.0,
+            "relevance": 0.0,
+        }
+        decisions = _write(
+            tmp_path / "merge-decisions.json",
+            {"finding_updates": {"qa:QA-001": downgrade}},
+        )
+        out = tmp_path / "out" / "report.json"
+        argv = ["finalize", "--input", str(intermediate)]
+        argv += ["--decisions", str(decisions), "--output", str(out)]
+        assert cr.main(argv) == 0
+        report = json.loads(out.read_text())
+        [finding] = [f for s in report["findings"] for f in s["findings"]]
+        assert finding["severity"] == 1
+        assert "merge_class" not in finding and "intent_basis" not in finding
+        assert not report.get("top_findings")
+        assert all(not r["finding_ids"] for r in report.get("remediation", []))
+
     def test_schema_failure_blocks_output(self, tmp_path):
         decisions = self._decisions(executive_summary={"verdict_text": "no summary"})
         assert self._run(tmp_path, decisions) == 1
