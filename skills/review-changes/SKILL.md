@@ -59,7 +59,7 @@ Before dispatching reviewers, fix one `<SCRATCH_DIR>` for all producer and inter
 mkdir -p /data/tmp/review-<PR-number-or-branch>-<session-id-fragment>   # = <SCRATCH_DIR>
 ```
 
-Fix `<REPORT_DIR>` too; an invoker-supplied one wins verbatim. Otherwise use the absolute path `<DURABLE_ROOT>/<repo>/<pr-N-or-branch-slug>-<mode>-<UTC-YYYYMMDD-HHMM>-<session-id-fragment>`, where `<DURABLE_ROOT>` is the review-artifact location named in user or project instructions, else `~/.local/state/claudius/reviews` — never scratch or temporary storage. Finalize creates it. File names inside stay fixed (`report.json`, renders, `comments.json`, `body.md`): callers key on them.
+Fix `<REPORT_DIR>` too; an invoker-supplied one wins verbatim. Otherwise, when user or project instructions name a durable review-artifact location, use the absolute path `<that-location>/<repo>/<pr-N-or-branch-slug>-<mode>-<UTC-YYYYMMDD-HHMM>-<session-id-fragment>`; with none named, use `<SCRATCH_DIR>` and tell the user the report's path. Finalize creates it. File names inside stay fixed (`report.json`, renders, `comments.json`, `body.md`): callers key on them.
 
 For the run record (consolidation § Finalize) note the session ID (`${CLAUDE_SESSION_ID}`, or the host's equivalent), the reviewed base and head SHAs, and each reviewer's model with UTC dispatch and return times.
 
