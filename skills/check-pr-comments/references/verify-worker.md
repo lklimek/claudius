@@ -17,6 +17,7 @@ Send one block per ID to the coordinator (`SendMessage`):
 - Category slug (SKILL.md step 4 catalog).
 - Verdict: valid / partly valid / invalid, with `file:line` evidence at the current head.
 - Pre-existing on the base branch: yes / no.
+- Architectural root cause: `no`, or the broader flaw with evidence and its other symptoms.
 - Scope per the necessity gate, with its evidence.
 - Blocker gates tripped, or none.
 - Fix sketch and size: XS / S / M with an estimated line count.
