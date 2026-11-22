@@ -1,6 +1,6 @@
 # Consolidate Findings
 
-After all workers complete, scripts do the mechanical work; judgment calls remain coordinator-owned. Run through § Finalize even when every producer file is `[]`. Use the actual producer list (one in basic mode), without launching extra reviewers. Preserve caller-supplied Pass C files in the same consolidation. `<REPORT_DIR>` defaults to the current directory.
+After all workers complete, scripts do the mechanical work; judgment calls remain coordinator-owned. Run through § Finalize even when every producer file is `[]`. Use the actual producer list (one in basic mode), without launching extra reviewers. Preserve caller-supplied Pass C files in the same consolidation. `<REPORT_DIR>` is fixed in `review-changes` § 1.
 
 ## Prepare
 
@@ -20,7 +20,7 @@ Writes `intermediate.json` (full `raw_findings`, `duplicate_groups`, `intentiona
 2. **INTENTIONAL downgrade**: downgrade each INTENTIONAL hit to `INFO` (lower its floats) — deliberate engineering decisions from previous triage.
 3. **System-scale rating**: run the rating pass (`<SYSTEM_RATING>` § Rating pass) over every surviving finding — merged clusters by their base key, step 2's INTENTIONAL downgrades excluded; producers rate from inside the diff and inflate component-local harm. Full mode: dispatch it to one fresh strong-model worker (`delegate`) given `intermediate.json`, the keys to rate (steps 1–2 applied) with each merged cluster's merged text, the project profile, anchors, calibration examples, and `<SYSTEM_RATING>`, returning `{key: {likelihood, impact, impact_description}}` for changed findings among those keys only; basic mode: run it yourself. Apply the result as `finding_updates`, except for a merged cluster: put its rated fields in the cluster's `updates`, which apply last and would otherwise overwrite them.
 4. **Merge classification**: assign `merge_class` to EVERY finding per `severity` skill § Merge Classification and its `merge-classification.md` reference (decision tree) — `blocking` only when a blocker gate trips, with `intent_basis` naming the gate ID plus one line of evidence. Use the Context Digest when the invoker supplied one (`review-pr` § Context Digest) for `G-INTENT` judgment; with no PR context, derive intent from your own knowledge of the work's goal — the coordinator often knows the bigger picture the producers don't. Apply the digest as a coordinator-side backstop too: re-check any finding whose floats ignore an evidenced operational-profile claim a producer plainly didn't have (`severity` skill § `likelihood`). Severity never determines `merge_class`. Escalate to the human explicitly (never silently defer) any pre-existing finding tripping `G-FUNDS`/`G-SECRET`/`G-CRYPTO`/`G-DATA`.
-5. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` consistent with merge classification and coverage. Include mode, completed passes, coverage status, limitations, and coverage-artifact paths. Zero findings with complete coverage permits a positive summary; unresolved paths require an incomplete verdict.
+5. **Executive summary**: write `overall_assessment`, `summary_text`, `verdict_text`, `verdict_action` consistent with merge classification and coverage. Include mode, completed passes, coverage status, limitations, coverage-artifact paths, and each artifact's *Considered, not filed* lines verbatim — information, never findings or fix items. Zero findings with complete coverage permits a positive summary; unresolved paths require an incomplete verdict.
 
 Record all of it in one Write of `<SCRATCH_DIR>/merge-decisions.json` — the only merge path; never hand-transcribe findings:
 
@@ -54,6 +54,8 @@ python3 <PLUGIN_ROOT>/scripts/consolidate_reports.py finalize --input <SCRATCH_D
 ```
 
 Applies the decisions (writing `<SCRATCH_DIR>/merged-findings.json` for audit), assigns sequential IDs by category, computes `summary_statistics`/`top_findings`/`remediation`, validates against the schema, and renders one file per `--format` (repeatable: `md`, `html`, `pdf`; default `md`) next to `report.json`. All-or-nothing: on failure no report, render, `comments.json`/`body.md` or `merged-findings.json` is written, and any left by an earlier run are renamed to `*.stale`; on success, renders of formats not requested this time are renamed `*.stale` too. Exit 1 names each finding lacking `merge_class`, each invalid decision (e.g. `blocking` without `intent_basis`), each schema error, or a failed render — fix `merge-decisions.json` (or the format) and re-run; exit 2 means an input file is missing or unparseable. After hand-editing `report.json`, re-validate with `validate_report.py <REPORT_DIR>/report.json`.
+
+Then Write the run record `<REPORT_DIR>/review-run.json` from the values noted in `review-changes` § 1: `{"session_id", "base_sha", "head_sha", "reviewers": [{"role", "model", "started", "ended"}]}`, timestamps UTC ISO 8601, `"unknown"` for any value the host does not expose.
 
 After each finalize, archive per `report-format` § File Output.
 

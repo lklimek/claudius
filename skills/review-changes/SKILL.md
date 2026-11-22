@@ -2,7 +2,7 @@
 name: review-changes
 description: "This skill should be used when the user asks for a \"code review\", \"review this code\", \"review my changes\", \"review this branch\", \"basic review\", \"full review\", or \"grumpy review\", to \"validate findings\" in a report.json, or before completing changes of at least 50 code lines per coding-best-practices. Basic (default) uses one strong independent reviewer; full adds independent security, global-optimum/reuse, and correctness passes into one severity-ranked report. For GitHub PRs use review-pr."
 argument-hint: "[basic|full|validate] [scope|report.json]"
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(mkdir -p /data/tmp/review-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(gh issue list *), Agent, SendMessage
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(gh issue view *), Bash(mkdir -p /data/tmp/review-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(gh issue list *), Agent, SendMessage
 ---
 
 # Review Changes
@@ -13,7 +13,7 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *),
 - **Full** (explicit “full review” or “grumpy review”): independent security, global-optimum/reuse, and adversarial passes on the same coverage baseline. Never downgrade a full review because the diff is small.
 - **Validate** (“validate findings”, `validate <report.json>`): skip §1–§4; run the opt-in AI validation pass of §5 on an existing consolidated report.
 
-Arguments: `[basic|full|validate] [scope|report.json]` — scope e.g. "feat/zk branch", "packages/auth/", "last 5 commits". Scope defaults to the current branch against its base, including working-tree and untracked changes for local work; PR wrappers supply exact refs. Record the compared refs/commit and local changes.
+Arguments: `[basic|full|validate] [scope|report.json]` — scope e.g. "feat/zk branch", "packages/auth/", "last 5 commits". Scope defaults to the current branch against its base, including working-tree and untracked changes for local work; PR wrappers supply exact refs. A PR or branch is reviewed whole (`<BASE_REF>...<head>`) every round, never as the delta since an earlier review. Record the compared refs/commit and local changes.
 
 The invoking coordinator runs §1–§5. An assigned Adams or Marvin reviewer runs only its pass (§ Reviewer pass, § Specialist passes) and never dispatches peers or re-enters this workflow.
 
@@ -36,7 +36,9 @@ Resolve plugin/skill roots from the loaded skill before executing commands; subs
 
 ## 1. Scope the Review
 
-Gather the user's requirements, acceptance criteria, relevant specs, and changed files. Carry the caller's Context Digest verbatim when supplied (`review-pr` § Context Digest). Load the project profile (`<SYSTEM_RATING>` § Project profile) and give it to every reviewer, inside the digest when one exists. Mark missing requirements as unknown; never infer intended behavior solely from the implementation.
+Gather the user's requirements, acceptance criteria (from the originating issue, read fresh with `gh issue view`, and the task or PR description), relevant specs, and changed files. Carry the caller's Context Digest verbatim when supplied (`review-pr` § Context Digest). Load the project profile (`<SYSTEM_RATING>` § Project profile) and give it to every reviewer, inside the digest when one exists. Mark missing requirements as unknown; never infer intended behavior solely from the implementation.
+
+**Brief** (every reviewer, both modes): pass the maintainer's prior per-ID decisions on this scope verbatim when supplied; they suppress repeats of decided items only (`<MERGE_CLASSIFICATION>`). Put coordinator focus questions last, to be answered after the reviewer's own pass, below its findings.
 
 **Bash hygiene** (coordinator; producers follow the producer contract's identical rule): commands use `<PLACEHOLDER>`s — substitute literal values, one plain command per call; no `$VAR`, `$(…)`, loops, pipes, redirects, `&&` chains, `cd`, `git -C` or `python3 -c` (restricted CI allowlists deny them, costing a round each); write files with the Write tool; read plugin files (skills, references, scripts) with Read, never Bash `ls`/`find`/`cp` — CI sandboxes block Bash outside the working directory.
 
@@ -57,13 +59,17 @@ Before dispatching reviewers, fix one `<SCRATCH_DIR>` for all producer and inter
 mkdir -p /data/tmp/review-<PR-number-or-branch>-<session-id-fragment>   # = <SCRATCH_DIR>
 ```
 
+Fix `<REPORT_DIR>` too; an invoker-supplied one wins verbatim. Otherwise use the absolute path `<DURABLE_ROOT>/<repo>/<pr-N-or-branch-slug>-<mode>-<UTC-YYYYMMDD-HHMM>`, where `<DURABLE_ROOT>` is the review-artifact location named in user or project instructions, else `~/.local/state/claudius/reviews` — never scratch or temporary storage. Finalize creates it. File names inside stay fixed (`report.json`, renders, `comments.json`, `body.md`): callers key on them.
+
+For the run record (consolidation § Finalize) note the session ID (`${CLAUDE_SESSION_ID}`, or the host's equivalent), the reviewed base and head SHAs, and each reviewer's model with UTC dispatch and return times.
+
 ### Ephemeral-ID lint
 
 It scans the diff, not findings: run it once before dispatch, batched with the scope commands. For each hit, judge genuine violation vs quoted/escaped example (a code fence demonstrating the rule, a test fixture asserting it, this lint's own docstring). Dismiss in-skill examples; promote genuine violations to `code_quality` findings with `tags: ["ephemeral-id-reference"]` and ID prefix `CODE-` (coordinator-assigned). Scans exit 0 whatever they find (exit 2 only if `git diff` fails) — judgement is yours. Write promoted hits as their own producer file (e.g. `<SCRATCH_DIR>/lint-findings.json`) and pass it to `prepare`.
 
 ## 2. Basic Review
 
-1. Load [delegate](../delegate/SKILL.md), then dispatch **one** worker with a strong available reasoning model at high effort where supported, setting the model explicitly (Claude: Opus, preferably the `claudius:qa-engineer-marvin` identity; Codex: a high-capability model available in the current session). Apply `delegate` § Independent Verification when selecting the reviewer; never substitute a lightweight model for a small diff. Give it the requirements, scope, § Reviewer pass, and absolute paths to the references it names.
+1. Load [delegate](../delegate/SKILL.md), then dispatch **one** worker with a strong available reasoning model at high effort where supported, setting the model explicitly (Claude: Opus, preferably the `claudius:qa-engineer-marvin` identity; Codex: a high-capability model available in the current session). Apply `delegate` § Independent Verification when selecting the reviewer; never substitute a lightweight model for a small diff. Give it the requirements, scope, § 1 Brief items, § Reviewer pass, and absolute paths to the references it names.
 2. If independent workers are unavailable, report that limitation; do not describe an author self-review as an independent basic review. A host-imposed budget does not permit sampling paths and calling the review complete.
 3. Collect the findings and coverage artifact, verify that every requirement and changed symbol is accounted for, and run §4 with the reviewer's file as `qa:<path>`, plus the lint file and caller-supplied files such as Pass C. Include the coverage status in the executive summary.
 
@@ -89,9 +95,10 @@ Load [coding-best-practices](../coding-best-practices/SKILL.md), [report-format]
 - Read the full changed functions and affected callers/callees, not just diff hunks. Follow the shared contract without function-count, depth, caller-count, or time sampling.
 - **Execution, CI first**: when CI runs the relevant tests and lints for the reviewed head, do not re-run them locally; before finishing, check that head's CI (`gh pr checks <PR>` or `gh run list --commit <sha>`), wait a bounded time for pending runs other than your own review job, and report failures. When automatic triggers miss the changed scope (path filters, manual or label-gated workflows), trigger the relevant workflow (`gh workflow run`, documented label or comment). Run locally only when no CI exists, CI cannot cover the scope, the reviewed changes are uncommitted, or for tests you wrote. Inside a CI review run, report CI status only (where `gh` is permitted), without waiting or triggering.
 - **New tests**: write verification tests only in an isolated worktree. Outside CI, commit those of lasting value for this PR's change (an uncovered contract, a found bug's reproduction) on a branch from the reviewed head and report the commit so the coordinator can publish them; never push.
+- **Tests as evidence**: a test counts only once you name the production line whose breakage fails it and confirm its assertions cover the values its name claims. Audit contract coverage and assertion depth: computed values, exact boundaries, specific errors, side effects, ordering, and state consistency. Tests must assert intended behavior rather than mirror implementation; reject `assert result is not None`, `status == 200` without the body, `len(items) > 0` without which items, and "runs without error" without asserting output. Never change expectations to make buggy behavior pass.
 - Construct concrete counterexamples for suspected defects. A passing test does not replace path tracing. Record commands, CI runs, results, and anything not executed.
 - For shared state, locks, tasks, or channels, enumerate access paths and reason through interleavings, lock order, cancellation, and retries; use race/stress tools where available.
-- Scan user-visible strings for misleading or alarming errors and apply the UX/DX lens.
+- Run the producer contract's UI-text scan and always-flagged checks; apply the UX/DX lens.
 - For security-relevant code, load the language pitfalls from [security-best-practices](../security-best-practices/SKILL.md); its full security-audit pass applies only when assigned.
 - Write a producer array per `report-format` to the assigned findings file, including `[]` when clean. Write the coverage artifact required by the shared contract even when there are no findings. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py gate <findings-file>`.
 

@@ -20,8 +20,6 @@ Use `project` / `PROJ-` for global-optimum findings and `code_quality` / `CODE-`
 
 Apply the `review-changes` Reviewer pass to the entire assigned scope, including its requirements and execution-path coverage contract. Independently verify claims against the actual reviewed tree, not reports or commit messages.
 
-Audit tests for contract coverage and assertion depth: computed values, exact boundaries, specific errors, side effects, ordering, and state consistency. Tests must assert intended behavior rather than mirror implementation; reject `assert result is not None`, `status == 200` without the body, `len(items) > 0` without which items, and "runs without error" without asserting output. Never change expectations to make buggy behavior pass.
-
 For suspected races, provide a concrete interleaving or reproducing stress test. Spend verification on untested scopes and feature combinations; reuse valid current-tree ledger evidence, but distrust implausible records (`grand-admiral` § Verification Economy). Web UI projects need a smoke test of critical flows (page loads, forms submit, navigation, error states) with `playwright-cli`; probe `command -v playwright-cli || npx @playwright/cli@latest --version`. If unavailable, skip it and file a LOW finding rather than testing manually. Note incidental security concerns as a `cross_domain_hint`.
 
 Also check code, configuration, docs, and tests for consistency: API contracts, config defaults, schemas/migrations, generated clients, test descriptions, and public documentation. Inspect naming, readability, idioms, maintainability, and needless abstractions; check that new public seams have test references. Read touched comments and docs against the coding rules; report mismatches with both source locations.
