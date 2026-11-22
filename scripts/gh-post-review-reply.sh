@@ -50,7 +50,5 @@ if [[ ! -f "$body_file" ]]; then
 fi
 
 # -F body=@file reads the file; -f would send the literal "@file" string.
-# </dev/null keeps run_gh's stdin buffering from blocking — the body comes from
-# the file, not stdin.
 run_gh api "repos/${owner}/${repo}/pulls/${pr_number}/comments/${comment_id}/replies" \
-  --method POST -F body=@"$body_file" --jq '.html_url' </dev/null
+  --method POST -F body=@"$body_file" --jq '.html_url'

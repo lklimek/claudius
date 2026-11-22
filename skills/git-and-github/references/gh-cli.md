@@ -57,6 +57,8 @@ gh issue create --title "<title>" --body-file /path/to/filled-in-issue-body.md
 
 If using a **read-only default token** with `gh`, install [ghsudo](https://github.com/lklimek/ghsudo) (`pip install ghsudo`) for write operations. When a `gh` or `git` command fails with HTTP 403 (Forbidden), 404 (Not Found), or "Resource not accessible", re-run it through ghsudo. **Never fork the repository** — forking creates a separate repo and breaks push/PR workflows. GitHub may return 404 instead of 403 for private resources when the token lacks permissions.
 
+`resolveReviewThread` FORBIDDEN "Resource not accessible by personal access token" (also under ghsudo) means a fine-grained PAT without that access: resolve the thread in the GitHub UI, or use a classic PAT (`repo` scope); `gh-resolve-review-threads.sh` says so and exits 1.
+
 ```bash
 ghsudo <original-command-and-args>
 # Or with explicit org:

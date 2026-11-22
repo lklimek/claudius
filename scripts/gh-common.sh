@@ -5,14 +5,21 @@
 # caller already does that before sourcing.
 
 # Run `gh "$@"`, retrying once via `ghsudo gh` on 403/404/permission errors.
-# Buffers piped stdin once so a ghsudo retry replays the SAME payload instead
-# of reading an already-drained pipe (EOF -> silent empty request body).
+# Buffers a stdin payload once so a ghsudo retry replays the SAME payload instead
+# of reading an already-drained pipe (EOF -> silent empty request body). Reads
+# stdin only when the arguments request it (`--input -`, `-F key=@-`): an
+# inherited non-TTY stdin may stay open without data and block `cat` forever.
 run_gh() {
-  local buffered="" has_stdin=0
-  if [ ! -t 0 ]; then
-    buffered=$(cat); has_stdin=1
-  fi
+  local buffered="" has_stdin=0 prev="" arg
+  for arg in "$@"; do
+    if [[ "$arg" == "--input=-" || "$arg" == *=@- ]] \
+        || [[ "$prev" == "--input" && "$arg" == "-" ]]; then
+      has_stdin=1
+    fi
+    prev="$arg"
+  done
   if [ "$has_stdin" -eq 1 ]; then
+    buffered=$(cat)
     if output=$(printf '%s' "$buffered" | gh "$@" 2>&1); then echo "$output"; return 0; fi
   else
     if output=$(gh "$@" 2>&1); then echo "$output"; return 0; fi
