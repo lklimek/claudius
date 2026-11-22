@@ -5,7 +5,7 @@ The decisions file keeps duplicate resolution review-specific while this helper
 handles copying untouched findings, applying per-finding overrides
 (``finding_updates``) and each hand-authored cluster update, grouping findings
 into sections, and preserving prepare's agent statistics. The CLI refuses to
-write output while any finding still lacks ``merge_class``.
+write output while any non-INFO finding still lacks ``merge_class``.
 
 Usage:
     python3 scripts/merge_findings_helper.py \
@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from severity_util import MERGE_CLASS_ORDER, load_json_strict
+from severity_util import MERGE_CLASS_ORDER, effective_severity, load_json_strict
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -371,12 +371,23 @@ def _drop_stale_intent_basis(finding: dict[str, Any], update: dict[str, Any]) ->
         finding.pop("intent_basis", None)
 
 
+def needs_merge_class(finding: dict[str, Any]) -> bool:
+    """True unless the finding has a valid merge_class or is an unclassified INFO.
+
+    INFO is informational only, so the severity skill omits its merge_class.
+    """
+    merge_class = finding.get("merge_class")
+    if merge_class is None:
+        return effective_severity(finding) > 1
+    return merge_class not in MERGE_CLASS_ORDER
+
+
 def find_missing_merge_class(findings: list[dict[str, Any]]) -> list[str]:
-    """Return ``<agent>:<original_id>`` for every finding lacking merge_class."""
+    """Return ``<agent>:<original_id>`` for every finding that needs merge_class."""
     return [
         _key_label(_finding_key(finding, context="finding"))
         for finding in findings
-        if finding.get("merge_class") not in MERGE_CLASS_ORDER
+        if needs_merge_class(finding)
     ]
 
 

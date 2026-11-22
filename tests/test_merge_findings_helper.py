@@ -353,6 +353,14 @@ def test_find_missing_merge_class_lists_every_unclassified_finding():
     ]
 
 
+def test_find_missing_merge_class_exempts_info_band_findings():
+    findings = [
+        _finding("qa", "QA-001", likelihood=0.0, impact=0.0, relevance=0.0),
+        _finding("qa", "QA-002", likelihood=0.3, impact=0.3, relevance=0.0),
+    ]
+    assert helper.find_missing_merge_class(findings) == ["qa:QA-002"]
+
+
 def test_main_fails_listing_findings_without_merge_class(tmp_path, caplog):
     intermediate_path = tmp_path / "intermediate.json"
     decisions_path = tmp_path / "merge-decisions.json"

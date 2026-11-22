@@ -979,9 +979,20 @@ def _infer_bare_finding_category(findings: list[dict[str, Any]]) -> str:
 
 
 def _flatten_agent_report(
-    agent_name: str, sections: list[dict[str, Any]]
+    agent_name: str,
+    sections: list[dict[str, Any]],
+    dropped: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Flatten agent sections into raw findings and section positives."""
+    """Flatten agent sections into raw findings and section positives.
+
+    Unusable findings are skipped with a warning; ``dropped`` (when given)
+    collects one ``<agent>:<id> (<reason>)`` entry per skipped finding.
+    """
+
+    def drop(f: dict[str, Any], reason: str) -> None:
+        if dropped is not None:
+            dropped.append(f"{agent_name}:{f.get('id') or '?'} ({reason})")
+
     finding_markers = {
         "id",
         "likelihood",
@@ -1052,6 +1063,7 @@ def _flatten_agent_report(
                     severity,
                     agent_name,
                 )
+                drop(f, f"invalid severity {severity!r}")
                 continue
 
             location = f.get("location", "")
@@ -1060,6 +1072,7 @@ def _flatten_agent_report(
                     "Skipping finding with non-string location from agent '%s'",
                     agent_name,
                 )
+                drop(f, "non-string location")
                 continue
 
             title = f.get("title", "")
@@ -1073,6 +1086,7 @@ def _flatten_agent_report(
                     title,
                     location,
                 )
+                drop(f, "empty required field")
                 continue
 
             tags = f.get("tags", [])
@@ -1195,7 +1209,20 @@ def cmd_prepare(args: argparse.Namespace) -> int:
             log.error("%s", e)
             return 2
 
-        raw, pos = _flatten_agent_report(agent_name, data)
+        dropped: list[str] = []
+        raw, pos = _flatten_agent_report(agent_name, data, dropped)
+        if dropped:
+            # Never lose a finding silently; a severity label is not mapped to
+            # floats because that would invent the producer's rating.
+            log.error(
+                "Refusing to drop %d finding(s): %s — fix the producer file and "
+                "re-run prepare (severity comes from likelihood/impact/relevance "
+                "floats, never a hand-typed label; title, location, description "
+                "and recommendation must be non-empty strings)",
+                len(dropped),
+                ", ".join(dropped),
+            )
+            return 2
         raw_findings.extend(raw)
         section_positives.extend(pos)
 
@@ -1373,7 +1400,7 @@ def build_digest(intermediate: dict[str, Any]) -> str:
     if not intentional:
         lines.append("- none")
     unclassified = [
-        _finding_label(raw[i]) for i in order if not raw[i].get("merge_class")
+        _finding_label(raw[i]) for i in order if mfh.needs_merge_class(raw[i])
     ]
     if unclassified:
         lines += [

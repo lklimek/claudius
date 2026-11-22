@@ -295,6 +295,25 @@ class TestGate:
         argv += ["--repo-root", str(tmp_path)]
         assert cr.main(argv) == 2
 
+    def test_prepare_refuses_to_drop_a_label_severity_finding(self, tmp_path, caplog):
+        labelled = {
+            k: v
+            for k, v in _f("QA-002", 0.5, 0.5, severity="MEDIUM").items()
+            if k not in ("likelihood", "impact", "relevance")
+        }
+        section = {
+            "title": "QA",
+            "category": "code_quality",
+            "findings": [_f("QA-001", 0.5, 0.5), labelled],
+        }
+        path = _write(tmp_path / "qa.json", [section])
+        out = tmp_path / "i.json"
+        argv = ["prepare", f"qa:{path}", "--output", str(out)]
+        argv += ["--repo-root", str(tmp_path)]
+        assert cr.main(argv) == 2
+        assert not out.exists()
+        assert "qa:QA-002" in caplog.text and "likelihood" in caplog.text
+
 
 # ---------------------------------------------------------------------------
 # prepare: plugin_version + --digest
@@ -418,6 +437,22 @@ class TestPrepare:
         line = next(ln for ln in text.splitlines() if ln.startswith("merge_class"))
         assert "`security:SEC-001`" in line and "`qa:QA-001`" in line
         assert "SEC-002" not in line
+
+    def test_digest_does_not_ask_merge_class_for_info_findings(self, tmp_path, capsys):
+        reports = {
+            "qa": [
+                {
+                    "title": "QA",
+                    "category": "code_quality",
+                    "findings": [
+                        _f("QA-001", 0.5, 0.5, merge_class="non_blocking"),
+                        _f("QA-002", 0.0, 0.0, relevance=0.0),
+                    ],
+                }
+            ]
+        }
+        _prepare(tmp_path, digest=True, reports=reports)
+        assert "merge_class needed" not in capsys.readouterr().out
 
     def test_digest_omits_merge_class_line_when_all_classified(self, tmp_path, capsys):
         reports = {
@@ -574,6 +609,34 @@ class TestFinalize:
         assert self._run(tmp_path, decisions) == 1
         assert "security:SEC-001" in caplog.text
         assert not (tmp_path / "out" / "report.json").exists()
+
+    def test_info_finding_needs_no_merge_class(self, tmp_path):
+        reports = {
+            "qa": [
+                {
+                    "title": "QA",
+                    "category": "code_quality",
+                    "findings": [
+                        _f("QA-001", 0.5, 0.5),
+                        _f("QA-002", 0.0, 0.0, relevance=0.0),
+                    ],
+                }
+            ]
+        }
+        intermediate = _prepare(tmp_path, digest=False, reports=reports)
+        decisions = _write(
+            tmp_path / "merge-decisions.json",
+            {"finding_updates": {"qa:QA-001": {"merge_class": "non_blocking"}}},
+        )
+        out = tmp_path / "out" / "report.json"
+        argv = ["finalize", "--input", str(intermediate)]
+        argv += ["--decisions", str(decisions), "--output", str(out)]
+        assert cr.main(argv) == 0
+        report = json.loads(out.read_text())
+        [info] = [
+            f for s in report["findings"] for f in s["findings"] if f["severity"] == 1
+        ]
+        assert "merge_class" not in info
 
     def test_schema_failure_blocks_output(self, tmp_path):
         decisions = self._decisions(executive_summary={"verdict_text": "no summary"})
