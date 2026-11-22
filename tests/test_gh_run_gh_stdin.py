@@ -83,7 +83,13 @@ def test_run_gh_without_payload_ignores_open_stdin(tmp_path):
 
 @pytest.mark.parametrize(
     "raw_args",
-    [["-f", "body=@-"], ["-fbody=@-"], ["--raw-field", "body=@-"]],
+    [
+        ["-f", "body=@-"],
+        ["-fbody=@-"],
+        ["--raw-field", "body=@-"],
+        ["-if", "body=@-"],
+        ["-HFoo=@-"],
+    ],
 )
 def test_run_gh_raw_field_at_dash_is_not_a_payload(tmp_path, raw_args):
     env = _env(tmp_path, 'echo "ok $*"', "exit 99")
@@ -118,6 +124,8 @@ def test_resolve_review_threads_ignores_open_stdin(tmp_path, args):
         ["-Fbody=@-"],
         ["--field", "body=@-"],
         ["--field=body=@-"],
+        ["-iF", "body=@-"],
+        ["-iFbody=@-"],
     ],
 )
 def test_run_gh_replays_stdin_payload_on_ghsudo_retry(tmp_path, payload_args):

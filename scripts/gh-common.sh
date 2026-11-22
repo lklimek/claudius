@@ -7,18 +7,33 @@
 # Run `gh "$@"`, retrying once via `ghsudo gh` on 403/404/permission errors.
 # Buffers a stdin payload once so a ghsudo retry replays the SAME payload instead
 # of reading an already-drained pipe (EOF -> silent empty request body). Reads
-# stdin only when the arguments request it (`--input -`, `-F/--field key=@-`;
-# `-f/--raw-field key=@-` is a literal): an inherited non-TTY stdin may stay
-# open without data and block `cat` forever.
+# stdin only when the arguments request it (`--input -`, `-F/--field key=@-`,
+# also clustered as `-iF`; `-f/--raw-field key=@-` is a literal): an inherited
+# non-TTY stdin may stay open without data and block `cat` forever.
 run_gh() {
-  local buffered="" has_stdin=0 prev="" arg
+  local buffered="" has_stdin=0 next="" arg
+  # Short-flag cluster ending in F (-F, -iF); a value-taking flag before F
+  # (-f -H -X -p -q -t) would take the rest as its value instead.
+  local field_cluster='^-([A-EG-Za-eg-z]*)F(.*)$'
   for arg in "$@"; do
-    if [[ "$arg" == "--input=-" || "$arg" == -F?*=@- || "$arg" == --field=*=@- ]] \
-        || [[ "$prev" == "--input" && "$arg" == "-" ]] \
-        || [[ ("$prev" == "-F" || "$prev" == "--field") && "$arg" == *=@- ]]; then
+    if [[ -n "$next" ]]; then
+      if [[ ("$next" == input && "$arg" == "-") || ("$next" == field && "$arg" == *=@-) ]]; then
+        has_stdin=1
+      fi
+      next=""
+    elif [[ "$arg" == "--input" ]]; then
+      next=input
+    elif [[ "$arg" == "--field" ]]; then
+      next=field
+    elif [[ "$arg" == "--input=-" || "$arg" == --field=*=@- ]]; then
       has_stdin=1
+    elif [[ "$arg" =~ $field_cluster && "${BASH_REMATCH[1]}" != *[HXpqt]* ]]; then
+      if [[ -z "${BASH_REMATCH[2]}" ]]; then
+        next=field
+      elif [[ "${BASH_REMATCH[2]}" == ?*=@- ]]; then
+        has_stdin=1
+      fi
     fi
-    prev="$arg"
   done
   if [ "$has_stdin" -eq 1 ]; then
     buffered=$(cat)
