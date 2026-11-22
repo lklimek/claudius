@@ -26,8 +26,8 @@ The defect-safety rules ("Unknown is not benign", the `severity` § 4 tie-break)
 ## Decision tree (apply in order)
 
 ```
-informational/praise (praise, INTENTIONAL downgrade,
-  RESOLVED comment, DECIDED item, relevance 0.0)   → omit merge_class
+informational/praise (INFO band: praise, INTENTIONAL
+  downgrade, RESOLVED comment, DECIDED item)       → omit merge_class
 invalid (ai_verdict false_positive | duplicate)    → disputed
 valid, but the problem lies only in the layer or
   dependency that owns the behavior (a tripped

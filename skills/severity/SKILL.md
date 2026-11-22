@@ -188,7 +188,7 @@ In finding JSON, `severity` is the integer, not the label.
 
 **Proportionate to the PR's problem**: what a PR must fix scales with how important the problem it solves is (`references/merge-classification.md` § Rating the PR's problem); a minor PR is one whose problem bands LOW. Below the gates, a finding whose fix outweighs a minor PR's own value — a pre-existing defect the diff worsens or exposes, or a LOW the diff introduces — is deferred; MEDIUM+ defects the diff introduces are always fixed.
 
-**`non_blocking` is optional work**: list it; fix it only when the user asks, or when the fix is a few lines riding a push that a `blocking` finding, a MEDIUM+ defect the diff introduces, or the user already requires. It never justifies a push or a review round on its own.
+**Other `non_blocking` work is optional** (all but MEDIUM+ defects the diff introduces): list it; fix it only when the user asks, or when the fix is a few lines riding a push that a `blocking` finding, an introduced MEDIUM+ defect, or the user already requires. It never justifies a push or a review round on its own.
 
 **Before assigning any `merge_class`, read `references/merge-classification.md`** — establishing PR intent, the ordered decision tree, pre-existing findings, and the external-reviewer field map. Two rules bind even at a glance:
 

@@ -122,7 +122,7 @@ The report has the same structure as a `review-changes` report — one definitio
 ## 6. Validate Report
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py report.json
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py <REPORT_DIR>/report.json
 ```
 
 If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid data.
@@ -130,10 +130,10 @@ If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid d
 ## 7. Render and Present
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py report.json --format html
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py <REPORT_DIR>/report.json --format html
 ```
 
-Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can also run `triage-findings report.json` for interactive triage of scored concerns; unscored context rows remain visible as evidence.
+Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can also run `triage-findings <REPORT_DIR>/report.json` for interactive triage of scored concerns; unscored context rows remain visible as evidence.
 
 ## 8. Resolve and Reply to Threads
 
