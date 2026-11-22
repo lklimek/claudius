@@ -1,6 +1,6 @@
 ---
 name: check-pr-comments
-description: "Fetches a PR's review comments, verifies each against the current code, collects a user decision per comment (one question at a time, or a decision table), and then fixes, replies to, or resolves threads. This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
+description: "Fetches a PR's review comments, verifies each against the current code, collects a decision per comment (the user's, one question at a time or via a decision table; or, in opt-in Auto mode, the agent's own), and then fixes, replies to, or resolves threads. This skill should be used when the user asks to \"check PR comments\", \"verify review comments are addressed\", or otherwise confirm that PR feedback is resolved in code. It can optionally produce a triage-compatible report."
 allowed-tools: Read, Write, Grep, Glob, Bash(gh pr view *), Bash(gh pr comment *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-list-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(ghsudo ${CLAUDE_PLUGIN_ROOT}/scripts/gh-resolve-review-threads.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-post-review-reply.sh *), Bash(gh search code *), Bash(gh search prs *), Bash(gh search issues *), Bash(gh pr list *), Bash(git for-each-ref *), Bash(git worktree list *)
 ---
 
@@ -12,10 +12,11 @@ On Codex/other hosts, resolve commands from the installed absolute script paths 
 
 ## 0. Choose Mode
 
-Every comment fix, reply, and resolve needs the user's per-ID decision — even when a request, standing instruction, or invoking skill asks to fix without asking. Agents verify and propose only.
+Every comment fix, reply, and resolve needs a per-ID decision: the user's, except in Auto mode. Workers verify and propose only.
 
 - **Interview** (default when the user is reachable): verify everything first, then ask one decision at a time (step 4) and execute each answer before the next question (step 8).
 - **Table**: show the step 4 table, change nothing until the user decides per ID (step 8). Use it on request, and always when no user is reachable (CI, headless, a subagent without a user channel) — the run then ends after the table.
+- **Auto** — only on the user's explicit request or a standing user/project instruction, never on an invoking skill's: verify everything, then decide each ID yourself by its step 4 recommendation and execute it (step 8). Auto decides only `resolve`, `fix here` (in scope), `handled in #N`, `TODO`, and `reject` of bot comments; every other ID — a gate override, `follow-up PR`, `upstream issue`, a rejected human comment, a product-rule ambiguity — goes to the user afterwards as an Interview question, or stays undecided in the table when no user is reachable.
 
 State the mode in one line.
 
@@ -65,7 +66,7 @@ For every unresolved inline comment and review-body/PR-comment item (below), rea
 
 ## 4. Decisions
 
-Table mode shows this table; Interview ends with it, Recommendation showing the action taken. Above it, one line: `PR #N: <one sentence on what the PR is for, from its title/TL;DR>`.
+Table mode shows this table; Interview and Auto end with it, Recommendation showing the action taken (Auto: marked `auto`). Above it, one line: `PR #N: <one sentence on what the PR is for, from its title/TL;DR>`.
 
 IDs are the report IDs (`CMT-001`, …, ordered per [structured-report.md](references/structured-report.md) § Finding additions, rough severity standing in for floats when no report exists) and are fixed once shown: a later report and `triage-findings` reuse them, never re-sort. A requested report (steps 5-7) is built before the table. Keep cells ≤ ~15 words:
 
@@ -140,7 +141,7 @@ Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can 
 
 ### Executing decisions
 
-Apply each decision exactly; never extend it to IDs the user did not name. Every "resolve" below covers human threads too. Reply and resolve on every thread of a merged ID. Never act on an already resolved (`isResolved: true`) thread, and keep local-only state (branches, WIP) off GitHub. Reply text for any decision other than `fix here` and `resolve` starts "Per maintainer decision". Post a fix's reply only after the fix lands.
+Apply each decision exactly; never extend it to IDs the user did not name. Every "resolve" below covers human threads too. Reply and resolve on every thread of a merged ID. Never act on an already resolved (`isResolved: true`) thread, and keep local-only state (branches, WIP) off GitHub. Reply text for any decision other than `fix here` and `resolve` starts "Per maintainer decision" — in Auto, "Per automated triage" replaces it in every reply below. Post a fix's reply only after the fix lands.
 
 **Fix commits awaiting a decision** (e.g. a worker briefed before a correction fixed anyway): before the first decision, move each onto its own local branch (record ID → commit) and reset the PR branch to its pushed head. Approved → apply that ID's commits to the PR branch; moved to a follow-up → that branch becomes the follow-up; rejected → delete it. Before each push, confirm the PR branch holds no undecided ID's commits.
 
