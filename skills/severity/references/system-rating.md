@@ -14,13 +14,13 @@ Fields, each a short claim with its source (doc link, maintainer statement, meas
 ```
 Project type: <network/node | GUI app | SDK/library | server service | tooling/CLI — `severity` § 3 System scale; mixed repos: one `<path> → <type>` line each (internal modules take their owning app's type; dev, CI, and agent tooling handling only test assets: `<path> → tooling/CLI, internal, not shipped`)>
 System & scale: <what runs in production and how much — e.g. "mainnet: ~400 validators, BFT consensus">
-Threat model: <assumptions the design relies on — e.g. "< 1/3 Byzantine voting power", "partially synchronous network">
+Threat model: <assumptions the design relies on — e.g. "< 1/3 Byzantine voting power", "partially synchronous network"; state each actor in or out: remote peer, hostile network data, same-user local process, other local user or physical access, supply chain (CI, release)>
 Critical assets: <ranked, most important first — e.g. consensus safety > liveness > single-node performance > tooling>
-Accepted risks: <scenarios maintainers decided not to defend against, with reason>
+Accepted risks: <scenarios maintainers decided not to defend against, each with the surface it applies to and the reason>
 Anchors: <a few issues/findings with the maintainers' outcome — band, `declined`, or `merged over` — e.g. "#812 HIGH: chain halt on malformed vote extension"; "#930 declined: crash on a crafted local file the user created">
 ```
 
-Start the file with one line any reviewer can follow without this skill: `Reviewers: rate harm against Critical assets; a precondition outside Threat model or under Accepted risks is low-likelihood, still reported.`
+Start the file with one line any reviewer can follow without this skill: `Reviewers: rate harm against Critical assets; a precondition outside Threat model or under an Accepted risks line (on the surface it names) is low-likelihood and trips no blocker gate, still reported.`
 
 Profile claims are human statements: they satisfy the `severity` § 3 evidence rule. **Every report summary opens with `Profile: <repo file @base | MemCan | none>`; none → rate generically**; never invent profile claims. To bootstrap one, draft the fields from the repo's README, docs, and specs, mark every claim lacking a source `unconfirmed`, and ask the user to confirm before saving.
 

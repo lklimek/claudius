@@ -51,6 +51,8 @@ A gate is a **must-not-ship** condition. Tripping any gate ⇒ `merge_class: blo
 | **G-GROWTH** | Unbounded resource growth under normal load | all |
 | **G-DEFAULTS** | Ships an insecure default configuration | all |
 
+**Accepted risks**: a path that needs a precondition the project profile ([references/system-rating.md](references/system-rating.md)) places outside its threat model, or that matches an `Accepted risks` line, trips no gate: report it as an ordinary finding with `intent_basis: "accepted risk: <profile line>"`. The match needs both the scenario and the surface the line names; a line naming no surface applies to none. No matching profile line → the gate trips.
+
 ### Plausibility (trial)
 
 Outside Sovereign and Boundary code, a gate other than G-FUNDS, G-DOUBLE, G-WYSIWYS, G-SECRET, G-CRYPTO, G-DATA trips only at `likelihood` ≥ ~0.2; below that it is an ordinary finding, and the low `likelihood` needs evidence (§ 3 evidence rule). Record a maintainer's disagreement with this threshold as calibration ([references/system-rating.md](references/system-rating.md) § Calibration memory).
