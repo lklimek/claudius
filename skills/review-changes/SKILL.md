@@ -38,7 +38,7 @@ Resolve plugin/skill roots from the loaded skill before executing commands; subs
 
 Gather the user's requirements, acceptance criteria (from the originating issue, read fresh with `gh issue view`, and the task or PR description), relevant specs, and changed files. Carry the caller's Context Digest verbatim when supplied (`review-pr` § Context Digest). Load the project profile (`<SYSTEM_RATING>` § Project profile) and give it to every reviewer, inside the digest when one exists. Mark missing requirements as unknown; never infer intended behavior solely from the implementation.
 
-**Brief** (every reviewer, both modes): pass the maintainer's prior per-ID decisions on this scope verbatim when supplied; they suppress repeats of decided items only (`<MERGE_CLASSIFICATION>`). Put coordinator focus questions last, to be answered after the reviewer's own pass, below its findings.
+**Brief** (every reviewer, both modes): pass the maintainer's prior per-ID decisions on this scope verbatim when supplied; they suppress repeats of decided items only (`<MERGE_CLASSIFICATION>` § Previously decided). Put coordinator focus questions last, to be answered after the reviewer's own pass, below its findings.
 
 **Bash hygiene** (coordinator; producers follow the producer contract's identical rule): commands use `<PLACEHOLDER>`s — substitute literal values, one plain command per call; no `$VAR`, `$(…)`, loops, pipes, redirects, `&&` chains, `cd`, `git -C` or `python3 -c` (restricted CI allowlists deny them, costing a round each); write files with the Write tool; read plugin files (skills, references, scripts) with Read, never Bash `ls`/`find`/`cp` — CI sandboxes block Bash outside the working directory.
 
