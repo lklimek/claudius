@@ -70,6 +70,8 @@ One report with these sections:
 
 ## 6. Cleanup
 
+First archive any report file written under the session dir per [report-format](../report-format/SKILL.md) § File Output.
+
 ```bash
 rm -rf "$SESSION_DIR"
 ```
