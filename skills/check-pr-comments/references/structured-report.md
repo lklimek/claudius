@@ -26,6 +26,8 @@ One scored finding per actual remaining concern; other comments live only in ass
 }
 ```
 
+`tags` carries the step 4 category as `category:<slug>` (`category:other:<label>` for `other`).
+
 Review-body and PR-comment items (SKILL.md step 3) have no thread: omit `comment_id` and `thread_id`; `comment_url` = the review's or comment's URL; `location` = the code the request concerns, else `PR #<number>` (no permalink).
 
 `description` = what the comment asked for; `recommendation` = what was done (RESOLVED) or what remains (UNRESOLVED). `thread_id` comes from `gh-list-review-threads.sh` and is needed for step 8.
@@ -44,4 +46,4 @@ This skill renders its own final report, so it emits what a coordinator would ot
 
 - **Already fixed/dismissed/context**: assessment rows need no scored finding. Legacy RESOLVED findings remain readable with zero floats and an informational band.
 - **Unresolved**: `likelihood` and `impact` per `claudius:severity`. Rate `relevance` as PR-goal fit per the `claudius:severity` § 3 scale, not blast radius — do NOT default to `1.0`. `verdict: "UNRESOLVED"`.
-- **Merge class** (coordinator-inline producer exception — `claudius:report-format`): RESOLVED comments omit `merge_class`. Classify UNRESOLVED per `claudius:severity` § Merge Classification — `blocking` only when the concern trips a blocker gate (`intent_basis` names the gate ID plus the reviewer's request as evidence); otherwise `non_blocking` (in PR scope) or `out_of_scope_follow_up` — reported for the user's decision, never filed anywhere by this skill (`claudius:severity` § 5).
+- **Merge class** (coordinator-inline producer exception — `claudius:report-format`): RESOLVED comments omit `merge_class`. Classify UNRESOLVED per `claudius:severity` § Merge Classification — `blocking` only when the concern trips a blocker gate in this PR's layer (`intent_basis` names the gate ID plus the reviewer's request as evidence; upstream-only → step 3 conflict, the user's call); otherwise `non_blocking` (in scope per SKILL.md step 3, necessity gate included) or `out_of_scope_follow_up` — reported for the user's decision, never filed anywhere by this skill (`claudius:severity` § 5).
