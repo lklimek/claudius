@@ -739,6 +739,25 @@ class TestGenerateRemediation:
         assert by_priority["before_production"]["finding_ids"] == ["CODE-002"]
         assert by_priority["post_deployment"]["finding_ids"] == ["CODE-004"]
 
+    def test_introduced_medium_non_blocking_is_before_merge(
+        self, make_finding, make_section
+    ):
+        # severity § 5: MEDIUM+ defects the diff introduces are always fixed in the PR.
+        introduced = make_finding(severity=3, fid="CODE-001")
+        introduced.update(merge_class="non_blocking", relevance=1.0)
+        worsened = make_finding(severity=3, fid="CODE-002")
+        worsened.update(merge_class="non_blocking", relevance=0.5)
+        introduced_low = make_finding(severity=2, fid="CODE-003")
+        introduced_low.update(merge_class="non_blocking", relevance=1.0)
+
+        result = cr.generate_remediation(
+            [make_section(findings=[introduced, worsened, introduced_low])]
+        )
+        by_priority = {bucket["priority"]: bucket for bucket in result}
+        assert by_priority["before_merge"]["finding_ids"] == ["CODE-001"]
+        assert by_priority["before_production"]["finding_ids"] == ["CODE-002"]
+        assert by_priority["post_deployment"]["finding_ids"] == ["CODE-003"]
+
     def test_absent_merge_class_keeps_severity_bucketing(
         self, make_finding, make_section
     ):

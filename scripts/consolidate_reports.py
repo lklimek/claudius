@@ -801,7 +801,13 @@ def generate_remediation(
         if merge_class == "blocking":
             bucket = "before_merge"
         elif merge_class == "non_blocking":
-            bucket = "before_production" if sev >= 3 else "post_deployment"
+            if sev < 3:
+                bucket = "post_deployment"
+            elif (f.get("relevance") or 0) >= 0.75:
+                # severity § 5: a MEDIUM+ defect the diff introduces is always fixed.
+                bucket = "before_merge"
+            else:
+                bucket = "before_production"
         elif merge_class == "out_of_scope_follow_up":
             bucket = "post_deployment"
         elif sev == 1:
