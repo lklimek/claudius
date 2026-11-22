@@ -53,7 +53,11 @@ A gate is a **must-not-ship** condition. Tripping any gate ⇒ `merge_class: blo
 
 ### Plausibility (trial)
 
-Outside Sovereign and Boundary code, a gate other than G-FUNDS, G-DOUBLE, G-WYSIWYS, G-SECRET, G-CRYPTO, G-DATA trips only at `likelihood` ≥ ~0.2; below that it is an ordinary finding, and the low `likelihood` needs evidence (§ 3 evidence rule). Record a maintainer's disagreement with this threshold as calibration ([references/system-rating.md](references/system-rating.md) § Calibration memory). For races, likelihood depends on the zone:
+Outside Sovereign and Boundary code, a gate other than G-FUNDS, G-DOUBLE, G-WYSIWYS, G-SECRET, G-CRYPTO, G-DATA trips only at `likelihood` ≥ ~0.2; below that it is an ordinary finding, and the low `likelihood` needs evidence (§ 3 evidence rule). Record a maintainer's disagreement with this threshold as calibration ([references/system-rating.md](references/system-rating.md) § Calibration memory).
+
+### Races and concurrency
+
+One rule, zone-dependent likelihood:
 
 - **GUI**: would a real human plausibly do this? Double-clicking submit is plausible → gate trips. A 3-ms window needing scripted timing is not.
 - **Server**: concurrency under normal load is near-certain → trips by default; argue your way out with evidence, not the reverse.
