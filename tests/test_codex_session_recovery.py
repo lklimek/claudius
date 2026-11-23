@@ -579,3 +579,85 @@ def test_watchdog_descendant_through_shell_suppresses_reminder(recovery, context
     (recovery.PROC_ROOT / "102/cmdline").write_bytes(b"bash\0")
     watchdog_process(recovery, context, parent=102)
     assert recovery.recovery_context(payload, env) == ""
+
+
+def test_pid_exit_mid_scan_does_not_hide_current_watchdog(
+    recovery, context, monkeypatch
+):
+    payload, env = context
+    job(env, pid=777)
+    fake_process(recovery, context, 777)
+    watchdog_process(recovery, context)
+    gone = recovery.PROC_ROOT / "998"
+    gone.mkdir()
+    original_iterdir = Path.iterdir
+    original_stat = Path.stat
+
+    def ordered(path):
+        if path == recovery.PROC_ROOT:
+            return iter([gone, recovery.PROC_ROOT / "999"])
+        return original_iterdir(path)
+
+    def vanished(path, *args, **kwargs):
+        if path == gone:
+            raise FileNotFoundError
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "iterdir", ordered)
+    monkeypatch.setattr(Path, "stat", vanished)
+    assert recovery.recovery_context(payload, env) == ""
+
+
+def test_versioned_claude_ancestor_is_recognised(recovery, context):
+    payload, env = context
+    job(env, pid=777)
+    fake_process(recovery, context, 777)
+    watchdog_process(recovery, context)
+    (recovery.PROC_ROOT / "100/cmdline").write_bytes(
+        b"/home/user/.local/share/claude/versions/2.1.330\0"
+    )
+    assert recovery.recovery_context(payload, env) == ""
+
+
+@pytest.mark.parametrize("path_kind", ["symlink", "trailing-slash"])
+def test_hook_sessionless_jobs_use_canonical_cwd(recovery, context, path_kind):
+    payload, env = context
+    job(env, sessionId=None)
+    alias = Path(env["HOME"]).parent / "alias"
+    alias.symlink_to(payload["cwd"], target_is_directory=True)
+    payload["cwd"] = str(alias) if path_kind == "symlink" else payload["cwd"] + "/"
+    assert "job=orphan " in recovery.recovery_context(payload, env)
+
+
+def test_finished_job_is_reported_once_across_resume_and_compact(recovery, context):
+    payload, env = context
+    job(env, id="finished", status="completed", completedAt=NOW - 5400)
+    assert "job=finished " in recovery.recovery_context(payload, env)
+    payload["source"] = "compact"
+    assert recovery.recovery_context(payload, env) == ""
+    payload["source"] = "resume"
+    assert recovery.recovery_context(payload, env) == ""
+
+
+def test_truncated_finished_jobs_are_reported_on_later_hooks_once_each(
+    recovery, context
+):
+    payload, env = context
+    for index in range(12):
+        job(env, id=f"done-{index}", status="completed", completedAt=NOW - 5400)
+    outputs = [recovery.recovery_context(payload, env) for _ in range(4)]
+    assert [out.count("Codex finished job=") for out in outputs] == [5, 5, 2, 0]
+    assert "+7 more finished jobs" in outputs[0]
+    assert "+2 more finished jobs" in outputs[1]
+
+
+def test_concurrent_hooks_report_each_finished_job_at_most_once(recovery, context):
+    from concurrent.futures import ThreadPoolExecutor
+
+    payload, env = context
+    job(env, id="finished", status="completed", completedAt=NOW - 5400)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outputs = list(
+            executor.map(lambda _: recovery.recovery_context(payload, env), range(2))
+        )
+    assert sum(out.count("Codex finished job=") for out in outputs) == 1

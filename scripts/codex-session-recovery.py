@@ -8,6 +8,7 @@ https://github.com/openai/codex-plugin-cc/issues/377
 
 from __future__ import annotations
 
+import hashlib
 import heapq
 import importlib.util
 import json
@@ -73,6 +74,29 @@ def printable(value: Any) -> bool:
     return isinstance(value, str) and 0 < len(value) <= 4096 and value.isprintable()
 
 
+def completion_receipt(env: dict, session: str, workspace: str, job_id: str) -> Path:
+    """Keep hook receipts separate from Codex's state, scoped to one session."""
+    root = Path(
+        env.get("CLAUDE_PLUGIN_DATA")
+        or watchdog.claude_config_dir(env) / "plugins/data/claudius"
+    )
+    owner = hashlib.sha256(session.encode()).hexdigest()
+    job = hashlib.sha256(
+        json.dumps([str(Path(workspace).resolve()), job_id]).encode()
+    ).hexdigest()
+    return root / "codex-recovery" / owner / job
+
+
+def claim_completion(receipt: Path) -> bool:
+    """An exclusive empty receipt prevents concurrent hooks repeating a notice."""
+    try:
+        receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        receipt.touch(mode=0o600, exist_ok=False)
+        return True
+    except OSError:
+        return False
+
+
 def recovery_context(payload: dict, env: dict) -> str:
     """Describe active and recently finished jobs belonging to this session."""
     if not isinstance(payload, dict) or payload.get("source") not in (
@@ -97,7 +121,7 @@ def recovery_context(payload: dict, env: dict) -> str:
     orphan_count = 0
     reused_count = 0
     finished = []
-    finished_count = 0
+    canonical_cwd = Path(cwd).resolve()
     now = time.time()
     try:
         for path in recent_jobs(watchdog.codex_state_roots(env), now):
@@ -125,7 +149,7 @@ def recovery_context(payload: dict, env: dict) -> str:
             job_session = job.get("sessionId")
             if job_session not in (None, "") and job_session != session:
                 continue
-            if job_session in (None, "") and workspace != cwd:
+            if job_session in (None, "") and Path(workspace).resolve() != canonical_cwd:
                 continue
             if status in watchdog.TERMINAL_STATUSES:
                 completed = watchdog._parse_timestamp(job.get("completedAt"))
@@ -135,8 +159,8 @@ def recovery_context(payload: dict, env: dict) -> str:
                     completed is not None
                     and now - watchdog.TERMINAL_JOB_RETENTION_SECS <= completed <= now
                 ):
-                    finished_count += 1
-                    if len(finished) >= MAX_FINISHED:
+                    receipt = completion_receipt(env, session, workspace, job_id)
+                    if receipt.exists():
                         continue
                     collect = shlex.join(
                         [
@@ -147,7 +171,10 @@ def recovery_context(payload: dict, env: dict) -> str:
                         ]
                     )
                     finished.append(
-                        f"Codex finished job={shlex.quote(job_id)} status={status} --cwd {shlex.quote(workspace)}\nCollect: {collect}"
+                        (
+                            receipt,
+                            f"Codex finished job={shlex.quote(job_id)} status={status} --cwd {shlex.quote(workspace)}\nCollect: {collect}",
+                        )
                     )
                 continue
             active = True
@@ -186,13 +213,20 @@ def recovery_context(payload: dict, env: dict) -> str:
             f"Recovery: for absent/zombie PIDs only, read {shlex.quote(str(reference))} (cancel, then --resume-last with identical --cwd)."
         )
     if not monitor_running:
-        if finished:
-            lines.append("Recent completions: check notes before collecting.")
-        lines.extend(finished)
-        if finished_count > MAX_FINISHED:
-            lines.append(
-                f"+{finished_count - MAX_FINISHED} more finished jobs; inspect jobs/*.json."
-            )
+        notices = []
+        remaining = 0
+        try:
+            for receipt, notice in finished:
+                if len(notices) < MAX_FINISHED:
+                    if claim_completion(receipt):
+                        notices.append(notice)
+                elif not receipt.exists():
+                    remaining += 1
+        except DeadlineExpired:
+            pass
+        lines.extend(notices)
+        if remaining:
+            lines.append(f"+{remaining} more finished jobs; inspect jobs/*.json.")
     if not active or monitor_running:
         return "\n".join(lines)
     command = shlex.join(

@@ -145,7 +145,7 @@ def record(
     )
 
 
-def member_transcript(projects: Path, cwd: Path, kind: str, session: str) -> None:
+def member_transcript(projects: Path, cwd: Path, kind: str, session: str) -> Path:
     """Write a real-shaped tmux member transcript, without inventing config keys."""
     slug = re.sub(r"[^A-Za-z0-9-]", "-", str(cwd).rstrip("/"))
     path = projects / slug / f"{session}.jsonl"
@@ -156,6 +156,7 @@ def member_transcript(projects: Path, cwd: Path, kind: str, session: str) -> Non
         )
         + "\n"
     )
+    return path
 
 
 def test_safe_json_bounds_reads_and_handles_recursion(
@@ -558,7 +559,6 @@ def test_direct_discovery_ignores_foreign_sessions_in_other_workspaces(
         [],
         "session-full",
         now=100,
-        discovery_candidates=[ws],
     )
 
     assert [item.job_id for item in result.records] == ["ours"]
@@ -586,7 +586,6 @@ def test_direct_discovery_survives_zero_match_ambient_session(
         [ambient],
         "coordinator-session",
         now=100,
-        discovery_candidates=[direct],
         teammate_sessions={"worker-session"},
     )
 
@@ -2696,9 +2695,7 @@ def test_direct_discovery_without_session_id_requires_session_cwd(tmp_path, sess
     codex_store(tmp_path, other, [{"id": "stranger", "sessionId": session}])
     env["PWD"] = str(ws)
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
-    records = scanner.scan(
-        [], "session-full", now=100, discovery_candidates=[ws, other]
-    ).records
+    records = scanner.scan([], "session-full", now=100).records
     assert [record.job_id for record in records] == ["local"]
 
 
@@ -2898,3 +2895,180 @@ def test_codex_export_outside_private_plugin_data_is_ignored(tmp_path):
         watchdog.codex_state_root(env)
         == Path(env["HOME"]) / ".claude/plugins/data/codex-openai-codex/state"
     )
+
+
+def harness_team_transcript(
+    projects, cwd, session, team, name, *, kind="claudius:developer-bilby"
+):
+    """Sanitised real header: six setup records, then harness team metadata."""
+    slug = re.sub(r"[^A-Za-z0-9-]", "-", str(cwd).rstrip("/"))
+    path = projects / slug / f"{session}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {"type": "agent-setting", "agentSetting": kind, "sessionId": session},
+        {"type": "mode", "mode": "default", "sessionId": session},
+        {"type": "permission-mode", "permissionMode": "default", "sessionId": session},
+        {"type": "session-owner", "accountUuid": "sanitised", "sessionId": session},
+        {"type": "atis-latch", "atis": False, "sessionId": session},
+        {"type": "tools-used", "tools": [], "sessionId": session},
+        {
+            "parentUuid": None,
+            "isSidechain": False,
+            "teamName": team,
+            "agentName": name,
+            "attachment": {
+                "type": "hook_success",
+                "hookName": "SessionStart",
+                "content": "sanitised",
+            },
+            "type": "attachment",
+            "uuid": "sanitised",
+            "timestamp": "2026-11-21T03:57:40.918Z",
+            "userType": "external",
+            "entrypoint": "cli",
+            "cwd": str(cwd),
+            "sessionId": session,
+            "version": "2.1.329",
+            "gitBranch": "sanitised",
+            "dataFlowOn": True,
+        },
+    ]
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+    os.utime(path, (100, 100))
+    return path
+
+
+def test_team_name_headers_track_duplicate_roles_and_removed_members(tmp_path):
+    ws = workspace(tmp_path)
+    projects = tmp_path / "projects"
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "one", "sessionId": "worker-one", "epoch": 100},
+            {"id": "two", "sessionId": "worker-two", "epoch": 100},
+            {"id": "removed", "sessionId": "worker-removed", "epoch": 100},
+            {"id": "foreign", "sessionId": "worker-foreign", "epoch": 100},
+        ],
+    )
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-lead/config.json",
+        {
+            "name": "session-lead",
+            "leadSessionId": "lead-session",
+            "createdAt": 1000000,
+            "members": [
+                {
+                    "name": name,
+                    "agentId": f"{name}@session-lead",
+                    "agentType": "claudius:developer-bilby",
+                    "backendType": "tmux",
+                    "cwd": str(ws),
+                    "isActive": True,
+                }
+                for name in ("one", "two")
+            ],
+        },
+    )
+    for name in ("one", "two", "removed", "foreign"):
+        harness_team_transcript(
+            projects,
+            ws,
+            f"worker-{name}",
+            "session-foreign" if name == "foreign" else "session-lead",
+            name,
+        )
+    subagent = projects / "slug/lead-session/subagents/agent-sub.jsonl"
+    subagent.parent.mkdir(parents=True)
+    subagent.write_text('{"type":"user","agentId":"sub"}\n')
+    write_json(
+        subagent.with_suffix(".meta.json"), {"agentType": "claudius:developer-bilby"}
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="lead-session",
+            projects_dir=projects,
+            worktrees=tmp_path / "worktrees",
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    assert monitor.poll_once(now=200) == []
+    lines = monitor.poll_once(now=201)
+    assert {line.split()[1] for line in lines} == {"job=one", "job=two", "job=removed"}
+
+
+def test_candidate_discovery_never_invokes_git_for_worktrees(tmp_path, monkeypatch):
+    ws = workspace(tmp_path)
+    _, env = codex_store(tmp_path, ws, [{"id": "owned", "epoch": 100}])
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    monkeypatch.setattr(
+        watchdog, "resolve_workspace", lambda *_: pytest.fail("unused git resolution")
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="session-full",
+            worktrees=tmp_path / "worktrees",
+            gone_enabled=False,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    for index in range(10):
+        (tmp_path / "worktrees" / f"worker-{index}").mkdir(parents=True)
+    monitor.poll_once(now=100)
+    assert [
+        record.job_id for record in scanner.scan([], "session-full", now=100).records
+    ] == ["owned"]
+
+
+@pytest.mark.parametrize("path_kind", ["symlink", "trailing-slash"])
+def test_sessionless_jobs_match_canonical_session_cwd(tmp_path, path_kind):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path, ws, [{"id": "legacy", "sessionId": None, "epoch": 100}]
+    )
+    alias = tmp_path / "alias"
+    alias.symlink_to(ws, target_is_directory=True)
+    env["PWD"] = str(alias) if path_kind == "symlink" else str(ws) + "/"
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    assert [
+        record.job_id for record in scanner.scan([], "session-full", now=100).records
+    ] == ["legacy"]
+
+
+def test_tmux_member_clock_ignores_same_type_inprocess_subagent(tmp_path):
+    projects = tmp_path / "projects"
+    cwd = workspace(tmp_path)
+    transcript = member_transcript(projects, cwd, "bilby", "worker-session")
+    subagent = projects / "slug/lead-session/subagents/agent-sub.jsonl"
+    subagent.parent.mkdir(parents=True)
+    subagent.write_text('{"type":"user","agentId":"sub"}\n')
+    write_json(subagent.with_suffix(".meta.json"), {"agentType": "bilby"})
+    team = watchdog.Team(
+        name="session-lead",
+        lead_session_id="lead-session",
+        members=(
+            watchdog.Member("bilby", cwd, "bilby@session-lead", "bilby", "%1", "tmux"),
+        ),
+    )
+    assert watchdog.member_transcripts(team, projects, set()) == {"bilby": transcript}
+
+
+def test_legacy_type_fallback_rejects_explicit_foreign_team(tmp_path):
+    projects = tmp_path / "projects"
+    cwd = workspace(tmp_path)
+    harness_team_transcript(
+        projects, cwd, "stranger", "session-other", "bilby", kind="bilby"
+    )
+    team = watchdog.Team(
+        name="session-lead",
+        lead_session_id="lead-session",
+        members=(
+            watchdog.Member("bilby", cwd, "bilby@session-lead", "bilby", "%1", "tmux"),
+        ),
+    )
+    assert watchdog.member_transcripts(team, projects, set()) == {}

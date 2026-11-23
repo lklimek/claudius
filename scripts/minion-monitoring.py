@@ -9,9 +9,9 @@ Anonymous transcript monitoring remains opt-in. Tmux GONE detection binds one
 session's swarm socket positively by pane ID and agent type before trusting pane
 absence, and all disappearance signals require consecutive confirmation.
 
-Codex Companion jobs are a separate Source D state machine. Candidate state
-directories come from the selected team, Source C worktrees, and a bounded
-session-workspace scan of the plugin state root. Job records must match the
+Codex Companion jobs are a separate Source D state machine. State directories
+come from the selected team and session-owned records across the plugin store.
+Job records must match the
 lead or a selected teammate session; records without a session ID require the
 exact session cwd. Healthy work is silent;
 terminal status, stall, recovery, verified runtime disappearance, and confirmed
@@ -709,6 +709,13 @@ class ProcInspector:
             if argv and (
                 _basename(argv[0]) in {"claude", "claude-code"}
                 or (
+                    Path(argv[0]).parent.name == "versions"
+                    and Path(argv[0]).parent.parent.name == "claude"
+                    and re.fullmatch(
+                        r"\d+\.\d+\.\d+(?:[-.][A-Za-z0-9]+)*", _basename(argv[0])
+                    )
+                )
+                or (
                     len(argv) > 1
                     and _basename(argv[0]) in {"node", "bun"}
                     and "/claude-code/" in argv[1]
@@ -723,7 +730,10 @@ class ProcInspector:
             for process in self.proc_root.iterdir():
                 if time.monotonic() >= deadline:
                     return None
-                if not process.name.isdigit() or process.stat().st_uid != uid:
+                try:
+                    if not process.name.isdigit() or process.stat().st_uid != uid:
+                        continue
+                except OSError:
                     continue
                 argv = _try_read_cmdline(process / "cmdline") or []
                 if (
@@ -1151,9 +1161,13 @@ class CodexScanner:
         if not isinstance(raw, dict):
             return False
         session = raw.get("sessionId")
+        workspace = raw.get("workspaceRoot")
         return (
             session in (None, "")
-            and raw.get("workspaceRoot") == self.env.get("PWD", str(Path.cwd()))
+            and isinstance(workspace, str)
+            and bool(workspace)
+            and self._canonical_workspace(workspace)
+            == self._canonical_workspace(self.env.get("PWD", str(Path.cwd())))
         ) or (
             isinstance(session, str)
             and any(_prefix_matches(session, item) for item in sessions)
@@ -1161,35 +1175,16 @@ class CodexScanner:
 
     def _direct_workspaces(
         self,
-        candidates: Iterable[Path],
         now: float | None,
         warnings: list[tuple[str, str]],
-        session_ids: set[str] | None = None,
+        session_ids: set[str],
     ) -> list[WorkspaceInfo]:
-        allowed: set[Path] = set()
-        for candidate in candidates:
-            try:
-                if candidate.is_dir():
-                    allowed.add(resolve_workspace(candidate, self.env).canonical)
-            except (OSError, ValueError):
-                continue
-        if not allowed and not session_ids:
-            return []
-        allowed_hashes = {sha256_path(canonical) for canonical in allowed}
         try:
             state_dirs = sorted(
                 path
                 for state_root in codex_state_roots(self.env)
                 for path in state_root.iterdir()
-                if path.is_dir()
-                and not path.is_symlink()
-                and (
-                    bool(session_ids)
-                    or any(
-                        path.name.endswith(f"-{path_hash}")
-                        for path_hash in allowed_hashes
-                    )
-                )
+                if path.is_dir() and not path.is_symlink()
             )
         except OSError:
             return []
@@ -1203,9 +1198,9 @@ class CodexScanner:
                         job_path,
                         self._minimal_job,
                         quiet=True,
-                        keep=lambda value: self._owned_job(value, session_ids or ()),
+                        keep=lambda value: self._owned_job(value, session_ids),
                     )
-                    if not self._owned_job(raw, session_ids or ()):
+                    if not self._owned_job(raw, session_ids):
                         continue
                     workspace_root = raw.get("workspaceRoot")
                     if not isinstance(workspace_root, str) or not workspace_root:
@@ -1236,7 +1231,6 @@ class CodexScanner:
         candidates: Iterable[Path],
         effective_session: str,
         now: float | None = None,
-        discovery_candidates: Iterable[Path] = (),
         teammate_sessions: Iterable[str] = (),
     ) -> ScanResult:
         """Scan active and recent jobs from mapped and session-root discovery."""
@@ -1257,9 +1251,7 @@ class CodexScanner:
                 continue
             info = resolve_workspace(candidate, self.env)
             workspaces.setdefault(info.state_dir, info)
-        for info in self._direct_workspaces(
-            discovery_candidates, now, warnings, allowed_sessions
-        ):
+        for info in self._direct_workspaces(now, warnings, allowed_sessions):
             workspaces[info.state_dir] = info
 
         raw_by_workspace: list[
@@ -1832,6 +1824,48 @@ def _agent_setting(path: Path) -> tuple[str, str]:
     return "", ""
 
 
+def _team_header(path: Path) -> tuple[str, str, str]:
+    """Read harness ownership metadata without loading transcript bodies."""
+    try:
+        with path.open("rb") as handle:
+            for _ in range(20):
+                line = handle.readline(256 * 1024)
+                if not line or not line.endswith(b"\n"):
+                    break
+                try:
+                    value = json.loads(line)
+                except (ValueError, RecursionError):
+                    continue
+                if not isinstance(value, dict) or not value.get("teamName"):
+                    continue
+                fields = tuple(
+                    value.get(key) for key in ("teamName", "agentName", "sessionId")
+                )
+                if all(
+                    isinstance(item, str) and SAFE_FIELD.fullmatch(item)
+                    for item in fields
+                ):
+                    return fields
+    except OSError:
+        pass
+    return "", "", ""
+
+
+def team_session_ids(team: Team, projects_dir: Path) -> set[str]:
+    """Include pruned members and duplicate roles through exact harness team names."""
+    sessions: set[str] = set()
+    # Config creation time resets on team recreation; it cannot date membership.
+    for path in projects_dir.glob("*/*.jsonl"):
+        name, _, session = _team_header(path)
+        if (
+            name == team.name
+            and session == path.stem
+            and session != team.lead_session_id
+        ):
+            sessions.add(session)
+    return sessions
+
+
 def _project_slug_dirs(projects_dir: Path, cwd: Path) -> list[Path]:
     raw = str(cwd).rstrip("/")
     names = [re.sub(r"[^A-Za-z0-9-]", "-", raw), re.sub(r"[/.]", "-", raw)]
@@ -1881,6 +1915,9 @@ def member_transcripts(
                 mtime = safe_mtime(path)
                 if mtime is None or (team.created_at and mtime < team.created_at - 5):
                     continue
+                header_team = _team_header(path)[0]
+                if header_team and header_team != team.name:
+                    continue
                 agent_type, session_id = _agent_setting(path)
                 if (
                     not agent_type
@@ -1899,7 +1936,7 @@ def member_transcripts(
         if member.agent_id in by_id:
             path = by_id[member.agent_id]
         elif member.agent_type and type_counts[member.agent_type] == 1:
-            if sub_by_type.get(member.agent_type):
+            if member.backend_type != "tmux" and sub_by_type.get(member.agent_type):
                 path = max(sub_by_type[member.agent_type])[1]
             elif member.cwd:
                 candidates = by_type(member.cwd).get(member.agent_type, [])
@@ -2012,7 +2049,6 @@ class Watchdog:
         self.env = dict(os.environ if env is None else env)
         self.home = Path(self.env.get("HOME", str(Path.home())))
         self.config_dir = claude_config_dir(self.env)
-        self.session_cwd = Path(self.env.get("PWD", str(Path.cwd())))
         self.warned: OrderedDict[str, None] = OrderedDict()
         self.claude = ClaudeStateMachine(
             options.stall_secs,
@@ -2291,13 +2327,16 @@ class Watchdog:
             teammate_sessions = {
                 _agent_setting(path)[1] for path in dispatch_transcripts.values()
             }
-            if team and self.options.session_id:
-                teammate_sessions.add(self.options.session_id)
+            if team:
+                teammate_sessions.update(
+                    team_session_ids(team, self.options.projects_dir)
+                )
+                if self.options.session_id:
+                    teammate_sessions.add(self.options.session_id)
             scan = self.scanner.scan(
                 codex_candidates,
                 effective_session,
                 epoch,
-                discovery_candidates=[self.session_cwd, *source_c],
                 teammate_sessions=teammate_sessions - {""},
             )
             for warning_key, message in scan.warnings:
