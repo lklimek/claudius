@@ -1,6 +1,6 @@
 ---
 name: delegate
-description: "This skill should be used before delegating work to an agent (one spawn or a whole wave) and when the user says \"spawn an agent\", \"delegate this\", \"parallelize this\", \"use a subagent\", \"send this to Codex\", or \"use Codex Astra\". It covers the spawn decision (inline vs spawn, model tier, batching), required prompt contents, WHAT-not-HOW development briefs with the one-agent plan/TDD/implement/self-review loop for changes up to 1000 LOC, durable tracking of multi-step work, and external Codex dispatch, job monitoring, and broker recovery."
+description: "This skill should be used before delegating work to an agent (one spawn or a whole wave) and when the user says \"spawn an agent\", \"delegate this\", \"parallelize this\", \"use a subagent\", \"send this to Codex\", \"use Codex Astra\", \"ask Aga\", or \"use Antigravity\". It covers the spawn decision (inline vs spawn, model tier, batching), required prompt contents, WHAT-not-HOW development briefs with the one-agent plan/TDD/implement/self-review loop for changes up to 1000 LOC, durable tracking of multi-step work, and external Codex dispatch, job monitoring, and broker recovery."
 ---
 
 # Delegate
@@ -119,3 +119,7 @@ This skill owns whether/how to dispatch, capability selection, briefs, and track
 Optional integration: first check whether external Codex dispatch is available through the host's tools or an installed launcher. If unavailable, skip these references and continue with available native workers; do not install Codex or block ordinary delegation.
 
 When Codex is available and external dispatch is relevant, load [external-codex-dispatch.md](references/external-codex-dispatch.md) for the `codex-companion.mjs` bridge. Load [codex-sandbox-and-recovery.md](references/codex-sandbox-and-recovery.md) only when that bridge needs sandbox, monitoring, collision, or broker guidance. Native Codex workers do not need these references. The integration does not override role skills or select the default host.
+
+## External Antigravity launcher
+
+Optional integration: when `agy` is installed and an Antigravity worker (Aga) is relevant, load [external-agy-dispatch.md](references/external-agy-dispatch.md). If unavailable, continue without her; do not install `agy`.

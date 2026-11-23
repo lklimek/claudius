@@ -142,6 +142,10 @@ sudo npm install --global @openai/codex
 
 Configure the Codex CLI in `~/.codex/config.toml` before using that bridge. Native Codex workers do not require the bridge.
 
+#### Optional Antigravity reviewer
+
+Install and sign in to [Google Antigravity's CLI](https://antigravity.google/docs/cli) (`agy`); full review then adds the Aga reviewer (`delegate` § External Antigravity launcher). Headless runs use your `agy` permission settings and stop at the first action they would ask about, so allow without asking: reading outside the working directory (`allowNonWorkspaceAccess`), writing her output files, and the commands her brief runs (`git`, `gh`, `python3`). Blanket `toolPermission: always-proceed` also lets prompt injection in a reviewed third-party PR run any command; prefer specific allow rules there.
+
 #### Built-in stall watchdog
 
 Install `tmux` to use the built-in stall watchdog:
