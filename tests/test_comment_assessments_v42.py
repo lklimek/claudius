@@ -179,7 +179,7 @@ def test_every_row_property_added_after_41_is_version_tied():
     properties = set(SCHEMA["$defs"]["comment_assessment"]["properties"])
     added = properties - V41_ROW_PROPERTIES
     assert added == _row_fields_tied_to_42()
-    assert added == set(V42_FIELDS)
+    assert added == set(V42_FIELDS) | {"merged_into"}
 
 
 # ---------------------------------------------------------- host-mode rules
@@ -511,11 +511,29 @@ def test_generator_cli_validates_42(host, tmp_path):
         "propose the standing `decision` unless the code at its lines changed",
         "`proposed_reply` is the single reply for `proposed_decision` only",
         'without the attribution footer or "post only after the fix lands" marker',
+        "base_ref, base_sha, title, body",
+        "optional `delegates: [login]`",
+        "PR's stated goal is `title`/`body`",
+        "pre-existing means present at `base_sha`",
+        "Read `pr-data` through filters for `scope.json`",
+        "Do not read the schema or validator source",
+        "A reused ID keeps its `source_kind`",
+        "Every in-scope source maps to a row",
+        "Record every reply-chain decision",
+        "`by` is the posting delegate",
     ],
 )
 def test_host_producer_contract(rule):
     text = (SKILL.parent / "references/host-supplied.md").read_text()
     assert rule in text
+
+
+def test_compact_host_row_example_is_schema_valid():
+    text = (SKILL.parent / "references/host-supplied.md").read_text()
+    example = json.loads(re.search(r"```json\n(.*?)\n```", text, re.DOTALL).group(1))
+    report = json.loads(HOST.read_text())
+    report["comment_assessments"] = [example]
+    assert errors(report) == []
 
 
 def test_host_entry_point_skips_fetch_and_overrides_worker_reply_contract():
@@ -573,3 +591,161 @@ def test_pdf_keeps_description_links_and_recorded_author(host, tmp_path, monkeyp
     for url in links:
         assert url in " ".join(captured)
     assert decision["by"] in " ".join(captured)
+
+
+@pytest.mark.parametrize(
+    "key,kind",
+    [
+        ("PRRT_third", "inline"),
+        ("review:102:1", "review_body"),
+        ("comment:103:1", "pr_comment"),
+    ],
+)
+@pytest.mark.parametrize("explicit", [False, True])
+def test_host_reused_item_cannot_become_status(host, tmp_path, key, kind, explicit):
+    item = next(r for r in host["comment_assessments"] if r["source_kind"] == kind)
+    offered = {"id": item["id"], "key": key}
+    if explicit:
+        offered["source_kind"] = kind
+    ids_path = tmp_path / "ids.json"
+    ids_path.write_text(json.dumps({"next_id": 1001, "items": [offered]}))
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(host))
+    command = [
+        sys.executable,
+        str(ROOT / "scripts/validate_report.py"),
+        str(report_path),
+        "--ids",
+        str(ids_path),
+    ]
+    good = subprocess.run(command, capture_output=True, text=True)
+    assert good.returncode == 0, good.stderr
+    item["source_kind"] = "status"
+    report_path.write_text(json.dumps(host))
+    bad = subprocess.run(command, capture_output=True, text=True)
+    assert bad.returncode == 1
+    assert item["id"] in bad.stderr and "source_kind" in bad.stderr
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "{",
+        "[]",
+        '{"items": {}}',
+        '{"items": [null]}',
+        '{"items":[{"id":"CMT-001","key":"PRRT_first","source_kind":[]}]}',
+    ],
+)
+def test_ids_input_errors_are_reported(host, tmp_path, contents):
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(host))
+    ids_path = tmp_path / "ids.json"
+    ids_path.write_text(contents)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/validate_report.py"),
+            str(report_path),
+            "--ids",
+            str(ids_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "ids" in result.stderr.lower()
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "value,valid", [("lklimek", True), ("", False), (None, False), (123, False)]
+)
+def test_delegate_preserves_posting_and_quoted_author(host, value, valid, tmp_path):
+    item = row(host, "CMT-1000")
+    item["recorded_decision"].update(
+        by="delegate-bot",
+        on_behalf_of=value,
+        quote="Per lklimek's decision, defer this.",
+    )
+    assert (errors(host) == []) is valid
+    assert (run_validator(host, tmp_path).returncode == 0) is valid
+
+
+def merged_source(host):
+    canonical = row(host, "CMT-002")
+    duplicate = copy.deepcopy(canonical)
+    duplicate.update(
+        id="CMT-007",
+        source_kind="pr_comment",
+        reviewer="bob",
+        comment_url="https://github.com/example/repo/pull/42#issuecomment-107",
+        merged_into=canonical["id"],
+    )
+    duplicate.pop("assessment")
+    canonical["merged_urls"] = [duplicate["comment_url"]]
+    host["comment_assessments"].append(duplicate)
+    return canonical, duplicate
+
+
+def test_cross_source_duplicate_keeps_a_row_without_a_second_finding(host, tmp_path):
+    canonical, duplicate = merged_source(host)
+    assert errors(host) == []
+    assert vr.comment_assessment_errors(host) == []
+    assert run_validator(host, tmp_path).returncode == 0
+    assert duplicate["comment_url"] in canonical["merged_urls"]
+    assert "finding_id" not in duplicate
+
+
+@pytest.mark.parametrize(
+    "failure", ["unknown", "self", "chain", "unlinked", "context", "scored"]
+)
+def test_invalid_merged_references_are_rejected(host, tmp_path, failure):
+    canonical, duplicate = merged_source(host)
+    if failure == "unknown":
+        duplicate["merged_into"] = "CMT-999"
+    elif failure == "self":
+        duplicate["merged_into"] = duplicate["id"]
+    elif failure == "chain":
+        canonical["merged_into"] = "CMT-004"
+        canonical.pop("assessment")
+    elif failure == "unlinked":
+        canonical.pop("merged_urls")
+    elif failure == "context":
+        duplicate["merged_into"] = "CMT-005"
+        row(host, "CMT-005")["merged_urls"] = [duplicate["comment_url"]]
+    else:
+        duplicate["finding_id"] = duplicate["id"]
+    assert run_validator(host, tmp_path).returncode == 1
+
+
+def test_merged_reference_requires_42(v41):
+    v41["comment_assessments"][1]["merged_into"] = "CMT-001"
+    assert any(list(e.absolute_path) == ["schema_version"] for e in errors(v41))
+
+
+def test_reply_chain_keeps_each_decision_and_its_author(host, tmp_path):
+    first = row(host, "CMT-1000")["recorded_decision"]
+    second = {
+        "kind": "handled_in_pr",
+        "by": "delegate-bot",
+        "on_behalf_of": "lklimek",
+        "comment_url": "https://github.com/example/repo/pull/42#discussion_r109",
+        "quote": "Per lklimek's decision, moved to #77.",
+        "target_pr": 77,
+    }
+    for index, decision in enumerate([first, second], 7):
+        host["comment_assessments"].append(
+            {
+                "id": f"CMT-{index:03d}",
+                "source_kind": "reply",
+                "reviewer": decision["by"],
+                "comment_url": decision["comment_url"],
+                "description": decision["quote"],
+                "reasoning": "Decision recorded in the reply chain.",
+                "proposed_action": "Keep the decision's provenance.",
+                "recorded_decision": decision,
+            }
+        )
+    assert errors(host) == []
+    assert run_validator(host, tmp_path).returncode == 0

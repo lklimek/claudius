@@ -2,7 +2,7 @@
 
 Use the existing review envelope with `schema_version: "4.2.0"`, `metadata.report_type: "comment_check"`, and optional top-level `comment_assessments`. Existing 3.x/4.0/4.1 reports remain readable; ordinary producers still emit 4.0. Old consumers must reject an unknown version rather than drop its rows. Findings retain every existing required field and risk-scoring rule.
 
-One row per comment/request, reply or status message; merge duplicates into one row, listing the others in `merged_thread_ids` / `merged_urls`. Reuse existing `CMT-…` IDs, author identity, metadata and permalinks. Keep IDs stable once shown. A row referring to a scored finding uses that finding's ID; other rows need their own unique IDs. Do not renumber findings independently of rows.
+One row per comment/request, reply or status message; merge duplicates into one row, listing the others in `merged_thread_ids` / `merged_urls`. In host mode, a duplicate from another in-scope source keeps a row with `merged_into` naming the canonical row; list its URL in the canonical row's `merged_urls`. Reuse existing `CMT-…` IDs, author identity, metadata and permalinks. Keep IDs stable once shown. A row referring to a scored finding uses that finding's ID; other rows need their own unique IDs. Do not renumber findings independently of rows.
 
 Outside host mode, also keep `merged_urls` and `recorded_decision.comment_url` with its author/quote in `description` so ordinary rendered reports retain them.
 
@@ -28,7 +28,7 @@ Outside host mode, also keep `merged_urls` and `recorded_decision.comment_url` w
 }
 ```
 
-Required: `id`, `reviewer`, `source_kind`, `comment_url`, `description`, `reasoning`, `proposed_action`. `source_kind`: `inline`, `review_body`, `pr_comment`, `reply`, `status`. `assessment` is required for the first three: `valid`, `already_fixed`, `out_of_scope`, `wrong`. Replies/status messages may omit it. `valid` requires `finding_id` referencing a scored finding. Score actual remaining defects, including out-of-scope ones, in `findings`; acknowledgements/status messages and dismissed or already-fixed requests need no fabricated scores. `findings` may be empty; statistics count scored findings only.
+Required: `id`, `reviewer`, `source_kind`, `comment_url`, `description`, `reasoning`, `proposed_action`. `source_kind`: `inline`, `review_body`, `pr_comment`, `reply`, `status`. The first three require either `assessment` (`valid`, `already_fixed`, `out_of_scope`, `wrong`) or `merged_into`, never both. Merged references omit `finding_id`; replies/status messages may omit assessment. `valid` requires `finding_id` referencing a scored finding. Score actual remaining defects, including out-of-scope ones, in `findings`; acknowledgements/status messages and dismissed or already-fixed requests need no fabricated scores. `findings` may be empty; statistics count scored findings only.
 
 `comment_id` preserves the fetched source ID: numeric database ID or GraphQL node string (PR-level `gh pr view` comments). Existing findings/wrappers retain their numeric ID contract. `thread_state` (`resolved`, `unresolved`, `unknown`) records GitHub state independently of the assessment: a resolved thread may still have a valid remaining concern. Omit thread fields for sources without threads. Omit unavailable location; never invent `n/a` code links. Source/code URLs must be absolute HTTP(S). Human-readable fields support Markdown except identity/location fields and literal `proposed_reply`.
 
@@ -39,8 +39,9 @@ Required: `id`, `reviewer`, `source_kind`, `comment_url`, `description`, `reason
 - `source_quote`: verbatim span (≤ 600 chars) of the source text the row answers.
 - `gates`: `[{gate, evidence}]`, each blocker gate (`severity` § 2) the concern trips; independent of `merge_class`.
 - `proposed_decision`: machine form of `proposed_action`: `{kind, fixed_in?, target_pr?, target_url?, title?}`. `kind`: `resolve` (`fixed_in`: commit SHA), `fix_here`, `reject`, `handled_in_pr` (`target_pr` or `target_url`), `follow_up_pr` (existing `target_pr`, or `title` ≤ 120 for a new one), `upstream_issue` (`target_url` of the owning repository or an existing issue), `todo`.
-- `recorded_decision`: a decision already on GitHub: `{kind, by: login, comment_url, quote ≤ 600, target_pr?, target_url?}`; `kind` as above, or `deferred` / `withdrawn`. Preserve known targets (`target_pr` ≥ 1, `target_url` HTTPS) for contradiction checks.
+- `recorded_decision`: a decision already on GitHub: `{kind, by: login, comment_url, quote ≤ 600, on_behalf_of?: login, target_pr?, target_url?}`; `kind` as above, or `deferred` / `withdrawn`. `by` is always the posting account; `on_behalf_of` names a maintainer explicitly quoted by a trusted delegate. Record non-maintainer decisions too; recording alone grants no authority. Keep the controlling decision on the item and additional reply-chain decisions in separate `reply` rows. Preserve known targets (`target_pr` ≥ 1, `target_url` HTTPS) for contradiction checks.
 - `merged_thread_ids`, `merged_urls`: thread node IDs and source URLs merged into the row.
+- `merged_into`: canonical assessment-row ID for a duplicate from another in-scope source. Keep the duplicate's identity, quote and proposal; omit `assessment` and `finding_id`. The target must be an item row, never itself a merged reference; it lists the duplicate URL in `merged_urls`.
 - `pre_existing`: the problem exists on the base branch. `fix_size`: `XS` / `S` / `M`.
 - `category`: a `check-pr-comments` step 4 slug, or `other: <2–3 words>`.
 

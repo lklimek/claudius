@@ -251,7 +251,7 @@
         "required": ["comment_assessments"],
         "properties": {"comment_assessments": {"contains": {"anyOf": [
           {"required": ["source_quote"]}, {"required": ["gates"]}, {"required": ["proposed_decision"]},
-          {"required": ["recorded_decision"]}, {"required": ["merged_thread_ids"]}, {"required": ["merged_urls"]},
+          {"required": ["recorded_decision"]}, {"required": ["merged_thread_ids"]}, {"required": ["merged_urls"]}, {"required": ["merged_into"]},
           {"required": ["pre_existing"]}, {"required": ["fix_size"]}, {"required": ["category"]}
         ]}}}
       },
@@ -363,6 +363,7 @@
           "properties": {
             "kind": {"anyOf": [{"$ref": "#/$defs/decision_kind"}, {"enum": ["deferred", "withdrawn"]}]},
             "by": {"type": "string", "minLength": 1},
+            "on_behalf_of": {"type": "string", "minLength": 1, "description": "Maintainer explicitly named in a delegate's quote; by remains the posting account."},
             "comment_url": {"$ref": "#/$defs/https_url"},
             "quote": {"type": "string", "minLength": 1, "maxLength": 600},
             "target_pr": {"type": "integer", "minimum": 1},
@@ -371,6 +372,7 @@
         },
         "merged_thread_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "4.2: node IDs of other threads merged into this row."},
         "merged_urls": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/https_url"}, "description": "4.2: links of other sources merged into this row."},
+        "merged_into": {"type": "string", "pattern": "^CMT-[0-9]{3,}$(?!\\n)", "description": "4.2: canonical row ID for a duplicate from another in-scope source. Keep source identity and proposal; omit assessment and finding_id."},
         "pre_existing": {"type": "boolean", "description": "4.2: the problem exists on the base branch."},
         "fix_size": {"enum": ["XS", "S", "M"]},
         "category": {
@@ -384,7 +386,11 @@
       "allOf": [
         {
           "if": {"properties": {"source_kind": {"enum": ["inline", "review_body", "pr_comment"]}}},
-          "then": {"required": ["assessment"]}
+          "then": {"oneOf": [{"required": ["assessment"]}, {"required": ["merged_into"]}]}
+        },
+        {
+          "if": {"required": ["merged_into"]},
+          "then": {"not": {"anyOf": [{"required": ["assessment"]}, {"required": ["finding_id"]}]}, "properties": {"source_kind": {"enum": ["inline", "review_body", "pr_comment"]}}}
         },
         {
           "if": {"required": ["assessment"], "properties": {"assessment": {"const": "valid"}}},

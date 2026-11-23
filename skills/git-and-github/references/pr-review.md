@@ -35,10 +35,10 @@ Fetch before posting to avoid duplicates: drop any finding already covered by an
 
 ```bash
 <plugin-root>/scripts/gh-fetch-reviews.sh <owner/repo> <pr>
-# -> [{id, state, submitted_at, body, user}]
+# -> [{id, state, submitted_at, body, user, html_url, commit_id}]
 
 <plugin-root>/scripts/gh-fetch-review-comments.sh <owner/repo> <pr>
-# -> {id, path, line, original_line, body, user, in_reply_to_id, html_url}
+# -> [{id, path, line, original_line, body, user, in_reply_to_id, html_url, created_at, commit_id, pull_request_review_id}]
 
 <plugin-root>/scripts/gh-list-review-threads.sh <owner/repo> <pr>
 # -> {id, isResolved, comments: [{databaseId, path, body}]}  (thread resolution status)
@@ -124,10 +124,10 @@ then post it:
 
 ```
 gh-fetch-review-comments.sh <owner/repo> <pr>
-  -> {id, path, line, original_line, body, user, in_reply_to_id, html_url}
+  -> [{id, path, line, original_line, body, user, in_reply_to_id, html_url, created_at, commit_id, pull_request_review_id}]
 
 gh-fetch-reviews.sh <owner/repo> <pr>
-  -> [{id, state, submitted_at, body, user}]
+  -> [{id, state, submitted_at, body, user, html_url, commit_id}]
 
 gh-post-review.sh <owner/repo> <pr> <json_file>
   -> Posts draft review. Input: {commit_id, body, comments: [{path, line, side, body}]}
