@@ -9,7 +9,7 @@ Use the host's worker API or an available alternative tool: in Claude, the liste
 | Name / Claude identity | `<role>` | Skill / pass | Focus |
 |---|---|---|---|
 | Smythe / `claudius:security-engineer-smythe` | `security` | `security-best-practices` — Security audit pass | Entry-to-sink security paths, trust boundaries, known vulnerabilities, secrets and dependencies |
-| Adams / `claudius:project-reviewer-adams` | `project` | `review-changes` — Adams specialist pass | Local-vs-global optimum: fix in the owning layer/repository across the organization; DRY of new code and tests |
+| Adams / `claudius:project-reviewer-adams` | `project` | `review-changes` — Adams specialist pass | Local-vs-global optimum: fix in the owning layer/repository across the organization; DRY of new code and tests; slim-down |
 | Marvin / `claudius:qa-engineer-marvin` | `qa` | `review-changes` — Reviewer pass and Marvin specialist pass | Requirements, all execution paths, adversarial correctness, cross-artifact consistency, structure and idioms, CI status |
 
 Always include all three, including for tiny diffs. Documentation-heavy changes add Trillian / `claudius:technical-writer-trillian` (`docs`, `technical-writing`: accuracy, completeness, API docs, changelog). For crypto-heavy code or significant dependency changes, expand the security prompt to crypto soundness and dependency audit — do NOT spawn a second instance. For 50+ files / 5000+ lines, spawn multiple agents of the same type with different file scopes, preserving coverage across boundaries.
@@ -18,7 +18,7 @@ Always add a Codex reviewer when Codex is available, using the Reviewer pass on 
 
 ## Agent prompts
 
-The invariant producer rules — finding format, execution-path coverage, UI-text scan, always-flagged classes, UX/DX lens, cross-domain hints, collision preservation, Bash hygiene, CI context, process and report-back rules — live in the producer contract (`<PRODUCER_READS>`); producers read it in place. Never restate them per spawn (measured: ~2500 lines of coordinator output across 5 producers on one large review); `report.json`'s `metadata.plugin_version` pins which version applied. Beyond the general agent prompt requirements (`delegate`), each spawn prompt carries only what varies:
+The invariant producer rules — finding format, execution-path coverage, UI-text scan, always-flagged classes, slim-down, UX/DX lens, cross-domain hints, collision preservation, Bash hygiene, CI context, process and report-back rules — live in the producer contract (`<PRODUCER_READS>`); producers read it in place. Never restate them per spawn (measured: ~2500 lines of coordinator output across 5 producers on one large review); `report.json`'s `metadata.plugin_version` pins which version applied. Beyond the general agent prompt requirements (`delegate`), each spawn prompt carries only what varies:
 
 1. **Comparison base**: how to see what changed (`git show <BASE_REF>:<file>`, `git diff <BASE_REF>...HEAD`).
 2. **Full roster**: every assigned worker's name, role/focus, scope, and running/queued status. The coordinator owns dispatch; workers never pause for peers or spawn duplicates.
