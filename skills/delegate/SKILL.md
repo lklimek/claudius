@@ -119,3 +119,7 @@ This skill owns whether/how to dispatch, capability selection, briefs, and track
 Optional integration: first check whether external Codex dispatch is available through the host's tools or an installed launcher. If unavailable, skip these references and continue with available native workers; do not install Codex or block ordinary delegation.
 
 When Codex is available and external dispatch is relevant, load [external-codex-dispatch.md](references/external-codex-dispatch.md) for the `codex-companion.mjs` bridge. Load [codex-sandbox-and-recovery.md](references/codex-sandbox-and-recovery.md) only when that bridge needs sandbox, monitoring, collision, or broker guidance. Native Codex workers do not need these references. The integration does not override role skills or select the default host.
+
+## External Antigravity reviewer
+
+Optional: when the `agy` CLI is installed, full review adds Aga per [antigravity-dispatch.md](references/antigravity-dispatch.md); without it, review continues without her.

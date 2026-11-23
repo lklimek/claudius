@@ -25,7 +25,7 @@ After every later push carrying production code (the push creating a PR gets its
 
 - One PR per review. Reviewer per `review-changes` § 2 and `delegate`, never the PR's author.
 - Pass the maintainer's earlier per-ID decisions on the PR as the review's prior decisions (`review-changes` § 1).
-- A coordinator audit never replaces this review. Tests-only, docs-only, empty, and tree-identical merge pushes skip it; the next review covers them.
+- A coordinator audit never replaces this review. Tests-only, docs-only, empty, and tree-identical merge pushes, and a head the creation review already covered, skip it; the next review covers them.
 
 ## Fix pushes
 
