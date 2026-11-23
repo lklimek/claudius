@@ -49,7 +49,7 @@ On a bare "push", "commit and push", "create a PR", "ship this", or similar — 
 4. **Push** after § Before Every Push.
 5. **PR**: existing → update its title and description whenever they no longer match the net final state; none → create a draft per § Creating a PR. Either way, reconcile § Readiness.
 
-This workflow pushes once per request; rerun it only on a new request.
+This workflow pushes once per request, plus the creation review's fix pushes (§ Creating a PR); rerun it only on a new request.
 
 ## Pull Requests
 
@@ -65,7 +65,7 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 `TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts; native stack layers per [stacked-prs.md](references/stacked-prs.md) § Creating PRs.
 
-**Review on creation**: review every new PR right after creating it with [review-pr](../review-pr/SKILL.md), whatever its size; a PR created empty (a follow-up skeleton) gets it at its first push carrying changes. Pick the mode by the change's effect on the project as a whole, never by diff size, and pass it explicitly: full by default (shared or often-used code, workflows, interfaces); basic only when that effect is contained (one isolated module, test or tooling-only change). Report the findings in chat; skip `review-pr` § 4's publish question unless the user asks. Address them per `coding-best-practices` § Workflow Discipline; their fix pushes belong to the same request.
+**Review on creation**: review every new PR right after creating it with [review-pr](../review-pr/SKILL.md), whatever its size; a PR created empty (a follow-up skeleton) gets it at its first push carrying changes. Pick the mode by the change's effect on the project as a whole, never by diff size, and pass it explicitly: full by default (shared or often-used code, workflows, interfaces); basic only when that effect is contained (one isolated module, test or tooling-only change). Report the findings in chat; skip `review-pr` § 4's publish question unless the user asks. Address them per `coding-best-practices` § Workflow Discipline before marking the PR ready (Readiness below).
 
 **Readiness**: a PR is ready when it targets the base branch, is not blocked by another PR, and is not labelled `postponed`; otherwise draft. A native stack layer counts as targeting the base and is not blocked by the layers below it: merging it lands them too, each gated by approval and passing checks ([stacked-prs.md](references/stacked-prs.md)). Reconcile on creation, on every update, and when its blockers, target, or label change — in both directions. Where CI skips drafts, dispatch the needed workflows on demand (`gh workflow run`).
 

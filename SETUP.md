@@ -144,7 +144,7 @@ Configure the Codex CLI in `~/.codex/config.toml` before using that bridge. Nati
 
 #### Optional Antigravity reviewer
 
-Install and sign in to [Google Antigravity's CLI](https://antigravity.google/docs/cli) (`agy`). Full review then adds the Aga reviewer when `agy models` lists `gemini-4-neon-high` (`delegate` § External Antigravity reviewer).
+Install and sign in to [Google Antigravity's CLI](https://antigravity.google/docs/cli) (`agy`). Full review then adds the Aga reviewer (`delegate` § External Antigravity reviewer).
 
 #### Built-in stall watchdog
 

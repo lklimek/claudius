@@ -122,4 +122,4 @@ When Codex is available and external dispatch is relevant, load [external-codex-
 
 ## External Antigravity reviewer
 
-Optional: when the `agy` CLI is installed, full review adds Aga per [antigravity-dispatch.md](references/antigravity-dispatch.md); without it, review continues without her.
+Optional: full review adds Aga, a Google Antigravity reviewer, per [antigravity-dispatch.md](references/antigravity-dispatch.md) when its availability check passes; otherwise review continues without her.
