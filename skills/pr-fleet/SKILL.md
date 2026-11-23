@@ -36,7 +36,7 @@ Every push costs a full bot round.
 
 ## Round close
 
-A round closes only with the CI result on the pushed head. Red CI is a finding of that round; pending or skipped required checks are not green.
+A round closes only with the CI result on the pushed head. Red CI is a finding of that round; pending required checks are not green; skipped checks count as absent and block nothing.
 
 ## Base updates
 
