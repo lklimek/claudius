@@ -11,6 +11,8 @@ Brief for the strong worker that runs step 3 when the coordinator delegates it. 
 
 ## Report contract
 
+Host mode uses [SKILL.md](../SKILL.md)'s single-reply override instead of the final reply bullet below.
+
 Send one block per ID to the coordinator (`SendMessage`):
 
 - Thread node ID (`PRRT_*`) and the first comment's `databaseId`; review-body items give the review/comment URL instead.

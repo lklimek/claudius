@@ -59,7 +59,8 @@ PREFIXES: frozenset[str] = frozenset(
     set(CATEGORY_PREFIX.values()) | set(CODE_QUALITY_PREFIXES) | _EXTRA_PREFIXES
 )
 _STEMS = sorted(p.rstrip("-") for p in PREFIXES)
-PATTERN = re.compile(r"\b(" + "|".join(_STEMS) + r")-\d{3}\b")
+# ``(?!-\d)`` spares dated IDs such as the Go vulnerability database's GO-2024-1234.
+PATTERN = re.compile(r"\b(" + "|".join(_STEMS) + r")-(?:\d{3}\b|\d{4,}\b(?!-\d))")
 
 
 def scan_text(text: str, source: str, *, line_offset: int = 0) -> list[dict]:

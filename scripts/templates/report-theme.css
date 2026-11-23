@@ -65,7 +65,7 @@ td{padding:.85rem .9rem;border-color:#e3e7e0}tr:nth-child(even) td{background:#f
 .assessment-id{font:600 .8rem monospace}.assessment-table small{display:block;color:#617079;font-size:.7rem;margin-top:.4rem}
 .assessment-badge{display:inline-block;font-size:.72rem;line-height:1.4;font-weight:700;border-radius:5px;padding:.3rem .5rem}
 .assessment-valid{background:#fbe8d2;color:#824407}.assessment-already_fixed{background:#dcefe4;color:#236247}
-.assessment-out_of_scope{background:#e2e9f7;color:#3f5487}.assessment-wrong{background:#f3e1e8;color:#8a3650}.assessment-context{background:#e9ebeb;color:#58676c}
+.assessment-out_of_scope{background:#e2e9f7;color:#3f5487}.assessment-wrong{background:#f3e1e8;color:#8a3650}.assessment-context,.assessment-merged{background:#e9ebeb;color:#58676c}
 .assessment-prose p{margin:0 0 .5rem}.assessment-prose p:last-child{margin-bottom:0}
 .assessment-prose ul,.assessment-prose ol{margin:.5rem 0 .5rem 1.2rem}
 .assessment-prose pre{white-space:pre-wrap;background:#edf0eb;padding:.5rem;border-radius:4px}

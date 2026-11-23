@@ -6,7 +6,7 @@ allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *),
 
 # Review Report Format
 
-Unified format for all review findings. Schema: `schemas/review-report.schema.json`; ordinary reports declare `4.0.0`; comment-assessment reports declare `4.1.0`.
+Unified format for all review findings. Schema: `schemas/review-report.schema.json`; ordinary reports declare `4.0.0`; comment-assessment reports declare `4.2.0` (`4.1.0` stays readable).
 
 Resolve script paths from the loaded skill: Claude substitutes `${CLAUDE_PLUGIN_ROOT}`; Codex uses the installed absolute script paths in `allowed-tools`. Otherwise locate the plugin tree containing `scripts/` and `schemas/` (Codex commonly `~/.codex/claudius`); the installed skills directory and project checkout need not be that tree. Never pass unresolved placeholders to the shell.
 

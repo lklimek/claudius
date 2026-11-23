@@ -11,6 +11,7 @@
     <label>Assessment<select id="assessment-filter">
       <option value="">All assessments</option>
       {% for key, label in assessment_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      <option value="merged">Merged</option>
       <option value="context">Reply / status</option>
     </select></label>
     <label>Thread state<select id="thread-state-filter">
@@ -31,13 +32,14 @@
         <th scope="col">Comment</th><th scope="col">Assessment</th><th scope="col">Reasoning / evidence</th><th scope="col">Proposed action</th></tr></thead>
       <tbody>{% for row in comment_assessments %}
         {% set thread_state = row.thread_state | default('unknown' if row.thread_id or row.source_kind == 'inline' else 'none') %}
-        <tr id="assessment-{{ row.id }}" data-assessment="{{ row.assessment | default('context') }}" data-thread-state="{{ thread_state }}" data-source="{{ row.source_kind }}">
+        {% set assessment = 'merged' if row.merged_into else row.assessment | default('context') %}
+        <tr id="assessment-{{ row.id }}" data-assessment="{{ assessment }}" data-thread-state="{{ thread_state }}" data-source="{{ row.source_kind }}">
           <td><a class="assessment-id" {% if row.comment_url | safe_url %}href="{{ row.comment_url | safe_url }}"{% endif %}>{{ row.id }}</a>
             <small>{{ source_labels[row.source_kind] }}</small>{% if row.comment_id %}<small>#{{ row.comment_id }}</small>{% endif %}</td>
           <td><strong>{{ row.reviewer }}</strong>{% if row.author_type %}<small>{{ row.author_type }}</small>{% endif %}</td>
           <td>{% if row.location %}{% if row.location_permalink | safe_url %}<a href="{{ row.location_permalink | safe_url }}">{{ row.location }}</a>{% else %}{{ row.location }}{% endif %}{% else %}<span class="muted">No code location</span>{% endif %}</td>
           <td class="assessment-prose">{{ row.description | markdown }}</td>
-          <td><span class="assessment-badge assessment-{{ row.assessment | default('context') }}">{{ assessment_labels.get(row.assessment, 'Context') }}</span>
+          <td><span class="assessment-badge assessment-{{ assessment }}">{% if row.merged_into %}<a href="#assessment-{{ row.merged_into }}">Merged into {{ row.merged_into }}</a>{% else %}{{ assessment_labels.get(row.assessment, 'Context') }}{% endif %}</span>
             {% if thread_state != 'none' %}<small class="thread-state">Thread: {{ thread_state }}</small>{% endif %}
             {% if row.finding_id %}<small><a href="#finding-{{ row.finding_id }}">Risk details ↗</a></small>{% endif %}</td>
           <td class="assessment-prose">{{ row.reasoning | markdown }}{% if row.evidence %}<div class="assessment-evidence"><strong>Evidence</strong>{{ row.evidence | markdown }}</div>{% endif %}</td>
