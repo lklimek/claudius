@@ -14,7 +14,7 @@ Use the host's worker API or an available alternative tool: in Claude, the liste
 
 Always include all three, including for tiny diffs. Documentation-heavy changes add Trillian / `claudius:technical-writer-trillian` (`docs`, `technical-writing`: accuracy, completeness, API docs, changelog). For crypto-heavy code or significant dependency changes, expand the security prompt to crypto soundness and dependency audit — do NOT spawn a second instance. For 50+ files / 5000+ lines, spawn multiple agents of the same type with different file scopes, preserving coverage across boundaries.
 
-Always add a Codex reviewer when Codex is available, using the Reviewer pass on the same scope. Use `qa-codex` for its producer files and consolidation label. Keep all core passes above.
+Always add a Codex reviewer when Codex is available, using the Reviewer pass on the same scope. Use `qa-codex` for its producer files and consolidation label. Likewise add Aga (Agnieszka), a Google Antigravity reviewer, when the `agy` CLI is available: label `qa-agy`, run per § Antigravity reviewer. Keep all core passes above.
 
 ## Agent prompts
 
@@ -60,3 +60,13 @@ Dispatch all core passes independently, in parallel when host capacity permits; 
 Honor an explicit user model choice, but before an override would downgrade the security pass below the strong tier, stop and confirm the user really means it — a blanket "review with Sonnet" does not silently trade away security depth. Otherwise retain the strong-model requirement. Report unavailable requested models instead of inventing aliases.
 
 If the review reveals areas needing deeper investigation: spawn additional agents with narrower scope, re-review specific files with different checklists, audit forked dependencies against upstream.
+
+## Antigravity reviewer
+
+Available when `agy models` lists `gemini-4-neon-high` (Neon at high effort; the effort is part of the model ID, and `agy` rejects `--effort` for Neon). Write the producer prompt (template above, absolute paths) to `<SCRATCH_DIR>/qa-agy-brief.md`, telling Aga to print the findings array and the coverage artifact in her final reply, each in its own fenced block, instead of writing files. From the reviewed worktree, in the background:
+
+```bash
+agy -p "Read <SCRATCH_DIR>/qa-agy-brief.md and follow it." --model gemini-4-neon-high --mode plan --print-timeout 0
+```
+
+`--mode plan` keeps her read-only: shell reads run, file writes wait for an approval that never comes. Save the two blocks as `<SCRATCH_DIR>/qa-agy-findings.json` and `<SCRATCH_DIR>/qa-agy-coverage.md`, then run `gate` on the findings. When `agy` fails (auth, quota, timeout), report it and continue without her.
