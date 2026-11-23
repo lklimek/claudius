@@ -34,12 +34,9 @@ def context(tmp_path, recovery, monkeypatch):
     monkeypatch.setattr(recovery, "PROC_ROOT", proc, raising=False)
     monkeypatch.setattr(time, "time", lambda: NOW)
 
-    def dead(*_):
-        raise ProcessLookupError
-
-    monkeypatch.setattr(os, "kill", dead)
     env = {
         "HOME": str(tmp_path / "home"),
+        "CLAUDE_CONFIG_DIR": str(tmp_path / "home/.claude"),
         "TMPDIR": str(tmp_path / "tmp"),
         "CLAUDIUS_WORKTREE_ROOT": str(tmp_path / "worktrees"),
         "CLAUDE_PLUGIN_DATA": str(tmp_path / "claudius-data"),
@@ -59,8 +56,8 @@ def job(env, *, epoch=NOW, filename=None, **fields):
         **fields,
     }
     path = (
-        Path(env["HOME"])
-        / ".claude/plugins/data/codex-openai-codex/state/workspace/jobs"
+        Path(env.get("CLAUDE_CONFIG_DIR") or Path(env["HOME"]) / ".claude")
+        / "plugins/data/codex-openai-codex/state/workspace/jobs"
         / (filename or f"{value['id']}.json")
     )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,15 +96,11 @@ def test_dead_pid_reports_recovery_reference(recovery, context, status):
 
 
 @pytest.mark.parametrize("pid", [777, None, 0, -1, True, "bad"])
-def test_live_or_unknown_pid_only_reminds(recovery, context, monkeypatch, pid):
+def test_live_or_unknown_pid_only_reminds(recovery, context, pid):
     payload, env = context
     job(env, pid=pid)
     fake_process(recovery, context, 777)
 
-    def alive(probed, signal):
-        assert type(probed) is int and probed == 777 and signal == 0
-
-    monkeypatch.setattr(os, "kill", alive)
     output = recovery.recovery_context(payload, env)
     assert "Monitor(" in output and "Recovery:" not in output
 
@@ -115,7 +108,7 @@ def test_live_or_unknown_pid_only_reminds(recovery, context, monkeypatch, pid):
 def test_foreign_and_terminal_jobs_are_silent(recovery, context):
     payload, env = context
     job(env, id="foreign", sessionId="another-session")
-    job(env, id="done", status="completed")
+    job(env, id="done", status="completed", epoch=NOW - 7 * 3600)
     assert recovery.recovery_context(payload, env) == ""
 
 
@@ -247,12 +240,11 @@ def test_scan_deadline_keeps_already_found_orphans(recovery, context, monkeypatc
 
 
 @pytest.mark.parametrize("kind", ["zombie", "reused"])
-def test_dead_launcher_is_reported_even_if_pid_exists(
-    recovery, context, monkeypatch, kind
+def test_dead_or_reused_launcher_is_reported_even_if_pid_exists(
+    recovery, context, kind
 ):
     payload, env = context
     job(env)
-    monkeypatch.setattr(os, "kill", lambda *_: None)
     fake_process(
         recovery,
         context,
@@ -260,7 +252,12 @@ def test_dead_launcher_is_reported_even_if_pid_exists(
         state="Z" if kind == "zombie" else "S",
         command="codex-companion.mjs" if kind == "zombie" else "sleep",
     )
-    assert "Recovery:" in recovery.recovery_context(payload, env)
+    output = recovery.recovery_context(payload, env)
+    if kind == "zombie":
+        assert "Recovery:" in output
+    else:
+        assert "pid reused" in output and "inspect, do not cancel" in output
+        assert "Recovery:" not in output
 
 
 def test_malformed_records_do_not_hide_valid_jobs(recovery, context):
@@ -350,3 +347,140 @@ def test_orphan_output_is_bounded(recovery, context):
     output = recovery.recovery_context(payload, env)
     assert output.count("Codex orphan job=") == 5
     assert "+15 more orphaned jobs" in output
+
+
+@pytest.mark.parametrize("outcome", ["alive", "absent", "denied"])
+def test_missing_proc_uses_only_a_mocked_pid_probe(
+    recovery, context, monkeypatch, outcome
+):
+    payload, env = context
+    job(env)
+    monkeypatch.setattr(recovery, "PROC_ROOT", recovery.PROC_ROOT / "missing")
+    calls = []
+
+    def probe(pid, signal):
+        calls.append((pid, signal))
+        if outcome == "absent":
+            raise ProcessLookupError
+        if outcome == "denied":
+            raise PermissionError
+
+    monkeypatch.setattr(os, "kill", probe)
+    output = recovery.recovery_context(payload, env)
+    assert calls == [(321, 0)]
+    assert ("Recovery:" in output) == (outcome == "absent")
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_empty_worktree_root_uses_default(recovery, context, value):
+    payload, env = context
+    env["CLAUDIUS_WORKTREE_ROOT"] = value
+    job(env)
+    output = recovery.recovery_context(payload, env)
+    assert "job=orphan " in output
+    assert shlex.split(monitor_command(output))[-1] == "/data/git-worktrees"
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "cancelled", "canceled"])
+def test_terminal_job_from_ninety_minute_outage_is_reported(recovery, context, status):
+    payload, env = context
+    job(env, id="finished", status=status, epoch=NOW - 5400, completedAt=NOW - 5400)
+    job(env, id="foreign", status=status, sessionId="foreign-session")
+    job(env, id="ancient", status=status, completedAt=NOW - 6 * 3600 - 1)
+    output = recovery.recovery_context(payload, env)
+    assert (
+        "job=finished " in output
+        and "job=foreign " not in output
+        and "job=ancient " not in output
+    )
+    assert "--dump-job finished" in output
+    assert "Monitor(" not in output and "Recovery:" not in output
+
+
+def test_finished_job_output_is_bounded(recovery, context):
+    payload, env = context
+    for index in range(12):
+        job(env, id=f"done-{index}", status="completed", completedAt=NOW - 5400)
+    output = recovery.recovery_context(payload, env)
+    assert output.count("Codex finished job=") == 5
+
+
+@pytest.mark.parametrize(
+    "monitor_session,state",
+    [
+        ("current-session", "S"),
+        ("foreign-session", "S"),
+        ("current-session", "Z"),
+    ],
+)
+def test_surviving_watchdog_suppresses_only_its_session_reminder(
+    recovery, context, monitor_session, state
+):
+    payload, env = context
+    job(env)
+    fake_process(recovery, context, 999, command="minion-monitoring.py", state=state)
+    (recovery.PROC_ROOT / "999/cmdline").write_bytes(
+        f"python3\0/plugin/minion-monitoring.py\0--session-id\0{monitor_session}\0".encode()
+    )
+    output = recovery.recovery_context(payload, env)
+    assert "job=orphan " in output and "Recovery:" in output
+    assert ("Monitor(" in output) == (
+        monitor_session != "current-session" or state == "Z"
+    )
+
+
+def test_config_dir_relocates_hook_store(recovery, context):
+    payload, env = context
+    env["CLAUDE_CONFIG_DIR"] = str(Path(env["HOME"]) / "custom-config")
+    job(env)
+    assert "job=orphan " in recovery.recovery_context(payload, env)
+
+
+def test_printed_monitor_does_not_filter_other_checkout_worktrees(recovery, context):
+    payload, env = context
+    job(env, workspaceRoot="/other/checkout/worktree")
+    command = monitor_command(recovery.recovery_context(payload, env))
+    assert "--worktrees-session-filter" not in command
+
+
+def test_live_job_with_surviving_watchdog_is_silent(recovery, context):
+    payload, env = context
+    job(env, pid=777)
+    fake_process(recovery, context, 777)
+    fake_process(recovery, context, 999, command="minion-monitoring.py")
+    (recovery.PROC_ROOT / "999/cmdline").write_bytes(
+        b"python3\0/plugin/minion-monitoring.py\0--session-id\0current-session\0"
+    )
+    assert recovery.recovery_context(payload, env) == ""
+
+
+def test_reused_pid_never_receives_the_orphan_recovery_advice(recovery, context):
+    payload, env = context
+    job(env, id="reused", pid=777)
+    job(env, id="dead", pid=321)
+    fake_process(recovery, context, 777, command="sleep")
+    output = recovery.recovery_context(payload, env)
+    reused = next(line for line in output.splitlines() if "job=reused " in line)
+    assert "inspect, do not cancel" in reused
+    assert "Recovery: for absent/zombie PIDs only" in output
+
+
+def test_unreadable_watchdog_state_keeps_reminder(recovery, context):
+    payload, env = context
+    job(env)
+    fake_process(recovery, context, 999, command="minion-monitoring.py")
+    (recovery.PROC_ROOT / "999/cmdline").write_bytes(
+        b"python3\0/plugin/minion-monitoring.py\0--session-id\0current-session\0"
+    )
+    (recovery.PROC_ROOT / "999/stat").unlink()
+    assert "Monitor(" in recovery.recovery_context(payload, env)
+
+
+@pytest.mark.parametrize(
+    "completed", [float("nan"), float("inf"), 10**400], ids=["nan", "inf", "overflow"]
+)
+def test_invalid_completion_clock_does_not_hide_orphans(recovery, context, completed):
+    payload, env = context
+    job(env, id="dead")
+    job(env, id="finished", status="completed", completedAt=completed)
+    assert "job=dead " in recovery.recovery_context(payload, env)

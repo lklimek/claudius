@@ -49,6 +49,7 @@ def workspace(tmp_path: Path, name: str = "repo") -> Path:
 def isolated_home(tmp_path, monkeypatch):
     """No fallback resolver can read the real Claude state in this module."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
 
 @pytest.fixture
@@ -250,7 +251,7 @@ def test_real_git_workspace_resolves_repository_root(
 
 
 def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
-    """CX-006..CX-010: direct discovery is workspace- and session-scoped."""
+    """CX-006..CX-010: session ownership includes work outside candidate directories."""
     ws = workspace(tmp_path)
     other = workspace(tmp_path, "other")
     _, env = codex_store(
@@ -265,15 +266,19 @@ def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
     codex_store(
         tmp_path,
         other,
-        [{"id": "foreign-workspace", "sessionId": "session-full"}],
+        [{"id": "other-workspace", "sessionId": "session-full"}],
     )
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
     result = scanner.scan([ws], "session-full")
-    assert [item.job_id for item in result.records] == ["ours"]  # CX-006/007
-    assert "foreign-workspace" not in [item.job_id for item in result.records]  # CX-008
+    assert [item.job_id for item in result.records] == [
+        "other-workspace",
+        "ours",
+    ]  # CX-006/007
+    assert "foreign-session" not in [item.job_id for item in result.records]  # CX-008
     assert scanner.scan([ws], "").records == []  # CX-009
     assert [item.job_id for item in scanner.scan([ws], "session-full").records] == [
-        "ours"
+        "other-workspace",
+        "ours",
     ]  # CX-010: direct scanner is independent of CLI projection environment
 
     current_state, current_env = codex_store(
@@ -523,19 +528,18 @@ def test_cross_session_job_prevents_shared_state_mtime_attribution(
     ]
 
 
-def test_direct_discovery_prefilters_foreign_workspace_state(
+def test_direct_discovery_ignores_foreign_sessions_in_other_workspaces(
     tmp_path: Path,
 ) -> None:
-    """Teamless discovery does not parse state for another workspace."""
+    """Global discovery reads ownership but never reports another session's jobs."""
     ws = workspace(tmp_path)
     foreign = workspace(tmp_path, "foreign")
     _, env = codex_store(tmp_path, ws, [{"id": "ours", "epoch": 100}])
-    foreign_state, _ = codex_store(
+    codex_store(
         tmp_path,
         foreign,
-        [{"id": "foreign", "epoch": 100}],
+        [{"id": "foreign", "sessionId": "another-session", "epoch": 100}],
     )
-    foreign_job = foreign_state / "jobs" / "foreign.json"
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
 
     result = scanner.scan(
@@ -546,13 +550,12 @@ def test_direct_discovery_prefilters_foreign_workspace_state(
     )
 
     assert [item.job_id for item in result.records] == ["ours"]
-    assert foreign_job not in scanner.cache.items
 
 
-def test_direct_discovery_rejects_foreign_dispatch_session(
+def test_direct_discovery_survives_zero_match_ambient_session(
     tmp_path: Path,
 ) -> None:
-    """Direct workspace discovery cannot override a foreign session ID."""
+    """An explicitly known teammate remains visible without a matching lead job."""
     ambient = workspace(tmp_path, "ambient")
     direct = workspace(tmp_path, "direct")
     _, env = codex_store(
@@ -572,9 +575,10 @@ def test_direct_discovery_rejects_foreign_dispatch_session(
         "coordinator-session",
         now=100,
         discovery_candidates=[direct],
+        teammate_sessions={"worker-session"},
     )
 
-    assert result.records == []
+    assert [item.job_id for item in result.records] == ["direct"]
     assert result.warnings == []
 
 
@@ -1723,10 +1727,10 @@ def test_teamless_watchdog_discovers_codex_state_from_session_cwd(
     assert "zero-monitored" not in monitor.warned
 
 
-def test_direct_workspace_never_surfaces_foreign_sessions(
+def test_direct_workspace_surfaces_jobs_from_multiple_foreign_sessions(
     tmp_path: Path,
 ) -> None:
-    """Worktree discovery cannot confer ownership of foreign-session jobs."""
+    """Teammate-dispatched jobs remain visible without admitting unrelated sessions."""
     worktrees = tmp_path / "worktrees"
     worktrees.mkdir()
     ws = workspace(worktrees, "agent-rescue")
@@ -1749,6 +1753,17 @@ def test_direct_workspace_never_surfaces_foreign_sessions(
         ],
         state_epoch=100,
     )
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-coordinator/config.json",
+        {
+            "name": "session-coordinator",
+            "leadSessionId": "coordinator-session",
+            "members": [
+                {"name": "one", "sessionId": "worker-session-one", "isActive": True},
+                {"name": "two", "sessionId": "worker-session-two", "isActive": False},
+            ],
+        },
+    )
     monitor = watchdog.Watchdog(
         watchdog.Options(
             session_id="coordinator-session",
@@ -1763,13 +1778,17 @@ def test_direct_workspace_never_surfaces_foreign_sessions(
     )
 
     assert monitor.poll_once(now=200) == []
-    assert monitor.poll_once(now=201) == []
+    key = watchdog.resolve_workspace(ws, env).key
+    assert monitor.poll_once(now=201) == [
+        f"CODEX_STALL job=worker-one workspace={key} idle=101s phase=running reason=no-progress",
+        f"CODEX_STALL job=worker-two workspace={key} idle=101s phase=running reason=no-progress",
+    ]
 
 
-def test_worktree_session_filter_excludes_unrelated_workspace_jobs(
+def test_worktree_filter_does_not_hide_session_jobs(
     tmp_path: Path,
 ) -> None:
-    """An opt-in worktree slug prefix excludes sibling-session Codex jobs."""
+    """Worktree discovery filters do not limit session-owned Codex discovery."""
     worktrees = tmp_path / "worktrees"
     worktrees.mkdir()
     selected = workspace(worktrees, "agent-session-one-rescue")
@@ -1818,7 +1837,9 @@ def test_worktree_session_filter_excludes_unrelated_workspace_jobs(
     key = watchdog.resolve_workspace(selected, env).key
     assert monitor.poll_once(now=201) == [
         f"CODEX_STALL job=selected workspace={key} "
-        "idle=101s phase=running reason=no-progress"
+        "idle=101s phase=running reason=no-progress",
+        f"CODEX_STALL job=unrelated workspace={watchdog.resolve_workspace(unrelated, env).key} "
+        "idle=101s phase=running reason=no-progress",
     ]
 
 
@@ -1976,7 +1997,7 @@ def test_codex_proc_evidence_rejects_pid_reuse(tmp_path: Path) -> None:
     watchdog.write_fake_process(proc, 102, ws, ["sleep", "1000"])
     inspector = watchdog.ProcInspector(proc)
     assert inspector.launcher(101, ws) == "alive"
-    assert inspector.launcher(102, ws) == "dead"
+    assert inspector.launcher(102, ws) == "reused"
     endpoint_dir = tmp_path / "runtime"
     endpoint = endpoint_dir / "broker.sock"
     watchdog.write_fake_process(
@@ -2156,6 +2177,7 @@ def test_dump_job_not_found_is_a_clean_error(
     plugin_data = tmp_path / "plugin-data"
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(plugin_data))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
     assert watchdog.main(["--dump-job", "missing-job"]) == 1
 
@@ -2650,3 +2672,100 @@ def test_direct_discovery_without_session_id_requires_session_cwd(tmp_path, sess
         [], "session-full", now=100, discovery_candidates=[ws, other]
     ).records
     assert [record.job_id for record in records] == ["local"]
+
+
+@pytest.mark.parametrize("config", ["", "relocated"])
+def test_config_dir_controls_codex_store(tmp_path, config):
+    env = {
+        "HOME": str(tmp_path / "home"),
+        "CLAUDE_CONFIG_DIR": str(tmp_path / config) if config else "",
+    }
+    root = Path(env["CLAUDE_CONFIG_DIR"]) if config else Path(env["HOME"]) / ".claude"
+    assert (
+        watchdog.codex_state_root(env) == root / "plugins/data/codex-openai-codex/state"
+    )
+
+
+def test_session_jobs_anywhere_are_visible_but_neighbours_are_not(tmp_path):
+    ws = workspace(tmp_path, "unrelated-checkout/worktree")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "owned", "sessionId": "session-full", "epoch": 100},
+            {"id": "neighbour", "sessionId": "another-session", "epoch": 100},
+        ],
+    )
+    env["PWD"] = str(tmp_path / "coordinator")
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="session-full",
+            worktrees=tmp_path / "empty-root",
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    assert monitor.poll_once(now=200) == []
+    key = watchdog.resolve_workspace(ws, env).key
+    assert monitor.poll_once(now=201) == [
+        f"CODEX_STALL job=owned workspace={key} idle=101s phase=running reason=no-progress",
+    ]
+
+
+def test_reused_launcher_with_dead_broker_is_not_proven_dead():
+    assert watchdog.classify_runtime(["reused"], ["dead"]) == "reused"
+
+
+def test_team_membership_scopes_jobs_outside_all_candidate_workspaces(tmp_path):
+    ws = workspace(tmp_path, "other-repository/worker")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "teammate", "sessionId": "member-session", "epoch": 100},
+            {"id": "stranger", "sessionId": "other-team-member", "epoch": 100},
+        ],
+    )
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-lead/config.json",
+        {
+            "name": "session-lead",
+            "leadSessionId": "lead-session",
+            "members": [
+                {"name": "bilby", "sessionId": "member-session", "isActive": True},
+            ],
+        },
+    )
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-other/config.json",
+        {
+            "name": "session-other",
+            "leadSessionId": "other-lead",
+            "members": [
+                {
+                    "name": "stranger",
+                    "sessionId": "other-team-member",
+                    "isActive": True,
+                },
+            ],
+        },
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="lead-session",
+            worktrees=tmp_path / "empty-root",
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    assert monitor.poll_once(now=200) == []
+    key = watchdog.resolve_workspace(ws, env).key
+    assert monitor.poll_once(now=201) == [
+        f"CODEX_STALL job=teammate workspace={key} idle=101s phase=running reason=no-progress",
+    ]

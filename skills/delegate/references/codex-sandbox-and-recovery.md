@@ -68,7 +68,7 @@ If the fallback triggers, investigate these mechanics first.
 
 ## On-Disk Job State (for Monitoring)
 
-Under Claude Code, Codex job state lives under `~/.claude/plugins/data/codex-openai-codex/state/`, one directory per workspace:
+Under Claude Code, Codex job state lives under `plugins/data/codex-openai-codex/state/` beneath the configuration directory (`~/.claude`, or `CLAUDE_CONFIG_DIR` when set), one directory per workspace:
 
 ```
 state/<workspace-slug>-<hash>/
@@ -131,7 +131,7 @@ Mitigation: poll for terminal status before the next same-cwd dispatch (never a 
 
 ## Harness Kills of a Backgrounded Task
 
-Upstream: [worker death](https://github.com/openai/codex-plugin-cc/issues/432), [dead-worker reconciliation](https://github.com/openai/codex-plugin-cc/issues/377). Resolve `CODEX_ROOT` through `delegate` § External Codex launcher before recovery. The hook/watchdog reject zombie or incompatible launcher PIDs; reuse by another Codex launcher in the identical cwd cannot be distinguished reliably.
+Upstream: [worker death](https://github.com/openai/codex-plugin-cc/issues/432), [dead-worker reconciliation](https://github.com/openai/codex-plugin-cc/issues/377). Resolve `CODEX_ROOT` through `delegate` § External Codex launcher before recovery. The hook/watchdog distinguish absent/zombie PIDs from live incompatible PIDs. For a reused PID, inspect and do not cancel: cancellation signals the recorded process group. Recheck absence before cancelling an orphan. Without procfs, signal 0 proves only PID presence; reuse by another Codex launcher in the identical cwd cannot be distinguished reliably.
 
 A `codex-companion.mjs task --write --background` run launched via a `run_in_background` Bash call can be killed by the harness mid-run — confirmed via a tmux pane reading `Background command ... was stopped`. Nothing reports it automatically: `--background` detaches and returns immediately, so nobody is polling the task once queued. **Silence is not evidence of health.**
 

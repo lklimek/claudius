@@ -32,6 +32,7 @@ SPEC.loader.exec_module(watchdog)
 BUDGET_SECS = 3
 JSON_LIMIT = 1024 * 1024
 MAX_ORPHANS = 5
+MAX_FINISHED = 5
 MAX_SCAN_JOBS = 256
 METADATA_BUDGET_SECS = 0.5
 PROC_ROOT = Path("/proc")
@@ -73,7 +74,7 @@ def printable(value: Any) -> bool:
 
 
 def recovery_context(payload: dict, env: dict) -> str:
-    """Describe only active jobs belonging to the resumed session."""
+    """Describe active and recently finished jobs belonging to this session."""
     if not isinstance(payload, dict) or payload.get("source") not in (
         "resume",
         "compact",
@@ -85,26 +86,29 @@ def recovery_context(payload: dict, env: dict) -> str:
         return ""
     if not printable(cwd) or not Path(cwd).is_absolute():
         return ""
-    worktrees = env.get("CLAUDIUS_WORKTREE_ROOT", str(watchdog.DEFAULT_WORKTREE_ROOT))
+    worktrees = env.get("CLAUDIUS_WORKTREE_ROOT", "").strip() or str(
+        watchdog.DEFAULT_WORKTREE_ROOT
+    )
     if not printable(worktrees) or not Path(worktrees).is_absolute():
         return ""
-    cwd_path = Path(cwd)
-    slug = (
-        cwd_path.name
-        if cwd_path.parent == Path(worktrees)
-        else cwd.strip("/").replace("/", "-")
-    )
     proc = watchdog.ProcInspector(PROC_ROOT)
     active = False
     orphans = []
     orphan_count = 0
+    reused_count = 0
+    finished = []
+    now = time.time()
     try:
-        for path in recent_jobs(watchdog.codex_state_root(env), time.time()):
+        for path in recent_jobs(watchdog.codex_state_root(env), now):
             job = read_json(path)
             if not isinstance(job, dict):
                 continue
             status = job.get("status")
-            if not isinstance(status, str) or status not in watchdog.ACTIVE_STATUSES:
+            if (
+                not isinstance(status, str)
+                or status
+                not in watchdog.ACTIVE_STATUSES | watchdog.TERMINAL_STATUSES.keys()
+            ):
                 continue
             job_id = job.get("id")
             if (
@@ -122,31 +126,67 @@ def recovery_context(payload: dict, env: dict) -> str:
                 continue
             if job_session in (None, "") and workspace != cwd:
                 continue
-            active = True
-            if proc.launcher(job.get("pid"), Path(workspace)) != "dead":
+            if status in watchdog.TERMINAL_STATUSES:
+                completed = watchdog._parse_timestamp(job.get("completedAt"))
+                if completed is None:
+                    completed = watchdog.safe_mtime(path)
+                if (
+                    completed is not None
+                    and now - watchdog.TERMINAL_JOB_RETENTION_SECS <= completed <= now
+                    and len(finished) < MAX_FINISHED
+                ):
+                    collect = shlex.join(
+                        [
+                            "python3",
+                            str(PLUGIN_ROOT / "scripts/minion-monitoring.py"),
+                            "--dump-job",
+                            job_id,
+                        ]
+                    )
+                    finished.append(
+                        f"Codex finished job={shlex.quote(job_id)} status={status} --cwd {shlex.quote(workspace)}\nCollect: {collect}"
+                    )
                 continue
-            orphan_count += 1
+            active = True
+            runtime = proc.launcher(job.get("pid"), Path(workspace))
+            if runtime not in {"dead", "reused"}:
+                continue
+            if runtime == "dead":
+                orphan_count += 1
+            else:
+                reused_count += 1
             if len(orphans) < MAX_ORPHANS:
+                label = "orphan" if runtime == "dead" else "pid reused"
+                advice = "" if runtime == "dead" else " — inspect, do not cancel"
                 orphans.append(
-                    f"Codex orphan job={shlex.quote(job_id)} status={status} "
-                    f"pid={job['pid']} --cwd {shlex.quote(workspace)}"
+                    f"Codex {label} job={shlex.quote(job_id)} status={status} "
+                    f"pid={job['pid']} --cwd {shlex.quote(workspace)}{advice}"
                 )
     except DeadlineExpired:
         pass
-    if not active:
+    if not active and not finished:
         return ""
     lines = orphans
-    if orphan_count > MAX_ORPHANS:
-        lines.append(
-            f"+{orphan_count - MAX_ORPHANS} more orphaned jobs; inspect jobs/*.json."
-        )
+    issue_count = orphan_count + reused_count
+    if issue_count > MAX_ORPHANS:
+        label = "orphaned jobs" if not reused_count else "jobs with absent/reused PIDs"
+        lines.append(f"+{issue_count - MAX_ORPHANS} more {label}; inspect jobs/*.json.")
     if orphan_count:
         reference = (
             PLUGIN_ROOT / "skills/delegate/references/codex-sandbox-and-recovery.md"
         )
         lines.append(
-            f"Recovery: read {shlex.quote(str(reference))} (cancel, then --resume-last with identical --cwd)."
+            f"Recovery: for absent/zombie PIDs only, read {shlex.quote(str(reference))} (cancel, then --resume-last with identical --cwd)."
         )
+    lines.extend(finished)
+    if not active:
+        return "\n".join(lines)
+    try:
+        monitor_running = proc.monitor_running(session)
+    except DeadlineExpired:
+        monitor_running = None
+    if monitor_running:
+        return "\n".join(lines)
     command = shlex.join(
         [
             "python3",
@@ -157,8 +197,6 @@ def recovery_context(payload: dict, env: dict) -> str:
             "300",
             "--worktrees",
             worktrees,
-            "--worktrees-session-filter",
-            slug,
         ]
     )
     lines.append(
