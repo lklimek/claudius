@@ -21,11 +21,11 @@ Done = only maintainer actions remain: bots finished on the current head, its CI
 
 ## Internal review
 
-After every push carrying production code — first push, marking ready, taking over a PR, every fix push including fixes of internal findings and CI fixes — start one independent `review-changes` basic review of the **whole PR** (`<base>...<head>`, never the delta since the last push), in parallel with the push; the push never waits for it.
+After every later push carrying production code (the push creating a PR, or a skeleton PR's first push carrying changes, gets its creation review, `git-and-github` § Creating a PR) — marking ready, taking over a PR, every fix push including fixes of internal findings and CI fixes — start one independent `review-changes` basic review of the **whole PR** (`<base>...<head>`, never the delta since the last push), in parallel with the push; the push never waits for it.
 
 - One PR per review. Reviewer per `review-changes` § 2 and `delegate`, never the PR's author.
 - Pass the maintainer's earlier per-ID decisions on the PR as the review's prior decisions (`review-changes` § 1).
-- A coordinator audit never replaces this review. Tests-only, docs-only, empty, and tree-identical merge pushes skip it; the next review covers them.
+- A coordinator audit never replaces this review. Tests-only, docs-only, empty, and tree-identical merge pushes, and a head the creation review already covered, skip it; the next review covers them.
 
 ## Fix pushes
 

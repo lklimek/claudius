@@ -1,12 +1,12 @@
 ---
 name: review-pr
-description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness. It gathers context, verifies the PR description against the diff (Pass C), runs basic review by default (full on request), and prepares a summary comment plus a draft inline review."
+description: "This skill should be used when the user asks to \"review this PR\", \"audit this pull request\", or assess a PR for code quality, security, and correctness, and for the creation review of every new PR (git-and-github). It gathers context, verifies the PR description against the diff (Pass C), runs basic review by default (full on request or when the caller passes it), and prepares a summary comment plus a draft inline review."
 allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh issue view *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/post_pr_review.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-pr-base-sha.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-review-comments.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-fetch-reviews.sh *), Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git show *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Agent, SendMessage
 ---
 
 # PR Audit Workflow
 
-Run in the coordinator context. Arguments: `<PR> [basic|full]`; default **basic**, with explicit full/grumpy requests selecting **full**. Mode semantics belong to [review-changes](../review-changes/SKILL.md). `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) is the resolved plugin installation root.
+Run in the coordinator context. Arguments: `<PR> [basic|full]`; default **basic**; explicit full/grumpy requests select **full**, and a caller's mode (e.g. `git-and-github` § Creating a PR) overrides the default. Mode semantics belong to [review-changes](../review-changes/SKILL.md). `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) is the resolved plugin installation root.
 
 ## 1. Gather PR Context
 
