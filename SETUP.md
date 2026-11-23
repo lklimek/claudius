@@ -144,7 +144,7 @@ Configure the Codex CLI in `~/.codex/config.toml` before using that bridge. Nati
 
 #### Optional Antigravity reviewer
 
-Install and sign in to [Google Antigravity's CLI](https://antigravity.google/docs/cli) (`agy`); full review then adds the Aga reviewer. She uses your `agy` permission settings, so allow the read and write actions a review needs without asking.
+Install and sign in to [Google Antigravity's CLI](https://antigravity.google/docs/cli) (`agy`); full review then adds the Aga reviewer (`delegate` § External Antigravity launcher). Headless runs use your `agy` permission settings and stop at the first action they would ask about, so allow without asking: reading outside the working directory (`allowNonWorkspaceAccess`), writing her output files, and the commands her brief runs (`git`, `python3`). Blanket `toolPermission: always-proceed` also lets prompt injection in a reviewed third-party PR run any command; prefer specific allow rules there.
 
 #### Built-in stall watchdog
 

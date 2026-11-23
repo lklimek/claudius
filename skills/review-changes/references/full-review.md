@@ -14,15 +14,7 @@ Use the host's worker API or an available alternative tool: in Claude, the liste
 
 Always include all three, including for tiny diffs. Documentation-heavy changes add Trillian / `claudius:technical-writer-trillian` (`docs`, `technical-writing`: accuracy, completeness, API docs, changelog). For crypto-heavy code or significant dependency changes, expand the security prompt to crypto soundness and dependency audit — do NOT spawn a second instance. For 50+ files / 5000+ lines, spawn multiple agents of the same type with different file scopes, preserving coverage across boundaries.
 
-Always add a Codex reviewer when Codex is available, using the Reviewer pass on the same scope. Use `qa-codex` for its producer files and consolidation label. Keep all core passes above.
-
-Likewise add Aga (Agnieszka), a Google Antigravity reviewer, when `agy models` lists `gemini-4-neon-high` (Gemini 4 Neon at high effort; the effort is part of the model ID, and `agy` rejects `--effort` for Neon); otherwise tell the user she was skipped and why. Use `qa-agy`. Write her producer prompt to `<SCRATCH_DIR>/qa-agy-brief.md` and run her in the background (foreground in headless hosts, with `--print-timeout` under the host's command limit) from a new empty directory outside any git checkout, since `agy` runs hooks and rules from its working directory's `.agents/`:
-
-```bash
-env -C <SCRATCH_DIR>/agy-cwd agy -p "Read <SCRATCH_DIR>/qa-agy-brief.md and follow it." --model gemini-4-neon-high --print-timeout 45m
-```
-
-She runs under the user's own `agy` permission settings; one action they would ask about ends a headless run with no output (exit 2). A non-zero exit, a timeout, or a missing or gate-failing findings file means her pass did not complete: say so in the executive summary and consolidate without her.
+Always add a Codex reviewer when Codex is available, using the Reviewer pass on the same scope. Use `qa-codex` for its producer files and consolidation label. Likewise add Aga, the Google Antigravity reviewer, when available per `delegate` § External Antigravity launcher; use `qa-agy`. Name skipped optional reviewers to the user; one that delivers no gate-passing findings file is an incomplete pass, stated in the executive summary. Keep all core passes above.
 
 ## Agent prompts
 
