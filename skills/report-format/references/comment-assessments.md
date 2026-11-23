@@ -4,6 +4,8 @@ Use the existing review envelope with `schema_version: "4.2.0"`, `metadata.repor
 
 One row per comment/request, reply or status message; merge duplicates into one row, listing the others in `merged_thread_ids` / `merged_urls`. Reuse existing `CMT-…` IDs, author identity, metadata and permalinks. Keep IDs stable once shown. A row referring to a scored finding uses that finding's ID; other rows need their own unique IDs. Do not renumber findings independently of rows.
 
+Outside host mode, also keep `merged_urls` and `recorded_decision.comment_url` with its author/quote in `description` so ordinary rendered reports retain them.
+
 ```json
 {
   "id": "CMT-001",
@@ -37,11 +39,11 @@ Required: `id`, `reviewer`, `source_kind`, `comment_url`, `description`, `reason
 - `source_quote`: verbatim span (≤ 600 chars) of the source text the row answers.
 - `gates`: `[{gate, evidence}]`, each blocker gate (`severity` § 2) the concern trips; independent of `merge_class`.
 - `proposed_decision`: machine form of `proposed_action`: `{kind, fixed_in?, target_pr?, target_url?, title?}`. `kind`: `resolve` (`fixed_in`: commit SHA), `fix_here`, `reject`, `handled_in_pr` (`target_pr` or `target_url`), `follow_up_pr` (existing `target_pr`, or `title` ≤ 120 for a new one), `upstream_issue` (`target_url` of the owning repository or an existing issue), `todo`.
-- `recorded_decision`: a decision already on GitHub: `{kind, by: login, comment_url, quote ≤ 600}`; `kind` as above, or `deferred` / `withdrawn`.
+- `recorded_decision`: a decision already on GitHub: `{kind, by: login, comment_url, quote ≤ 600, target_pr?, target_url?}`; `kind` as above, or `deferred` / `withdrawn`. Preserve known targets (`target_pr` ≥ 1, `target_url` HTTPS) for contradiction checks.
 - `merged_thread_ids`, `merged_urls`: thread node IDs and source URLs merged into the row.
 - `pre_existing`: the problem exists on the base branch. `fix_size`: `XS` / `S` / `M`.
 - `category`: a `check-pr-comments` step 4 slug, or `other: <2–3 words>`.
 
-`metadata.input_mode`: `fetched` or `host_supplied`. `host_supplied` also requires `metadata.pr_number` and `metadata.commit`, `thread_id` on inline rows, `proposed_decision` on inline/review-body/PR-comment rows, and `source_quote` on review-body/PR-comment rows. 4.2 URLs are `https://`. Row IDs: `CMT-` plus three or more digits.
+`metadata.input_mode`: `fetched` or `host_supplied`. `host_supplied` also requires at least one `comment_assessments` row, `metadata.pr_number` and `metadata.commit`, `thread_id` on inline rows, `proposed_decision` on inline/review-body/PR-comment rows, and `source_quote` on review-body/PR-comment rows. 4.2 URLs require HTTPS and a host; consumers must re-validate URLs. Row IDs: `CMT-` plus three or more ASCII digits.
 
 Render HTML with the existing generator's `--format html`: every row contains its reasoning, evidence and proposed action alongside source/code links, assessment badge and independent thread state. Markdown/PDF remain explicit opt-ins. Interactive triage controls apply to scored findings; assessment/context rows are read-only evidence, and do not authorize GitHub actions.

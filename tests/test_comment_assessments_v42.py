@@ -228,6 +228,16 @@ def test_host_metadata_requires_pr_and_commit(host, field):
     assert errors(host)
 
 
+@pytest.mark.parametrize("missing", [True, False])
+def test_host_requires_nonempty_assessments(host, missing, tmp_path):
+    if missing:
+        host.pop("comment_assessments")
+    else:
+        host["comment_assessments"] = []
+    assert errors(host)
+    assert run_validator(host, tmp_path).returncode == 1
+
+
 # ----------------------------------------------------- proposed_decision
 
 
@@ -326,6 +336,12 @@ def test_malformed_42_fields_are_rejected(host, field, value):
         ({"quote": "q" * 601}, False),
         ({"quote": ""}, False),
         ({"comment_url": "http://github.com/o/r/pull/1#issuecomment-1"}, False),
+        ({"target_pr": 80}, True),
+        ({"target_url": "https://github.com/o/r/pull/80"}, True),
+        ({"target_pr": 0}, False),
+        ({"target_pr": "80"}, False),
+        ({"target_url": "http://github.com/o/r/pull/80"}, False),
+        ({"target_url": "https://"}, False),
         ({"extra": True}, False),
     ],
 )
@@ -338,6 +354,61 @@ def test_recorded_decision_shapes(host, change, valid):
 @pytest.mark.parametrize("field", ["kind", "by", "comment_url", "quote"])
 def test_recorded_decision_requires_every_field(host, field):
     row(host, "CMT-1000")["recorded_decision"].pop(field)
+    assert errors(host)
+
+
+@pytest.mark.parametrize("version", ["4.1.0", "4.2.0"])
+def test_recorded_targets_are_version_tied(v41, version):
+    v41["schema_version"] = version
+    v41["comment_assessments"][1]["recorded_decision"] = {
+        **V42_FIELDS["recorded_decision"],
+        "target_pr": 80,
+        "target_url": "https://github.com/o/r/pull/80",
+    }
+    assert (errors(v41) == []) is (version == "4.2.0")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("id", "CMT-004\n"),
+        ("id", "CMT-١٢٣"),
+        ("finding_id", "CMT-004\n"),
+        ("finding_id", "CMT-١٢٣"),
+        ("proposed_decision", {"kind": "resolve", "fixed_in": "abc1234\n"}),
+        ("proposed_decision", {"kind": "resolve", "fixed_in": "abc١٢٣٤"}),
+        ("category", "other: fee caching\n"),
+    ],
+)
+def test_patterns_reject_newlines_and_non_ascii_digits(host, field, value):
+    row(host, "CMT-004")[field] = value
+    assert errors(host)
+
+
+@pytest.mark.parametrize("rid", ["CMT-004\n", "CMT-١٢٣"])
+def test_finding_ids_reject_newlines_and_non_ascii_digits(host, rid):
+    host["findings"][0]["findings"][0]["id"] = rid
+    assert errors(host)
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://", "https://a b <x>", "https://\nevil", "https://example.org/\n"],
+)
+@pytest.mark.parametrize(
+    "field",
+    ["proposed_decision", "recorded_decision", "recorded_target", "merged_urls"],
+)
+def test_https_fields_require_a_host_and_no_whitespace(host, field, url):
+    item = row(host, "CMT-1000")
+    if field == "merged_urls":
+        item[field] = [url]
+    elif field == "proposed_decision":
+        item[field] = {"kind": "handled_in_pr", "target_url": url}
+    elif field == "recorded_target":
+        item["recorded_decision"]["target_url"] = url
+    else:
+        item[field]["comment_url"] = url
     assert errors(host)
 
 
@@ -426,3 +497,79 @@ def test_generator_cli_validates_42(host, tmp_path):
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+# Producer instructions are the contract for behavior implemented by the model.
+@pytest.mark.parametrize(
+    "rule",
+    [
+        "copied verbatim from the supplied (cleaned) text",
+        "at least 12 characters (the whole text when shorter), distinct within its source",
+        "`comment_url` equals the source URL in `scope.json`",
+        "contains, or is contained in, its `ids.json` quote",
+        "a merged row takes the ID of its own `thread_id`/source",
+        "propose the standing `decision` unless the code at its lines changed",
+        "`proposed_reply` is the single reply for `proposed_decision` only",
+        'without the attribution footer or "post only after the fix lands" marker',
+    ],
+)
+def test_host_producer_contract(rule):
+    text = (SKILL.parent / "references/host-supplied.md").read_text()
+    assert rule in text
+
+
+def test_host_entry_point_skips_fetch_and_overrides_worker_reply_contract():
+    text = SKILL.read_text()
+    assert "## 1. Fetch All Comments (host-supplied mode: skip)" in text
+    brief = (SKILL.parent / "references/verify-worker.md").read_text()
+    assert "../SKILL.md" in brief
+    assert "single-reply override" in brief
+
+
+@pytest.mark.parametrize(
+    "renderer", [grr.render_html, grr.render_triage, grr.render_markdown]
+)
+def test_fetched_descriptions_preserve_duplicate_and_decision_links(host, renderer):
+    contract = (
+        ROOT / "skills/report-format/references/comment-assessments.md"
+    ).read_text()
+    assert "Outside host mode" in contract
+    assert "`description`" in contract
+    assert "`recorded_decision.comment_url`" in contract
+    host["metadata"]["input_mode"] = "fetched"
+    item = row(host, "CMT-1000")
+    item["merged_urls"] = row(host, "CMT-001")["merged_urls"]
+    decision = item["recorded_decision"]
+    links = [*item.get("merged_urls", []), decision["comment_url"]]
+    assert len(links) >= 2
+    item["description"] += " " + " ".join(f"[Source]({url})" for url in links)
+    item["description"] += f" {decision['by']}: {decision['quote']}"
+    rendered = renderer(host)
+    for url in links:
+        assert url in rendered
+    assert decision["by"] in rendered
+
+
+def test_pdf_keeps_description_links_and_recorded_author(host, tmp_path, monkeypatch):
+    from reportlab.platypus import SimpleDocTemplate
+
+    captured = []
+    build = SimpleDocTemplate.build
+
+    def capture(doc, story, *args, **kwargs):
+        captured.extend(getattr(part, "text", "") for part in story)
+        return build(doc, story, *args, **kwargs)
+
+    monkeypatch.setattr(SimpleDocTemplate, "build", capture)
+    host["metadata"]["input_mode"] = "fetched"
+    item = row(host, "CMT-1000")
+    decision = item["recorded_decision"]
+    links = [*row(host, "CMT-001")["merged_urls"], decision["comment_url"]]
+    item["description"] += " " + " ".join(f"[Source]({url})" for url in links)
+    item["description"] += f" {decision['by']}: {decision['quote']}"
+    output = tmp_path / "comments.pdf"
+    grr.render_pdf(host, output)
+    assert output.read_bytes().startswith(b"%PDF-")
+    for url in links:
+        assert url in " ".join(captured)
+    assert decision["by"] in " ".join(captured)

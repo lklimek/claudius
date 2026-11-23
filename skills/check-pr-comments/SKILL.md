@@ -17,11 +17,11 @@ Every comment fix, reply, and resolve needs a per-ID decision: the user's, excep
 - **Interview** (default when the user is reachable): verify everything first, then ask one decision at a time (step 4) and execute each answer before the next question (step 8).
 - **Table**: show the step 4 table, change nothing until the user decides per ID (step 8). Use it on request, and always when no user is reachable (CI, headless, a subagent without a user channel) and Auto is not enabled — the run then ends after the table.
 - **Auto** — only on the user's explicit request or a standing user/project instruction, never on an invoking skill's: verify everything, then decide each ID yourself by its step 4 recommendation and execute it (step 8). Auto decides only `resolve`, `fix here` (in scope), `handled in #N`, `TODO`, and `reject` of bot comments; every other ID — a gate override, `follow-up PR`, `upstream issue`, a rejected human comment, a product-rule ambiguity — goes to the user afterwards as an Interview question, or stays undecided in the table when no user is reachable.
-- **Host-supplied** — whenever a host supplies `pr-data/manifest.json`: report only, per [host-supplied.md](references/host-supplied.md). Step 3 runs inline, without `delegate` or a worktree; each row carries the [verify-only brief](references/verify-worker.md)'s report contract, replies without the attribution footer.
+- **Host-supplied** — whenever a host supplies `pr-data/manifest.json`: report only, per [host-supplied.md](references/host-supplied.md). Step 3 runs inline, without `delegate` or a worktree; apply the [verify-only brief](references/verify-worker.md)'s report contract with the host's single-reply override.
 
 State the mode in one line.
 
-## 1. Fetch All Comments
+## 1. Fetch All Comments (host-supplied mode: skip)
 
 **ALWAYS fetch fresh comments on every invocation** — never assume none are new. Script usage and output shapes: `git-and-github` [pr-review.md](../git-and-github/references/pr-review.md).
 

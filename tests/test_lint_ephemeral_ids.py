@@ -111,6 +111,12 @@ def test_trailing_punctuation_still_matches() -> None:
     assert hits[0]["matched_id"] == "CMT-001"
 
 
+@pytest.mark.parametrize("token", ["CMT-001-005", "SEC-014-2"])
+def test_three_digit_ranges_remain_ephemeral(token: str) -> None:
+    hits = lint.scan_text(token, "<test>")
+    assert [hit["matched_id"] for hit in hits] == [token[:7]]
+
+
 def test_multiple_matches_same_line() -> None:
     hits = lint.scan_text("both CMT-001 and SEC-014 here", "<test>")
     matched = {h["matched_id"] for h in hits}

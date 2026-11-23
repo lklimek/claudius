@@ -269,9 +269,10 @@
     {
       "if": {"required": ["metadata"], "properties": {"metadata": {"required": ["input_mode"], "properties": {"input_mode": {"const": "host_supplied"}}}}},
       "then": {
+        "required": ["comment_assessments"],
         "properties": {
           "metadata": {"required": ["pr_number", "commit"]},
-          "comment_assessments": {"items": {"allOf": [
+          "comment_assessments": {"minItems": 1, "items": {"allOf": [
             {
               "if": {"required": ["source_kind"], "properties": {"source_kind": {"enum": ["inline", "review_body", "pr_comment"]}}},
               "then": {"required": ["proposed_decision"]}
@@ -295,8 +296,8 @@
       "additionalProperties": false,
       "required": ["id", "reviewer", "source_kind", "comment_url", "description", "reasoning", "proposed_action"],
       "properties": {
-        "id": {"type": "string", "pattern": "^CMT-\\d{3,}$"},
-        "finding_id": {"type": "string", "pattern": "^CMT-\\d{3,}$"},
+        "id": {"type": "string", "pattern": "^CMT-[0-9]{3,}$(?!\\n)"},
+        "finding_id": {"type": "string", "pattern": "^CMT-[0-9]{3,}$(?!\\n)"},
         "reviewer": {"type": "string", "minLength": 1},
         "author_type": {"enum": ["bot", "human"]},
         "source_kind": {"enum": ["inline", "review_body", "pr_comment", "reply", "status"]},
@@ -334,7 +335,7 @@
           "description": "4.2: machine form of proposed_action, which stays prose.",
           "properties": {
             "kind": {"$ref": "#/$defs/decision_kind"},
-            "fixed_in": {"type": "string", "pattern": "^[0-9a-f]{7,40}$"},
+            "fixed_in": {"type": "string", "pattern": "^[0-9a-f]{7,40}$(?!\\n)"},
             "target_pr": {"type": "integer", "minimum": 1},
             "target_url": {"$ref": "#/$defs/https_url"},
             "title": {"type": "string", "minLength": 1, "maxLength": 120}
@@ -363,7 +364,9 @@
             "kind": {"anyOf": [{"$ref": "#/$defs/decision_kind"}, {"enum": ["deferred", "withdrawn"]}]},
             "by": {"type": "string", "minLength": 1},
             "comment_url": {"$ref": "#/$defs/https_url"},
-            "quote": {"type": "string", "minLength": 1, "maxLength": 600}
+            "quote": {"type": "string", "minLength": 1, "maxLength": 600},
+            "target_pr": {"type": "integer", "minimum": 1},
+            "target_url": {"$ref": "#/$defs/https_url"}
           }
         },
         "merged_thread_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "4.2: node IDs of other threads merged into this row."},
@@ -374,7 +377,7 @@
           "description": "4.2: check-pr-comments step 4 category slug, or 'other: <2-3 words>'.",
           "anyOf": [
             {"enum": ["funds", "security", "privacy", "data-loss", "correctness", "concurrency", "error-handling", "performance", "state-freshness", "migration", "api-contract", "ux", "maintainability", "tests", "docs", "build-ci"]},
-            {"type": "string", "pattern": "^other: \\S+( \\S+){1,2}$"}
+            {"type": "string", "pattern": "^other: \\S+( \\S+){1,2}$(?!\\n)"}
           ]
         }
       },
@@ -390,7 +393,7 @@
       ]
     },
     "decision_kind": {"enum": ["resolve", "fix_here", "reject", "handled_in_pr", "follow_up_pr", "upstream_issue", "todo"]},
-    "https_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+    "https_url": {"type": "string", "format": "uri", "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]+)?(?:[/?#][^\\s<>]*)?$(?!\\n)"},
     "severity": {
       "type": "integer",
       "minimum": 1,
@@ -410,7 +413,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^(SEC|QA|PROJ|CODE|RUST|PY|GO|FE|DOC|CMT|DEP|PPM|CALL|ARCH|UX)-\\d{3,}$",
+          "pattern": "^(SEC|QA|PROJ|CODE|RUST|PY|GO|FE|DOC|CMT|DEP|PPM|CALL|ARCH|UX)-[0-9]{3,}$(?!\\n)",
           "description": "Finding ID with category prefix (SEC→security, PROJ→project, CODE/RUST/PY/GO/FE/QA→code_quality, DOC→documentation, CMT→pr_comments, DEP→dependencies, PPM→pr_promises, CALL→call_tree, ARCH→architecture, UX→ux)"
         },
         "severity": { "$ref": "#/$defs/severity" },
