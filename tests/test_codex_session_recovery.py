@@ -661,3 +661,155 @@ def test_concurrent_hooks_report_each_finished_job_at_most_once(recovery, contex
             executor.map(lambda _: recovery.recovery_context(payload, env), range(2))
         )
     assert sum(out.count("Codex finished job=") for out in outputs) == 1
+
+
+@pytest.mark.parametrize("operation", ["mkdir", "touch", "stat"])
+def test_receipt_storage_errors_keep_finished_notice(
+    recovery, context, monkeypatch, operation
+):
+    payload, env = context
+    job(env, id="finished", status="completed", completedAt=NOW - 60)
+    target = os if operation == "stat" else Path
+    original = getattr(target, operation)
+    attempts = []
+
+    def unavailable(path, *args, **kwargs):
+        if (
+            isinstance(path, (str, os.PathLike))
+            and "codex-recovery" in Path(path).parts
+        ):
+            attempts.append(path)
+            raise PermissionError("read-only receipt store")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(target, operation, unavailable)
+    output = recovery.recovery_context(payload, env)
+    assert "Codex finished job=finished" in output
+    assert "--dump-job finished" in output
+    assert attempts
+
+
+def test_receipt_parent_file_collision_keeps_finished_notice(recovery, context):
+    payload, env = context
+    root = Path(env["CLAUDE_CONFIG_DIR"]) / "plugins/data/claudius"
+    env["CLAUDE_PLUGIN_DATA"] = str(root)
+    root.mkdir(parents=True)
+    (root / "codex-recovery").write_text("unrelated file")
+    job(env, id="finished", status="completed", completedAt=NOW - 60)
+    assert "job=finished " in recovery.recovery_context(payload, env)
+
+
+@pytest.mark.parametrize(
+    "export", ["unset", "relative", "codex", "external", "symlink", "valid"]
+)
+def test_receipt_store_is_owned_by_claudius(recovery, context, monkeypatch, export):
+    payload, env = context
+    monkeypatch.chdir(Path(env["HOME"]).parent)
+    data = Path(env["CLAUDE_CONFIG_DIR"]) / "plugins/data"
+    expected = data / "claudius"
+    if export == "unset":
+        env.pop("CLAUDE_PLUGIN_DATA")
+    elif export == "relative":
+        env["CLAUDE_PLUGIN_DATA"] = "relative-data"
+    elif export == "codex":
+        env["CLAUDE_PLUGIN_DATA"] = str(data / "codex-openai-codex")
+    elif export == "external":
+        env["CLAUDE_PLUGIN_DATA"] = str(Path(env["HOME"]).parent / "claudius-other")
+    elif export == "symlink":
+        target = Path(env["HOME"]).parent / "external-data"
+        target.mkdir()
+        data.mkdir(parents=True)
+        link = data / "claudius-local"
+        link.symlink_to(target, target_is_directory=True)
+        env["CLAUDE_PLUGIN_DATA"] = str(link)
+    else:
+        expected = data / "claudius-local"
+        env["CLAUDE_PLUGIN_DATA"] = str(expected)
+    job(env, id="finished", status="completed", completedAt=NOW - 60)
+    assert "job=finished " in recovery.recovery_context(payload, env)
+    receipts = list((expected / "codex-recovery").glob("*/*"))
+    assert len(receipts) == 1 and receipts[0].is_file()
+    assert recovery.recovery_context(payload, env) == ""
+    if export not in {"unset", "valid"}:
+        assert not (Path(env["CLAUDE_PLUGIN_DATA"]) / "codex-recovery").exists()
+
+
+def test_symlinked_receipt_fallback_is_not_written(recovery, context):
+    payload, env = context
+    data = Path(env["CLAUDE_CONFIG_DIR"]) / "plugins/data"
+    data.mkdir(parents=True)
+    target = Path(env["HOME"]).parent / "external-data"
+    target.mkdir()
+    (data / "claudius").symlink_to(target, target_is_directory=True)
+    env.pop("CLAUDE_PLUGIN_DATA")
+    job(env, id="finished", status="completed", completedAt=NOW - 60)
+    assert "job=finished " in recovery.recovery_context(payload, env)
+    assert list(target.iterdir()) == []
+
+
+def test_expired_receipts_and_empty_session_dirs_are_pruned(recovery, context):
+    payload, env = context
+    root = Path(env["CLAUDE_CONFIG_DIR"]) / "plugins/data/claudius/codex-recovery"
+    env.pop("CLAUDE_PLUGIN_DATA")
+    old = root / ("a" * 64) / ("b" * 64)
+    old.parent.mkdir(parents=True)
+    old.touch()
+    expired = NOW - recovery.watchdog.TERMINAL_JOB_RETENTION_SECS - 1
+    os.utime(old, (expired, expired))
+    os.utime(old.parent, (expired, expired))
+    fresh = root / ("c" * 64) / ("d" * 64)
+    fresh.parent.mkdir()
+    fresh.touch()
+    os.utime(fresh, (NOW, NOW))
+    assert recovery.recovery_context(payload, env) == ""
+    assert not old.parent.exists()
+    assert fresh.exists()
+
+
+def test_receipt_pruning_has_a_scan_limit(recovery, context, monkeypatch):
+    payload, env = context
+    env.pop("CLAUDE_PLUGIN_DATA")
+    directory = (
+        Path(env["CLAUDE_CONFIG_DIR"])
+        / "plugins/data/claudius/codex-recovery"
+        / ("a" * 64)
+    )
+    directory.mkdir(parents=True)
+    for index in range(12):
+        path = directory / f"{index:064x}"
+        path.touch()
+        expired = NOW - recovery.watchdog.TERMINAL_JOB_RETENTION_SECS - 1
+        os.utime(path, (expired, expired))
+    monkeypatch.setattr(recovery, "MAX_PRUNE_ENTRIES", 5, raising=False)
+    assert recovery.recovery_context(payload, env) == ""
+    assert 7 <= len(list(directory.iterdir())) < 12
+
+
+def test_directory_in_place_of_receipt_keeps_finished_notice(recovery, context):
+    payload, env = context
+    root = Path(env["CLAUDE_CONFIG_DIR"]) / "plugins/data/claudius"
+    env["CLAUDE_PLUGIN_DATA"] = str(root)
+    job(env, id="finished", status="completed", completedAt=NOW - 60)
+    assert "job=finished " in recovery.recovery_context(payload, env)
+    (receipt,) = (root / "codex-recovery").glob("*/*")
+    receipt.unlink()
+    receipt.mkdir()
+    assert "job=finished " in recovery.recovery_context(payload, env)
+
+
+def test_symlinked_receipt_store_is_not_pruned_or_written(recovery, context):
+    payload, env = context
+    data = Path(env["CLAUDE_CONFIG_DIR"]) / "plugins/data/claudius"
+    data.mkdir(parents=True)
+    target = Path(env["HOME"]).parent / "external-data"
+    old = target / ("a" * 64) / ("b" * 64)
+    old.parent.mkdir(parents=True)
+    old.touch()
+    expired = NOW - recovery.watchdog.TERMINAL_JOB_RETENTION_SECS - 1
+    os.utime(old, (expired, expired))
+    os.utime(old.parent, (expired, expired))
+    (data / "codex-recovery").symlink_to(target, target_is_directory=True)
+    env.pop("CLAUDE_PLUGIN_DATA")
+    job(env, id="finished", status="completed", completedAt=NOW - 60)
+    assert "job=finished " in recovery.recovery_context(payload, env)
+    assert list(target.glob("*/*")) == [old]

@@ -117,7 +117,7 @@ Monitor(timeout_ms=1800000, description="agent stall watchdog",
 
 `timeout_ms` caps at 1800000 ms (30 minutes); the Monitor then ends with one expiry notice. Re-arm on expiry only while dispatched work is live; also re-arm after resume/compaction if no watchdog survived.
 
-Allow-list once in user settings: `Bash(python3 */scripts/minion-monitoring.py *)` (a glob, because the installed plugin path changes with every version). Tune `--stall-secs` to expected build duration (cold Rust builds: 600+); point `--worktrees`/`$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root (also feeds Codex job discovery). `TaskStop` it when the wave completes.
+Allow-list once in user settings: `Bash(python3 */scripts/minion-monitoring.py *)` (a glob, because the installed plugin path changes with every version). Tune `--stall-secs` to expected build duration (cold Rust builds: 600+); point `--worktrees`/`$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root for Claude activity clocks. `TaskStop` it when the wave completes.
 
 **Load `references/stall-watchdog.md` before the first dispatch** — discovery sources, event grammar (`STALL`/`RESUMED`/`GONE`/`CODEX_*`), Multi-Session Hygiene traps, orphan-pane cleanup, and the mandatory STALL/GONE playbooks. Never improvise a response to those events without it.
 

@@ -36,6 +36,8 @@ MAX_ORPHANS = 5
 MAX_FINISHED = 5
 MAX_SCAN_JOBS = 256
 METADATA_BUDGET_SECS = 0.5
+MAX_PRUNE_ENTRIES = 256
+PRUNE_BUDGET_SECS = 0.05
 PROC_ROOT = Path("/proc")
 
 
@@ -74,27 +76,95 @@ def printable(value: Any) -> bool:
     return isinstance(value, str) and 0 < len(value) <= 4096 and value.isprintable()
 
 
-def completion_receipt(env: dict, session: str, workspace: str, job_id: str) -> Path:
+def receipt_root(env: dict) -> Path | None:
+    """Use Claudius's own hook data dir, with a private fallback for manual runs."""
+    data = watchdog.claude_config_dir(env) / "plugins/data"
+    if not data.is_absolute():
+        return None
+    root = Path(env.get("CLAUDE_PLUGIN_DATA") or data / "claudius")
+    try:
+        if not (
+            root.is_absolute()
+            and root.parent.resolve() == data.resolve()
+            and (root.name == "claudius" or root.name.startswith("claudius-"))
+            and not root.is_symlink()
+        ):
+            root = data / "claudius"
+        receipts = root / "codex-recovery"
+        return None if root.is_symlink() or receipts.is_symlink() else receipts
+    except OSError:
+        return None
+
+
+def prune_receipts(root: Path | None, now: float) -> None:
+    """Bound best-effort expiry cleanup, including empty old session directories."""
+    if root is None:
+        return
+    cutoff = now - watchdog.TERMINAL_JOB_RETENTION_SECS
+    deadline = time.monotonic() + PRUNE_BUDGET_SECS
+    remaining = MAX_PRUNE_ENTRIES
+    try:
+        for owner in root.iterdir():
+            if remaining <= 0 or time.monotonic() >= deadline:
+                return
+            remaining -= 1
+            try:
+                if owner.is_symlink() or not owner.is_dir():
+                    continue
+                owner_mtime = owner.stat().st_mtime
+                for receipt in owner.iterdir():
+                    if remaining <= 0 or time.monotonic() >= deadline:
+                        return
+                    remaining -= 1
+                    if (
+                        not receipt.is_symlink()
+                        and receipt.is_file()
+                        and receipt.stat().st_mtime < cutoff
+                    ):
+                        receipt.unlink()
+                if owner_mtime < cutoff:
+                    owner.rmdir()
+            except OSError:
+                continue
+    except OSError:
+        pass
+
+
+def completion_receipt(
+    root: Path | None, session: str, workspace: str, job_id: str
+) -> Path | None:
     """Keep hook receipts separate from Codex's state, scoped to one session."""
-    root = Path(
-        env.get("CLAUDE_PLUGIN_DATA")
-        or watchdog.claude_config_dir(env) / "plugins/data/claudius"
-    )
+    if root is None:
+        return None
     owner = hashlib.sha256(session.encode()).hexdigest()
     job = hashlib.sha256(
         json.dumps([str(Path(workspace).resolve()), job_id]).encode()
     ).hexdigest()
-    return root / "codex-recovery" / owner / job
+    return root / owner / job
 
 
-def claim_completion(receipt: Path) -> bool:
-    """An exclusive empty receipt prevents concurrent hooks repeating a notice."""
+def receipt_exists(receipt: Path | None) -> bool:
     try:
-        receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        receipt.touch(mode=0o600, exist_ok=False)
-        return True
+        return receipt is not None and receipt.is_file()
     except OSError:
         return False
+
+
+def claim_completion(receipt: Path | None) -> bool:
+    """Deduplicate atomically when writable; keep notices visible on storage errors."""
+    if receipt is None:
+        return True
+    try:
+        receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    except OSError:
+        return True
+    try:
+        receipt.touch(mode=0o600, exist_ok=False)
+    except FileExistsError:
+        return not receipt_exists(receipt)
+    except OSError:
+        pass
+    return True
 
 
 def recovery_context(payload: dict, env: dict) -> str:
@@ -123,7 +193,9 @@ def recovery_context(payload: dict, env: dict) -> str:
     finished = []
     canonical_cwd = Path(cwd).resolve()
     now = time.time()
+    root = receipt_root(env)
     try:
+        prune_receipts(root, now)
         for path in recent_jobs(watchdog.codex_state_roots(env), now):
             job = read_json(path)
             if not isinstance(job, dict):
@@ -159,8 +231,8 @@ def recovery_context(payload: dict, env: dict) -> str:
                     completed is not None
                     and now - watchdog.TERMINAL_JOB_RETENTION_SECS <= completed <= now
                 ):
-                    receipt = completion_receipt(env, session, workspace, job_id)
-                    if receipt.exists():
+                    receipt = completion_receipt(root, session, workspace, job_id)
+                    if receipt_exists(receipt):
                         continue
                     collect = shlex.join(
                         [
@@ -220,7 +292,7 @@ def recovery_context(payload: dict, env: dict) -> str:
                 if len(notices) < MAX_FINISHED:
                     if claim_completion(receipt):
                         notices.append(notice)
-                elif not receipt.exists():
+                elif not receipt_exists(receipt):
                     remaining += 1
         except DeadlineExpired:
             pass

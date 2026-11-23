@@ -2350,16 +2350,6 @@ class Watchdog:
                 "state; dispatch a named teammate or verify --worktrees, "
                 "--session-id, and the monitor working directory.",
             )
-        elif team is not None and not codex_candidates and scan.workspace_count == 0:
-            self.warn_once(
-                "codex-zero-candidates",
-                "Codex Source D: a team config with no active member or lead cwd, "
-                "and no discovered agent worktrees — 0 candidate workspaces to "
-                "scan this poll; Codex job monitoring is effectively disabled "
-                "(dispatch a NAMED teammate that reports a cwd, or verify "
-                "--worktrees points at where Codex worktrees actually live, if "
-                "Codex jobs are expected).",
-            )
         if effective_session:
             events.extend(
                 self.codex.evaluate(

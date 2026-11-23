@@ -1491,11 +1491,11 @@ def test_watchdog_warns_once_when_codex_has_zero_candidates(
     )
 
 
-def test_watchdog_zero_candidates_warning_names_the_real_cause(
+def test_watchdog_without_candidates_keeps_store_discovery_enabled(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A team lacking any usable cwd is not blamed on a missing team config."""
+    """No mapped cwd is required for session-owned Codex discovery."""
     home = tmp_path / "home"
     worktrees = tmp_path / "worktrees"
     worktrees.mkdir()
@@ -1532,10 +1532,9 @@ def test_watchdog_zero_candidates_warning_names_the_real_cause(
     assert monitor.poll_once(now=100) == []
 
     err = capsys.readouterr().err
-    assert "codex-zero-candidates" in monitor.warned
-    assert "no team config" not in err
-    assert "a team config with no active member or lead cwd" in err
-    assert "dispatch a NAMED teammate that reports a cwd" in err
+    assert "codex-zero-candidates" not in monitor.warned
+    assert "Codex job monitoring is effectively disabled" not in err
+    assert "--worktrees points at where Codex worktrees" not in err
 
 
 def test_watchdog_poll_combines_claude_and_codex_edges(tmp_path: Path) -> None:
