@@ -42,7 +42,6 @@ Names are optional identities. In Claude, dispatch the `claudius:<identity>` age
 | Smythe | `security-best-practices` — audit pass |
 | Adams | `review-changes` — global-optimum and reuse pass |
 | Marvin | `review-changes` — requirements, correctness, and consistency pass |
-| Aga (Agnieszka) | `review-changes` — Reviewer pass on Google Antigravity, no agent type: `delegate` § External Antigravity reviewer |
 
 **Bilby builds, Marvin breaks.** Marvin reports findings but NEVER fixes; fixes go back to Bilby (SendMessage if still running, else a new spawn).
 

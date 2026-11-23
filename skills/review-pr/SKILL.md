@@ -6,7 +6,7 @@ allowed-tools: Read, Grep, Glob, Write, Bash(gh pr comment *), Bash(gh pr view *
 
 # PR Audit Workflow
 
-Run in the coordinator context. Arguments: `<PR> [basic|full]`; default **basic**, with explicit full/grumpy requests selecting **full**. Mode semantics belong to [review-changes](../review-changes/SKILL.md). `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) is the resolved plugin installation root.
+Run in the coordinator context. Arguments: `<PR> [basic|full]`; default **basic**; explicit full/grumpy requests select **full**, and a caller's mode (e.g. `git-and-github` § Creating a PR) overrides the default. Mode semantics belong to [review-changes](../review-changes/SKILL.md). `<plugin-root>` in [pr-review.md](../git-and-github/references/pr-review.md) is the resolved plugin installation root.
 
 ## 1. Gather PR Context
 
