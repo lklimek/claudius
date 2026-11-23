@@ -215,10 +215,9 @@ def comment_assessment_errors(report: dict, ids: dict | None = None) -> list[str
     errors = []
     rows = {row["id"]: row for row in report.get("comment_assessments", [])}
     offered_kinds = {}
-    if (
-        ids is not None
-        and report.get("metadata", {}).get("input_mode") == "host_supplied"
-    ):
+    if ids is not None:
+        if report.get("metadata", {}).get("input_mode") != "host_supplied":
+            errors.append("--ids requires metadata.input_mode: host_supplied")
         for item in ids["items"]:
             key = item["key"]
             kind = item.get("source_kind")
@@ -257,10 +256,20 @@ def comment_assessment_errors(report: dict, ids: dict | None = None) -> list[str
                 )
             elif target["source_kind"] not in {"inline", "review_body", "pr_comment"}:
                 errors.append(f"{rid}: merged_into must reference an assessed item")
-            elif row["comment_url"] not in target.get("merged_urls", []):
-                errors.append(
-                    f"{rid}: canonical row {target_id} must list the duplicate in merged_urls"
-                )
+            else:
+                if row["comment_url"] not in target.get("merged_urls", []):
+                    errors.append(
+                        f"{rid}: canonical row {target_id} must list the duplicate in merged_urls"
+                    )
+                thread_id = row.get("thread_id")
+                if (
+                    thread_id is not None
+                    and thread_id != target.get("thread_id")
+                    and thread_id not in target.get("merged_thread_ids", [])
+                ):
+                    errors.append(
+                        f"{rid}: canonical row {target_id} must list the duplicate in merged_thread_ids"
+                    )
     return errors
 
 
@@ -391,6 +400,8 @@ def main() -> int:
         "--ids", type=Path, help="Host ids.json to check reused source kinds"
     )
     args = parser.parse_args()
+    if args.ids is not None and args.producer:
+        parser.error("--ids cannot be used with --producer")
 
     ids = None
     if args.ids is not None:
@@ -405,7 +416,7 @@ def main() -> int:
                     or not isinstance(item.get("id"), str)
                     or not isinstance(item.get("key"), str)
                     or (
-                        "source_kind" in item
+                        item.get("source_kind") is not None
                         and (
                             not isinstance(item["source_kind"], str)
                             or item["source_kind"] not in kinds

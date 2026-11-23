@@ -57,11 +57,11 @@ def errors(report):
     return list(VALIDATOR.iter_errors(report))
 
 
-def run_validator(report, tmp_path):
+def run_validator(report, tmp_path, *args):
     path = tmp_path / "report.json"
     path.write_text(json.dumps(report))
     return subprocess.run(
-        [sys.executable, str(ROOT / "scripts/validate_report.py"), str(path)],
+        [sys.executable, str(ROOT / "scripts/validate_report.py"), str(path), *args],
         capture_output=True,
         text=True,
     )
@@ -601,12 +601,14 @@ def test_pdf_keeps_description_links_and_recorded_author(host, tmp_path, monkeyp
         ("comment:103:1", "pr_comment"),
     ],
 )
-@pytest.mark.parametrize("explicit", [False, True])
+@pytest.mark.parametrize("explicit", [False, True, None])
 def test_host_reused_item_cannot_become_status(host, tmp_path, key, kind, explicit):
     item = next(r for r in host["comment_assessments"] if r["source_kind"] == kind)
     offered = {"id": item["id"], "key": key}
     if explicit:
         offered["source_kind"] = kind
+    elif explicit is None:
+        offered["source_kind"] = None
     ids_path = tmp_path / "ids.json"
     ids_path.write_text(json.dumps({"next_id": 1001, "items": [offered]}))
     report_path = tmp_path / "report.json"
@@ -625,6 +627,26 @@ def test_host_reused_item_cannot_become_status(host, tmp_path, key, kind, explic
     bad = subprocess.run(command, capture_output=True, text=True)
     assert bad.returncode == 1
     assert item["id"] in bad.stderr and "source_kind" in bad.stderr
+
+
+@pytest.mark.parametrize("mode", [None, "fetched"])
+def test_ids_require_host_supplied_mode(host, tmp_path, mode):
+    host["metadata"].pop("input_mode")
+    if mode is not None:
+        host["metadata"]["input_mode"] = mode
+    ids_path = tmp_path / "ids.json"
+    ids_path.write_text(json.dumps({"items": []}))
+    result = run_validator(host, tmp_path, "--ids", str(ids_path))
+    assert result.returncode == 1
+    assert "input_mode" in result.stderr and "host_supplied" in result.stderr
+
+
+def test_ids_cannot_be_ignored_in_producer_mode(tmp_path):
+    ids_path = tmp_path / "ids.json"
+    ids_path.write_text(json.dumps({"items": []}))
+    result = run_validator([], tmp_path, "--ids", str(ids_path), "--producer")
+    assert result.returncode == 2
+    assert "--ids" in result.stderr and "--producer" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -695,6 +717,67 @@ def test_cross_source_duplicate_keeps_a_row_without_a_second_finding(host, tmp_p
     assert run_validator(host, tmp_path).returncode == 0
     assert duplicate["comment_url"] in canonical["merged_urls"]
     assert "finding_id" not in duplicate
+
+
+@pytest.mark.parametrize("missing", ["thread", "both", "none", "same_thread"])
+def test_merged_inline_thread_is_preserved(host, tmp_path, missing):
+    canonical, duplicate = merged_source(host)
+    duplicate.update(source_kind="inline", thread_id="PRRT_duplicate")
+    if missing == "both":
+        canonical.pop("merged_urls")
+    elif missing == "none":
+        canonical["merged_thread_ids"] = [duplicate["thread_id"]]
+    elif missing == "same_thread":
+        canonical["thread_id"] = duplicate["thread_id"]
+    assert errors(host) == []
+    result = run_validator(host, tmp_path)
+    if missing in {"none", "same_thread"}:
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode == 1
+        assert "merged_thread_ids" in result.stderr
+        assert duplicate["id"] in result.stderr and canonical["id"] in result.stderr
+        if missing == "both":
+            assert "merged_urls" in result.stderr
+
+
+@pytest.mark.parametrize("renderer", [grr.render_html, grr.render_triage])
+def test_merged_rows_link_to_canonical_and_have_a_separate_filter(host, renderer):
+    canonical, duplicate = merged_source(host)
+    soup = BeautifulSoup(renderer(host), "html.parser")
+    rendered = soup.select_one(f"#assessment-{duplicate['id']}")
+    assert rendered["data-assessment"] == "merged"
+    badge = rendered.select_one(".assessment-badge")
+    assert badge.get_text(strip=True) == f"Merged into {canonical['id']}"
+    assert badge.select_one("a")["href"] == f"#assessment-{canonical['id']}"
+    assert soup.select_one('#assessment-filter option[value="merged"]').text == "Merged"
+    assert soup.select_one("#assessment-CMT-005")["data-assessment"] == "context"
+
+
+def test_markdown_merged_row_names_canonical(host):
+    canonical, duplicate = merged_source(host)
+    rendered = grr.render_markdown(host).split(f"### {duplicate['id']}", 1)[1]
+    assert f"**Assessment:** Merged into {canonical['id']}" in rendered
+    assert "**Assessment:** Context" not in rendered
+
+
+def test_pdf_merged_row_names_canonical(host, tmp_path, monkeypatch):
+    from reportlab.platypus import SimpleDocTemplate
+
+    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "matplotlib"))
+    canonical, duplicate = merged_source(host)
+    captured = []
+    build = SimpleDocTemplate.build
+
+    def capture(doc, story, *args, **kwargs):
+        captured.extend(getattr(part, "text", "") for part in story)
+        return build(doc, story, *args, **kwargs)
+
+    monkeypatch.setattr(SimpleDocTemplate, "build", capture)
+    grr.render_pdf(host, tmp_path / "merged.pdf")
+    rendered = captured[captured.index(duplicate["id"]) :]
+    assert f"Merged into {canonical['id']}" in rendered
+    assert "Context" not in rendered
 
 
 @pytest.mark.parametrize(
