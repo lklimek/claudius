@@ -30,7 +30,7 @@ import json
 import math
 import os
 from collections import Counter, OrderedDict, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 import re
@@ -146,7 +146,7 @@ class Team:
     lead_cwd: Path | None = None
     members: tuple[Member, ...] = ()
     created_at: float = 0.0
-    session_ids: frozenset[str] = frozenset()
+    inactive_members: tuple[Member, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -245,7 +245,7 @@ def _is_agent_worktree_dir(path: Path) -> bool:
     )
 
 
-def safe_json(path: Path) -> Any | None:
+def safe_json(path: Path, *, quiet: bool = False) -> Any | None:
     """Read JSON defensively, returning None for transient failures."""
     signature: tuple[int, int] | None = None
     try:
@@ -257,12 +257,13 @@ def safe_json(path: Path) -> Any | None:
         with path.open("rb") as handle:
             payload = handle.read(JSON_FILE_LIMIT + 1)
         if len(payload) > JSON_FILE_LIMIT:
-            print(
-                f"minion-monitoring: JSON file {path} exceeds the "
-                f"{JSON_FILE_LIMIT}-byte read limit; skipped",
-                file=sys.stderr,
-                flush=True,
-            )
+            if not quiet:
+                print(
+                    f"minion-monitoring: JSON file {path} exceeds the "
+                    f"{JSON_FILE_LIMIT}-byte read limit; skipped",
+                    file=sys.stderr,
+                    flush=True,
+                )
             _JSON_REJECTIONS[path] = signature
             while len(_JSON_REJECTIONS) > JSON_REJECTION_LIMIT:
                 _JSON_REJECTIONS.popitem(last=False)
@@ -373,21 +374,20 @@ def parse_team(config_path: Path) -> Team | None:
     if not isinstance(value, dict):
         return None
     members: list[Member] = []
-    session_ids: set[str] = set()
+    inactive_members: list[Member] = []
     lead_cwd: Path | None = None
     for raw in value.get("members", []):
         if not isinstance(raw, dict):
             continue
-        if isinstance(raw.get("sessionId"), str) and raw["sessionId"]:
-            session_ids.add(raw["sessionId"])
         if raw.get("agentType") == "team-lead":
             if raw.get("cwd"):
                 lead_cwd = Path(str(raw["cwd"]))
             continue
-        if raw.get("isActive") is not True or not raw.get("name"):
+        if not raw.get("name"):
             continue
         cwd = Path(str(raw["cwd"])) if raw.get("cwd") else None
-        members.append(
+        target = members if raw.get("isActive") is True else inactive_members
+        target.append(
             Member(
                 name=str(raw["name"]),
                 cwd=cwd,
@@ -410,7 +410,7 @@ def parse_team(config_path: Path) -> Team | None:
         lead_cwd=lead_cwd,
         members=tuple(members),
         created_at=created_at,
-        session_ids=frozenset(session_ids),
+        inactive_members=tuple(inactive_members),
     )
 
 
@@ -660,34 +660,83 @@ class ProcInspector:
         self.proc_root = proc_root
 
     @staticmethod
-    def _state(process: Path) -> str | None:
+    def _stat_fields(process: Path) -> list[str]:
         try:
-            fields = (
+            return (
                 (process / "stat")
                 .read_text(errors="replace")
                 .rpartition(")")[2]
                 .split()
             )
-            return fields[0] if fields else None
         except OSError:
-            return None
+            return []
+
+    def _state(self, process: Path) -> str | None:
+        fields = self._stat_fields(process)
+        return fields[0] if fields else None
 
     def monitor_running(self, session_id: str) -> bool | None:
-        """Find an exact session's surviving watchdog, with a cheap scan budget."""
+        """Find this Claude process's own watchdog, never an orphan or look-alike."""
         deadline = time.monotonic() + 0.1
+        uid = os.getuid()
+        parents: dict[int, tuple[str, int] | None] = {}
+
+        def lineage(pid: int) -> Iterable[int]:
+            seen: set[int] = set()
+            for _ in range(64):
+                if pid <= 1 or pid in seen or time.monotonic() >= deadline:
+                    return
+                seen.add(pid)
+                if pid not in parents:
+                    parents[pid] = None
+                    try:
+                        process = self.proc_root / str(pid)
+                        if process.stat().st_uid == uid:
+                            fields = self._stat_fields(process)
+                            if len(fields) >= 2:
+                                parents[pid] = (fields[0], int(fields[1]))
+                    except (OSError, ValueError):
+                        pass
+                info = parents[pid]
+                if info is None or info[0] == "Z":
+                    return
+                yield pid
+                pid = info[1]
+
+        claude_pid = None
+        for pid in lineage(os.getppid()):
+            argv = _try_read_cmdline(self.proc_root / str(pid) / "cmdline") or []
+            if argv and (
+                _basename(argv[0]) in {"claude", "claude-code"}
+                or (
+                    len(argv) > 1
+                    and _basename(argv[0]) in {"node", "bun"}
+                    and "/claude-code/" in argv[1]
+                    and _basename(argv[1]) in {"cli.js", "claude"}
+                )
+            ):
+                claude_pid = pid
+                break
+        if claude_pid is None:
+            return None
         try:
             for process in self.proc_root.iterdir():
                 if time.monotonic() >= deadline:
                     return None
-                if not process.name.isdigit():
+                if not process.name.isdigit() or process.stat().st_uid != uid:
                     continue
                 argv = _try_read_cmdline(process / "cmdline") or []
-                if not any(_basename(arg) == "minion-monitoring.py" for arg in argv):
+                if (
+                    len(argv) < 4
+                    or not re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", _basename(argv[0]))
+                    or Path(argv[1]).name != "minion-monitoring.py"
+                    or Path(argv[1]).parent.name != "scripts"
+                ):
                     continue
                 if any(
                     argv[index : index + 2] == ["--session-id", session_id]
                     for index in range(len(argv))
-                ) and self._state(process) not in {None, "Z"}:
+                ) and claude_pid in lineage(int(process.name)):
                     return True
         except OSError:
             return None
@@ -831,9 +880,34 @@ def claude_config_dir(env: Mapping[str, str] | None = None) -> Path:
     return Path(environment.get("CLAUDE_CONFIG_DIR") or home / ".claude")
 
 
+def codex_state_roots(env: Mapping[str, str] | None = None) -> tuple[Path, ...]:
+    """Discover Codex marketplace stores only beneath Claude's private data root."""
+    environment = os.environ if env is None else env
+    data = claude_config_dir(environment) / "plugins/data"
+    canonical = data / "codex-openai-codex/state"
+    try:
+        roots = sorted(
+            path / "state"
+            for path in data.glob("codex-*")
+            if path.is_dir()
+            and not path.is_symlink()
+            and (path / "state").is_dir()
+            and not (path / "state").is_symlink()
+        )
+    except OSError:
+        roots = []
+    exported = Path(environment.get("CLAUDE_PLUGIN_DATA") or data / "unused")
+    preferred = exported / "state"
+    if exported.parent != data or preferred not in roots:
+        preferred = canonical
+    return tuple(sorted(roots, key=lambda root: (root != preferred, root))) or (
+        canonical,
+    )
+
+
 def codex_state_root(env: Mapping[str, str] | None = None) -> Path:
-    """Resolve Claude Code's Codex store independently of other plugin exports."""
-    return claude_config_dir(env) / "plugins/data/codex-openai-codex/state"
+    """Resolve the preferred workspace store, while discovery searches all stores."""
+    return codex_state_roots(env)[0]
 
 
 def resolve_workspace(
@@ -884,7 +958,12 @@ class _JsonCache:
         self.items: OrderedDict[Path, tuple[tuple[int, int], Any]] = OrderedDict()
 
     def read(
-        self, path: Path, projector: Callable[[Any], Any] | None = None
+        self,
+        path: Path,
+        projector: Callable[[Any], Any] | None = None,
+        *,
+        keep: Callable[[Any], bool] | None = None,
+        quiet: bool = False,
     ) -> Any | None:
         try:
             stat = path.stat()
@@ -894,13 +973,18 @@ class _JsonCache:
             return None
         cached = self.items.get(path)
         if cached and cached[0] == signature:
+            if keep is not None and not keep(cached[1]):
+                self.items.pop(path, None)
+                return cached[1]
             self.items.move_to_end(path)
             return cached[1]
-        value = safe_json(path)
+        value = safe_json(path, quiet=True) if quiet else safe_json(path)
         if value is None:
             return None
         if projector is not None:
             value = projector(value)
+        if keep is not None and not keep(value):
+            return value
         self.items[path] = (signature, value)
         self.items.move_to_end(path)
         while len(self.items) > self.limit:
@@ -1022,6 +1106,8 @@ class CodexScanner:
         workspace_key: str,
         now: float | None,
         warnings: list[tuple[str, str]],
+        *,
+        warn: bool = True,
     ) -> list[Path]:
         glob_start = time.monotonic()
         try:
@@ -1029,7 +1115,7 @@ class CodexScanner:
         except OSError:
             paths = []
         glob_elapsed = time.monotonic() - glob_start
-        if glob_elapsed > JOBS_GLOB_WARN_SECS:
+        if warn and glob_elapsed > JOBS_GLOB_WARN_SECS:
             self._warning(
                 f"codex-jobs-glob-slow:{workspace_key}",
                 f"Codex job enumeration for {workspace_key} took "
@@ -1045,7 +1131,7 @@ class CodexScanner:
             path for path, mtime in mtimes if mtime is not None and mtime >= cutoff
         ]
         skipped = len(paths) - len(recent)
-        if skipped:
+        if warn and skipped:
             self._warning(
                 f"codex-jobs-recency:{workspace_key}",
                 f"Codex state {workspace_key} skipped {skipped} job file(s) "
@@ -1060,6 +1146,18 @@ class CodexScanner:
             return Path(value).resolve(strict=True)
         except (OSError, ValueError):
             return Path(os.path.realpath(value))
+
+    def _owned_job(self, raw: Any, sessions: Iterable[str]) -> bool:
+        if not isinstance(raw, dict):
+            return False
+        session = raw.get("sessionId")
+        return (
+            session in (None, "")
+            and raw.get("workspaceRoot") == self.env.get("PWD", str(Path.cwd()))
+        ) or (
+            isinstance(session, str)
+            and any(_prefix_matches(session, item) for item in sessions)
+        )
 
     def _direct_workspaces(
         self,
@@ -1077,11 +1175,11 @@ class CodexScanner:
                 continue
         if not allowed and not session_ids:
             return []
-        state_root = codex_state_root(self.env)
         allowed_hashes = {sha256_path(canonical) for canonical in allowed}
         try:
             state_dirs = sorted(
                 path
+                for state_root in codex_state_roots(self.env)
                 for path in state_root.iterdir()
                 if path.is_dir()
                 and not path.is_symlink()
@@ -1097,25 +1195,28 @@ class CodexScanner:
             return []
         discovered: dict[Path, WorkspaceInfo] = {}
         for state_dir in state_dirs:
-            for job_path in self._job_paths(state_dir, state_dir.name, now, warnings):
+            for job_path in self._job_paths(
+                state_dir, state_dir.name, now, warnings, warn=False
+            ):
                 try:
-                    raw = self.cache.read(job_path, self._minimal_job)
-                    if not isinstance(raw, dict):
+                    raw = self.cache.read(
+                        job_path,
+                        self._minimal_job,
+                        quiet=True,
+                        keep=lambda value: self._owned_job(value, session_ids or ()),
+                    )
+                    if not self._owned_job(raw, session_ids or ()):
                         continue
                     workspace_root = raw.get("workspaceRoot")
                     if not isinstance(workspace_root, str) or not workspace_root:
                         continue
                     canonical = self._canonical_workspace(workspace_root)
-                    if canonical not in allowed and raw.get("sessionId") not in (
-                        session_ids or set()
-                    ):
-                        continue
                     root = Path(workspace_root)
                     expected_key = workspace_key(root, canonical)
                     if state_dir.name != expected_key:
                         continue
                     discovered.setdefault(
-                        canonical,
+                        state_dir,
                         WorkspaceInfo(
                             root, canonical, state_dir.name, state_dir, direct=True
                         ),
@@ -1155,17 +1256,18 @@ class CodexScanner:
             except OSError:
                 continue
             info = resolve_workspace(candidate, self.env)
-            workspaces.setdefault(info.canonical, info)
+            workspaces.setdefault(info.state_dir, info)
         for info in self._direct_workspaces(
             discovery_candidates, now, warnings, allowed_sessions
         ):
-            workspaces[info.canonical] = info
+            workspaces[info.state_dir] = info
 
         raw_by_workspace: list[
             tuple[
                 WorkspaceInfo,
                 list[tuple[Path, dict[str, Any]]],
                 int | None,
+                int,
             ]
         ] = []
         sessions: set[str] = set()
@@ -1204,10 +1306,23 @@ class CodexScanner:
                 )
                 continue
             jobs: list[tuple[Path, dict[str, Any]]] = []
+            workspace_active_count = 0
             for job_path in self._job_paths(info.state_dir, info.key, now, warnings):
                 try:
-                    raw = self.cache.read(job_path, self._minimal_job)
+                    raw = self.cache.read(
+                        job_path,
+                        self._minimal_job,
+                        keep=lambda value: self._owned_job(value, allowed_sessions),
+                    )
                     if not isinstance(raw, dict):
+                        continue
+                    persisted_status = raw.get("status")
+                    if (
+                        isinstance(persisted_status, str)
+                        and persisted_status in ACTIVE_STATUSES
+                    ):
+                        workspace_active_count += 1
+                    if not self._owned_job(raw, allowed_sessions):
                         continue
                     workspace_root = raw.get("workspaceRoot")
                     if not isinstance(workspace_root, str) or not workspace_root:
@@ -1268,15 +1383,16 @@ class CodexScanner:
                         f"{type(error).__name__} during scanning; job skipped",
                         warnings,
                     )
-            raw_by_workspace.append((info, jobs, safe_mtime(state_path)))
-
-        session = self._session(effective_session, sessions, warnings)
-        allowed_sessions = {session, *teammate_sessions} - {""}
-        records: list[CodexRecord] = []
-        for info, jobs, state_mtime in raw_by_workspace:
-            workspace_active_count = sum(
-                raw.get("status") in ACTIVE_STATUSES for _, raw in jobs
+            raw_by_workspace.append(
+                (info, jobs, safe_mtime(state_path), workspace_active_count)
             )
+
+        allowed_sessions = {
+            self._session(requested, sessions, warnings)
+            for requested in allowed_sessions
+        } - {""}
+        records: list[CodexRecord] = []
+        for info, jobs, state_mtime, workspace_active_count in raw_by_workspace:
             matching: list[tuple[Path, dict[str, Any], str]] = []
             for job_path, raw in jobs:
                 try:
@@ -2164,14 +2280,25 @@ class Watchdog:
         codex_records: Iterable[CodexRecord] = ()
         scan = ScanResult([])
         if effective_session:
+            dispatch_transcripts = transcripts
+            if team and team.inactive_members:
+                dispatch_team = replace(
+                    team, members=team.members + team.inactive_members
+                )
+                dispatch_transcripts = transcripts | member_transcripts(
+                    dispatch_team, self.options.projects_dir, set(selection.other_leads)
+                )
+            teammate_sessions = {
+                _agent_setting(path)[1] for path in dispatch_transcripts.values()
+            }
+            if team and self.options.session_id:
+                teammate_sessions.add(self.options.session_id)
             scan = self.scanner.scan(
                 codex_candidates,
                 effective_session,
                 epoch,
                 discovery_candidates=[self.session_cwd, *source_c],
-                teammate_sessions=(team.session_ids | {self.options.session_id})
-                if team
-                else (),
+                teammate_sessions=teammate_sessions - {""},
             )
             for warning_key, message in scan.warnings:
                 self.warn_once(warning_key, message)
@@ -2326,7 +2453,11 @@ def dump_job(job_id: str, env: Mapping[str, str] | None = None) -> int:
     """Print every Codex job record matching an id and return its exit status."""
     state_root = codex_state_root(env)
     try:
-        matches = sorted(state_root.glob(f"*/jobs/{job_id}.json"))
+        matches = sorted(
+            path
+            for root in codex_state_roots(env)
+            for path in root.glob(f"*/jobs/{job_id}.json")
+        )
     except OSError as error:
         print(
             f"minion-monitoring: unable to search for job {job_id!r} under "

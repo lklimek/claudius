@@ -33,6 +33,12 @@ def context(tmp_path, recovery, monkeypatch):
     proc.mkdir()
     monkeypatch.setattr(recovery, "PROC_ROOT", proc, raising=False)
     monkeypatch.setattr(time, "time", lambda: NOW)
+    monkeypatch.setattr(os, "getppid", lambda: 101)
+    for pid, parent, argv in ((100, 1, b"/opt/claude\0"), (101, 100, b"bash\0hook\0")):
+        process = proc / str(pid)
+        process.mkdir()
+        (process / "stat").write_text(f"{pid} (process) S {parent} " + "0 " * 19)
+        (process / "cmdline").write_bytes(argv)
 
     env = {
         "HOME": str(tmp_path / "home"),
@@ -66,11 +72,13 @@ def job(env, *, epoch=NOW, filename=None, **fields):
     return path
 
 
-def fake_process(recovery, context, pid, *, state="S", command="codex-companion.mjs"):
+def fake_process(
+    recovery, context, pid, *, state="S", command="codex-companion.mjs", parent=100
+):
     payload, _ = context
     process = recovery.PROC_ROOT / str(pid)
     process.mkdir()
-    (process / "stat").write_text(f"{pid} (worker) {state} " + "0 " * 20)
+    (process / "stat").write_text(f"{pid} (worker) {state} {parent} " + "0 " * 19)
     (process / "cmdline").write_bytes(
         f"node\0/plugin/{command}\0task-worker\0".encode()
     )
@@ -420,7 +428,7 @@ def test_surviving_watchdog_suppresses_only_its_session_reminder(
     job(env)
     fake_process(recovery, context, 999, command="minion-monitoring.py", state=state)
     (recovery.PROC_ROOT / "999/cmdline").write_bytes(
-        f"python3\0/plugin/minion-monitoring.py\0--session-id\0{monitor_session}\0".encode()
+        f"python3\0/plugin/scripts/minion-monitoring.py\0--session-id\0{monitor_session}\0".encode()
     )
     output = recovery.recovery_context(payload, env)
     assert "job=orphan " in output and "Recovery:" in output
@@ -449,7 +457,7 @@ def test_live_job_with_surviving_watchdog_is_silent(recovery, context):
     fake_process(recovery, context, 777)
     fake_process(recovery, context, 999, command="minion-monitoring.py")
     (recovery.PROC_ROOT / "999/cmdline").write_bytes(
-        b"python3\0/plugin/minion-monitoring.py\0--session-id\0current-session\0"
+        b"python3\0/plugin/scripts/minion-monitoring.py\0--session-id\0current-session\0"
     )
     assert recovery.recovery_context(payload, env) == ""
 
@@ -470,7 +478,7 @@ def test_unreadable_watchdog_state_keeps_reminder(recovery, context):
     job(env)
     fake_process(recovery, context, 999, command="minion-monitoring.py")
     (recovery.PROC_ROOT / "999/cmdline").write_bytes(
-        b"python3\0/plugin/minion-monitoring.py\0--session-id\0current-session\0"
+        b"python3\0/plugin/scripts/minion-monitoring.py\0--session-id\0current-session\0"
     )
     (recovery.PROC_ROOT / "999/stat").unlink()
     assert "Monitor(" in recovery.recovery_context(payload, env)
@@ -484,3 +492,90 @@ def test_invalid_completion_clock_does_not_hide_orphans(recovery, context, compl
     job(env, id="dead")
     job(env, id="finished", status="completed", completedAt=completed)
     assert "job=dead " in recovery.recovery_context(payload, env)
+
+
+def watchdog_process(recovery, context, *, argv=None, parent=100):
+    fake_process(recovery, context, 999, command="minion-monitoring.py", parent=parent)
+    arguments = argv or [
+        "python3",
+        "/plugin/scripts/minion-monitoring.py",
+        "--session-id",
+        "current-session",
+    ]
+    (recovery.PROC_ROOT / "999/cmdline").write_bytes(
+        "\0".join(arguments).encode() + b"\0"
+    )
+
+
+def test_finished_jobs_are_silent_while_this_claude_watchdog_runs(recovery, context):
+    payload, env = context
+    job(env, id="finished", status="completed", completedAt=NOW - 5400)
+    watchdog_process(recovery, context)
+    assert recovery.recovery_context(payload, env) == ""
+
+
+def test_truncated_finished_jobs_report_the_remaining_count(recovery, context):
+    payload, env = context
+    for index in range(12):
+        job(env, id=f"done-{index}", status="completed", completedAt=NOW - 5400)
+    output = recovery.recovery_context(payload, env)
+    assert output.count("Codex finished job=") == 5
+    assert "+7 more finished jobs" in output
+
+
+@pytest.mark.parametrize(
+    "case", ["argument", "other-user", "orphan", "other-claude", "shell"]
+)
+def test_unrelated_watchdog_lookalike_never_suppresses_reminder(
+    recovery, context, monkeypatch, case
+):
+    payload, env = context
+    job(env)
+    parent = 1 if case == "orphan" else 100
+    argv = (
+        [
+            "python3",
+            "-c",
+            "pass",
+            "minion-monitoring.py",
+            "--session-id",
+            "current-session",
+        ]
+        if case == "argument"
+        else None
+    )
+    if case == "shell":
+        argv = [
+            "bash",
+            "/plugin/scripts/minion-monitoring.py",
+            "--session-id",
+            "current-session",
+        ]
+    if case == "other-claude":
+        fake_process(recovery, context, 200, command="unused", parent=1)
+        (recovery.PROC_ROOT / "200/cmdline").write_bytes(b"claude\0")
+        parent = 200
+    watchdog_process(recovery, context, argv=argv, parent=parent)
+    if case == "other-user":
+        original_stat = Path.stat
+
+        def changed_owner(path, *args, **kwargs):
+            value = original_stat(path, *args, **kwargs)
+            if path == recovery.PROC_ROOT / "999":
+                from types import SimpleNamespace
+
+                return SimpleNamespace(st_uid=os.getuid() + 1)
+            return value
+
+        monkeypatch.setattr(Path, "stat", changed_owner)
+    assert "Monitor(" in recovery.recovery_context(payload, env)
+
+
+def test_watchdog_descendant_through_shell_suppresses_reminder(recovery, context):
+    payload, env = context
+    job(env, pid=777)
+    fake_process(recovery, context, 777)
+    fake_process(recovery, context, 102, command="unused", parent=100)
+    (recovery.PROC_ROOT / "102/cmdline").write_bytes(b"bash\0")
+    watchdog_process(recovery, context, parent=102)
+    assert recovery.recovery_context(payload, env) == ""

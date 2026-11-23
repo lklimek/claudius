@@ -50,11 +50,11 @@ def read_json(path: Path) -> Any:
         return None
 
 
-def recent_jobs(root: Path, now: float) -> list[Path]:
+def recent_jobs(roots: tuple[Path, ...], now: float) -> list[Path]:
     """Bound metadata time and JSON reads, prioritising recent job activity."""
     newest: list[tuple[float, Path]] = []
     deadline = time.monotonic() + METADATA_BUDGET_SECS
-    for path in root.glob("*/jobs/*.json"):
+    for path in (path for root in roots for path in root.glob("*/jobs/*.json")):
         if time.monotonic() >= deadline:
             break
         try:
@@ -97,9 +97,10 @@ def recovery_context(payload: dict, env: dict) -> str:
     orphan_count = 0
     reused_count = 0
     finished = []
+    finished_count = 0
     now = time.time()
     try:
-        for path in recent_jobs(watchdog.codex_state_root(env), now):
+        for path in recent_jobs(watchdog.codex_state_roots(env), now):
             job = read_json(path)
             if not isinstance(job, dict):
                 continue
@@ -133,8 +134,10 @@ def recovery_context(payload: dict, env: dict) -> str:
                 if (
                     completed is not None
                     and now - watchdog.TERMINAL_JOB_RETENTION_SECS <= completed <= now
-                    and len(finished) < MAX_FINISHED
                 ):
+                    finished_count += 1
+                    if len(finished) >= MAX_FINISHED:
+                        continue
                     collect = shlex.join(
                         [
                             "python3",
@@ -166,6 +169,10 @@ def recovery_context(payload: dict, env: dict) -> str:
         pass
     if not active and not finished:
         return ""
+    try:
+        monitor_running = proc.monitor_running(session)
+    except DeadlineExpired:
+        monitor_running = None
     lines = orphans
     issue_count = orphan_count + reused_count
     if issue_count > MAX_ORPHANS:
@@ -178,14 +185,15 @@ def recovery_context(payload: dict, env: dict) -> str:
         lines.append(
             f"Recovery: for absent/zombie PIDs only, read {shlex.quote(str(reference))} (cancel, then --resume-last with identical --cwd)."
         )
-    lines.extend(finished)
-    if not active:
-        return "\n".join(lines)
-    try:
-        monitor_running = proc.monitor_running(session)
-    except DeadlineExpired:
-        monitor_running = None
-    if monitor_running:
+    if not monitor_running:
+        if finished:
+            lines.append("Recent completions: check notes before collecting.")
+        lines.extend(finished)
+        if finished_count > MAX_FINISHED:
+            lines.append(
+                f"+{finished_count - MAX_FINISHED} more finished jobs; inspect jobs/*.json."
+            )
+    if not active or monitor_running:
         return "\n".join(lines)
     command = shlex.join(
         [

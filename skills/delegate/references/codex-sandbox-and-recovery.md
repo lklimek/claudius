@@ -68,7 +68,7 @@ If the fallback triggers, investigate these mechanics first.
 
 ## On-Disk Job State (for Monitoring)
 
-Under Claude Code, Codex job state lives under `plugins/data/codex-openai-codex/state/` beneath the configuration directory (`~/.claude`, or `CLAUDE_CONFIG_DIR` when set), one directory per workspace:
+Under Claude Code, Codex job state lives under `plugins/data/codex-<marketplace>/state/` beneath the configuration directory (`~/.claude`, or `CLAUDE_CONFIG_DIR` when set), one directory per workspace. The launcher follows its `CLAUDE_PLUGIN_DATA`; monitoring discovers installed Codex stores under that private data root, preferring a valid Codex export for workspace lookups:
 
 ```
 state/<workspace-slug>-<hash>/
