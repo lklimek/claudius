@@ -54,7 +54,7 @@ For every unresolved inline comment and review-body/PR-comment item (below), rea
 **Pre-analysis** — for every unresolved thread and every unresolved review-body/PR-comment item:
 
 - **Handled elsewhere?** Search shallowly (`--limit 10`) by keywords and paths: local branches and worktrees (`git for-each-ref`, `git worktree list`; uncommitted WIP via `git -C <worktree> status --short`, deliberately ungranted — a `git -C *` rule would also admit `-c <config>`), stacked/child and other open PRs (`gh pr list`, `gh search prs`), issues (`gh search issues`). Cite `#N`, `branch@SHA`, or `uncommitted WIP in <worktree>`.
-- **Earlier decisions**: honour decisions in the reply chain (e.g. "moved to #N", "deferred by maintainer").
+- **Earlier decisions**: honour decisions in the reply chain (e.g. "moved to #N", "deferred by maintainer"). Repeats of a decided concern: `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` § Previously decided.
 - **Duplicates**: merge threads and items about one problem into one ID, keeping every thread ID and source link.
 - **Architectural root cause?** Answer for every item: is the problem a symptom of a broader design flaw (wrong layer, missing abstraction, duplicated logic, leaky contract)? `no`, or the flaw with evidence and its other symptoms (`file:line`). If yes, recommend fixing the flaw (`follow-up PR` / `upstream issue`) over patching this symptom, unless the necessity gate keeps the symptom fix in scope.
 
@@ -111,7 +111,7 @@ A user decision rejecting or re-rating a comment as unimportant (or more importa
 
 ## Optional: Structured Report (on request only)
 
-Steps 5-7 run on an explicit report request or a request to save the comment table as a file. Ordinary tables stay in chat. File output defaults to one self-contained HTML; explicit format/layout requests win. Load `report-format` and its [comment assessment contract](../report-format/references/comment-assessments.md). Step 8 applies to both flows; file generation itself authorizes no GitHub actions.
+Steps 5-7 run on an explicit report request or a request to save the comment table as a file. Ordinary tables stay in chat. File output defaults to one self-contained HTML in a `<REPORT_DIR>` chosen per `review-changes` § 1 (mode `comments`); explicit format/layout requests win. Load `report-format` and its [comment assessment contract](../report-format/references/comment-assessments.md). Step 8 applies to both flows; file generation itself authorizes no GitHub actions.
 
 ## 5. Build Structured Report JSON
 
@@ -122,7 +122,7 @@ The report has the same structure as a `review-changes` report — one definitio
 ## 6. Validate Report
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py report.json
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py <REPORT_DIR>/report.json
 ```
 
 If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid data.
@@ -130,10 +130,10 @@ If validation fails, fix the JSON and re-validate. Do NOT proceed with invalid d
 ## 7. Render and Present
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py report.json --format html
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py <REPORT_DIR>/report.json --format html
 ```
 
-Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can also run `triage-findings report.json` for interactive triage of scored concerns; unscored context rows remain visible as evidence.
+Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can also run `triage-findings <REPORT_DIR>/report.json` for interactive triage of scored concerns; unscored context rows remain visible as evidence.
 
 ## 8. Resolve and Reply to Threads
 

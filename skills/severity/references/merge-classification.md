@@ -26,9 +26,12 @@ The defect-safety rules ("Unknown is not benign", the `severity` § 4 tie-break)
 ## Decision tree (apply in order)
 
 ```
-informational/praise (praise, INTENTIONAL downgrade,
-  RESOLVED comment, relevance 0.0)                 → omit merge_class
+informational/praise (INFO band: praise, INTENTIONAL
+  downgrade, RESOLVED comment, DECIDED item)       → omit merge_class
 invalid (ai_verdict false_positive | duplicate)    → disputed
+valid, but the problem lies only in the layer or
+  dependency that owns the behavior (a tripped
+  gate included; flag it for the user)             → out_of_scope_follow_up (disposition: upstream issue or PR)
 trips any blocker gate (`severity` § 2) in PR scope
   (`severity` § 5)                                 → blocking
 in PR scope but disproportionate to the PR's
@@ -36,6 +39,10 @@ in PR scope but disproportionate to the PR's
 relevance ≥ ~0.5 (in PR scope, `severity` § 5)   → non_blocking
 otherwise, whatever its severity or file           → out_of_scope_follow_up
 ```
+
+## Previously decided
+
+**DECIDED** — the same concern at the same location already has a recorded maintainer decision (declined, accepted risk, or moved to `#N`): a thread reply, the PR body's "Known limitations" or "Out of scope", or a profile line. List it once under "Previously decided" with the decision's reference; do not re-rate it or ask again. For bot threads, the thread's `dedupe=` marker is the match key. It reopens on new evidence — a path or harm the decision did not consider, not a rewording — or on a diff change to that code path after the decision.
 
 ## Pre-existing findings
 
@@ -59,3 +66,5 @@ Binding rule: `severity` § 5. A separate PR may be stacked on this one. Listing
 | `material_impact` | `impact_description` |
 | OWASP `risk` (schema v3) | `likelihood` — near-equivalent, migrates by rename |
 | OWASP `scope` (schema v3) | **nothing.** v3 `scope` was blast radius, which maps to `impact` (what fails together) and `likelihood` (independent reach). It is NOT `relevance` (PR-goal fit) — never carry a v3 `scope` value into `relevance`; that value decides `merge_class` and a migrated blast radius there is wrong. Migrated v3 findings need `relevance` re-rated by a human or the validation pass (`review-changes` § Reports and Validation). |
+
+An external reviewer's "blocking" label is a claim, not a gate: derive `merge_class` from `severity` § 2 and the profile. Keep the label as `tags: external:blocking` so a disagreement becomes a calibration example.

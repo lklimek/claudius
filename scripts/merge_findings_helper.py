@@ -5,7 +5,7 @@ The decisions file keeps duplicate resolution review-specific while this helper
 handles copying untouched findings, applying per-finding overrides
 (``finding_updates``) and each hand-authored cluster update, grouping findings
 into sections, and preserving prepare's agent statistics. The CLI refuses to
-write output while any finding still lacks ``merge_class``.
+write output while any non-INFO finding still lacks ``merge_class``.
 
 Usage:
     python3 scripts/merge_findings_helper.py \
@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from severity_util import MERGE_CLASS_ORDER, load_json_strict
+from severity_util import MERGE_CLASS_ORDER, effective_severity, load_json_strict
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -224,10 +224,10 @@ def _validate_finding_update(label: str, update: Any) -> dict[str, Any]:
             f"{', '.join(sorted(_FINDING_UPDATE_FIELDS))}"
         )
     merge_class = update.get("merge_class")
-    if "merge_class" in update and merge_class not in MERGE_CLASS_ORDER:
+    if merge_class is not None and merge_class not in MERGE_CLASS_ORDER:
         raise ValueError(
             f"finding_updates[{label!r}]: merge_class must be one of "
-            f"{', '.join(MERGE_CLASS_ORDER)}"
+            f"{', '.join(MERGE_CLASS_ORDER)}, or null to clear it"
         )
     intent_basis = update.get("intent_basis")
     if intent_basis is not None and not isinstance(intent_basis, str):
@@ -323,7 +323,7 @@ def _check_classification(finding: dict[str, Any]) -> None:
 
     Cluster updates may set any field, so the finding_updates rules are
     re-applied to the result: valid merge_class and floats, and ``blocking``
-    only with an intent_basis.
+    only with an intent_basis and never on an INFO finding.
     """
     label = f"{finding.get('agent')}:{finding.get('original_id')}"
     rated = {k: finding[k] for k in _FINDING_UPDATE_FIELDS if k in finding}
@@ -333,6 +333,11 @@ def _check_classification(finding: dict[str, Any]) -> None:
         isinstance(basis, str) and basis.strip()
     ):
         raise ValueError(f"{label}: merge_class blocking requires an intent_basis")
+    if finding.get("merge_class") == "blocking" and effective_severity(finding) == 1:
+        raise ValueError(
+            f"{label}: an INFO finding cannot be blocking — set merge_class null "
+            "to clear it, or re-rate its floats"
+        )
 
 
 def _apply_finding_update(
@@ -360,8 +365,11 @@ def _drop_stale_intent_basis(finding: dict[str, Any], update: dict[str, Any]) ->
     """Drop ``intent_basis`` when ``update`` leaves the finding non-blocking.
 
     Applies only when ``update`` touches the classification and supplies no
-    new intent_basis; shared by finding_updates and cluster ``updates``.
+    new intent_basis; shared by finding_updates and cluster ``updates``. A null
+    ``merge_class`` clears the classification.
     """
+    if "merge_class" in update and update["merge_class"] is None:
+        finding.pop("merge_class", None)
     touched = "merge_class" in update or "intent_basis" in update
     if (
         touched
@@ -371,12 +379,23 @@ def _drop_stale_intent_basis(finding: dict[str, Any], update: dict[str, Any]) ->
         finding.pop("intent_basis", None)
 
 
+def needs_merge_class(finding: dict[str, Any]) -> bool:
+    """True unless the finding has a valid merge_class or is an unclassified INFO.
+
+    INFO is informational only, so the severity skill omits its merge_class.
+    """
+    merge_class = finding.get("merge_class")
+    if merge_class is None:
+        return effective_severity(finding) > 1
+    return merge_class not in MERGE_CLASS_ORDER
+
+
 def find_missing_merge_class(findings: list[dict[str, Any]]) -> list[str]:
-    """Return ``<agent>:<original_id>`` for every finding lacking merge_class."""
+    """Return ``<agent>:<original_id>`` for every finding that needs merge_class."""
     return [
         _key_label(_finding_key(finding, context="finding"))
         for finding in findings
-        if finding.get("merge_class") not in MERGE_CLASS_ORDER
+        if needs_merge_class(finding)
     ]
 
 

@@ -95,7 +95,17 @@ resolve_by_ids() {
   done
   query+=" }"
 
-  run_gh api graphql -f query="$query"
+  local out
+  if out=$(run_gh api graphql -f query="$query" 2>&1); then
+    printf '%s\n' "$out"
+    return 0
+  fi
+  printf '%s\n' "$out" >&2
+  if grep -q 'Resource not accessible by personal access token' <<<"$out"; then
+    echo "Error: resolveReviewThread FORBIDDEN — the token (ghsudo included) is a fine-grained PAT without access to resolve review threads." >&2
+    echo "       Resolve the thread(s) in the GitHub UI, or retry with a classic PAT (repo scope)." >&2
+  fi
+  exit 1
 }
 
 # Detect mode: legacy (first arg looks like a GraphQL ID) vs enhanced (owner/repo)

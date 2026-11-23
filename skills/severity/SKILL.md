@@ -22,6 +22,8 @@ Before rating anything, answer: **what stands between this defect and irreversib
 | **Sovereign** | Nothing. This code is the last line — key material, signing, entropy, local persistence, offline/standalone tools | Irreversible loss of funds, keys, or data | 1.0 |
 | **Boundary** | This code decides *what crosses into* sovereign territory — assembling the tx to be signed, choosing the destination, composing what the user is asked to approve | Same as Sovereign — the backstop validates the *signature*, not the *intent* | 1.0 |
 
+**Zone follows the value at risk, not the code's shape.** Code that only handles throwaway or test assets — internal dev, CI, and agent tooling, fixtures — is Backstopped when the profile's `Project type` marks it `internal, not shipped`: its operator sees the failure and reruns. G-SECRET and G-DATA still trip there when a real user's or operator's secret or data can pass through it. Code that builds, signs, or publishes what users install is not internal tooling.
+
 For **server-side code**, the code owns the data — read it as Sovereign over its own persistence, with the operator's monitoring as the only backstop against silent breakage (hence G-SILENT).
 
 **Zone is per finding, never per repo or app** — one PR routinely spans all three (balance refresh: Backstopped; seed-phrase handling: Sovereign; send-confirmation screen: Boundary). Judge the code path the finding sits on. Unsure between two zones → the more sovereign one.
@@ -41,13 +43,19 @@ A gate is a **must-not-ship** condition. Tripping any gate ⇒ `merge_class: blo
 | **G-UI-TEXT** | User-visible text that is scary or confusing — raw exceptions, stack traces, internal jargon, alarming wording for a benign condition | all |
 | **G-WYSIWYS** | The confirmation screen does not match what is actually signed or sent | Boundary, Sovereign |
 | **G-AMOUNT** | Monetary values are displayed wrongly (unit, precision, rounding, fee omission) | all |
-| **G-DOUBLE** | Retry or auto-recovery duplicates a spend, broadcast, or other external side effect | all |
+| **G-DOUBLE** | Retry or auto-recovery duplicates a spend, broadcast, or other external side effect; a duplicated spend is also G-FUNDS | all |
 | **G-PHISH** | Untrusted data rendered unescaped or clickable, or able to imitate trusted UI | all |
 | **G-BRICK** | Upgrade or migration failure prevents startup or destroys the user profile | all |
 | **G-SILENT** | Failures are swallowed — operators cannot detect that it broke | Operated services |
 | **G-PRIVACY** | Leaks short of secrets — address linkage, identifying telemetry, financial data in logs | all |
 | **G-GROWTH** | Unbounded resource growth under normal load | all |
 | **G-DEFAULTS** | Ships an insecure default configuration | all |
+
+**Accepted risks**: a path that needs a precondition the project profile ([references/system-rating.md](references/system-rating.md)) places outside its threat model, or that matches an `Accepted risks` line, trips no gate: report it as an ordinary finding with `intent_basis: "accepted risk: <profile line>"`. The match needs both the scenario and the surface the line names; a line naming no surface applies to none. No matching profile line → the gate trips.
+
+### Plausibility (trial)
+
+Outside Sovereign and Boundary code, a gate other than G-FUNDS, G-DOUBLE, G-WYSIWYS, G-SECRET, G-CRYPTO, G-DATA trips only at `likelihood` ≥ ~0.2; below that it is an ordinary finding, and the low `likelihood` needs evidence (§ 3 evidence rule). Record a maintainer's disagreement with this threshold as calibration ([references/system-rating.md](references/system-rating.md) § Calibration memory).
 
 ### Races and concurrency
 
@@ -79,11 +87,12 @@ What "the system" is depends on the project type (profile `Project type`; mixed 
 | GUI app | the user base | share of users reaching the flow (`likelihood`) | frustration read as cosmetic — friction that makes users abandon or redo a task (lost input, stuck or confusing state, recurring scary errors, blocking lag) is `impact ~0.4`; a one-off annoyance stays `~0.1` |
 | SDK / library (public API) | every consuming app | consumers hitting the API in typical use (`likelihood`) | "only a library" read as low impact — rate `impact` by the worst outcome in a typical consumer; a bad default, footgun, or misleading error that makes consumers ship bugs is that outcome, not DX polish |
 | Server service | its clients and owned data | requests, tenants, records | one request's error read as a hot-path outage, or the reverse |
-| Tooling / CLI | its operators | operators, frequency of use | a failure with a quick workaround read as an outage |
+| Tooling / CLI | its operators | operators, frequency of use | a failure with a quick workaround read as an outage; robustness against the tool's own operator read as a defect |
 
 Zones (§ 1) override share: irreversible loss in Sovereign or Boundary code — including SDK signing paths and one operator's keys — takes its `impact` from the harm to the party that suffers it (the end user of a consuming app, for an SDK), never diluted by the share of users, nodes, or consumers; share still sets `likelihood`.
 
 - **Local harm ≠ system harm**: where redundancy, replication, or consensus absorbs the failure (one node, worker, or replica), `impact` is what the system loses, not what the component loses.
+- **Production scope**: a path reachable only on development networks (devnet, regtest), dev builds, or fixtures (profile `System & scale`) has developers as its users — `impact` ≤ ~0.4, and funds or data gates do not trip on assets with no value. Public test networks count as production. No profile claim → treat it as production.
 - **Dominance**: a precondition outside the project's threat model, or one that already grants a strictly worse outcome than the finding (≥ 1/3 Byzantine power already breaks BFT liveness), caps `likelihood` at `0.1` — state the dominating capability. Still reported.
 - **Conjunction**: list independent preconditions, adversarial or not; `likelihood` sits at or below the least likely one, and lower when several are each unlikely.
 - **Attacker economics**: an attack costing more than any plausible gain, while a cheaper route to a worse outcome exists, is pathological (`~0.1`).
@@ -180,6 +189,8 @@ In finding JSON, `severity` is the integer, not the label.
 **PR scope is narrow**: the PR's intent, defects its diff introduces, worsens, newly exposes, or relies on, and its own tests and docs. Anything else is out of scope regardless of severity or proximity, and review fixes never widen the PR beyond it.
 
 **Proportionate to the PR's problem**: what a PR must fix scales with how important the problem it solves is (`references/merge-classification.md` § Rating the PR's problem); a minor PR is one whose problem bands LOW. Below the gates, a finding whose fix outweighs a minor PR's own value — a pre-existing defect the diff worsens or exposes, or a LOW the diff introduces — is deferred; MEDIUM+ defects the diff introduces are always fixed.
+
+**Other `non_blocking` work is optional** (all but MEDIUM+ defects the diff introduces): list it; fix it only when the user asks, or when the fix is a few lines riding a push that a `blocking` finding, an introduced MEDIUM+ defect, or the user already requires. It never justifies a push or a review round on its own.
 
 **Before assigning any `merge_class`, read `references/merge-classification.md`** — establishing PR intent, the ordered decision tree, pre-existing findings, and the external-reviewer field map. Two rules bind even at a glance:
 

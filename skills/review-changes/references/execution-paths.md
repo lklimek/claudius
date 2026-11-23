@@ -6,12 +6,14 @@ Applies to the basic reviewer and the full review's requirements/correctness and
 
 Record each requirement with its source and each changed executable unit: new, modified, or removed functions/methods, changed bodies with unchanged signatures, module initialization, callbacks, configuration and registrations that alter behavior. Include test code when it is in scope; documentation-only changes require requirement/cross-reference verification, with executable tracing explicitly marked not applicable.
 
+Check each acceptance criterion against the current code with `file:line` evidence; one the code does not meet — never implemented, or narrowed by a later fix — is **violated**. A fixed finding is one requirement, and every unit its fix changed is inventoried and traced as new code; earlier findings, bot comments, and prior decisions are context, never the requirements list.
+
 For removals, inspect the base version and surviving callers. New functions can already have callers in the same change or via registration; never assume they are unreachable.
 
 ## Trace
 
 1. Walk upward to **every reachable entry point**: handlers, CLI/IPC, jobs, callbacks, exports, and indirect dispatch. Use the Grep tool plus Read to confirm each hit, and `gh search code repo:<owner>/<repo> "<symbol>"` for cross-repository callers. Resolve aliases, re-exports, trait/interface implementations, callbacks, and dynamically registered calls; unresolved dispatch is a coverage gap, not evidence of no callers.
-2. Walk downward from each entry through the changed code to **every reachable result and side effect**: returns, errors, persistence, signing, process execution, network, logs, and UI. Cross file, module, and repository boundaries as needed; document unavailable external implementation as unresolved.
+2. Walk downward from each entry through the changed code to **every reachable result and side effect**: returns, errors, persistence, signing, process execution, network, logs, and UI. Cross file, module, and repository boundaries as needed; document unavailable external implementation as unresolved. When an outcome depends on a pinned dependency (UI state, persistence and exit; input routing; SDK or wallet calls; standard-library formatting), read its source at the locked version from the local package cache or vendored copy (e.g. `~/.cargo/registry/src`, `~/.cargo/git/checkouts`, `node_modules`).
 3. Inspect every feasible branch: happy, alternate, boundary, error, panic/exception, early return, cleanup/rollback, retry, timeout, cancellation, and concurrent execution. Check data/state changes and ordering at each hop, including removed or moved checks. For loops and recursion, cover termination, zero/one/multiple iterations and relevant state classes; justify any grouping of equivalent paths rather than claiming enumeration of infinitely many traces.
 4. Check the contract at **every visited call site**, including intermediate callers: arguments and defaults, return shape, error propagation, ownership, side effects, performance, synchronization, and changed semantics. Propagate contract changes along the whole caller chain. Compilation establishes neither semantic correctness nor path coverage.
 5. Compare every path's result with the requirements and invariants. Verify issues with source evidence and targeted tests or concrete inputs/interleavings. For security, carry attacker-controlled data and trust boundaries through the chain to each sink.
@@ -25,10 +27,11 @@ Prioritize high-risk paths first, but **do not truncate** to a top-N set, depth,
 Write `<reviewer>-coverage.md` beside the findings, even for a clean pass:
 
 - Reviewed revision, local changes, and assigned scope.
-- Requirements: source → implementation/path evidence → verified, violated, or unresolved.
+- Requirements, each acceptance criterion its own row: source → implementation/path evidence → verified, violated, or unresolved.
 - Changed units: entry points → intermediate calls → outcomes/sinks, with `file:line`, branch/state conditions, and verification evidence.
 - Unresolved paths, unavailable dependencies, unexecuted checks, and justified equivalent-path groupings.
-- Status: **complete**, **incomplete**, or **not applicable** for executable paths, with the reason.
+- **Considered, not filed**: at most 10 one-line items — a suspicion examined and dropped, with the reason.
+- Status: **complete**, **incomplete**, or **not applicable** for executable paths, with the reason. A path left untraced that ends in user-visible state, persistence, exit status, or signing makes it **incomplete**.
 
 The coordinator must reconcile the artifacts with the full changed-unit inventory. Missing coverage or unresolved paths prevent a complete/clean verdict; zero findings alone does not establish completion. Report limitations in the executive summary as well as the artifact.
 

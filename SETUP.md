@@ -337,6 +337,7 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `grand-admiral` | Multi-agent orchestration -- spawning, isolation, coordination, recovery |
 | `lessons-learned` | Extract and save reusable learnings from the session |
 | `merge-base` | Careful merge of remote base branch into current feature branch |
+| `pr-fleet` | Drive PRs through the push, bot-review, and fix loop: whole-PR review per push, push batching, round close, merge question |
 | `product-design` | Requirements, domain analysis, user flows, accessibility, developer experience |
 | `release` | Bump version (SemVer), update changelog, commit, push, and create GitHub release |
 | `report-format` | Unified review report format for all finding-producing agents |

@@ -27,9 +27,18 @@ caller chains, and entry-to-sink paths follow that contract; report gaps explici
 
 ## UI-text scan
 
-Scan the diff's user-visible strings — labels, buttons, toasts, dialogs, error messages — for
-raw exception text, stack traces, error codes, internal jargon, or alarming wording on a
-benign condition. These trip `G-UI-TEXT`.
+For each new or changed user-visible string — labels, buttons, toasts, dialogs, error messages:
+
+- **Truth**: a sentence that states, promises, or instructs is true in every state where it
+  appears — show it in code — and every control it names exists and is reachable there.
+- **Wording**: no raw exception text, stack traces, error codes, internal jargon, or alarming
+  wording on a benign condition. These trip `G-UI-TEXT`.
+
+## Always-flagged classes
+
+Check all changed code, whatever the assigned focus: fixed secrets (keys, mnemonics, passwords,
+tokens) in tests and fixtures; interactive widgets without an accessible name; raw error text
+in logs and diagnostics.
 
 ## UX/DX lens
 
