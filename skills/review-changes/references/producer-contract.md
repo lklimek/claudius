@@ -40,6 +40,15 @@ Check all changed code, whatever the assigned focus: fixed secrets (keys, mnemon
 tokens) in tests and fixtures; interactive widgets without an accessible name; raw error text
 in logs and diagnostics.
 
+## Slim-down
+
+Run by the basic reviewer and, in full mode, by Adams; other producers skip it. Ask what the
+diff can delete or merge and still meet its intent with tests green: redundant fields, state or
+collections; duplicated control flow; drive-by renames, reformatting or refactors
+(`coding-best-practices` § Cross-Cutting Rules); tests asserting the same case twice. File each
+concrete change as a `code_quality` finding tagged `simplification`, ending its description with
+`Net: -<N> lines`.
+
 ## UX/DX lens
 
 Assess how findings affect end-user workflows and developer experience, not just code

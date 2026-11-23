@@ -98,7 +98,7 @@ Load [coding-best-practices](../coding-best-practices/SKILL.md), [report-format]
 - **Tests as evidence**: a test counts only once you name the production line whose breakage fails it and confirm its assertions cover the values its name claims. Audit contract coverage and assertion depth: computed values, exact boundaries, specific errors, side effects, ordering, and state consistency. Tests must assert intended behavior rather than mirror implementation; reject `assert result is not None`, `status == 200` without the body, `len(items) > 0` without which items, and "runs without error" without asserting output. Never change expectations to make buggy behavior pass.
 - Construct concrete counterexamples for suspected defects. A passing test does not replace path tracing. Record commands, CI runs, results, and anything not executed.
 - For shared state, locks, tasks, or channels, enumerate access paths and reason through interleavings, lock order, cancellation, and retries; use race/stress tools where available.
-- Run the producer contract's UI-text scan and always-flagged checks; apply the UX/DX lens.
+- Run the producer contract's UI-text scan, always-flagged checks and slim-down; apply the UX/DX lens.
 - For security-relevant code, load the language pitfalls from [security-best-practices](../security-best-practices/SKILL.md); its full security-audit pass applies only when assigned.
 - Write a producer array per `report-format` to the assigned findings file, including `[]` when clean. Write the coverage artifact required by the shared contract even when there are no findings. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py gate <findings-file>`.
 
