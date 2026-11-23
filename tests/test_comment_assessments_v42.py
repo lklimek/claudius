@@ -143,6 +143,45 @@ def test_unknown_input_mode_is_rejected(host):
     assert errors(host)
 
 
+# comment_assessment properties of schema 4.1.0; anything added later needs a version tie.
+V41_ROW_PROPERTIES = {
+    "id",
+    "finding_id",
+    "reviewer",
+    "author_type",
+    "source_kind",
+    "comment_id",
+    "comment_url",
+    "thread_id",
+    "thread_state",
+    "location",
+    "location_permalink",
+    "description",
+    "assessment",
+    "reasoning",
+    "evidence",
+    "proposed_action",
+    "proposed_reply",
+    "action_taken",
+}
+
+
+def _row_fields_tied_to_42():
+    for rule in SCHEMA["allOf"]:
+        then_version = rule["then"].get("properties", {}).get("schema_version")
+        rows = rule["if"].get("properties", {}).get("comment_assessments", {})
+        if then_version == {"const": "4.2.0"} and "contains" in rows:
+            return {branch["required"][0] for branch in rows["contains"]["anyOf"]}
+    return set()
+
+
+def test_every_row_property_added_after_41_is_version_tied():
+    properties = set(SCHEMA["$defs"]["comment_assessment"]["properties"])
+    added = properties - V41_ROW_PROPERTIES
+    assert added == _row_fields_tied_to_42()
+    assert added == set(V42_FIELDS)
+
+
 # ---------------------------------------------------------- host-mode rules
 
 
