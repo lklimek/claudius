@@ -13,7 +13,7 @@ Optional `agy` (Google Antigravity CLI) dispatch. Load through `delegate` only w
 
 ## Dispatch
 
-Write the brief to a file (`delegate` § Agent Prompt Requirements) with absolute paths only — worktree, plugin skills, output files — and repository-scoped commands (`git -C <WORKTREE>`, `gh … -R <owner/repo>`): she does not start in the repository. Then, in the background:
+Write the brief to a file (`delegate` § Agent Prompt Requirements) with absolute paths only — worktree, plugin skills, output files — and repository-scoped commands (`git -C <WORKTREE>`, `gh … -R <owner/repo>`): she does not start in the repository, so the brief overrides the producer contract's ban on `git -C`. Then, in the background:
 
 ```bash
 env -C <CWD> agy -p "Read <BRIEF_FILE> and follow it." --model gemini-4-neon-high --print-timeout 45m

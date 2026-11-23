@@ -1,6 +1,6 @@
 ---
 name: delegate
-description: "This skill should be used before delegating work to an agent (one spawn or a whole wave) and when the user says \"spawn an agent\", \"delegate this\", \"parallelize this\", \"use a subagent\", \"send this to Codex\", or \"use Codex Astra\". It covers the spawn decision (inline vs spawn, model tier, batching), required prompt contents, WHAT-not-HOW development briefs with the one-agent plan/TDD/implement/self-review loop for changes up to 1000 LOC, durable tracking of multi-step work, and external Codex dispatch, job monitoring, and broker recovery."
+description: "This skill should be used before delegating work to an agent (one spawn or a whole wave) and when the user says \"spawn an agent\", \"delegate this\", \"parallelize this\", \"use a subagent\", \"send this to Codex\", \"use Codex Astra\", \"ask Aga\", or \"use Antigravity\". It covers the spawn decision (inline vs spawn, model tier, batching), required prompt contents, WHAT-not-HOW development briefs with the one-agent plan/TDD/implement/self-review loop for changes up to 1000 LOC, durable tracking of multi-step work, and external Codex dispatch, job monitoring, and broker recovery."
 ---
 
 # Delegate
