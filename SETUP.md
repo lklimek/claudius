@@ -144,7 +144,7 @@ Configure the Codex CLI in `~/.codex/config.toml` before using that bridge. Nati
 
 #### Optional Antigravity reviewer
 
-Install and sign in to [Google Antigravity's CLI](https://antigravity.google/docs/cli) (`agy`). Full review then adds the Aga reviewer (`delegate` § External Antigravity reviewer).
+Install and sign in to [Google Antigravity's CLI](https://antigravity.google/docs/cli) (`agy`), and install [bubblewrap](https://github.com/containers/bubblewrap) (`sudo apt-get install -y bubblewrap`), which jails her. Full review then adds the Aga reviewer (`delegate` § External Antigravity reviewer).
 
 #### Built-in stall watchdog
 
