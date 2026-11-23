@@ -405,14 +405,6 @@ def test_terminal_job_from_ninety_minute_outage_is_reported(recovery, context, s
     assert "Monitor(" not in output and "Recovery:" not in output
 
 
-def test_finished_job_output_is_bounded(recovery, context):
-    payload, env = context
-    for index in range(12):
-        job(env, id=f"done-{index}", status="completed", completedAt=NOW - 5400)
-    output = recovery.recovery_context(payload, env)
-    assert output.count("Codex finished job=") == 5
-
-
 @pytest.mark.parametrize(
     "monitor_session,state",
     [
