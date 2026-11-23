@@ -53,7 +53,7 @@ _AXIS_SHARE_THRESHOLD = 0.8
 _RATED_AXES = ("likelihood", "impact", "relevance")
 
 # Schema versions that define merge_class / intent_basis.
-_MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0", "4.1.0")
+_MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0", "4.1.0", "4.2.0")
 _MERGE_CLASS_VERSIONS_TEXT = " or ".join(_MERGE_CLASS_SCHEMA_VERSIONS)
 
 

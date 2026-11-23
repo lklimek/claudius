@@ -2011,7 +2011,7 @@ def cmd_regenerate(args: argparse.Namespace) -> int:
     # ship a report whose stated version contradicts its own findings — and any
     # downstream v3 reader would then choke on the renamed floats.
     declared = report.get("schema_version")
-    if declared != SCHEMA_VERSION and declared != "4.1.0":
+    if declared not in (SCHEMA_VERSION, "4.1.0", "4.2.0"):
         log.info(
             "Restamping schema_version %s -> %s (report is written in v4 form)",
             declared,
