@@ -11,9 +11,9 @@ absence, and all disappearance signals require consecutive confirmation.
 
 Codex Companion jobs are a separate Source D state machine. Candidate state
 directories come from the selected team, Source C worktrees, and a bounded
-session-workspace scan of the plugin state root. Ambient team records must
-match both the effective Claude session and canonical workspace; directly
-named workspaces rely on the canonical path match. Healthy work is silent;
+session-workspace scan of the plugin state root. Job records must match the
+effective Claude session; records without a session ID require the exact session
+cwd. Healthy work is silent;
 terminal status, stall, recovery, verified runtime disappearance, and confirmed
 record removal emit only the documented transition grammar.
 
@@ -61,6 +61,7 @@ JOBS_GLOB_WARN_SECS = 0.5
 # direct scanner callers) are skipped before parsing. Override with
 # --codex-job-recency-secs when longer-running jobs need a wider window.
 DEFAULT_JOB_RECENCY_SECS = 7 * 24 * 60 * 60
+TERMINAL_REARM_LOOKBACK_SECS = 30 * 60
 DEFAULT_WORKTREE_ROOT = Path("/data/git-worktrees")
 # Within the scan window, age terminal records out after six hours.
 TERMINAL_JOB_RETENTION_SECS = 6 * 60 * 60
@@ -198,6 +199,7 @@ class CodexRecord:
     runtime: str
     created_at: float
     error_message: str | None = None
+    completed_at: int | None = None
 
 
 @dataclass(frozen=True)
@@ -670,6 +672,17 @@ class ProcInspector:
             return "dead"
         except OSError:
             return None
+        try:
+            fields = (
+                (process / "stat")
+                .read_text(errors="replace")
+                .rpartition(")")[2]
+                .split()
+            )
+            if fields and fields[0] == "Z":
+                return "dead"
+        except OSError:
+            pass
         argv = _try_read_cmdline(process / "cmdline")
         if argv is None:
             return None
@@ -773,15 +786,10 @@ def workspace_key(workspace_root: Path, canonical: Path) -> str:
 
 
 def codex_state_root(env: Mapping[str, str] | None = None) -> Path:
-    """Resolve CLAUDE_PLUGIN_DATA or Node-compatible temporary state root."""
+    """Resolve Claude Code's Codex store independently of other plugin exports."""
     environment = os.environ if env is None else env
-    plugin_data = environment.get("CLAUDE_PLUGIN_DATA", "")
-    if plugin_data:
-        return Path(plugin_data) / "state"
-    for variable in ("TMPDIR", "TMP", "TEMP"):
-        if environment.get(variable):
-            return Path(environment[variable]) / "codex-companion"
-    return Path("/tmp") / "codex-companion"
+    home = Path(environment.get("HOME", str(Path.home())))
+    return home / ".claude/plugins/data/codex-openai-codex/state"
 
 
 def resolve_workspace(
@@ -946,6 +954,7 @@ class CodexScanner:
             "phase",
             "updatedAt",
             "createdAt",
+            "completedAt",
             "pid",
             "logFile",
             "errorMessage",
@@ -1187,7 +1196,7 @@ class CodexScanner:
                         if job_mtime is not None and job_mtime < terminal_cutoff:
                             continue
                     session = raw.get("sessionId")
-                    if not info.direct and isinstance(session, str) and session:
+                    if isinstance(session, str) and session:
                         sessions.add(session)
                     jobs.append((job_path, raw))
                 except Exception as error:
@@ -1213,8 +1222,17 @@ class CodexScanner:
             matching: list[tuple[Path, dict[str, Any], str]] = []
             for job_path, raw in jobs:
                 try:
-                    if not info.direct and raw.get("sessionId") != session:
-                        continue
+                    job_session = raw.get("sessionId")
+                    if job_session:
+                        if job_session != session:
+                            continue
+                    else:
+                        session_cwd = Path(self.env.get("PWD", str(Path.cwd())))
+                        if (
+                            job_session not in (None, "")
+                            or info.canonical != session_cwd.resolve()
+                        ):
+                            continue
                     job_id = raw.get("id")
                     if not isinstance(job_id, str) or not SAFE_FIELD.fullmatch(job_id):
                         self._warning(
@@ -1287,6 +1305,9 @@ class CodexScanner:
                         created = float(raw.get("createdAt") or 0)
                     except (TypeError, ValueError):
                         created = 0.0
+                    completed = _parse_timestamp(raw.get("completedAt"))
+                    if completed is None:
+                        completed = safe_mtime(job_path)
                     records.append(
                         CodexRecord(
                             key=f"codex:{info.key}:{job_id}",
@@ -1298,6 +1319,7 @@ class CodexScanner:
                             activity_epoch=activity,
                             runtime=runtime,
                             created_at=created,
+                            completed_at=completed if status != "active" else None,
                             error_message=(
                                 str(raw["errorMessage"])
                                 if raw.get("errorMessage") is not None
@@ -1449,6 +1471,7 @@ class CodexStateMachine:
         self.gone_hits: dict[str, int] = {}
         self.reported: set[str] = set()
         self.initialized = False
+        self.terminal_since: int | None = None
 
     def _terminal(self, record: CodexRecord, *, baseline: bool = False) -> list[str]:
         if record.key in self.reported:
@@ -1544,12 +1567,21 @@ class CodexStateMachine:
     ) -> list[str]:
         """Evaluate every record deterministically, then apply missing-record grace."""
         ordered = sorted(records, key=lambda item: (item.created_at, item.job_id))
+        if self.terminal_since is None:
+            self.terminal_since = now - TERMINAL_REARM_LOOKBACK_SECS
         seen = {record.key for record in ordered}
         events: list[str] = []
         for record in ordered:
             self.misses[record.key] = 0
             if record.status in {"done", "failed", "cancelled"}:
-                events.extend(self._terminal(record, baseline=not self.initialized))
+                old = (
+                    record.completed_at is not None
+                    and record.completed_at < self.terminal_since
+                )
+                baseline = record.key not in self.state and (
+                    old or (not self.initialized and record.completed_at is None)
+                )
+                events.extend(self._terminal(record, baseline=baseline))
             else:
                 events.extend(self._active(record, now, build_active))
         events.extend(self.prune(seen))
@@ -2100,13 +2132,14 @@ class Watchdog:
                 "--worktrees points at where Codex worktrees actually live, if "
                 "Codex jobs are expected).",
             )
-        events.extend(
-            self.codex.evaluate(
-                codex_records,
-                epoch,
-                lambda path: build_status_under(path, self.scanner.proc.proc_root),
+        if effective_session:
+            events.extend(
+                self.codex.evaluate(
+                    codex_records,
+                    epoch,
+                    lambda path: build_status_under(path, self.scanner.proc.proc_root),
+                )
             )
-        )
         return events
 
 

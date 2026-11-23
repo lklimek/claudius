@@ -68,7 +68,7 @@ If the fallback triggers, investigate these mechanics first.
 
 ## On-Disk Job State (for Monitoring)
 
-Codex job state lives under `$CLAUDE_PLUGIN_DATA/state/` (default `CLAUDE_PLUGIN_DATA=/home/ubuntu/.claude/plugins/data/codex-openai-codex`), one directory per workspace:
+Under Claude Code, Codex job state lives under `~/.claude/plugins/data/codex-openai-codex/state/`, one directory per workspace:
 
 ```
 state/<workspace-slug>-<hash>/
@@ -130,6 +130,8 @@ Symptoms: the earlier dispatch is stranded at `status=running` forever with no c
 Mitigation: poll for terminal status before the next same-cwd dispatch (never a fixed stagger delay). `scripts/minion-monitoring.py` should eventually catch a stuck orphan as `CODEX_STALL reason=no-progress` — a detection backstop, not a substitute. After any dispatch, sanity-check that `workspaceRoot` matches the intended worktree and `rawOutput` engages the dispatched task.
 
 ## Harness Kills of a Backgrounded Task
+
+Upstream: [worker death](https://github.com/openai/codex-plugin-cc/issues/432), [dead-worker reconciliation](https://github.com/openai/codex-plugin-cc/issues/377). Resolve `CODEX_ROOT` through `delegate` § External Codex launcher before recovery. The hook/watchdog reject zombie or incompatible launcher PIDs; reuse by another Codex launcher in the identical cwd cannot be distinguished reliably.
 
 A `codex-companion.mjs task --write --background` run launched via a `run_in_background` Bash call can be killed by the harness mid-run — confirmed via a tmux pane reading `Background command ... was stopped`. Nothing reports it automatically: `--background` detaches and returns immediately, so nobody is polling the task once queued. **Silence is not evidence of health.**
 

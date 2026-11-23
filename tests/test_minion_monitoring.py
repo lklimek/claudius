@@ -45,6 +45,12 @@ def workspace(tmp_path: Path, name: str = "repo") -> Path:
     return result
 
 
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path, monkeypatch):
+    """No fallback resolver can read the real Claude state in this module."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
     """Create a real Git workspace for repository-root resolution tests."""
@@ -216,10 +222,16 @@ def test_cx_004_slug_sanitization(root: Path, prefix: str) -> None:
     assert watchdog.workspace_key(root, root).startswith(prefix)
 
 
-def test_cx_005_node_temp_environment_semantics(tmp_path: Path) -> None:
-    """CX-005: plugin-data absence uses Node-compatible temp selection."""
-    env = {"TMPDIR": str(tmp_path / "node-tmp"), "HOME": str(tmp_path / "home")}
-    assert watchdog.codex_state_root(env) == Path(env["TMPDIR"]) / "codex-companion"
+def test_codex_store_is_independent_of_other_plugins_and_tmp(tmp_path: Path) -> None:
+    """Claude Code job discovery always reads the Codex plugin's own store."""
+    env = {
+        "TMPDIR": str(tmp_path / "node-tmp"),
+        "HOME": str(tmp_path / "home"),
+        "CLAUDE_PLUGIN_DATA": str(tmp_path / "another-plugin"),
+    }
+    assert watchdog.codex_state_root(env) == (
+        Path(env["HOME"]) / ".claude/plugins/data/codex-openai-codex/state"
+    )
 
 
 def test_real_git_workspace_resolves_repository_root(
@@ -537,10 +549,10 @@ def test_direct_discovery_prefilters_foreign_workspace_state(
     assert foreign_job not in scanner.cache.items
 
 
-def test_direct_discovery_survives_zero_match_ambient_session(
+def test_direct_discovery_rejects_foreign_dispatch_session(
     tmp_path: Path,
 ) -> None:
-    """A failed ambient session match cannot suppress a direct workspace."""
+    """Direct workspace discovery cannot override a foreign session ID."""
     ambient = workspace(tmp_path, "ambient")
     direct = workspace(tmp_path, "direct")
     _, env = codex_store(
@@ -562,7 +574,7 @@ def test_direct_discovery_survives_zero_match_ambient_session(
         discovery_candidates=[direct],
     )
 
-    assert [item.job_id for item in result.records] == ["direct"]
+    assert result.records == []
     assert result.warnings == []
 
 
@@ -1711,10 +1723,10 @@ def test_teamless_watchdog_discovers_codex_state_from_session_cwd(
     assert "zero-monitored" not in monitor.warned
 
 
-def test_direct_workspace_surfaces_jobs_from_multiple_foreign_sessions(
+def test_direct_workspace_never_surfaces_foreign_sessions(
     tmp_path: Path,
 ) -> None:
-    """Direct workspace ownership includes jobs from every dispatch session."""
+    """Worktree discovery cannot confer ownership of foreign-session jobs."""
     worktrees = tmp_path / "worktrees"
     worktrees.mkdir()
     ws = workspace(worktrees, "agent-rescue")
@@ -1751,13 +1763,7 @@ def test_direct_workspace_surfaces_jobs_from_multiple_foreign_sessions(
     )
 
     assert monitor.poll_once(now=200) == []
-    key = watchdog.resolve_workspace(ws, env).key
-    assert monitor.poll_once(now=201) == [
-        f"CODEX_STALL job=worker-one workspace={key} "
-        "idle=101s phase=running reason=no-progress",
-        f"CODEX_STALL job=worker-two workspace={key} "
-        "idle=101s phase=running reason=no-progress",
-    ]
+    assert monitor.poll_once(now=201) == []
 
 
 def test_worktree_session_filter_excludes_unrelated_workspace_jobs(
@@ -1771,13 +1777,27 @@ def test_worktree_session_filter_excludes_unrelated_workspace_jobs(
     _, env = codex_store(
         tmp_path,
         selected,
-        [{"id": "selected", "epoch": 100, "updatedAt": None}],
+        [
+            {
+                "id": "selected",
+                "sessionId": "coordinator-session",
+                "epoch": 100,
+                "updatedAt": None,
+            }
+        ],
         state_epoch=100,
     )
     codex_store(
         tmp_path,
         unrelated,
-        [{"id": "unrelated", "epoch": 100, "updatedAt": None}],
+        [
+            {
+                "id": "unrelated",
+                "sessionId": "coordinator-session",
+                "epoch": 100,
+                "updatedAt": None,
+            }
+        ],
         state_epoch=100,
     )
     monitor = watchdog.Watchdog(
@@ -2104,6 +2124,7 @@ def test_dump_job_prints_full_record_without_starting_monitor(
         ],
     )
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", env["CLAUDE_PLUGIN_DATA"])
+    monkeypatch.setenv("HOME", env["HOME"])
 
     def fail_monitor(_options: watchdog.Options) -> None:
         raise AssertionError("dump mode must not start the persistent monitor")
@@ -2134,12 +2155,17 @@ def test_dump_job_not_found_is_a_clean_error(
     """An unknown dump id reports the searched root without a traceback."""
     plugin_data = tmp_path / "plugin-data"
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(plugin_data))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
     assert watchdog.main(["--dump-job", "missing-job"]) == 1
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert f"no job 'missing-job' found under {plugin_data / 'state'}" in captured.err
+    assert (
+        "no job 'missing-job' found under "
+        + str(tmp_path / "home/.claude/plugins/data/codex-openai-codex/state")
+        in captured.err
+    )
     assert "Traceback" not in captured.err
 
 
@@ -2154,6 +2180,7 @@ def test_dump_job_reports_malformed_record(
     job_path = state_dir / "jobs" / "broken-job.json"
     job_path.write_text('{"id": "broken-job"', encoding="utf-8")
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", env["CLAUDE_PLUGIN_DATA"])
+    monkeypatch.setenv("HOME", env["HOME"])
 
     assert watchdog.main(["--dump-job", "broken-job"]) == 1
 
@@ -2426,3 +2453,200 @@ def test_codex_rearm_baselines_existing_terminals(status: str) -> None:
         "CODEX_DONE job=live workspace=repo-abc123 phase=done"
     ]
     assert machine.evaluate([old, done], now=103, build_active=no_build) == []
+
+
+@pytest.mark.parametrize(
+    "status,event",
+    [
+        ("completed", "CODEX_DONE"),
+        ("failed", "CODEX_FAILED"),
+        ("cancelled", "CODEX_CANCELLED"),
+    ],
+)
+def test_rearm_reports_recent_gap_completion_once(tmp_path, status, event):
+    ws = workspace(tmp_path)
+    now = 10000
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "gap",
+                "status": status,
+                "epoch": now - 20,
+                "completedAt": "1970-01-01T02:46:20Z",
+            },
+            {
+                "id": "history",
+                "status": status,
+                "epoch": now - 10,
+                "completedAt": "1970-01-01T01:00:00Z",
+            },
+        ],
+    )
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan(
+            [ws],
+            "session-full",
+            now=now,
+        )
+        .records
+    )
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    lines = machine.evaluate(records, now=now, build_active=no_build)
+    assert len(lines) == 1 and lines[0].startswith(event + " job=gap ")
+    assert machine.evaluate(records, now=now + 1, build_active=no_build) == []
+
+
+def test_rearm_completion_uses_mtime_without_completed_at(tmp_path):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "gap", "status": "completed", "epoch": 9990},
+            {"id": "old", "status": "completed", "epoch": 5000},
+        ],
+    )
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan(
+            [ws],
+            "session-full",
+            now=10000,
+        )
+        .records
+    )
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    assert [
+        line.split()[1]
+        for line in machine.evaluate(records, now=10000, build_active=no_build)
+    ] == ["job=gap"]
+
+
+def test_no_session_poll_does_not_consume_codex_baseline(tmp_path):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "history",
+                "status": "completed",
+                "epoch": 9990,
+                "completedAt": "1970-01-01T01:00:00Z",
+            },
+        ],
+    )
+    env["PWD"] = str(ws)
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            projects_dir=tmp_path / "projects",
+            worktrees=tmp_path / "worktrees",
+            gone_enabled=False,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    assert monitor.poll_once(now=10000) == []
+    assert monitor.codex.initialized is False
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-short/config.json",
+        {
+            "name": "session-short",
+            "leadSessionId": "session-full",
+            "members": [
+                {
+                    "agentType": "team-lead",
+                    "name": "lead",
+                    "cwd": str(ws),
+                    "isActive": True,
+                },
+            ],
+        },
+    )
+    assert monitor.poll_once(now=10001) == []
+    assert monitor.codex.initialized is True
+
+
+def test_proc_zombie_is_dead_before_cwd_or_cmdline_reads(tmp_path):
+    process = tmp_path / "proc/321"
+    process.mkdir(parents=True)
+    (process / "stat").write_text("321 (name with ) chars) Z " + "0 " * 20)
+    assert watchdog.ProcInspector(tmp_path / "proc").launcher(321, tmp_path) == "dead"
+
+
+@pytest.mark.parametrize("pid", [None, 0, -1, True, "321"])
+def test_invalid_launcher_pid_never_probes_proc(tmp_path, monkeypatch, pid):
+    inspector = watchdog.ProcInspector(tmp_path / "proc")
+    monkeypatch.setattr(Path, "stat", lambda *_: pytest.fail("invalid pid probed proc"))
+    assert inspector.launcher(pid, tmp_path) is None
+
+
+def test_completed_at_epoch_zero_is_not_replaced_by_recent_mtime(tmp_path):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "history", "status": "completed", "epoch": 9990, "completedAt": 0},
+        ],
+    )
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan(
+            [ws],
+            "session-full",
+            now=10000,
+        )
+        .records
+    )
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    assert machine.evaluate(records, now=10000, build_active=no_build) == []
+
+
+def test_terminal_cutoff_survives_later_workspace_discovery(tmp_path):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "boundary",
+                "status": "completed",
+                "epoch": 9990,
+                "completedAt": 8200,
+            },
+            {"id": "old", "status": "completed", "epoch": 9990, "completedAt": 8199},
+        ],
+    )
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    assert machine.evaluate([], now=10000, build_active=no_build) == []
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan(
+            [ws],
+            "session-full",
+            now=10001,
+        )
+        .records
+    )
+    assert [
+        line.split()[1]
+        for line in machine.evaluate(records, now=10001, build_active=no_build)
+    ] == ["job=boundary"]
+
+
+@pytest.mark.parametrize("session", [None, ""])
+def test_direct_discovery_without_session_id_requires_session_cwd(tmp_path, session):
+    ws = workspace(tmp_path)
+    other = workspace(tmp_path, "other")
+    _, env = codex_store(tmp_path, ws, [{"id": "local", "sessionId": session}])
+    codex_store(tmp_path, other, [{"id": "stranger", "sessionId": session}])
+    env["PWD"] = str(ws)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    records = scanner.scan(
+        [], "session-full", now=100, discovery_candidates=[ws, other]
+    ).records
+    assert [record.job_id for record in records] == ["local"]

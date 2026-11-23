@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
-"""Read-only, bounded SessionStart reminder for interrupted Codex dispatches."""
+"""Bounded SessionStart recovery for orphaned Codex jobs.
+
+Upstream worker-death/reconciliation defects:
+https://github.com/openai/codex-plugin-cc/issues/432
+https://github.com/openai/codex-plugin-cc/issues/377
+"""
 
 from __future__ import annotations
 
+import heapq
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -10,17 +17,28 @@ import shlex
 import signal
 import stat
 import sys
+import time
 from typing import Any
 
+
+PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location(
+    "claudius_minion_monitoring", PLUGIN_ROOT / "scripts/minion-monitoring.py"
+)
+watchdog = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = watchdog
+SPEC.loader.exec_module(watchdog)
 
 BUDGET_SECS = 3
 JSON_LIMIT = 1024 * 1024
 MAX_ORPHANS = 5
-ACTIVE_STATUSES = ("running", "queued", "pending")
+MAX_SCAN_JOBS = 256
+METADATA_BUDGET_SECS = 0.5
+PROC_ROOT = Path("/proc")
 
 
 def read_json(path: Path) -> Any:
-    """Ignore malformed, oversized, or non-regular state files."""
+    """Keep startup reads smaller than the long-lived monitor's cached reads."""
     try:
         if not stat.S_ISREG(path.stat().st_mode):
             return None
@@ -31,21 +49,31 @@ def read_json(path: Path) -> Any:
         return None
 
 
-def pid_alive(pid: Any) -> bool:
-    """Only a populated positive PID proven absent counts as orphaned."""
-    if type(pid) is not int or pid <= 0:
-        return True
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except (OSError, OverflowError):
-        pass
-    return True
+def recent_jobs(root: Path, now: float) -> list[Path]:
+    """Bound metadata time and JSON reads, prioritising recent job activity."""
+    newest: list[tuple[float, Path]] = []
+    deadline = time.monotonic() + METADATA_BUDGET_SECS
+    for path in root.glob("*/jobs/*.json"):
+        if time.monotonic() >= deadline:
+            break
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if mtime < now - watchdog.DEFAULT_JOB_RECENCY_SECS:
+            continue
+        heapq.heappush(newest, (mtime, path))
+        if len(newest) > MAX_SCAN_JOBS:
+            heapq.heappop(newest)
+    return [path for _, path in sorted(newest, reverse=True)]
+
+
+def printable(value: Any) -> bool:
+    return isinstance(value, str) and 0 < len(value) <= 4096 and value.isprintable()
 
 
 def recovery_context(payload: dict, env: dict) -> str:
-    """Describe this session's active jobs and the exact watchdog invocation."""
+    """Describe only active jobs belonging to the resumed session."""
     if not isinstance(payload, dict) or payload.get("source") not in (
         "resume",
         "compact",
@@ -53,75 +81,59 @@ def recovery_context(payload: dict, env: dict) -> str:
         return ""
     session = payload.get("session_id")
     cwd = payload.get("cwd")
-    if not isinstance(session, str) or not session or not isinstance(cwd, str):
+    if not printable(session) or not watchdog.SAFE_FIELD.fullmatch(session):
         return ""
-    if not Path(cwd).is_absolute() or "\0" in cwd:
+    if not printable(cwd) or not Path(cwd).is_absolute():
         return ""
-    home = Path(env.get("HOME", str(Path.home())))
-    worktrees = Path(env.get("CLAUDIUS_WORKTREE_ROOT", "/data/git-worktrees"))
-    cwd_path = Path(cwd).resolve()
+    worktrees = env.get("CLAUDIUS_WORKTREE_ROOT", str(watchdog.DEFAULT_WORKTREE_ROOT))
+    if not printable(worktrees) or not Path(worktrees).is_absolute():
+        return ""
+    cwd_path = Path(cwd)
     slug = (
         cwd_path.name
-        if cwd_path.parent == worktrees.resolve()
+        if cwd_path.parent == Path(worktrees)
         else cwd.strip("/").replace("/", "-")
     )
-    owned = set()
-    try:
-        for path in worktrees.iterdir():
-            if (
-                (path.name == slug or path.name.startswith(slug + "-"))
-                and (path / ".git").exists()
-                and path.is_dir()
-            ):
-                owned.add(path.resolve())
-    except OSError:
-        pass
-    roots = [home / ".claude/plugins/data/codex-openai-codex/state"]
-    if env.get("CLAUDE_PLUGIN_DATA"):
-        roots.append(Path(env["CLAUDE_PLUGIN_DATA"]) / "state")
-    temp = next((env[key] for key in ("TMPDIR", "TMP", "TEMP") if env.get(key)), "/tmp")
-    roots.append(Path(temp) / "codex-companion")
+    proc = watchdog.ProcInspector(PROC_ROOT)
     active = False
     orphans = []
     orphan_count = 0
-    monitor_env: list[str] = []
-    for root in dict.fromkeys(roots):
-        for path in root.glob("*/jobs/*.json"):
+    try:
+        for path in recent_jobs(watchdog.codex_state_root(env), time.time()):
             job = read_json(path)
-            if not isinstance(job, dict) or job.get("status") not in ACTIVE_STATUSES:
+            if not isinstance(job, dict):
+                continue
+            status = job.get("status")
+            if not isinstance(status, str) or status not in watchdog.ACTIVE_STATUSES:
+                continue
+            job_id = job.get("id")
+            if (
+                not isinstance(job_id, str)
+                or len(job_id) > 64
+                or not job_id[:1].isalnum()
+                or not watchdog.SAFE_FIELD.fullmatch(job_id)
+            ):
                 continue
             workspace = job.get("workspaceRoot")
-            if not isinstance(workspace, str) or not workspace or "\0" in workspace:
-                continue
-            try:
-                workspace_path = Path(workspace).resolve()
-            except (OSError, ValueError, RuntimeError):
+            if not printable(workspace) or not Path(workspace).is_absolute():
                 continue
             job_session = job.get("sessionId")
-            if job_session != session and workspace_path not in owned:
-                if job_session or workspace_path != cwd_path:
-                    continue
-            if not active:
-                monitor_env = [
-                    "env",
-                    (
-                        f"CLAUDE_PLUGIN_DATA={root.parent}"
-                        if root.name == "state"
-                        else "CLAUDE_PLUGIN_DATA="
-                    ),
-                ]
-                if root.name != "state":
-                    monitor_env.append(f"TMPDIR={root.parent}")
+            if job_session not in (None, "") and job_session != session:
+                continue
+            if job_session in (None, "") and workspace != cwd:
+                continue
             active = True
-            if pid_alive(job.get("pid")):
+            if proc.launcher(job.get("pid"), Path(workspace)) != "dead":
                 continue
             orphan_count += 1
             if len(orphans) < MAX_ORPHANS:
                 orphans.append(
-                    f"Codex orphan job={json.dumps(job.get('id', path.stem))} "
-                    f"status={job['status']} pid={job['pid']} --cwd {shlex.quote(workspace)}"
+                    f"Codex orphan job={shlex.quote(job_id)} status={status} "
+                    f"pid={job['pid']} --cwd {shlex.quote(workspace)}"
                 )
-    if not active and not owned:
+    except DeadlineExpired:
+        pass
+    if not active:
         return ""
     lines = orphans
     if orphan_count > MAX_ORPHANS:
@@ -129,23 +141,22 @@ def recovery_context(payload: dict, env: dict) -> str:
             f"+{orphan_count - MAX_ORPHANS} more orphaned jobs; inspect jobs/*.json."
         )
     if orphan_count:
+        reference = (
+            PLUGIN_ROOT / "skills/delegate/references/codex-sandbox-and-recovery.md"
+        )
         lines.append(
-            'Recovery: from each job\'s cwd run node "$CODEX_ROOT/scripts/codex-companion.mjs" '
-            "cancel <job-id> --json; confirm status --all is no longer running, "
-            "then redispatch task --resume-last with the identical --cwd. "
-            "See delegate/references/codex-sandbox-and-recovery.md."
+            f"Recovery: read {shlex.quote(str(reference))} (cancel, then --resume-last with identical --cwd)."
         )
     command = shlex.join(
         [
-            *monitor_env,
             "python3",
-            str(Path(__file__).with_name("minion-monitoring.py").resolve()),
+            str(PLUGIN_ROOT / "scripts/minion-monitoring.py"),
             "--session-id",
             session,
             "--stall-secs",
             "300",
             "--worktrees",
-            str(worktrees),
+            worktrees,
             "--worktrees-session-filter",
             slug,
         ]
