@@ -1,0 +1,113 @@
+{
+  "schema_version": "4.2.0",
+  "metadata": {
+    "project": "example/repo",
+    "date": "2026-11-23",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "scope": "PR #42 comment verification",
+    "report_type": "comment_check",
+    "pr_number": 42,
+    "input_mode": "host_supplied"
+  },
+  "executive_summary": {"overall_assessment": "Six comments assessed; two concerns remain."},
+  "summary_statistics": {"total_findings": 2, "severity_counts": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 1, "LOW": 0, "INFO": 0}},
+  "findings": [{
+    "title": "PR Comment Verification",
+    "category": "pr_comments",
+    "findings": [
+      {
+        "id": "CMT-001",
+        "severity": 4,
+        "title": "Keep the seed out of the debug log",
+        "location": "src/wallet.py:88",
+        "description": "The seed phrase is logged at debug level.",
+        "recommendation": "Drop the field from the log line.",
+        "likelihood": 0.6,
+        "impact": 0.9,
+        "relevance": 0.9,
+        "merge_class": "blocking",
+        "intent_basis": "G-SECRET: seed phrase written to the debug log at src/wallet.py:88"
+      },
+      {
+        "id": "CMT-1000",
+        "severity": 3,
+        "title": "Cache the fee estimate",
+        "location": "src/fees.py:10",
+        "description": "Every refresh requests a new estimate.",
+        "recommendation": "Cache the estimate per block.",
+        "likelihood": 0.5,
+        "impact": 0.4,
+        "relevance": 0.3,
+        "merge_class": "out_of_scope_follow_up"
+      }
+    ]
+  }],
+  "comment_assessments": [
+    {
+      "id": "CMT-001", "finding_id": "CMT-001",
+      "reviewer": "review-bot", "author_type": "bot", "source_kind": "inline",
+      "comment_id": 101, "comment_url": "https://github.com/example/repo/pull/42#discussion_r101",
+      "thread_id": "PRRT_first", "thread_state": "unresolved",
+      "location": "src/wallet.py:88",
+      "description": "Do not log the seed phrase.", "assessment": "valid",
+      "reasoning": "The debug line still formats the seed.",
+      "evidence": "src/wallet.py:88 passes `seed` to `log.debug`.",
+      "proposed_action": "Fix here: drop the field.",
+      "proposed_reply": "The seed is no longer logged.",
+      "gates": [{"gate": "G-SECRET", "evidence": "seed phrase in the debug log at src/wallet.py:88"}],
+      "proposed_decision": {"kind": "fix_here"},
+      "merged_thread_ids": ["PRRT_second"],
+      "merged_urls": ["https://github.com/example/repo/pull/42#discussion_r107"],
+      "pre_existing": false,
+      "fix_size": "XS",
+      "category": "security"
+    },
+    {
+      "id": "CMT-002", "reviewer": "alice", "author_type": "human", "source_kind": "review_body",
+      "comment_url": "https://github.com/example/repo/pull/42#pullrequestreview-102",
+      "description": "Avoid a duplicate request.", "assessment": "already_fixed",
+      "reasoning": "The request is now cached.", "proposed_action": "Resolve: fixed in 1a2b3c4.",
+      "source_quote": "Please avoid sending the balance request twice on refresh.",
+      "proposed_decision": {"kind": "resolve", "fixed_in": "1a2b3c4"},
+      "category": "performance"
+    },
+    {
+      "id": "CMT-1000", "finding_id": "CMT-1000",
+      "reviewer": "bob", "author_type": "human", "source_kind": "pr_comment", "comment_id": "IC_example",
+      "comment_url": "https://github.com/example/repo/pull/42#issuecomment-103",
+      "description": "Cache the fee estimate.", "assessment": "valid",
+      "reasoning": "Valid, but the PR does not touch fee handling.", "proposed_action": "Handled in #77.",
+      "proposed_reply": "https://github.com/example/repo/pull/77",
+      "source_quote": "The fee estimate should be cached per block.",
+      "proposed_decision": {"kind": "handled_in_pr", "target_pr": 77},
+      "recorded_decision": {
+        "kind": "deferred", "by": "carol",
+        "comment_url": "https://github.com/example/repo/pull/42#issuecomment-108",
+        "quote": "Let's defer fee caching to the fees PR."
+      },
+      "pre_existing": true,
+      "fix_size": "S",
+      "category": "other: fee estimate caching"
+    },
+    {
+      "id": "CMT-004", "reviewer": "charlie", "source_kind": "inline",
+      "thread_id": "PRRT_third", "thread_state": "unresolved",
+      "comment_url": "https://github.com/example/repo/pull/42#discussion_r104",
+      "description": "Reject empty values.", "assessment": "wrong",
+      "reasoning": "Empty values are explicitly supported.", "proposed_action": "Reject: the contract allows them.",
+      "proposed_decision": {"kind": "reject"}
+    },
+    {
+      "id": "CMT-005", "reviewer": "alice", "source_kind": "reply",
+      "comment_url": "https://github.com/example/repo/pull/42#discussion_r105",
+      "description": "Thanks for the clarification.",
+      "reasoning": "This is an acknowledgement.", "proposed_action": "No action."
+    },
+    {
+      "id": "CMT-006", "reviewer": "ci-bot", "source_kind": "status",
+      "comment_url": "https://github.com/example/repo/pull/42#issuecomment-106",
+      "description": "Checks completed.",
+      "reasoning": "This reports a completed check.", "proposed_action": "No action."
+    }
+  ]
+}

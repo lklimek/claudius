@@ -9,6 +9,7 @@ exactly the hole that let `intent_basis` accept any non-empty string.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -35,6 +36,14 @@ def test_skill_still_documents_a_gate_table():
 
 def test_code_vocabulary_matches_the_doctrine_exactly():
     assert list(GATE_IDS) == documented_gates()
+
+
+def test_schema_gate_enum_matches_the_code_vocabulary():
+    schema = json.loads(
+        (ROOT / "schemas" / "review-report.schema.json").read_text(encoding="utf-8")
+    )
+    gates = schema["$defs"]["comment_assessment"]["properties"]["gates"]
+    assert gates["items"]["properties"]["gate"]["enum"] == list(GATE_IDS)
 
 
 def test_gate_ids_are_unique():

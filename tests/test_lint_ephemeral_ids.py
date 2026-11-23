@@ -3,7 +3,7 @@
 Covers:
 - Positive matches across every consolidator prefix.
 - Negative cases for the documented allow-list (ADR/RFC/CWE/CVE/OWASP/GHSA/etc.).
-- Word-boundary edge cases (5-digit suffix rejected, no-boundary prefix rejected).
+- Word-boundary edge cases (longer suffixes match, no-boundary prefix rejected).
 - ``--diff`` parsing (only added lines, line numbers from hunk headers).
 - Prefix-source-of-truth assertion: lint's PREFIXES is a superset of the
   consolidator's CATEGORY_PREFIX values.
@@ -44,6 +44,7 @@ POSITIVE_CASES = [
     "GO-007",
     "FE-111",
     "DOC-002",
+    "CMT-1000",
 ]
 
 
@@ -74,6 +75,7 @@ NEGATIVE_CASES = [
     "HACK",
     "TS-001",  # test-spec, not in consolidator set
     "T-1234",  # too short prefix
+    "GO-2024-1234",  # Go vulnerability database ID
 ]
 
 
@@ -86,9 +88,14 @@ def test_negative_no_match(token: str) -> None:
 # ---------------------------------------------------------------------------
 # Word-boundary edges
 # ---------------------------------------------------------------------------
-def test_five_digit_suffix_rejected() -> None:
-    """Regex requires exactly 3 digits — 5-digit IDs are NOT ephemeral."""
+def test_longer_suffix_matches() -> None:
+    """Report IDs grow past three digits (``CMT-\\d{3,}``)."""
     hits = lint.scan_text("see RUST-12345 docs", "<test>")
+    assert [h["matched_id"] for h in hits] == ["RUST-12345"]
+
+
+def test_two_digit_suffix_rejected() -> None:
+    hits = lint.scan_text("see RUST-12 docs", "<test>")
     assert hits == []
 
 
@@ -102,6 +109,12 @@ def test_trailing_punctuation_still_matches() -> None:
     hits = lint.scan_text("see CMT-001. and done", "<test>")
     assert len(hits) == 1
     assert hits[0]["matched_id"] == "CMT-001"
+
+
+@pytest.mark.parametrize("token", ["CMT-001-005", "SEC-014-2"])
+def test_three_digit_ranges_remain_ephemeral(token: str) -> None:
+    hits = lint.scan_text(token, "<test>")
+    assert [hit["matched_id"] for hit in hits] == [token[:7]]
 
 
 def test_multiple_matches_same_line() -> None:

@@ -3,7 +3,7 @@
 
 Usage:
     python3 scripts/validate_report.py <report.json> [--schema <schema.json>]
-        [--producer] [--strict-v4]
+        [--producer] [--strict-v4] [--ids <pr-data/ids.json>]
 
 Schema-v3 files are migrated in memory and validated in that form; the verdict
 says so, and --strict-v4 rejects them outright for callers that need v4 on disk.
@@ -53,7 +53,7 @@ _AXIS_SHARE_THRESHOLD = 0.8
 _RATED_AXES = ("likelihood", "impact", "relevance")
 
 # Schema versions that define merge_class / intent_basis.
-_MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0", "4.1.0")
+_MERGE_CLASS_SCHEMA_VERSIONS = ("3.2.0", "4.0.0", "4.1.0", "4.2.0")
 _MERGE_CLASS_VERSIONS_TEXT = " or ".join(_MERGE_CLASS_SCHEMA_VERSIONS)
 
 
@@ -208,11 +208,28 @@ def _mentioned_gate(text: str) -> str | None:
     return None
 
 
-def comment_assessment_errors(report: dict) -> list[str]:
+def comment_assessment_errors(report: dict, ids: dict | None = None) -> list[str]:
     """Check row identity and links to the canonical scored findings."""
     findings = {f["id"] for f in _iter_findings(report)}
     seen = set()
     errors = []
+    rows = {row["id"]: row for row in report.get("comment_assessments", [])}
+    offered_kinds = {}
+    if ids is not None:
+        if report.get("metadata", {}).get("input_mode") != "host_supplied":
+            errors.append("--ids requires metadata.input_mode: host_supplied")
+        for item in ids["items"]:
+            key = item["key"]
+            kind = item.get("source_kind")
+            if kind is None:
+                if key.startswith("review:"):
+                    kind = "review_body"
+                elif key.startswith("comment:"):
+                    kind = "pr_comment"
+                elif key.startswith("PRRT_"):
+                    kind = "inline"
+            if kind is not None:
+                offered_kinds[item["id"]] = kind
     for row in report.get("comment_assessments", []):
         rid = row["id"]
         if rid in seen:
@@ -224,6 +241,35 @@ def comment_assessment_errors(report: dict) -> list[str]:
             errors.append(f"{rid}: assessment and finding_id must share the same ID")
         if rid in findings and row.get("finding_id") != rid:
             errors.append(f"{rid}: scored finding ID requires an explicit finding_id")
+        if rid in offered_kinds and row["source_kind"] != offered_kinds[rid]:
+            errors.append(
+                f"{rid}: source_kind must remain {offered_kinds[rid]} from ids.json"
+            )
+        target_id = row.get("merged_into")
+        if target_id is not None:
+            target = rows.get(target_id)
+            if target is None:
+                errors.append(f"{rid}: unknown merged_into {target_id}")
+            elif target_id == rid or "merged_into" in target:
+                errors.append(
+                    f"{rid}: merged_into must reference a canonical row directly"
+                )
+            elif target["source_kind"] not in {"inline", "review_body", "pr_comment"}:
+                errors.append(f"{rid}: merged_into must reference an assessed item")
+            else:
+                if row["comment_url"] not in target.get("merged_urls", []):
+                    errors.append(
+                        f"{rid}: canonical row {target_id} must list the duplicate in merged_urls"
+                    )
+                thread_id = row.get("thread_id")
+                if (
+                    thread_id is not None
+                    and thread_id != target.get("thread_id")
+                    and thread_id not in target.get("merged_thread_ids", [])
+                ):
+                    errors.append(
+                        f"{rid}: canonical row {target_id} must list the duplicate in merged_thread_ids"
+                    )
     return errors
 
 
@@ -350,7 +396,39 @@ def main() -> int:
         action="store_true",
         help="Fail (exit 1) when the file needs the schema-v3 migration to validate",
     )
+    parser.add_argument(
+        "--ids", type=Path, help="Host ids.json to check reused source kinds"
+    )
     args = parser.parse_args()
+    if args.ids is not None and args.producer:
+        parser.error("--ids cannot be used with --producer")
+
+    ids = None
+    if args.ids is not None:
+        try:
+            ids = load_json_strict(args.ids.read_text())
+            kinds = {"inline", "review_body", "pr_comment", "reply", "status"}
+            if not isinstance(ids, dict) or not isinstance(ids.get("items"), list):
+                raise ValueError("expected an object with an items array")
+            for item in ids["items"]:
+                if (
+                    not isinstance(item, dict)
+                    or not isinstance(item.get("id"), str)
+                    or not isinstance(item.get("key"), str)
+                    or (
+                        item.get("source_kind") is not None
+                        and (
+                            not isinstance(item["source_kind"], str)
+                            or item["source_kind"] not in kinds
+                        )
+                    )
+                ):
+                    raise ValueError(
+                        "each item needs id, key and an optional valid source_kind"
+                    )
+        except (OSError, ValueError) as e:
+            print(f"Invalid ids input: {e}", file=sys.stderr)
+            return 2
 
     try:
         schema = json.loads(Path(args.schema).read_text())
@@ -417,7 +495,7 @@ def main() -> int:
     errors = sorted(validator.iter_errors(report), key=lambda e: list(e.absolute_path))
 
     if not errors and not args.producer:
-        row_errors = comment_assessment_errors(report)
+        row_errors = comment_assessment_errors(report, ids)
         if row_errors:
             print("\n".join(row_errors), file=sys.stderr)
             return 1

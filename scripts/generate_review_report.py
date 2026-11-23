@@ -681,6 +681,12 @@ def _safe_url(value: Any, *, allow_mailto: bool = False) -> str:
         return ""
 
 
+def _assessment_label(row: dict[str, Any]) -> str:
+    if row.get("merged_into"):
+        return f"Merged into {row['merged_into']}"
+    return ASSESSMENT_LABELS.get(row.get("assessment"), "Context")
+
+
 def _comment_assessment_markdown(data: dict[str, Any]) -> list[str]:
     rows = data.get("comment_assessments", [])
     if not rows:
@@ -694,7 +700,7 @@ def _comment_assessment_markdown(data: dict[str, Any]) -> list[str]:
             ("Location", row.get("location")),
             ("Code URL", _safe_url(row.get("location_permalink"))),
             ("Comment", row["description"]),
-            ("Assessment", ASSESSMENT_LABELS.get(row.get("assessment"), "Context")),
+            ("Assessment", _assessment_label(row)),
             ("Thread state", row.get("thread_state")),
             ("Reasoning", row["reasoning"]),
             ("Evidence", row.get("evidence")),
@@ -3568,7 +3574,7 @@ def render_pdf(data: dict[str, Any], output_path: Path) -> None:
             ("Source", row["comment_url"]),
             ("Location", row.get("location")),
             ("Code URL", row.get("location_permalink")),
-            ("Assessment", ASSESSMENT_LABELS.get(row.get("assessment"), "Context")),
+            ("Assessment", _assessment_label(row)),
             ("Thread state", row.get("thread_state")),
             ("Comment", row["description"]),
             ("Reasoning", row["reasoning"]),
