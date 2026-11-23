@@ -142,6 +142,10 @@ sudo npm install --global @openai/codex
 
 Configure the Codex CLI in `~/.codex/config.toml` before using that bridge. Native Codex workers do not require the bridge.
 
+#### Optional Antigravity reviewer
+
+Install and sign in to [Google Antigravity's CLI](https://antigravity.google/docs/cli) (`agy`); full review then adds the Aga reviewer. She uses your `agy` permission settings, so allow the read and write actions a review needs without asking.
+
 #### Built-in stall watchdog
 
 Install `tmux` to use the built-in stall watchdog:

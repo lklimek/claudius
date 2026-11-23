@@ -16,6 +16,14 @@ Always include all three, including for tiny diffs. Documentation-heavy changes 
 
 Always add a Codex reviewer when Codex is available, using the Reviewer pass on the same scope. Use `qa-codex` for its producer files and consolidation label. Keep all core passes above.
 
+Likewise add Aga (Agnieszka), a Google Antigravity reviewer, when `agy models` lists `gemini-4-neon-high` (Gemini 4 Neon at high effort; the effort is part of the model ID, and `agy` rejects `--effort` for Neon); otherwise tell the user she was skipped and why. Use `qa-agy`. Write her producer prompt to `<SCRATCH_DIR>/qa-agy-brief.md` and run her in the background (foreground in headless hosts, with `--print-timeout` under the host's command limit) from a new empty directory outside any git checkout, since `agy` runs hooks and rules from its working directory's `.agents/`:
+
+```bash
+env -C <SCRATCH_DIR>/agy-cwd agy -p "Read <SCRATCH_DIR>/qa-agy-brief.md and follow it." --model gemini-4-neon-high --print-timeout 45m
+```
+
+She runs under the user's own `agy` permission settings; one action they would ask about ends a headless run with no output (exit 2). A non-zero exit, a timeout, or a missing or gate-failing findings file means her pass did not complete: say so in the executive summary and consolidate without her.
+
 ## Agent prompts
 
 The invariant producer rules — finding format, execution-path coverage, UI-text scan, always-flagged classes, slim-down, UX/DX lens, cross-domain hints, collision preservation, Bash hygiene, CI context, process and report-back rules — live in the producer contract (`<PRODUCER_READS>`); producers read it in place. Never restate them per spawn (measured: ~2500 lines of coordinator output across 5 producers on one large review); `report.json`'s `metadata.plugin_version` pins which version applied. Beyond the general agent prompt requirements (`delegate`), each spawn prompt carries only what varies:
