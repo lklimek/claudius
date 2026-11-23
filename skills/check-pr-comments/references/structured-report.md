@@ -8,7 +8,12 @@ Read for a requested report or comment-table file. A comment-check report uses t
 - `executive_summary`: `overall_assessment` = "X of Y review comments resolved", `verdict_action` = "N comments require attention".
 - `summary_statistics`: add `verdict_counts: {"RESOLVED": <n>, "UNRESOLVED": <n>}` next to `severity_counts`.
 - `findings`: one section — `title: "PR Comment Verification"`, `category: "pr_comments"`.
-- Emit `schema_version: "4.1.0"` and `comment_assessments` per the `report-format` contract loaded in step 5. Existing 4.0 comment-check reports remain readable. Statistics count scored findings, not context rows; omit `verdict_counts` when the binary finding verdict is unused.
+- Emit `schema_version: "4.2.0"` and `comment_assessments` per the `report-format` contract loaded in step 5; `metadata.input_mode`: `fetched`, or `host_supplied` in host-supplied mode. Existing 4.0/4.1 comment-check reports remain readable. Statistics count scored findings, not context rows; omit `verdict_counts` when the binary finding verdict is unused.
+
+## Row fields (4.2)
+
+- Step 3: an item's quote → `source_quote`; reply-chain decision → `recorded_decision`; merged duplicates → `merged_thread_ids` / `merged_urls`.
+- Step 4 and the verify-only report contract: Category → `category`; Recommendation → `proposed_decision` (`proposed_action` keeps the prose); tripped gates → `gates`; pre-existing on base → `pre_existing`; fix size → `fix_size`.
 
 ## Finding additions
 
