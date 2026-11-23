@@ -1448,12 +1448,15 @@ class CodexStateMachine:
         self.misses: dict[str, int] = {}
         self.gone_hits: dict[str, int] = {}
         self.reported: set[str] = set()
+        self.initialized = False
 
-    def _terminal(self, record: CodexRecord) -> list[str]:
+    def _terminal(self, record: CodexRecord, *, baseline: bool = False) -> list[str]:
         if record.key in self.reported:
             return []
         self.reported.add(record.key)
         self.state[record.key] = record.status.upper()
+        if baseline:
+            return []
         if record.status == "done":
             return [
                 f"CODEX_DONE job={record.job_id} workspace={record.workspace_key} "
@@ -1546,10 +1549,11 @@ class CodexStateMachine:
         for record in ordered:
             self.misses[record.key] = 0
             if record.status in {"done", "failed", "cancelled"}:
-                events.extend(self._terminal(record))
+                events.extend(self._terminal(record, baseline=not self.initialized))
             else:
                 events.extend(self._active(record, now, build_active))
         events.extend(self.prune(seen))
+        self.initialized = True
         return events
 
     def prune(self, alive: set[str]) -> list[str]:

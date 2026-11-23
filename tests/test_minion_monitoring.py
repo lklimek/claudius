@@ -976,7 +976,7 @@ def test_cx_022_to_026_terminal_events_are_exact_and_deterministic() -> None:
 
 
 def test_cx_027_to_032_missing_partial_unknown_and_bootstrap(tmp_path: Path) -> None:
-    """CX-027..CX-032: read glitches are tolerated and bootstrap terminals report."""
+    """CX-027..CX-032: read glitches are tolerated and bootstrap terminals stay silent."""
     ws = workspace(tmp_path)
     state_dir, env = codex_store(tmp_path, ws, [{"id": "job-1", "epoch": 100}])
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
@@ -1048,7 +1048,7 @@ def test_cx_027_to_032_missing_partial_unknown_and_bootstrap(tmp_path: Path) -> 
 
     boot = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
     terminal = record(status="done", phase="done")
-    assert len(boot.evaluate([terminal], now=100, build_active=no_build)) == 1
+    assert boot.evaluate([terminal], now=100, build_active=no_build) == []
     assert boot.evaluate([terminal], now=101, build_active=no_build) == []  # CX-032
 
 
@@ -1103,6 +1103,7 @@ def test_cx_037_completed_job_cycles_keep_per_job_state_bounded() -> None:
     """CX-037: completed and forgotten jobs do not accumulate state."""
     machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
 
+    machine.evaluate([], now=-1, build_active=no_build)
     for index in range(100):
         done = record(job_id=f"job-{index}", status="done", phase="done")
         assert machine.evaluate([done], now=index * 3, build_active=no_build) == [
@@ -2410,3 +2411,18 @@ def test_codex_cli_state_store_integration_is_isolated(tmp_path: Path) -> None:
         f"CODEX_FAILED job=cli-job workspace={watchdog.resolve_workspace(ws, env=env).key} "
         'phase=failed error="line one line two"'
     ]
+
+
+@pytest.mark.parametrize("status", ["done", "failed", "cancelled"])
+def test_codex_rearm_baselines_existing_terminals(status: str) -> None:
+    """Re-arming never replays terminals, but later completions still report."""
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    old = record(job_id="old", status=status)
+    active = record(job_id="live")
+    assert machine.evaluate([old, active], now=100, build_active=no_build) == []
+    assert machine.evaluate([old, active], now=101, build_active=no_build) == []
+    done = record(job_id="live", status="done", phase="done")
+    assert machine.evaluate([old, done], now=102, build_active=no_build) == [
+        "CODEX_DONE job=live workspace=repo-abc123 phase=done"
+    ]
+    assert machine.evaluate([old, done], now=103, build_active=no_build) == []
