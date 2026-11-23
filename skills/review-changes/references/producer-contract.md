@@ -40,6 +40,18 @@ Check all changed code, whatever the assigned focus: fixed secrets (keys, mnemon
 tokens) in tests and fixtures; interactive widgets without an accessible name; raw error text
 in logs and diagnostics.
 
+## Slim-down
+
+Run by the basic reviewer and, in full mode, by Adams; other producers skip it. Ask what the
+diff can delete or merge while keeping its intent and test coverage: redundant fields, state or
+collections; duplicated control flow within the diff; drive-by renames, reformatting or refactors
+(`coding-best-practices` § Cross-Cutting Rules); tests asserting the same case twice. Duplication
+of existing code stays under Adams' DRY. File each concrete change as a `code_quality` finding
+tagged `simplification`, its title (under 150 characters, so the digest keeps it whole) ending
+`(-<N> lines)`. Rate it LOW (`likelihood` ≈ 0.3,
+`impact` 0.1–0.3 by how much code a later change must read), never INFO; a removable hunk that
+also carries a defect is rated as that defect.
+
 ## UX/DX lens
 
 Assess how findings affect end-user workflows and developer experience, not just code
