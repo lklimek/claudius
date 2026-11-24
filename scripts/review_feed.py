@@ -16,7 +16,7 @@ MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
 
 
 def parse_ts(ts: object) -> Optional[datetime]:
-    if not isinstance(ts, str) or not ts:
+    if not isinstance(ts, str) or not ts or not ts.isprintable():
         return None
     try:
         parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))

@@ -190,6 +190,14 @@ def test_snapshot_cannot_forge_additional_stdout_events(field, value):
     assert len(text.splitlines()) == 1 and "PR999" not in text
 
 
+@pytest.mark.parametrize("separator", ["\n", "\r", "\t", "\x85", "\u2028"])
+def test_nonprinting_iso_separator_cannot_split_evidence_lines(separator):
+    data = snapshot(data_as_of="2026-11-24" + separator + "11:59:00Z")
+    result = observe(data)
+    assert result.state == "unknown"
+    assert result.as_of is None and len(result.text().splitlines()) == 1
+
+
 @pytest.mark.parametrize("value", [False, 0.0])
 def test_ingest_error_streak_requires_an_integer(value):
     data = snapshot()
