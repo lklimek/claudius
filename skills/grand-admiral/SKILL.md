@@ -108,14 +108,16 @@ Treat every `<task-notification>` as a routing hint, not proof the task belongs 
 
 For native workers, track the returned worker IDs with the host's lifecycle/status tools and collect all results before ending the turn. Use this external watchdog only for Claude teams or launcher jobs it can actually discover.
 
-Launch ONE persistent Monitor per session/wave — silent until an agent actually stalls:
+Launch ONE Monitor per session/wave — silent until an agent actually stalls:
 
 ```
-Monitor(persistent=true, description="agent stall watchdog",
+Monitor(timeout_ms=1800000, description="agent stall watchdog",
         command="python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/minion-monitoring.py\" --session-id ${CLAUDE_SESSION_ID} --stall-secs 300 --worktrees \"${CLAUDIUS_WORKTREE_ROOT:-/data/git-worktrees}\"")
 ```
 
-Allow-list once in user settings: `Bash(python3 */scripts/minion-monitoring.py *)` (a glob, because the installed plugin path changes with every version). Tune `--stall-secs` to expected build duration (cold Rust builds: 600+); point `--worktrees`/`$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root (also feeds Codex job discovery). `TaskStop` it when the wave completes.
+`timeout_ms` caps at 1800000 ms (30 minutes); the Monitor then ends with one expiry notice. Re-arm on expiry only while dispatched work is live; also re-arm after resume/compaction if no watchdog survived.
+
+Allow-list once in user settings: `Bash(python3 */scripts/minion-monitoring.py *)` (a glob, because the installed plugin path changes with every version). Tune `--stall-secs` to expected build duration (cold Rust builds: 600+); point `--worktrees`/`$CLAUDIUS_WORKTREE_ROOT` at the pre-created worktree root for Claude activity clocks. `TaskStop` it when the wave completes.
 
 **Load `references/stall-watchdog.md` before the first dispatch** — discovery sources, event grammar (`STALL`/`RESUMED`/`GONE`/`CODEX_*`), Multi-Session Hygiene traps, orphan-pane cleanup, and the mandatory STALL/GONE playbooks. Never improvise a response to those events without it.
 

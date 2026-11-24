@@ -45,6 +45,13 @@ def workspace(tmp_path: Path, name: str = "repo") -> Path:
     return result
 
 
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path, monkeypatch):
+    """No fallback resolver can read the real Claude state in this module."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+
+
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
     """Create a real Git workspace for repository-root resolution tests."""
@@ -138,6 +145,20 @@ def record(
     )
 
 
+def member_transcript(projects: Path, cwd: Path, kind: str, session: str) -> Path:
+    """Write a real-shaped tmux member transcript, without inventing config keys."""
+    slug = re.sub(r"[^A-Za-z0-9-]", "-", str(cwd).rstrip("/"))
+    path = projects / slug / f"{session}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {"type": "agent-setting", "agentSetting": kind, "sessionId": session}
+        )
+        + "\n"
+    )
+    return path
+
+
 def test_safe_json_bounds_reads_and_handles_recursion(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -216,10 +237,16 @@ def test_cx_004_slug_sanitization(root: Path, prefix: str) -> None:
     assert watchdog.workspace_key(root, root).startswith(prefix)
 
 
-def test_cx_005_node_temp_environment_semantics(tmp_path: Path) -> None:
-    """CX-005: plugin-data absence uses Node-compatible temp selection."""
-    env = {"TMPDIR": str(tmp_path / "node-tmp"), "HOME": str(tmp_path / "home")}
-    assert watchdog.codex_state_root(env) == Path(env["TMPDIR"]) / "codex-companion"
+def test_codex_store_is_independent_of_other_plugins_and_tmp(tmp_path: Path) -> None:
+    """Claude Code job discovery always reads the Codex plugin's own store."""
+    env = {
+        "TMPDIR": str(tmp_path / "node-tmp"),
+        "HOME": str(tmp_path / "home"),
+        "CLAUDE_PLUGIN_DATA": str(tmp_path / "another-plugin"),
+    }
+    assert watchdog.codex_state_root(env) == (
+        Path(env["HOME"]) / ".claude/plugins/data/codex-openai-codex/state"
+    )
 
 
 def test_real_git_workspace_resolves_repository_root(
@@ -238,7 +265,7 @@ def test_real_git_workspace_resolves_repository_root(
 
 
 def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
-    """CX-006..CX-010: direct discovery is workspace- and session-scoped."""
+    """CX-006..CX-010: session ownership includes work outside candidate directories."""
     ws = workspace(tmp_path)
     other = workspace(tmp_path, "other")
     _, env = codex_store(
@@ -253,15 +280,19 @@ def test_cx_006_to_010_scanner_scope(tmp_path: Path) -> None:
     codex_store(
         tmp_path,
         other,
-        [{"id": "foreign-workspace", "sessionId": "session-full"}],
+        [{"id": "other-workspace", "sessionId": "session-full"}],
     )
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
     result = scanner.scan([ws], "session-full")
-    assert [item.job_id for item in result.records] == ["ours"]  # CX-006/007
-    assert "foreign-workspace" not in [item.job_id for item in result.records]  # CX-008
+    assert [item.job_id for item in result.records] == [
+        "other-workspace",
+        "ours",
+    ]  # CX-006/007
+    assert "foreign-session" not in [item.job_id for item in result.records]  # CX-008
     assert scanner.scan([ws], "").records == []  # CX-009
     assert [item.job_id for item in scanner.scan([ws], "session-full").records] == [
-        "ours"
+        "other-workspace",
+        "ours",
     ]  # CX-010: direct scanner is independent of CLI projection environment
 
     current_state, current_env = codex_store(
@@ -312,7 +343,6 @@ def test_codex_scanner_warns_once_for_workspace_root_mismatch(
     )
     job_path = state_dir / "jobs" / "mismatch.json"
     job = json.loads(job_path.read_text(encoding="utf-8"))
-    job.pop("sessionId")
     write_json(job_path, job, 100)
     info = watchdog.resolve_workspace(ws, env)
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
@@ -511,36 +541,33 @@ def test_cross_session_job_prevents_shared_state_mtime_attribution(
     ]
 
 
-def test_direct_discovery_prefilters_foreign_workspace_state(
+def test_direct_discovery_ignores_foreign_sessions_in_other_workspaces(
     tmp_path: Path,
 ) -> None:
-    """Teamless discovery does not parse state for another workspace."""
+    """Global discovery reads ownership but never reports another session's jobs."""
     ws = workspace(tmp_path)
     foreign = workspace(tmp_path, "foreign")
     _, env = codex_store(tmp_path, ws, [{"id": "ours", "epoch": 100}])
-    foreign_state, _ = codex_store(
+    codex_store(
         tmp_path,
         foreign,
-        [{"id": "foreign", "epoch": 100}],
+        [{"id": "foreign", "sessionId": "another-session", "epoch": 100}],
     )
-    foreign_job = foreign_state / "jobs" / "foreign.json"
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
 
     result = scanner.scan(
         [],
         "session-full",
         now=100,
-        discovery_candidates=[ws],
     )
 
     assert [item.job_id for item in result.records] == ["ours"]
-    assert foreign_job not in scanner.cache.items
 
 
 def test_direct_discovery_survives_zero_match_ambient_session(
     tmp_path: Path,
 ) -> None:
-    """A failed ambient session match cannot suppress a direct workspace."""
+    """An explicitly known teammate remains visible without a matching lead job."""
     ambient = workspace(tmp_path, "ambient")
     direct = workspace(tmp_path, "direct")
     _, env = codex_store(
@@ -559,7 +586,7 @@ def test_direct_discovery_survives_zero_match_ambient_session(
         [ambient],
         "coordinator-session",
         now=100,
-        discovery_candidates=[direct],
+        teammate_sessions={"worker-session"},
     )
 
     assert [item.job_id for item in result.records] == ["direct"]
@@ -590,9 +617,9 @@ def test_codex_scanner_never_parses_growing_state_json(
     real_safe_json = watchdog.safe_json
     real_safe_state_header = watchdog._safe_state_header
 
-    def tracking_safe_json(path: Path) -> Any | None:
+    def tracking_safe_json(path: Path, **kwargs) -> Any | None:
         parsed_paths.append(path)
-        return real_safe_json(path)
+        return real_safe_json(path, **kwargs)
 
     def tracking_safe_state_header(path: Path) -> Any | None:
         header_paths.append(path)
@@ -976,7 +1003,7 @@ def test_cx_022_to_026_terminal_events_are_exact_and_deterministic() -> None:
 
 
 def test_cx_027_to_032_missing_partial_unknown_and_bootstrap(tmp_path: Path) -> None:
-    """CX-027..CX-032: read glitches are tolerated and bootstrap terminals report."""
+    """CX-027..CX-032: read glitches are tolerated and bootstrap terminals stay silent."""
     ws = workspace(tmp_path)
     state_dir, env = codex_store(tmp_path, ws, [{"id": "job-1", "epoch": 100}])
     scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
@@ -1048,7 +1075,7 @@ def test_cx_027_to_032_missing_partial_unknown_and_bootstrap(tmp_path: Path) -> 
 
     boot = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
     terminal = record(status="done", phase="done")
-    assert len(boot.evaluate([terminal], now=100, build_active=no_build)) == 1
+    assert boot.evaluate([terminal], now=100, build_active=no_build) == []
     assert boot.evaluate([terminal], now=101, build_active=no_build) == []  # CX-032
 
 
@@ -1103,6 +1130,7 @@ def test_cx_037_completed_job_cycles_keep_per_job_state_bounded() -> None:
     """CX-037: completed and forgotten jobs do not accumulate state."""
     machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
 
+    machine.evaluate([], now=-1, build_active=no_build)
     for index in range(100):
         done = record(job_id=f"job-{index}", status="done", phase="done")
         assert machine.evaluate([done], now=index * 3, build_active=no_build) == [
@@ -1463,11 +1491,11 @@ def test_watchdog_warns_once_when_codex_has_zero_candidates(
     )
 
 
-def test_watchdog_zero_candidates_warning_names_the_real_cause(
+def test_watchdog_without_candidates_keeps_store_discovery_enabled(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A team lacking any usable cwd is not blamed on a missing team config."""
+    """No mapped cwd is required for session-owned Codex discovery."""
     home = tmp_path / "home"
     worktrees = tmp_path / "worktrees"
     worktrees.mkdir()
@@ -1504,10 +1532,9 @@ def test_watchdog_zero_candidates_warning_names_the_real_cause(
     assert monitor.poll_once(now=100) == []
 
     err = capsys.readouterr().err
-    assert "codex-zero-candidates" in monitor.warned
-    assert "no team config" not in err
-    assert "a team config with no active member or lead cwd" in err
-    assert "dispatch a NAMED teammate that reports a cwd" in err
+    assert "codex-zero-candidates" not in monitor.warned
+    assert "Codex job monitoring is effectively disabled" not in err
+    assert "--worktrees points at where Codex worktrees" not in err
 
 
 def test_watchdog_poll_combines_claude_and_codex_edges(tmp_path: Path) -> None:
@@ -1713,7 +1740,7 @@ def test_teamless_watchdog_discovers_codex_state_from_session_cwd(
 def test_direct_workspace_surfaces_jobs_from_multiple_foreign_sessions(
     tmp_path: Path,
 ) -> None:
-    """Direct workspace ownership includes jobs from every dispatch session."""
+    """Teammate-dispatched jobs remain visible without admitting unrelated sessions."""
     worktrees = tmp_path / "worktrees"
     worktrees.mkdir()
     ws = workspace(worktrees, "agent-rescue")
@@ -1736,6 +1763,33 @@ def test_direct_workspace_surfaces_jobs_from_multiple_foreign_sessions(
         ],
         state_epoch=100,
     )
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-coordinator/config.json",
+        {
+            "name": "session-coordinator",
+            "leadSessionId": "coordinator-session",
+            "members": [
+                {
+                    "name": "one",
+                    "agentId": "one@session-coordinator",
+                    "agentType": "developer-one",
+                    "backendType": "tmux",
+                    "cwd": str(ws),
+                    "isActive": True,
+                },
+                {
+                    "name": "two",
+                    "agentId": "two@session-coordinator",
+                    "agentType": "reviewer-two",
+                    "backendType": "tmux",
+                    "cwd": str(ws),
+                    "isActive": False,
+                },
+            ],
+        },
+    )
+    member_transcript(tmp_path / "projects", ws, "developer-one", "worker-session-one")
+    member_transcript(tmp_path / "projects", ws, "reviewer-two", "worker-session-two")
     monitor = watchdog.Watchdog(
         watchdog.Options(
             session_id="coordinator-session",
@@ -1752,17 +1806,15 @@ def test_direct_workspace_surfaces_jobs_from_multiple_foreign_sessions(
     assert monitor.poll_once(now=200) == []
     key = watchdog.resolve_workspace(ws, env).key
     assert monitor.poll_once(now=201) == [
-        f"CODEX_STALL job=worker-one workspace={key} "
-        "idle=101s phase=running reason=no-progress",
-        f"CODEX_STALL job=worker-two workspace={key} "
-        "idle=101s phase=running reason=no-progress",
+        f"CODEX_STALL job=worker-one workspace={key} idle=101s phase=running reason=no-progress",
+        f"CODEX_STALL job=worker-two workspace={key} idle=101s phase=running reason=no-progress",
     ]
 
 
-def test_worktree_session_filter_excludes_unrelated_workspace_jobs(
+def test_worktree_filter_does_not_hide_session_jobs(
     tmp_path: Path,
 ) -> None:
-    """An opt-in worktree slug prefix excludes sibling-session Codex jobs."""
+    """Worktree discovery filters do not limit session-owned Codex discovery."""
     worktrees = tmp_path / "worktrees"
     worktrees.mkdir()
     selected = workspace(worktrees, "agent-session-one-rescue")
@@ -1770,13 +1822,27 @@ def test_worktree_session_filter_excludes_unrelated_workspace_jobs(
     _, env = codex_store(
         tmp_path,
         selected,
-        [{"id": "selected", "epoch": 100, "updatedAt": None}],
+        [
+            {
+                "id": "selected",
+                "sessionId": "coordinator-session",
+                "epoch": 100,
+                "updatedAt": None,
+            }
+        ],
         state_epoch=100,
     )
     codex_store(
         tmp_path,
         unrelated,
-        [{"id": "unrelated", "epoch": 100, "updatedAt": None}],
+        [
+            {
+                "id": "unrelated",
+                "sessionId": "coordinator-session",
+                "epoch": 100,
+                "updatedAt": None,
+            }
+        ],
         state_epoch=100,
     )
     monitor = watchdog.Watchdog(
@@ -1797,7 +1863,9 @@ def test_worktree_session_filter_excludes_unrelated_workspace_jobs(
     key = watchdog.resolve_workspace(selected, env).key
     assert monitor.poll_once(now=201) == [
         f"CODEX_STALL job=selected workspace={key} "
-        "idle=101s phase=running reason=no-progress"
+        "idle=101s phase=running reason=no-progress",
+        f"CODEX_STALL job=unrelated workspace={watchdog.resolve_workspace(unrelated, env).key} "
+        "idle=101s phase=running reason=no-progress",
     ]
 
 
@@ -1955,7 +2023,7 @@ def test_codex_proc_evidence_rejects_pid_reuse(tmp_path: Path) -> None:
     watchdog.write_fake_process(proc, 102, ws, ["sleep", "1000"])
     inspector = watchdog.ProcInspector(proc)
     assert inspector.launcher(101, ws) == "alive"
-    assert inspector.launcher(102, ws) == "dead"
+    assert inspector.launcher(102, ws) == "reused"
     endpoint_dir = tmp_path / "runtime"
     endpoint = endpoint_dir / "broker.sock"
     watchdog.write_fake_process(
@@ -2103,6 +2171,7 @@ def test_dump_job_prints_full_record_without_starting_monitor(
         ],
     )
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", env["CLAUDE_PLUGIN_DATA"])
+    monkeypatch.setenv("HOME", env["HOME"])
 
     def fail_monitor(_options: watchdog.Options) -> None:
         raise AssertionError("dump mode must not start the persistent monitor")
@@ -2133,12 +2202,18 @@ def test_dump_job_not_found_is_a_clean_error(
     """An unknown dump id reports the searched root without a traceback."""
     plugin_data = tmp_path / "plugin-data"
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(plugin_data))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
     assert watchdog.main(["--dump-job", "missing-job"]) == 1
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert f"no job 'missing-job' found under {plugin_data / 'state'}" in captured.err
+    assert (
+        "no job 'missing-job' found under "
+        + str(tmp_path / "home/.claude/plugins/data/codex-openai-codex/state")
+        in captured.err
+    )
     assert "Traceback" not in captured.err
 
 
@@ -2153,6 +2228,7 @@ def test_dump_job_reports_malformed_record(
     job_path = state_dir / "jobs" / "broken-job.json"
     job_path.write_text('{"id": "broken-job"', encoding="utf-8")
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", env["CLAUDE_PLUGIN_DATA"])
+    monkeypatch.setenv("HOME", env["HOME"])
 
     assert watchdog.main(["--dump-job", "broken-job"]) == 1
 
@@ -2410,3 +2486,588 @@ def test_codex_cli_state_store_integration_is_isolated(tmp_path: Path) -> None:
         f"CODEX_FAILED job=cli-job workspace={watchdog.resolve_workspace(ws, env=env).key} "
         'phase=failed error="line one line two"'
     ]
+
+
+@pytest.mark.parametrize("status", ["done", "failed", "cancelled"])
+def test_codex_rearm_baselines_existing_terminals(status: str) -> None:
+    """Re-arming never replays terminals, but later completions still report."""
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    old = record(job_id="old", status=status)
+    active = record(job_id="live")
+    assert machine.evaluate([old, active], now=100, build_active=no_build) == []
+    assert machine.evaluate([old, active], now=101, build_active=no_build) == []
+    done = record(job_id="live", status="done", phase="done")
+    assert machine.evaluate([old, done], now=102, build_active=no_build) == [
+        "CODEX_DONE job=live workspace=repo-abc123 phase=done"
+    ]
+    assert machine.evaluate([old, done], now=103, build_active=no_build) == []
+
+
+@pytest.mark.parametrize(
+    "status,event",
+    [
+        ("completed", "CODEX_DONE"),
+        ("failed", "CODEX_FAILED"),
+        ("cancelled", "CODEX_CANCELLED"),
+    ],
+)
+def test_rearm_reports_recent_gap_completion_once(tmp_path, status, event):
+    ws = workspace(tmp_path)
+    now = 10000
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "gap",
+                "status": status,
+                "epoch": now - 20,
+                "completedAt": "1970-01-01T02:46:20Z",
+            },
+            {
+                "id": "history",
+                "status": status,
+                "epoch": now - 10,
+                "completedAt": "1970-01-01T01:00:00Z",
+            },
+        ],
+    )
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan(
+            [ws],
+            "session-full",
+            now=now,
+        )
+        .records
+    )
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    lines = machine.evaluate(records, now=now, build_active=no_build)
+    assert len(lines) == 1 and lines[0].startswith(event + " job=gap ")
+    assert machine.evaluate(records, now=now + 1, build_active=no_build) == []
+
+
+def test_rearm_completion_uses_mtime_without_completed_at(tmp_path):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "gap", "status": "completed", "epoch": 9990},
+            {"id": "old", "status": "completed", "epoch": 5000},
+        ],
+    )
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan(
+            [ws],
+            "session-full",
+            now=10000,
+        )
+        .records
+    )
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    assert [
+        line.split()[1]
+        for line in machine.evaluate(records, now=10000, build_active=no_build)
+    ] == ["job=gap"]
+
+
+def test_no_session_poll_does_not_consume_codex_baseline(tmp_path):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "history",
+                "status": "completed",
+                "epoch": 9990,
+                "completedAt": "1970-01-01T01:00:00Z",
+            },
+        ],
+    )
+    env["PWD"] = str(ws)
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            projects_dir=tmp_path / "projects",
+            worktrees=tmp_path / "worktrees",
+            gone_enabled=False,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    assert monitor.poll_once(now=10000) == []
+    assert monitor.codex.initialized is False
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-short/config.json",
+        {
+            "name": "session-short",
+            "leadSessionId": "session-full",
+            "members": [
+                {
+                    "agentType": "team-lead",
+                    "name": "lead",
+                    "cwd": str(ws),
+                    "isActive": True,
+                },
+            ],
+        },
+    )
+    assert monitor.poll_once(now=10001) == []
+    assert monitor.codex.initialized is True
+
+
+def test_proc_zombie_is_dead_before_cwd_or_cmdline_reads(tmp_path):
+    process = tmp_path / "proc/321"
+    process.mkdir(parents=True)
+    (process / "stat").write_text("321 (name with ) chars) Z " + "0 " * 20)
+    assert watchdog.ProcInspector(tmp_path / "proc").launcher(321, tmp_path) == "dead"
+
+
+@pytest.mark.parametrize("pid", [None, 0, -1, True, "321"])
+def test_invalid_launcher_pid_never_probes_proc(tmp_path, monkeypatch, pid):
+    inspector = watchdog.ProcInspector(tmp_path / "proc")
+    monkeypatch.setattr(Path, "stat", lambda *_: pytest.fail("invalid pid probed proc"))
+    assert inspector.launcher(pid, tmp_path) is None
+
+
+def test_completed_at_epoch_zero_is_not_replaced_by_recent_mtime(tmp_path):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "history", "status": "completed", "epoch": 9990, "completedAt": 0},
+        ],
+    )
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan(
+            [ws],
+            "session-full",
+            now=10000,
+        )
+        .records
+    )
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    assert machine.evaluate(records, now=10000, build_active=no_build) == []
+
+
+def test_terminal_cutoff_survives_later_workspace_discovery(tmp_path):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {
+                "id": "boundary",
+                "status": "completed",
+                "epoch": 9990,
+                "completedAt": 8200,
+            },
+            {"id": "old", "status": "completed", "epoch": 9990, "completedAt": 8199},
+        ],
+    )
+    machine = watchdog.CodexStateMachine(stall_secs=100, resume_secs=20, gone_polls=2)
+    assert machine.evaluate([], now=10000, build_active=no_build) == []
+    records = (
+        watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+        .scan(
+            [ws],
+            "session-full",
+            now=10001,
+        )
+        .records
+    )
+    assert [
+        line.split()[1]
+        for line in machine.evaluate(records, now=10001, build_active=no_build)
+    ] == ["job=boundary"]
+
+
+@pytest.mark.parametrize("session", [None, ""])
+def test_direct_discovery_without_session_id_requires_session_cwd(tmp_path, session):
+    ws = workspace(tmp_path)
+    other = workspace(tmp_path, "other")
+    _, env = codex_store(tmp_path, ws, [{"id": "local", "sessionId": session}])
+    codex_store(tmp_path, other, [{"id": "stranger", "sessionId": session}])
+    env["PWD"] = str(ws)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    records = scanner.scan([], "session-full", now=100).records
+    assert [record.job_id for record in records] == ["local"]
+
+
+@pytest.mark.parametrize("config", ["", "relocated"])
+def test_config_dir_controls_codex_store(tmp_path, config):
+    env = {
+        "HOME": str(tmp_path / "home"),
+        "CLAUDE_CONFIG_DIR": str(tmp_path / config) if config else "",
+    }
+    root = Path(env["CLAUDE_CONFIG_DIR"]) if config else Path(env["HOME"]) / ".claude"
+    assert (
+        watchdog.codex_state_root(env) == root / "plugins/data/codex-openai-codex/state"
+    )
+
+
+def test_session_jobs_anywhere_are_visible_but_neighbours_are_not(tmp_path):
+    ws = workspace(tmp_path, "unrelated-checkout/worktree")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "owned", "sessionId": "session-full", "epoch": 100},
+            {"id": "neighbour", "sessionId": "another-session", "epoch": 100},
+        ],
+    )
+    env["PWD"] = str(tmp_path / "coordinator")
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="session-full",
+            worktrees=tmp_path / "empty-root",
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    assert monitor.poll_once(now=200) == []
+    key = watchdog.resolve_workspace(ws, env).key
+    assert monitor.poll_once(now=201) == [
+        f"CODEX_STALL job=owned workspace={key} idle=101s phase=running reason=no-progress",
+    ]
+
+
+def test_reused_launcher_with_dead_broker_is_not_proven_dead():
+    assert watchdog.classify_runtime(["reused"], ["dead"]) == "reused"
+
+
+def test_team_membership_scopes_jobs_outside_all_candidate_workspaces(tmp_path):
+    ws = workspace(tmp_path, "other-repository/worker")
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "teammate", "sessionId": "member-session", "epoch": 100},
+            {"id": "stranger", "sessionId": "other-team-member", "epoch": 100},
+        ],
+    )
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-lead/config.json",
+        {
+            "name": "session-lead",
+            "leadSessionId": "lead-session",
+            "members": [
+                {
+                    "name": "bilby",
+                    "agentId": "bilby@session-lead",
+                    "agentType": "developer-bilby",
+                    "backendType": "tmux",
+                    "cwd": str(ws),
+                    "isActive": True,
+                },
+            ],
+        },
+    )
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-other/config.json",
+        {
+            "name": "session-other",
+            "leadSessionId": "other-lead",
+            "members": [
+                {
+                    "name": "stranger",
+                    "agentId": "stranger@session-other",
+                    "agentType": "reviewer-stranger",
+                    "backendType": "tmux",
+                    "cwd": str(ws),
+                    "isActive": True,
+                },
+            ],
+        },
+    )
+    member_transcript(tmp_path / "projects", ws, "developer-bilby", "member-session")
+    member_transcript(
+        tmp_path / "projects", ws, "reviewer-stranger", "other-team-member"
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="lead-session",
+            projects_dir=tmp_path / "projects",
+            worktrees=tmp_path / "empty-root",
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    assert monitor.poll_once(now=200) == []
+    key = watchdog.resolve_workspace(ws, env).key
+    assert monitor.poll_once(now=201) == [
+        f"CODEX_STALL job=teammate workspace={key} idle=101s phase=running reason=no-progress",
+    ]
+
+
+@pytest.mark.parametrize("ambiguous", [False, True])
+def test_store_discovery_resolves_session_prefixes_outside_candidates(
+    tmp_path, ambiguous
+):
+    ws = workspace(tmp_path, "unmapped")
+    jobs = [{"id": "ours", "sessionId": "abcdef12-full-one", "epoch": 100}]
+    if ambiguous:
+        jobs.append({"id": "ambiguous", "sessionId": "abcdef12-full-two", "epoch": 100})
+    _, env = codex_store(tmp_path, ws, jobs)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    result = scanner.scan([], "abcdef12", now=100)
+    assert [item.job_id for item in result.records] == ([] if ambiguous else ["ours"])
+    assert any("ambiguous" in key for key, _ in result.warnings) == ambiguous
+
+
+def test_store_discovery_does_not_warn_or_cache_foreign_records(tmp_path, capsys):
+    ours = workspace(tmp_path, "ours")
+    _, env = codex_store(tmp_path, ours, [{"id": "owned", "epoch": 10000}])
+    foreign = workspace(tmp_path, "foreign")
+    foreign_state, _ = codex_store(
+        tmp_path,
+        foreign,
+        [
+            {"id": "foreign", "sessionId": "other-session", "epoch": 10000},
+            {"id": "history", "sessionId": "other-session", "epoch": 1},
+        ],
+    )
+    scanner = watchdog.CodexScanner(
+        env=env, proc=watchdog.NullProcInspector(), job_recency_secs=100
+    )
+    for _ in range(2):
+        result = scanner.scan([], "session-full", now=10000)
+        assert [item.job_id for item in result.records] == ["owned"]
+        assert result.warnings == []
+        assert not any(foreign_state in path.parents for path in scanner.cache.items)
+    assert capsys.readouterr().err == ""
+
+
+def test_codex_alternate_marketplace_data_dir_is_used(tmp_path):
+    config = tmp_path / "config"
+    alternate = config / "plugins/data/codex-local"
+    (alternate / "state").mkdir(parents=True)
+    env = {
+        "HOME": str(tmp_path / "home"),
+        "CLAUDE_CONFIG_DIR": str(config),
+        "CLAUDE_PLUGIN_DATA": str(config / "plugins/data/claudius-local"),
+    }
+    assert watchdog.codex_state_root(env) == alternate / "state"
+
+
+def test_codex_export_selects_a_trusted_alternate_marketplace(tmp_path):
+    config = tmp_path / "config"
+    alternate = config / "plugins/data/codex-local"
+    canonical = config / "plugins/data/codex-openai-codex"
+    for path in (alternate, canonical):
+        (path / "state").mkdir(parents=True)
+    env = {"CLAUDE_CONFIG_DIR": str(config), "CLAUDE_PLUGIN_DATA": str(alternate)}
+    assert watchdog.codex_state_root(env) == alternate / "state"
+
+
+def test_alternate_marketplace_jobs_are_discovered_and_collectable(tmp_path, capsys):
+    ws = workspace(tmp_path)
+    state_dir, env = codex_store(tmp_path, ws, [{"id": "alternate", "epoch": 100}])
+    alternate = (
+        Path(env["HOME"]) / ".claude/plugins/data/codex-local/state" / state_dir.name
+    )
+    alternate.parent.mkdir(parents=True)
+    state_dir.rename(alternate)
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    assert [
+        record.job_id for record in scanner.scan([], "session-full", now=100).records
+    ] == ["alternate"]
+    assert watchdog.dump_job("alternate", env) == 0
+    assert str(alternate / "jobs/alternate.json") in capsys.readouterr().out
+
+
+def test_codex_export_outside_private_plugin_data_is_ignored(tmp_path):
+    outside = tmp_path / "public/codex-evil"
+    (outside / "state").mkdir(parents=True)
+    env = {"HOME": str(tmp_path / "home"), "CLAUDE_PLUGIN_DATA": str(outside)}
+    assert (
+        watchdog.codex_state_root(env)
+        == Path(env["HOME"]) / ".claude/plugins/data/codex-openai-codex/state"
+    )
+
+
+def harness_team_transcript(
+    projects, cwd, session, team, name, *, kind="claudius:developer-bilby"
+):
+    """Sanitised real header: six setup records, then harness team metadata."""
+    slug = re.sub(r"[^A-Za-z0-9-]", "-", str(cwd).rstrip("/"))
+    path = projects / slug / f"{session}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {"type": "agent-setting", "agentSetting": kind, "sessionId": session},
+        {"type": "mode", "mode": "default", "sessionId": session},
+        {"type": "permission-mode", "permissionMode": "default", "sessionId": session},
+        {"type": "session-owner", "accountUuid": "sanitised", "sessionId": session},
+        {"type": "atis-latch", "atis": False, "sessionId": session},
+        {"type": "tools-used", "tools": [], "sessionId": session},
+        {
+            "parentUuid": None,
+            "isSidechain": False,
+            "teamName": team,
+            "agentName": name,
+            "attachment": {
+                "type": "hook_success",
+                "hookName": "SessionStart",
+                "content": "sanitised",
+            },
+            "type": "attachment",
+            "uuid": "sanitised",
+            "timestamp": "2026-11-21T03:57:40.918Z",
+            "userType": "external",
+            "entrypoint": "cli",
+            "cwd": str(cwd),
+            "sessionId": session,
+            "version": "2.1.329",
+            "gitBranch": "sanitised",
+            "dataFlowOn": True,
+        },
+    ]
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+    os.utime(path, (100, 100))
+    return path
+
+
+def test_team_name_headers_track_duplicate_roles_and_removed_members(tmp_path):
+    ws = workspace(tmp_path)
+    projects = tmp_path / "projects"
+    _, env = codex_store(
+        tmp_path,
+        ws,
+        [
+            {"id": "one", "sessionId": "worker-one", "epoch": 100},
+            {"id": "two", "sessionId": "worker-two", "epoch": 100},
+            {"id": "removed", "sessionId": "worker-removed", "epoch": 100},
+            {"id": "foreign", "sessionId": "worker-foreign", "epoch": 100},
+        ],
+    )
+    write_json(
+        Path(env["HOME"]) / ".claude/teams/session-lead/config.json",
+        {
+            "name": "session-lead",
+            "leadSessionId": "lead-session",
+            "createdAt": 1000000,
+            "members": [
+                {
+                    "name": name,
+                    "agentId": f"{name}@session-lead",
+                    "agentType": "claudius:developer-bilby",
+                    "backendType": "tmux",
+                    "cwd": str(ws),
+                    "isActive": True,
+                }
+                for name in ("one", "two")
+            ],
+        },
+    )
+    for name in ("one", "two", "removed", "foreign"):
+        harness_team_transcript(
+            projects,
+            ws,
+            f"worker-{name}",
+            "session-foreign" if name == "foreign" else "session-lead",
+            name,
+        )
+    subagent = projects / "slug/lead-session/subagents/agent-sub.jsonl"
+    subagent.parent.mkdir(parents=True)
+    subagent.write_text('{"type":"user","agentId":"sub"}\n')
+    write_json(
+        subagent.with_suffix(".meta.json"), {"agentType": "claudius:developer-bilby"}
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="lead-session",
+            projects_dir=projects,
+            worktrees=tmp_path / "worktrees",
+            gone_enabled=False,
+            stall_secs=50,
+            resume_secs=20,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    assert monitor.poll_once(now=200) == []
+    lines = monitor.poll_once(now=201)
+    assert {line.split()[1] for line in lines} == {"job=one", "job=two", "job=removed"}
+
+
+def test_candidate_discovery_never_invokes_git_for_worktrees(tmp_path, monkeypatch):
+    ws = workspace(tmp_path)
+    _, env = codex_store(tmp_path, ws, [{"id": "owned", "epoch": 100}])
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    monkeypatch.setattr(
+        watchdog, "resolve_workspace", lambda *_: pytest.fail("unused git resolution")
+    )
+    monitor = watchdog.Watchdog(
+        watchdog.Options(
+            session_id="session-full",
+            worktrees=tmp_path / "worktrees",
+            gone_enabled=False,
+        ),
+        env=env,
+        proc_root=tmp_path / "proc",
+    )
+    for index in range(10):
+        (tmp_path / "worktrees" / f"worker-{index}").mkdir(parents=True)
+    monitor.poll_once(now=100)
+    assert [
+        record.job_id for record in scanner.scan([], "session-full", now=100).records
+    ] == ["owned"]
+
+
+@pytest.mark.parametrize("path_kind", ["symlink", "trailing-slash"])
+def test_sessionless_jobs_match_canonical_session_cwd(tmp_path, path_kind):
+    ws = workspace(tmp_path)
+    _, env = codex_store(
+        tmp_path, ws, [{"id": "legacy", "sessionId": None, "epoch": 100}]
+    )
+    alias = tmp_path / "alias"
+    alias.symlink_to(ws, target_is_directory=True)
+    env["PWD"] = str(alias) if path_kind == "symlink" else str(ws) + "/"
+    scanner = watchdog.CodexScanner(env=env, proc=watchdog.NullProcInspector())
+    assert [
+        record.job_id for record in scanner.scan([], "session-full", now=100).records
+    ] == ["legacy"]
+
+
+def test_tmux_member_clock_ignores_same_type_inprocess_subagent(tmp_path):
+    projects = tmp_path / "projects"
+    cwd = workspace(tmp_path)
+    transcript = member_transcript(projects, cwd, "bilby", "worker-session")
+    subagent = projects / "slug/lead-session/subagents/agent-sub.jsonl"
+    subagent.parent.mkdir(parents=True)
+    subagent.write_text('{"type":"user","agentId":"sub"}\n')
+    write_json(subagent.with_suffix(".meta.json"), {"agentType": "bilby"})
+    team = watchdog.Team(
+        name="session-lead",
+        lead_session_id="lead-session",
+        members=(
+            watchdog.Member("bilby", cwd, "bilby@session-lead", "bilby", "%1", "tmux"),
+        ),
+    )
+    assert watchdog.member_transcripts(team, projects, set()) == {"bilby": transcript}
+
+
+def test_legacy_type_fallback_rejects_explicit_foreign_team(tmp_path):
+    projects = tmp_path / "projects"
+    cwd = workspace(tmp_path)
+    harness_team_transcript(
+        projects, cwd, "stranger", "session-other", "bilby", kind="bilby"
+    )
+    team = watchdog.Team(
+        name="session-lead",
+        lead_session_id="lead-session",
+        members=(
+            watchdog.Member("bilby", cwd, "bilby@session-lead", "bilby", "%1", "tmux"),
+        ),
+    )
+    assert watchdog.member_transcripts(team, projects, set()) == {}
