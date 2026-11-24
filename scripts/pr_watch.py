@@ -53,6 +53,7 @@ from review_feed import (
     Observation,
     SnapshotClient,
     combined_state,
+    comment_commit,
     comment_observation,
     feed_observation,
     parse_ts,
@@ -224,6 +225,9 @@ def gate_comment(
             continue
         text = re.sub(r"<!--.*?-->", "", body, flags=re.S).replace("\r", "")
         line = next((ln.strip() for ln in text.split("\n") if ln.strip()), "")
+        commit = comment_commit(text)
+        if commit and comment_commit(line) != commit:
+            line += f" (commit {commit})"
         ts = c.get("updated_at") or ""
         if best is None or (parse_ts(ts) or EPOCH) > (parse_ts(best[0]) or EPOCH):
             best = (ts, line)
@@ -349,9 +353,13 @@ class Watcher:
 
     def enrich(self, n: int, reading: str, raw: Optional[str]) -> str:
         head = self.heads.get(n, "")
+        if not isinstance(head, str) or not re.fullmatch(r"[0-9a-f]{40}", head):
+            head = ""
         observed = self.feed_evidence(n, head, raw)
         comment = comment_observation(self.gates.get(n), head, DEFAULT_BUSY)
         detail = observed.text()
+        if self.gates.get(n) and comment.state in {"unknown", "obsolete-head"}:
+            detail += f" comment={comment.state}"
         if (
             observed.state in {"running", "queued"}
             and comment.state in {"running", "queued", "complete", "failed"}
@@ -480,9 +488,13 @@ def watch(
             if not w.a.quiet_init or n in prev:
                 event = cur
                 if w.a.gate_feed_url:
-                    if not feed_read:
-                        feed_raw, feed_read = w.fetch(w.a.gate_feed_url), True
-                    event = w.enrich(n, cur, feed_raw)
+                    try:
+                        if not feed_read:
+                            feed_read = True
+                            feed_raw = w.fetch(w.a.gate_feed_url)
+                        event = w.enrich(n, cur, feed_raw)
+                    except Exception as error:
+                        event += f" || review-feed: unknown enrichment-{type(error).__name__}"
                 print(f"PR{n} {event}", file=out, flush=True)
                 changed = True
             prev[n] = key

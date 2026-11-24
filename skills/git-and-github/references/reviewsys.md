@@ -44,7 +44,8 @@ python3 <plugin-root>/scripts/pr_watch.py watch --repo <owner/repo> --gate-bot t
 Attach snapshots only to emitted GitHub-state events, once per batch; feed-only
 changes do not wake the watcher. `--feed-max-age` bounds snapshot/ingest age (local
 default 900 s, not a service promise). Respect HTTP caching: 304 preserves observation
-time. Avoid per-PR fetches, cache-busting and rapid retries. The model applies gates.
+time. Fetch HTTP(S) snapshots up to 16 MiB; avoid per-PR fetches, cache-busting and
+rapid retries. The model applies gates.
 
 ## Work and requests
 

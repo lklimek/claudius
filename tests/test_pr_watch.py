@@ -363,6 +363,68 @@ def test_head_change_emits_even_when_other_state_is_identical_with_feed():
     assert "head=" + "b" * 40 in out.getvalue()
 
 
+def test_enrichment_exception_preserves_all_events_and_fetches_once():
+    calls = []
+
+    def broken(url):
+        calls.append(url)
+        raise RuntimeError("untrusted error text")
+
+    w = pw.Watcher(
+        args(
+            "watch", "--probe-interval", "0", "--gate-feed-url", "https://feed.invalid"
+        ),
+        FakeGh(),
+        broken,
+    )
+    w.reading = lambda _: "github changed"
+    w.heads = {1: None, 2: "a" * 40}
+    out = io.StringIO()
+    pw.watch(w, [1, 2], out=out, sleep=lambda _: None, max_passes=1)
+    lines = out.getvalue().splitlines()
+    assert len(lines) == 2 and len(calls) == 1
+    assert all(
+        "github changed" in line and "review-feed: unknown" in line for line in lines
+    )
+    assert "untrusted error text" not in out.getvalue()
+
+
+def test_enrichment_marks_obsolete_gate_even_when_feed_is_missing():
+    w = pw.Watcher(args("watch", "--gate-feed-url", "https://feed.invalid"), FakeGh())
+    w.heads[1167] = "a" * 40
+    w.gates[1167] = (
+        "2026-11-24T12:00:00Z",
+        "✅ Final review complete (commit bbbbbbbb)",
+    )
+    assert "comment=obsolete-head" in w.enrich(1167, "gate: complete", None)
+
+
+@pytest.mark.parametrize(
+    "body,expected",
+    [
+        (
+            "🕓 Review not started yet because debounce.\n\n_Commit aaaaaaaa. Normal review starts when eligible._",
+            "queued",
+        ),
+        (
+            "♻️ No change since commit bbbbbbbb: that review stands (commit aaaaaaaa)",
+            "complete",
+        ),
+    ],
+)
+def test_real_status_formats_use_current_commit_from_full_body(body, expected):
+    rows = [
+        {
+            "login": "thepastaclaw",
+            "updated_at": "2026-11-24T12:00:00Z",
+            "body": "<!-- thepastaclaw-gate v1 -->\n" + body,
+        }
+    ]
+    gate = pw.gate_comment(rows, "thepastaclaw")
+    assert pw.comment_observation(gate, "a" * 40, pw.DEFAULT_BUSY).state == expected
+    assert len(gate[1].splitlines()) == 1
+
+
 def test_watch_ignore_pending_ci_settling_is_not_a_change():
     s = "state=OPEN || ci: "
     seq = [s + "none", s + "pending ignored", s + "green", s + "green || gate: done"]
