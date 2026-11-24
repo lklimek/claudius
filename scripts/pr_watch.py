@@ -21,8 +21,8 @@ triggers a full reading at once. Changes the probes cannot see, such as a
 resolved review thread, show at the next full reading.
 
 ``gate`` prints ``feed: ...`` and ``gate: <updated_at> <status line>`` and exits
-3 while the gate bot is reviewing the PR (do not push), 0 when it is not, 2 on a
-fetch failure or bad usage.
+3 for observed running work, 0 for known non-running work, 2 for unknown evidence
+or a fetch/usage error. These are observations, never push or merge permissions.
 
 Adapters, both off unless their input exists:
 
@@ -30,26 +30,33 @@ Adapters, both off unless their input exists:
   block in the PR body (heading ``# PR Hygiene · `<sha>```` and ``- [ ]`` items).
 * Gate bot (``--gate-bot`` / ``GATE_BOT``): the bot's status comment, found by
   ``--gate-marker`` (default ``<bot>-gate``) and edited in place, so the newest
-  ``updated_at`` wins, never creation order. ``gate`` with ``--gate-feed-url``
-  / ``GATE_FEED_URL`` also reads a JSON status feed shaped
-  ``{"data_as_of", "live": {"active": [...], "queued": [...]}}`` with entries
-  ``{"repo": "owner/name", "number", "sha", ...}``. Both lag; the newer wins.
-  Logins and repo names match case-insensitively, as on GitHub.
+  ``updated_at`` wins, never creation order. Logins and repo names ignore case.
+* Review feed (``--gate-feed-url`` / ``GATE_FEED_URL``): optional Reviewsys v1
+  snapshot. ``watch`` enriches emitted events only, sharing one fetch per batch;
+  feed-only changes do not wake it. Evidence matches repo/PR/head and includes
+  freshness/health; absence is unknown. See git-and-github/references/reviewsys.md.
 """
 
 from __future__ import annotations
 
 import argparse
-import http.client
 import json
 import os
 import re
 import subprocess
 import sys
 import time
-import urllib.request
 from datetime import datetime, timezone
 from typing import Callable, Optional
+
+from review_feed import (
+    Observation,
+    SnapshotClient,
+    combined_state,
+    comment_observation,
+    feed_observation,
+    parse_ts,
+)
 
 EXIT_IDLE, EXIT_FAIL, EXIT_REVIEWING = 0, 2, 3
 ONESHOT_FAILED_READS = 5
@@ -83,23 +90,7 @@ def run_gh(args: list) -> tuple[int, str, str]:
     return p.returncode, p.stdout, p.stderr
 
 
-def fetch_url(url: str) -> Optional[str]:
-    sep = "&" if "?" in url else "?"
-    try:
-        with urllib.request.urlopen(f"{url}{sep}t={int(time.time())}", timeout=20) as r:
-            return r.read().decode("utf-8")
-    except (OSError, ValueError, http.client.HTTPException):
-        return None
-
-
-def parse_ts(ts: object) -> Optional[datetime]:
-    if not isinstance(ts, str) or not ts:
-        return None
-    try:
-        d = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+fetch_url = SnapshotClient()
 
 
 def first_line(err: str) -> str:
@@ -215,33 +206,6 @@ def same_name(value, name: str) -> bool:
     return isinstance(value, str) and value.casefold() == name.casefold()
 
 
-def feed_status(feed: dict, repo: str, number: int) -> tuple[str, bool]:
-    """Return ('as_of=... <status>', active) for one PR from the status feed."""
-    live = feed.get("live")
-
-    def entries(key: str) -> list:
-        v = live.get(key) if isinstance(live, dict) else None
-        return [e for e in v if isinstance(e, dict)] if isinstance(v, list) else []
-
-    st, active = "idle", False
-    for a in entries("active"):
-        if same_name(a.get("repo"), repo) and a.get("number") == number:
-            st, active = (
-                f"ACTIVE sha={str(a.get('sha') or '')[:9]} started={a.get('started_at')} "
-                f"phase={a.get('phase')} progress={a.get('progress')}",
-                True,
-            )
-    if not active:
-        for q in entries("queued"):
-            if same_name(q.get("repo"), repo) and q.get("number") == number:
-                st = (
-                    f"queued sha={str(q.get('sha') or '')[:9]} reason={q.get('reason')} "
-                    f"eligible_at={q.get('eligible_at')}"
-                )
-                break
-    return f"as_of={feed.get('data_as_of')} {st}", active
-
-
 def gate_comment(
     comments: list, bot: str, marker: Optional[str] = None
 ) -> Optional[tuple[str, str]]:
@@ -266,21 +230,6 @@ def gate_comment(
     return best
 
 
-def is_reviewing(
-    feed_active: bool,
-    feed_as_of: Optional[str],
-    gate: Optional[tuple[str, str]],
-    busy_re: str,
-) -> bool:
-    if gate and re.search(busy_re, gate[1]):
-        return True
-    if not feed_active:
-        return False
-    # A gate edit after the feed snapshot overrides a stale ACTIVE.
-    g, f = parse_ts(gate[0]) if gate else None, parse_ts(feed_as_of)
-    return not (g and f and g > f)
-
-
 # --- GitHub-backed reader -----------------------------------------------------
 
 
@@ -294,6 +243,7 @@ class Watcher:
         self.failed: set = set()
         self.etags: dict = {}  # pr -> {endpoint: etag}; "" = endpoint failed
         self.heads: dict = {}
+        self.gates: dict = {}
 
     def warn(self, n: int, msg: str) -> None:
         """Report a failed fetch on stderr, once per PR per outage and error."""
@@ -347,21 +297,12 @@ class Watcher:
         for ep in [ep for ep, etag in seen.items() if etag == ""]:
             del seen[ep]
 
-    def gate(self, n: int, feed: bool = True) -> Optional[tuple[str, str, bool]]:
-        """Return (feed line, gate line, reviewing); None on a fetch failure."""
+    def gate(
+        self, n: int, feed: bool = True
+    ) -> Optional[tuple[str, str, Optional[bool]]]:
+        """Return source evidence and running/known non-running/unknown; no policy."""
         a = self.a
         feed_url = feed and getattr(a, "gate_feed_url", None)
-        feed_line, active, as_of = "off", False, None
-        if feed_url:
-            feed_line = "unavailable"
-            raw = self.fetch(feed_url)
-            try:
-                data = json.loads(raw) if raw else None
-            except ValueError:
-                data = None
-            if isinstance(data, dict):
-                feed_line, active = feed_status(data, a.repo, n)
-                as_of = data.get("data_as_of")
         rc, out, err = self.run(
             [
                 "api",
@@ -379,9 +320,45 @@ class Watcher:
             self.warn(n, "comments: " + first_line(err))
             return None
         g = gate_comment(comments, a.gate_bot, a.gate_marker or None)
+        self.gates[n] = g
         gate_line = f"{g[0]} {g[1]}" if g else "none"
         busy = getattr(a, "gate_busy", DEFAULT_BUSY)
-        return feed_line, gate_line, is_reviewing(active, as_of, g, busy)
+        if not feed:
+            return "off", gate_line, None
+        pr = self.pull_request(n)
+        if pr is None:
+            return None
+        head = pr["headRefOid"]
+        observation = (
+            self.feed_evidence(n, head, self.fetch(feed_url))
+            if feed_url
+            else Observation("unknown", "off")
+        )
+        state = combined_state(observation, comment_observation(g, head, busy))
+        running = (
+            True
+            if state == "running"
+            else False
+            if state in {"queued", "complete", "failed"}
+            else None
+        )
+        return observation.text() if feed_url else "off", gate_line, running
+
+    def feed_evidence(self, n: int, head: str, raw: Optional[str]) -> Observation:
+        return feed_observation(raw, self.a.repo, n, head, max_age=self.a.feed_max_age)
+
+    def enrich(self, n: int, reading: str, raw: Optional[str]) -> str:
+        head = self.heads.get(n, "")
+        observed = self.feed_evidence(n, head, raw)
+        comment = comment_observation(self.gates.get(n), head, DEFAULT_BUSY)
+        detail = observed.text()
+        if (
+            observed.state in {"running", "queued"}
+            and comment.state in {"running", "queued", "complete", "failed"}
+            and observed.state != comment.state
+        ):
+            detail += f" conflict=comment-{comment.state} combined=unknown"
+        return f"{reading} || review-feed: {detail} head={head or 'unknown'}"
 
     def pull_request(self, n: int) -> Optional[dict]:
         """GraphQL PR node with every review-thread page merged; None on failure."""
@@ -472,6 +449,7 @@ def watch(
     passes = 0
     while True:
         changed = False
+        feed_read, feed_raw = False, None
         for n in prs:
             due = since_full.get(n, per_full) >= per_full
             if step < interval:
@@ -495,10 +473,17 @@ def watch(
             key = cur
             if cur and w.a.ignore_pending:
                 key = SETTLING_CI_RE.sub(" || ci: settling", cur, 1)
+            if w.a.gate_feed_url:
+                key = (key, w.heads.get(n))
             if cur is None or key == prev.get(n):
                 continue
             if not w.a.quiet_init or n in prev:
-                print(f"PR{n} {cur}", file=out, flush=True)
+                event = cur
+                if w.a.gate_feed_url:
+                    if not feed_read:
+                        feed_raw, feed_read = w.fetch(w.a.gate_feed_url), True
+                    event = w.enrich(n, cur, feed_raw)
+                print(f"PR{n} {event}", file=out, flush=True)
                 changed = True
             prev[n] = key
         passes += 1
@@ -531,6 +516,17 @@ def parse_args(argv: list) -> argparse.Namespace:
         default=os.environ.get("GATE_MARKER"),
         help="text identifying the gate comment; default: <bot>-gate",
     )
+    common.add_argument(
+        "--gate-feed-url",
+        default=os.environ.get("GATE_FEED_URL"),
+        help="optional Reviewsys snapshot URL; watch reads it only for emitted events",
+    )
+    common.add_argument(
+        "--feed-max-age",
+        type=positive_seconds,
+        default=900,
+        help="maximum snapshot/ingest age in seconds (default 900)",
+    )
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     w = sub.add_parser("watch", parents=[common], help="print PR state changes")
@@ -541,8 +537,8 @@ def parse_args(argv: list) -> argparse.Namespace:
     w.add_argument(
         "--ignore-pending",
         action="store_true",
-        help="running checks, pending reviews, a new head and a green "
-        "build are not changes",
+        help="ignore running checks, pending reviews and green builds; "
+        "head changes still emit when a review feed is configured",
     )
     w.add_argument(
         "--gate-pending",
@@ -575,11 +571,6 @@ def parse_args(argv: list) -> argparse.Namespace:
     )
     g = sub.add_parser("gate", parents=[common], help="is the gate bot reviewing now")
     g.add_argument("pr", type=int)
-    g.add_argument(
-        "--gate-feed-url",
-        default=os.environ.get("GATE_FEED_URL"),
-        help="JSON status feed of the bot's running reviews",
-    )
     g.add_argument(
         "--gate-busy",
         type=regex,
@@ -617,6 +608,9 @@ def main(
     if g is None:
         return EXIT_FAIL
     print(f"feed: {g[0]}\ngate: {g[1]}")
+    if g[2] is None:
+        print("state: unknown")
+        return EXIT_FAIL
     return EXIT_REVIEWING if g[2] else EXIT_IDLE
 
 

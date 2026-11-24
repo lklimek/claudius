@@ -14,7 +14,7 @@ On Codex/other hosts, resolve commands from the installed absolute script paths 
 
 Every comment fix, reply, and resolve needs a per-ID decision: the user's, except in Auto mode. Workers verify and propose only.
 
-- **Interview** (default when the user is reachable): verify everything first, then ask one decision at a time (step 4) and execute each answer before the next question (step 8).
+- **Interview** (default when the user is reachable): verify everything first, then ask one decision at a time (step 4); implement each answer, batching publication per step 8.
 - **Table**: show the step 4 table, change nothing until the user decides per ID (step 8). Use it on request, and always when no user is reachable (CI, headless, a subagent without a user channel) and Auto is not enabled — the run then ends after the table.
 - **Auto** — only on the user's explicit request or a standing user/project instruction, never on an invoking skill's: verify everything, then decide each ID yourself by its step 4 recommendation and execute it (step 8). Auto decides only `resolve`, `fix here` (in scope), `handled in #N`, `TODO`, and `reject` of bot comments; every other ID — a gate override, `follow-up PR`, `upstream issue`, a rejected human comment, a product-rule ambiguity — goes to the user afterwards as an Interview question, or stays undecided in the table when no user is reachable.
 - **Host-supplied** — whenever a host supplies `pr-data/manifest.json`: report only, per [host-supplied.md](references/host-supplied.md). Step 3 runs inline, without `delegate` or a worktree; apply the [verify-only brief](references/verify-worker.md)'s report contract with the host's single-reply override.
@@ -142,14 +142,16 @@ Link the HTML file. Generate Markdown/CSV/PDF only when requested. The user can 
 
 ### Executing decisions
 
-Apply each decision exactly; never extend it to IDs it was not made for (Auto executes only its own permitted decisions). Every "resolve" below covers human threads too. Reply and resolve on every thread of a merged ID. Never act on an already resolved (`isResolved: true`) thread, and keep local-only state (branches, WIP) off GitHub. Reply text for any decision other than `fix here` and `resolve` starts "Per maintainer decision" — in Auto, "Per automated triage" replaces it in every reply below. Post a fix's reply only after the fix lands.
+Apply each decision exactly; never extend it to IDs it was not made for (Auto executes only its own permitted decisions). Every "resolve" below covers human threads too. Reply and resolve on every thread of a merged ID. Never act on an already resolved (`isResolved: true`) thread, and keep local-only state (branches, WIP) off GitHub. Reply text for any decision other than `fix here` and `resolve` starts "Per maintainer decision" — in Auto, "Per automated triage" replaces it in every reply below.
+
+Publish approved fixes in one tested push per decision batch, not per ID; unrelated pending decisions need not delay it. Verify the fixes reached the remote PR head, then promptly reply on each fixed thread, bots included: SHA, change, verification. Resolve only as authorized below. Local commits/failed pushes are unpublished. Follow the reviewer's discussion protocol; replies need not trigger re-review.
 
 **Fix commits awaiting a decision** (e.g. a worker briefed before a correction fixed anyway): before the first decision, move each onto its own local branch (record ID → commit) and drop only those commits from the PR branch, keeping its other unpushed work. Approved → apply that ID's commits to the PR branch; moved to a follow-up → that branch becomes the follow-up; rejected → delete it. Before each push, confirm the PR branch holds no undecided ID's commits.
 
 | Decision | Action |
 |----------|--------|
-| `resolve` | Verified fixed: bot → resolve; human → reply what was done, then resolve. |
-| `fix here` | Fix per `coding-best-practices` (its independent-review threshold applies to the total diff), verify, commit, and push per `git-and-github` — a problem only in the PR description is fixed by editing the body. Then bot → resolve; human → reply what was done, resolve only if the decision says so. |
+| `resolve` | Verified published fix: reply, then resolve. |
+| `fix here` | Fix per `coding-best-practices` (its independent-review threshold applies to the total diff); verify, commit and batch publication per `git-and-github`. A PR-description-only fix edits the body. Reply; resolve bot threads, human threads only if the decision says so. |
 | `handled in #N` | Reply "Per maintainer decision, this is addressed in #N, which we treat as sufficient for #<this PR>.", then resolve. |
 | `follow-up PR` | Existing `#M`: reply with its link, then resolve. New: first create a draft skeleton per `git-and-github` § Commit, Push, PR Workflow (base: the default branch, unless the follow-up needs code from an open PR — then stack on that PR per `git-and-github` [stacked-prs.md](../git-and-github/references/stacked-prs.md); empty commit; plain-language body linking the threads), reply with its link, and resolve now — do not wait for the implementation. |
 | `TODO` | Save it with `memcan:todo` (project = repo name), linking the threads. Reply "Per maintainer decision, out of scope for this PR." — never mention the TODO or its tracker (private, local) — then resolve. Save failed or `memcan:todo` unavailable → no reply, no resolve; report the item to the user. |

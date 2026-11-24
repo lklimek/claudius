@@ -10,6 +10,9 @@ from __future__ import annotations
 import io
 import json
 import sys
+from http.client import IncompleteRead
+import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -138,14 +141,8 @@ def test_summarize_checks(ignore_pending, want, expected):
     assert pw.summarize_checks(checks, want, ignore_pending) == expected
 
 
-def test_feed_status_active_queued_idle():
-    feed = json.loads(FEED)
-    line, active = pw.feed_status(feed, "dashpay/tenderdash", 1586)
-    assert active and "ACTIVE sha=f8cecf6fe" in line and "phase=phase1" in line
-    line, active = pw.feed_status(feed, "dashpay/dash", 8062)
-    assert not active and "queued" in line and "debounce" in line
-    line, active = pw.feed_status(feed, REPO, 1167)
-    assert line == "as_of=2026-11-06T15:57:01Z idle" and not active
+def test_legacy_feed_without_schema_is_unknown():
+    assert pw.feed_observation(FEED, REPO, 1167, PR["headRefOid"]).state == "unknown"
 
 
 def test_gate_comment_newest_edit_first_line_no_cr():
@@ -163,30 +160,24 @@ def test_gate_comment_none():
 
 
 @pytest.mark.parametrize(
-    ("active", "as_of", "gate", "expected"),
+    ("feed_state", "comment_state", "expected"),
     [
-        # Emoji prefix before the busy text still matches.
-        (False, None, ("2026-11-06T10:00:00Z", "🔍 Review in progress"), True),
-        # Stale feed ACTIVE vs newer gate "complete": the gate wins.
-        (
-            True,
-            "2026-11-06T09:00:00Z",
-            ("2026-11-06T10:00:00Z", "✅ Final review complete"),
-            False,
-        ),
-        # Feed newer than the gate edit: ACTIVE wins.
-        (
-            True,
-            "2026-11-06T11:00:00Z",
-            ("2026-11-06T10:00:00Z", "✅ Final review complete"),
-            True,
-        ),
-        (True, "2026-11-06T11:00:00Z", None, True),
-        (False, None, ("2026-11-06T10:00:00Z", "⏳ Review not started"), False),
+        ("running", "complete", "unknown"),
+        ("queued", "running", "unknown"),
+        ("unknown", "complete", "complete"),
+        ("unknown", "unknown", "unknown"),
+        ("obsolete-head", "queued", "queued"),
     ],
 )
-def test_is_reviewing(active, as_of, gate, expected):
-    assert pw.is_reviewing(active, as_of, gate, "Review in progress") is expected
+def test_review_sources_are_not_combined_into_false_completion(
+    feed_state, comment_state, expected
+):
+    assert (
+        pw.combined_state(
+            pw.Observation(feed_state, ""), pw.Observation(comment_state, "")
+        )
+        == expected
+    )
 
 
 # --- reading / gate over fake gh ------------------------------------------------
@@ -310,6 +301,68 @@ def test_watch_quiet_init_oneshot_exits_on_first_change():
     assert rc == 0 and lines == ["PR1167 b"]
 
 
+def test_feed_enriches_only_emitted_events_once_per_batch():
+    a = args(
+        "watch",
+        "--quiet-init",
+        "--probe-interval",
+        "0",
+        "--gate-feed-url",
+        "https://feed.invalid",
+    )
+    calls = []
+    w = pw.Watcher(a, FakeGh(), lambda url: calls.append(url) or "{}")
+    sequence = iter(["a", "a", "a", "a", "b", "b"])
+    w.reading = lambda n: next(sequence)
+    w.heads = {1: "a" * 40, 2: "b" * 40}
+    out = io.StringIO()
+    pw.watch(w, [1, 2], out=out, sleep=lambda _: None, max_passes=3)
+    assert calls == ["https://feed.invalid"]
+    lines = out.getvalue().splitlines()
+    assert len(lines) == 2
+    assert all("review-feed: unknown" in line for line in lines)
+    assert "head=" + "a" * 40 in lines[0]
+
+
+def test_feed_failure_does_not_hide_a_github_event_or_create_new_events():
+    a = args(
+        "watch", "--probe-interval", "0", "--gate-feed-url", "https://feed.invalid"
+    )
+    calls = []
+    w = pw.Watcher(a, FakeGh(), lambda url: calls.append(url))
+    w.reading = lambda n: "changed"
+    w.heads[1167] = "a" * 40
+    out = io.StringIO()
+    pw.watch(w, [1167], out=out, sleep=lambda _: None, max_passes=3)
+    assert calls == ["https://feed.invalid"]
+    assert len(out.getvalue().splitlines()) == 1
+    assert "changed" in out.getvalue() and "review-feed: unknown" in out.getvalue()
+
+
+def test_head_change_emits_even_when_other_state_is_identical_with_feed():
+    a = args(
+        "watch",
+        "--quiet-init",
+        "--ignore-pending",
+        "--probe-interval",
+        "0",
+        "--gate-feed-url",
+        "https://feed.invalid",
+    )
+    w = pw.Watcher(a, FakeGh(), lambda _: None)
+    heads = iter(["a" * 40, "b" * 40])
+
+    def reading(n):
+        w.heads[n] = next(heads)
+        return "state=OPEN || ci: green"
+
+    w.reading = reading
+    out = io.StringIO()
+    pw.watch(w, [1167], out=out, sleep=lambda _: None, max_passes=2)
+    assert len(out.getvalue().splitlines()) == 1
+    assert "head=" + "b" * 40 in out.getvalue()
+
+
 def test_watch_ignore_pending_ci_settling_is_not_a_change():
     s = "state=OPEN || ci: "
     seq = [s + "none", s + "pending ignored", s + "green", s + "green || gate: done"]
@@ -323,10 +376,26 @@ def test_watch_ignore_pending_ci_settling_is_not_a_change():
 
 
 def _fetch_feed_active_for_1167(url):
-    feed = json.loads(FEED)
-    feed["live"]["active"].append(
-        {"repo": REPO, "number": 1167, "sha": "beee9f6b", "phase": "phase2"}
-    )
+    now = datetime.now(timezone.utc).isoformat()
+    feed = {
+        "schema_version": 1,
+        "data_as_of": now,
+        "live": {
+            "ingest_last_at": now,
+            "ingest_error_streak": 0,
+            "watchdog": {"ingest_stale": False},
+            "queued": [],
+            "active": [
+                {
+                    "repo": REPO,
+                    "number": 1167,
+                    "sha": PR["headRefOid"],
+                    "queue": "live",
+                    "phase": "phase2",
+                }
+            ],
+        },
+    }
     return json.dumps(feed)
 
 
@@ -336,15 +405,26 @@ def test_gate_cli_exit_codes(capsys):
     assert capsys.readouterr().out.startswith(
         "feed: off\ngate: 2026-11-05T15:05:50Z ✅"
     )
-    # Feed ACTIVE newer than the gate edit -> reviewing.
+    # Conflicting current-head sources never imply completion.
     feed_args = [
         *base[:-1],
         "--gate-feed-url",
         "https://example.invalid/s.json",
         "1167",
     ]
-    assert pw.main(feed_args, gh(), _fetch_feed_active_for_1167) == pw.EXIT_REVIEWING
-    assert "ACTIVE" in capsys.readouterr().out
+    assert pw.main(feed_args, gh(), _fetch_feed_active_for_1167) == pw.EXIT_FAIL
+    assert "state: unknown" in capsys.readouterr().out
+    busy = json.dumps(
+        dict(
+            COMMENT_ROWS[0],
+            body="<!-- thepastaclaw-gate v1 -->\n🔍 Review in progress (commit beee9f6b)",
+        )
+    )
+    assert (
+        pw.main(feed_args, gh(comments=(0, busy, "")), _fetch_feed_active_for_1167)
+        == pw.EXIT_REVIEWING
+    )
+    assert "running" in capsys.readouterr().out
     assert pw.main(base, gh(comments=(1, "", "x")), no_network) == pw.EXIT_FAIL
     assert "PR1167: comments: x" in capsys.readouterr().err
     # Unreachable or malformed feed: reported, the gate comment still decides.
@@ -355,7 +435,31 @@ def test_gate_cli_exit_codes(capsys):
     ):
         assert pw.main(feed_args, gh(), lambda url, raw=raw: raw) == pw.EXIT_IDLE
         out = capsys.readouterr().out
-        assert out.startswith(("feed: unavailable", "feed: as_of=5 idle")), out
+        assert out.startswith("feed: unknown"), out
+
+
+@pytest.mark.parametrize(
+    "comments",
+    [
+        "",
+        json.dumps(
+            dict(
+                COMMENT_ROWS[0],
+                body="<!-- thepastaclaw-gate v1 -->\n✅ Final review complete (commit aaaaaaa)",
+            )
+        ),
+    ],
+)
+def test_missing_or_obsolete_gate_is_unknown(comments, capsys):
+    assert (
+        pw.main(
+            ["gate", "--repo", REPO, "--gate-bot", "thepastaclaw", "1167"],
+            gh(comments=(0, comments, "")),
+            no_network,
+        )
+        == pw.EXIT_FAIL
+    )
+    assert "state: unknown" in capsys.readouterr().out
 
 
 def test_gate_cli_unexpected_error_is_fetch_failure(capsys):
@@ -369,15 +473,14 @@ def test_gate_cli_unexpected_error_is_fetch_failure(capsys):
 
 def test_fetch_url_maps_http_protocol_errors(monkeypatch):
     def bad(*a, **k):
-        raise pw.http.client.IncompleteRead(b"")
+        raise IncompleteRead(b"")
 
-    monkeypatch.setattr(pw.urllib.request, "urlopen", bad)
+    monkeypatch.setattr(urllib.request, "urlopen", bad)
     assert pw.fetch_url("https://example.invalid/s.json") is None
 
 
 def test_naive_timestamps_compare_as_utc():
-    gate = ("2026-11-06T10:00:00", "✅ Final review complete")
-    assert pw.is_reviewing(True, "2026-11-06T09:00:00Z", gate, "x") is False
+    assert pw.parse_ts("2026-11-06T10:00:00") == pw.parse_ts("2026-11-06T10:00:00Z")
     assert pw.parse_ts(5) is None
 
 
@@ -387,9 +490,9 @@ def test_naive_timestamps_compare_as_utc():
         ["watch", "--checks", "(", "1"],
         ["watch", "--gate-pending", "[", "1"],
         ["gate", "--gate-busy", "(", "1"],
-        ["watch", "--gate-feed-url", "https://x", "1"],
+        ["watch", "--feed-max-age", "0", "1"],
     ],
-    ids=["checks", "gate-pending", "gate-busy", "feed-is-gate-only"],
+    ids=["checks", "gate-pending", "gate-busy", "feed-max-age"],
 )
 def test_bad_options_rejected_by_argparse(argv):
     with pytest.raises(SystemExit) as e:
@@ -431,8 +534,15 @@ def test_gate_comment_rows_survive_nel_in_body():
 def test_feed_repo_and_bot_login_match_case_insensitively():
     # GitHub owner/repo names and logins are case-insensitive; a differently
     # cased --repo / --gate-bot must not turn a running review into "idle".
-    feed = json.loads(_fetch_feed_active_for_1167(None))
-    assert pw.feed_status(feed, "DashPay/Dash-Evo-Tool", 1167)[1] is True
+    assert (
+        pw.feed_observation(
+            _fetch_feed_active_for_1167(None),
+            "DashPay/Dash-Evo-Tool",
+            1167,
+            PR["headRefOid"],
+        ).state
+        == "running"
+    )
     assert pw.gate_comment(COMMENT_ROWS, "ThePastaClaw", "thepastaclaw-gate")
 
 

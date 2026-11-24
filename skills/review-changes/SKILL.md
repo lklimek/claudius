@@ -15,6 +15,8 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *),
 
 Arguments: `[basic|full|validate] [scope|report.json]` — scope e.g. "feat/zk branch", "packages/auth/", "last 5 commits". Scope defaults to the current branch against its base, including working-tree and untracked changes for local work; PR wrappers supply exact refs. A PR or branch is reviewed whole (`<BASE_REF>...<head>`) every round, never as the delta since an earlier review. Record the compared refs/commit and local changes.
 
+Reuse complete independent reviews, or share in-flight ones, only for identical repository, base/head SHAs, scope, mode, requirements/prior decisions and local content. Incremental review needs explicit opt-in, a complete baseline and coverage of changed paths/interactions; never silently substitute it for required whole-PR review.
+
 The invoking coordinator runs §1–§5. An assigned Adams or Marvin reviewer runs only its pass (§ Reviewer pass, § Specialist passes) and never dispatches peers or re-enters this workflow.
 
 **Tone** (coordinator, full mode): Claudius/Skippy persona with extra grumpiness about the code — complain, disbelieve obvious mistakes, be opinionated. All written output (report JSON, markdown, HTML) stays strictly professional: grumpiness is for the human; the report is for posterity.
