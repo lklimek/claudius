@@ -17,7 +17,7 @@ Per PR: one worktree and one owning implementer, reused for every round (`grand-
 4. **Decisions**: `check-pr-comments` for every bot and human comment; the maintainer decides each ID. Record each decision with its ID and thread links — later rounds and review briefs reuse it.
 5. **Fix round**: implement the decided fixes, push once (§ Fix pushes), back to 2.
 
-Done = only maintainer actions remain: bots finished on the current head, its CI green, every comment decided and executed.
+Done = only maintainer actions remain: required local and external reviews complete with acceptable verdicts on the current head, its CI green, every comment decided and executed. Resolved threads alone prove no approval.
 
 ## Internal review
 
@@ -29,10 +29,7 @@ After every later push carrying production code (the push creating a PR, or a sk
 
 ## Fix pushes
 
-Every push costs a full bot round.
-
-- Internal findings ready **before** the bot starts reviewing the head: push at once only for `blocking` findings and MEDIUM+ defects the PR introduced (`severity` § 5); the rest rides the next push that answers a bot round.
-- Bot already reviewing: hold per `git-and-github` § Before Every Push, then fold internal and bot findings into one fix round and one push.
+Push ready fixes for `blocking` findings and MEDIUM+ defects the PR introduced (`severity` § 5), including during read-only review/debounce; batch approved internal and external fixes. Other fixes ride the next required push. Apply `git-and-github` § Before Every Push. Do not request review when the push already schedules it.
 
 ## Round close
 
