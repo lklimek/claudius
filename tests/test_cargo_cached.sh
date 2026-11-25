@@ -68,6 +68,7 @@
 #   K63 delayed waiter              -> expired admission cannot start Cargo
 #   K64 late orphan writes          -> recorded log and replay stay stable
 #   K65 failed log snapshot          -> preserve Cargo verdict without a record
+#   K66 cancelled output capture     -> caller receives EOF while admission stays busy
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -1383,6 +1384,39 @@ if [ "$RC" = 7 ] && grep -q 'cannot publish Cargo log' <<<"$OUT" \
   ok "K65 failed snapshots left the Cargo exit intact"
 else
   bad "K65 (rc=$RC output='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K66: cancelling a queued wrapper ends the caller's output capture ==="
+K66LOCKS="$WORK/k66-locks"
+mkdir -m 700 "$K66LOCKS"
+if (
+  exec 8>"$K66LOCKS/admission.lock" || exit 1
+  flock -n 8 || exit 1
+  (
+    cd "$REPO" || exit 1
+    captured=$(env PATH="$K62BIN:$STUBDIR:$PATH" REAL_FLOCK="$REAL_FLOCK" \
+      ADMISSION_PIDS="$WORK/k66-pids" CLAUDIUS_BUILD_LOCK_DIR="$K66LOCKS" \
+      CLAUDIUS_CACHE_DIR="$WORK/k66-cache" CLAUDIUS_FORCE=1 \
+      CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=12 \
+      timeout -k 1 15 "$BASHBIN" "$WRAPPER" build --k66 2>&1)
+    printf '%s\n' "$?" "$captured" > "$WORK/k66-result"
+  ) 8>&- &
+  caller_pid=$!
+  result=1
+  if wait_for_line "$WORK/k66-pids" '^[0-9][0-9]* [0-9][0-9]*$'; then
+    read -r wrapper_pid flock_pid < "$WORK/k66-pids"
+    if kill -TERM "$wrapper_pid" && wait_for_line "$WORK/k66-result" '^143$'; then
+      result=0
+    fi
+    kill -TERM "$flock_pid" 2>/dev/null || true
+  fi
+  exec 8>&-
+  wait "$caller_pid"
+  exit "$result"
+); then
+  ok "K66 captured output closed before the admission lock was released"
+else
+  bad "K66 captured output did not return promptly after wrapper TERM"
 fi
 
 echo ""

@@ -383,7 +383,8 @@ acquire_build_slot() {
   # a newly freed slot while that waiter holds admission. flock itself is not FIFO.
   build_wait_clock now
   deadline=$(( now + wait_seconds * 100 ))
-  if flock -w "$wait_seconds" -E 75 "$admission_fd" 9>&-; then
+  # The helper can outlive a wrapper-only TERM, so keep it off the caller's pipes.
+  if flock -w "$wait_seconds" -E 75 "$admission_fd" 9>&- >/dev/null 2>&1; then
     printf '%s\n' "$context" > "$admission" || build_lock_error "$admission"
   else
     lock_rc=$?
