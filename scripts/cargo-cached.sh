@@ -334,7 +334,18 @@ max_parallel_builds() {
 
 build_lock_error() {
   printf 'claudius: ERROR: cannot coordinate Cargo builds at %s\n' "$1" >&2
+  printf 'claudius: use the same absolute, user-owned mode-700 CLAUDIUS_BUILD_LOCK_DIR in every session\n' >&2
   exit 1
+}
+
+build_wait_clock() {
+  local uptime
+  # Linux exposes monotonic time at centisecond precision without a subprocess.
+  if { read -r uptime _ < /proc/uptime; } 2>/dev/null && [[ "$uptime" =~ ^[0-9]+\.[0-9]{2}$ ]]; then
+    printf -v "$1" '%d' "$(( 10#${uptime/./} ))"
+  else
+    printf -v "$1" '%d' "$(( SECONDS * 100 ))"
+  fi
 }
 
 build_wait_timeout() {
@@ -352,25 +363,27 @@ build_slot_fd=""
 acquire_build_slot() {
   local lock_dir="${CLAUDIUS_BUILD_LOCK_DIR:-/tmp/claudius-build-locks-$EUID}"
   local admission="$lock_dir/admission.lock" wait_seconds="${CLAUDIUS_BUILD_SLOT_WAIT_SECONDS:-300}"
-  local max deadline admission_fd context holder holder_limit lock_rc slot free_slot fd
+  local max deadline now remaining poll_delay admission_fd context holder holder_limit lock_rc slot free_slot fd mode
   local active allowed slot_count notified=0
   local holders=()
 
   [[ "$lock_dir" == /* ]] || build_lock_error "$lock_dir (use an absolute path)"
   (umask 077; mkdir -p -- "$lock_dir") 2>/dev/null || build_lock_error "$lock_dir"
-  [[ -d "$lock_dir" && ! -L "$lock_dir" && -O "$lock_dir" \
-    && "$(stat -c %a -- "$lock_dir")" == 700 ]] || build_lock_error "$lock_dir"
+  [[ -d "$lock_dir" && ! -L "$lock_dir" && -O "$lock_dir" ]] || build_lock_error "$lock_dir"
+  mode=$(stat -c %a -- "$lock_dir" 2>/dev/null || stat -f %Lp "$lock_dir" 2>/dev/null)
+  [[ "$mode" == 700 ]] || build_lock_error "$lock_dir"
   [[ ! -L "$admission" && ( ! -e "$admission" || -f "$admission" ) ]] || build_lock_error "$admission"
   { exec {admission_fd}>>"$admission"; } 2>/dev/null || build_lock_error "$admission"
 
   [[ "$wait_seconds" =~ ^[0-9]{1,9}$ ]] || wait_seconds=300
   wait_seconds=$(( 10#$wait_seconds ))
-  deadline=$(( SECONDS + wait_seconds ))
   printf -v context 'pid=%s checkout=%q cargo=%q' "$$" "$toplevel" "$cmd_norm"
 
   # Only the first admitted waiter scans the slots. Later arrivals cannot take
   # a newly freed slot while that waiter holds admission. flock itself is not FIFO.
-  if flock -w "$wait_seconds" -E 75 "$admission_fd"; then
+  build_wait_clock now
+  deadline=$(( now + wait_seconds * 100 ))
+  if flock -w "$wait_seconds" -E 75 "$admission_fd" 9>&-; then
     printf '%s\n' "$context" > "$admission" || build_lock_error "$admission"
   else
     lock_rc=$?
@@ -381,13 +394,17 @@ acquire_build_slot() {
 
   max=$(max_parallel_builds)
   while :; do
+    build_wait_clock now
+    if (( wait_seconds && now >= deadline )); then
+      build_wait_timeout "a build slot" "$wait_seconds" "${holders[@]}"
+    fi
     active=0; allowed=$max; slot_count=0; free_slot=""; holders=()
     for slot in "$lock_dir"/build-slot-*.lock; do
       [[ -e "$slot" || -L "$slot" ]] || continue
       [[ -f "$slot" && ! -L "$slot" ]] || build_lock_error "$slot"
       (( ++slot_count ))
       { exec {fd}>>"$slot"; } 2>/dev/null || build_lock_error "$slot"
-      if flock -n -E 75 "$fd"; then
+      if flock -n -E 75 "$fd" 9>&-; then
         if [[ -z "$free_slot" ]]; then
           free_slot=$slot
           build_slot_fd=$fd
@@ -415,7 +432,11 @@ acquire_build_slot() {
           free_slot="$lock_dir/build-slot-$slot_count.lock"
         done
         { exec {build_slot_fd}>>"$free_slot"; } 2>/dev/null || build_lock_error "$free_slot"
-        flock -n "$build_slot_fd" || build_lock_error "$free_slot"
+        flock -n "$build_slot_fd" 9>&- || build_lock_error "$free_slot"
+      fi
+      build_wait_clock now
+      if (( wait_seconds && now >= deadline )); then
+        build_wait_timeout "a build slot" "$wait_seconds" "${holders[@]}"
       fi
       printf '%s %s\n' "$max" "$context" > "$free_slot" || build_lock_error "$free_slot"
       exec {admission_fd}>&-
@@ -425,7 +446,9 @@ acquire_build_slot() {
       exec {build_slot_fd}>&-
       build_slot_fd=""
     fi
-    if (( SECONDS >= deadline )); then
+    build_wait_clock now
+    remaining=$(( deadline - now ))
+    if (( remaining <= 0 )); then
       build_wait_timeout "a build slot" "$wait_seconds" "${holders[@]}"
     fi
     if (( ! notified )); then
@@ -433,7 +456,9 @@ acquire_build_slot() {
       printf 'claudius: holder: %s\n' "${holders[@]}" >&2
       notified=1
     fi
-    sleep 0.2
+    (( remaining <= 20 )) || remaining=20
+    printf -v poll_delay '0.%02d' "$remaining"
+    sleep "$poll_delay" {admission_fd}>&- 9>&-
   done
 }
 # Lock order: per-key, admission, then slot. Replays never enter admission,
@@ -451,11 +476,12 @@ run_cargo() (
 # PID suffix avoids two concurrent identical runs in the same second colliding
 # on one log file (interleaved/corrupted output) when flock is unavailable.
 logf="$LEDGER_DIR/logs/$(date +%Y%m%dT%H%M%S)-$key-$$.log"
+live_log="$logf.live"
 # Descendants can keep stdout open after Cargo exits. Appending to a regular
 # file preserves live logs and lets the wrapper finish without waiting for EOF.
 log_fd=""
-if ! { exec {log_fd}>>"$logf"; } 2>/dev/null; then
-  printf 'claudius: ledger log unavailable at %s; running Cargo without recording a verdict\n' "$logf" >&2
+if ! { exec {log_fd}>>"$live_log"; } 2>/dev/null; then
+  printf 'claudius: ledger log unavailable at %s; running Cargo without recording a verdict\n' "$live_log" >&2
 fi
 start=$(date +%s)
 # Bash defers a TERM trap while Cargo runs in the foreground. Group TERM
@@ -463,11 +489,24 @@ start=$(date +%s)
 trap 'exit 143' TERM
 run_cargo "$@"
 rc=$?
+log_bytes=""
+if [[ -n "$log_fd" ]]; then
+  log_bytes=$(stat -c %s -- "$live_log" 2>/dev/null || stat -f %z "$live_log" 2>/dev/null)
+fi
 trap - TERM
 if [[ -n "$build_slot_fd" ]]; then exec {build_slot_fd}>&-; fi
 [[ -n "$log_fd" ]] || exit "$rc"
 exec {log_fd}>&-
 dur=$(( $(date +%s) - start ))
+# Publish only the measured prefix. A surviving writer keeps its own inode.
+snapshot="$logf.tmp"
+if ! [[ "$log_bytes" =~ ^[0-9]+$ ]] || ! head -c "$log_bytes" -- "$live_log" > "$snapshot" 9>&- \
+   || [[ -d "$logf" ]] || ! mv -f -- "$snapshot" "$logf"; then
+  rm -f -- "$snapshot"
+  printf 'claudius: cannot publish Cargo log from %s; no verdict recorded\n' "$live_log" >&2
+  exit "$rc"
+fi
+rm -f -- "$live_log"
 tail -100 "$logf"
 
 # Keep target-dir provenance in the full ledger log, not only its JSON record.

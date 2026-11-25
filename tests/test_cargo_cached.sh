@@ -64,6 +64,10 @@
 #   K59 cancellation                -> process-group TERM releases the build slot
 #   K60 wrapper-only TERM           -> slot stays owned until Cargo exits
 #   K61 unavailable log file        -> Cargo still runs and no verdict is recorded
+#   K62 cancelled admission         -> flock does not retain the per-key lock
+#   K63 delayed waiter              -> expired admission cannot start Cargo
+#   K64 late orphan writes          -> recorded log and replay stay stable
+#   K65 failed log snapshot          -> preserve Cargo verdict without a record
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -140,7 +144,18 @@ fi
 case "${STUB_ORPHAN:-}" in
   sccache) sccache spawn ;;
   nextest)
-    setsid bash -c 'echo "$$" > "$1"; exec sleep 20' _ "$STUB_ORPHAN_PID" </dev/null &
+    setsid bash -c '
+      echo "$$" > "$1"
+      [[ -n "$2" ]] || exec sleep 20
+      for ((i = 0; i < 400; i++)); do
+        if [[ -f "$2" ]]; then
+          echo LATE_ORPHAN_OUTPUT
+          echo done > "$2.done"
+          exit
+        fi
+        sleep 0.05
+      done
+    ' _ "$STUB_ORPHAN_PID" "${STUB_ORPHAN_RELEASE:-}" </dev/null &
     ;;
 esac
 [ "${STUB_SLEEP:-0}" != 0 ] && sleep "${STUB_SLEEP}"
@@ -992,7 +1007,7 @@ fi
 
 echo "=== K51: without flock the cap is skipped entirely (fail open) ==="
 NOFLOCKBIN="$WORK/no-flock-bin"; mkdir -p "$NOFLOCKBIN"
-for t in bash cat cut date env find git grep jq mkdir mv rm sha256sum sleep sort stat tail tee timeout tr xargs; do
+for t in bash cat cut date env find git grep head jq mkdir mv rm sha256sum sleep sort stat tail tee timeout tr xargs; do
   src=$(command -v "$t" 2>/dev/null) && ln -sf "$src" "$NOFLOCKBIN/$t"
 done
 ln -sf "$STUBDIR/cargo" "$NOFLOCKBIN/cargo"   # deliberately no flock in $NOFLOCKBIN
@@ -1253,6 +1268,116 @@ if [ "$RC" = 7 ] && grep -q 'ledger log unavailable' <<<"$OUT" \
   ok "K61 Cargo ran directly and its exit was never recorded"
 else
   bad "K61 (rc=$RC output='${OUT//$'\n'/ }')"
+fi
+
+K62BIN="$WORK/k62bin"; mkdir "$K62BIN"
+cat > "$K62BIN/flock" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == -w ]]; then
+  printf '%s %s\n' "$PPID" "$$" > "$ADMISSION_PIDS"
+fi
+exec "$REAL_FLOCK" "$@"
+EOF
+chmod +x "$K62BIN/flock"
+REAL_FLOCK=$(command -v flock)
+
+echo "=== K62: cancelling an admission waiter releases its per-key lock ==="
+marker="$WORK/k62.marker"; : > "$marker"
+K62CACHE="$WORK/k62cache"
+spawn_build "$REPO" "$marker" k62-holder 1 STUB_GATE="$WORK/k62-release"
+p62h=$slot_pid
+wait_for_line "$marker" '^START k62-holder '
+spawn_build "$REPO" "$marker" k62-head 1
+p62q=$slot_pid
+wait_for_line "$marker.k62-head.out" 'build slots busy'
+spawn_build "$REPO" "$marker" k62-tail 1 CLAUDIUS_CACHE_DIR="$K62CACHE" \
+  PATH="$K62BIN:$STUBDIR:$PATH" REAL_FLOCK="$REAL_FLOCK" ADMISSION_PIDS="$WORK/k62-pids" \
+  CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=8
+p62t=$slot_pid
+if wait_for_line "$WORK/k62-pids" '^[0-9][0-9]* [0-9][0-9]*$'; then
+  read -r wrapper_pid flock_pid < "$WORK/k62-pids"
+  kill -TERM "$wrapper_pid"
+  wait "$p62t"; RC=$?
+  key_locks=("$K62CACHE"/ledger/locks/*.lock)
+  if [ "$RC" = 143 ] && [ -f "${key_locks[0]}" ] && flock -n "${key_locks[0]}" true; then
+    ok "K62 a queued cancellation released its per-key lock"
+  else
+    bad "K62 per-key lock remained held or wrapper did not stop (rc=$RC)"
+  fi
+  kill -TERM "$flock_pid" 2>/dev/null || true
+else
+  bad "K62 admission helper not reached"
+fi
+: > "$WORK/k62-release"
+wait "$p62h" "$p62q" "$p62t"
+
+echo "=== K63: only an unexpired or immediate attempt can admit Cargo ==="
+marker="$WORK/k63.marker"; : > "$marker"
+spawn_build "$REPO" "$marker" k63-holder 1 STUB_GATE="$WORK/k63-release"
+p63h=$slot_pid
+wait_for_line "$marker" '^START k63-holder '
+spawn_build "$REPO" "$marker" k63-immediate-busy 1 CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=0
+wait "$slot_pid"; RC1=$?
+spawn_build "$REPO" "$marker" k63-delayed 1 PATH="$K62BIN:$STUBDIR:$PATH" REAL_FLOCK="$REAL_FLOCK" \
+  ADMISSION_PIDS="$WORK/k63-pids" CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=1
+p63t=$slot_pid
+if wait_for_line "$marker.k63-delayed.out" 'build slots busy' && read -r wrapper_pid _ < "$WORK/k63-pids"; then
+  kill -STOP "$wrapper_pid"
+  sleep 1.2
+  : > "$WORK/k63-release"
+  wait "$p63h"
+  kill -CONT "$wrapper_pid"
+  wait "$p63t"; RC2=$?
+  spawn_build "$REPO" "$marker" k63-immediate-free 1 CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=0
+  wait "$slot_pid"; RC3=$?
+  if [ "$RC1" = 75 ] && [ "$RC2" = 75 ] && [ "$RC3" = 0 ] \
+     && ! grep -q '^START k63-delayed ' "$marker"; then
+    ok "K63 only an unexpired or immediate attempt started Cargo"
+  else
+    bad "K63 (busy=$RC1 delayed=$RC2 free=$RC3 marker='$(tr '\n' ' ' < "$marker")')"
+  fi
+else
+  : > "$WORK/k63-release"
+  wait "$p63h" "$p63t"
+  bad "K63 the delayed build did not reach the slot wait"
+fi
+
+echo "=== K64: late orphan output cannot change a recorded verdict ==="
+K64CACHE="$WORK/k64cache"
+OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K64CACHE" CLAUDIUS_FORCE=0 \
+       STUB_ORPHAN=nextest STUB_ORPHAN_PID="$WORK/k64-pid" STUB_ORPHAN_RELEASE="$WORK/k64-release" \
+       timeout -k 1 3 "$BASHBIN" "$WRAPPER" nextest run --k64 2>&1 ); RC=$?
+log=$(jq -r .log "$K64CACHE/ledger/records.jsonl" 2>/dev/null)
+before=$(sha256sum "$log" 2>/dev/null)
+mtime=$(stat -c %y "$log" 2>/dev/null)
+: > "$WORK/k64-release"
+if wait_for_line "$WORK/k64-release.done" '^done$'; then
+  OUT2=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K64CACHE" CLAUDIUS_FORCE=0 \
+          timeout -k 1 3 "$BASHBIN" "$WRAPPER" nextest run --k64 2>&1 ); RC2=$?
+  if [ "$RC" = 0 ] && [ "$RC2" = 0 ] && grep -q "CACHED verification" <<<"$OUT2" \
+     && ! grep -q LATE_ORPHAN_OUTPUT <<<"$OUT2" && [ "$before" = "$(sha256sum "$log")" ] \
+     && [ "$mtime" = "$(stat -c %y "$log")" ]; then
+    ok "K64 late orphan output changed neither the recorded bytes nor the TTL"
+  else
+    bad "K64 (rc=$RC replay=$RC2 replay output='${OUT2//$'\n'/ }')"
+  fi
+else
+  bad "K64 orphan did not write late output"
+  if read -r orphan_pid < "$WORK/k64-pid"; then kill "$orphan_pid" 2>/dev/null || true; fi
+fi
+
+echo "=== K65: snapshot failure preserves the exit without a ledger verdict ==="
+K65BIN="$WORK/k65bin"; mkdir "$K65BIN"
+printf '#!/bin/sh\nexit 1\n' > "$K65BIN/head"
+chmod +x "$K65BIN/head"
+K65CACHE="$WORK/k65cache"
+OUT=$( cd "$REPO" && env PATH="$K65BIN:$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K65CACHE" \
+       CLAUDIUS_FORCE=1 STUB_RC=7 timeout -k 1 3 "$BASHBIN" "$WRAPPER" build --k65 2>&1 ); RC=$?
+if [ "$RC" = 7 ] && grep -q 'cannot publish Cargo log' <<<"$OUT" \
+   && [ ! -e "$K65CACHE/ledger/records.jsonl" ]; then
+  ok "K65 failed snapshots left the Cargo exit intact"
+else
+  bad "K65 (rc=$RC output='${OUT//$'\n'/ }')"
 fi
 
 echo ""
