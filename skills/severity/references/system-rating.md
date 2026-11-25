@@ -38,6 +38,7 @@ Per finding:
    Any band: a `declined` or `merged over` anchor the finding resembles is guidance, not a binding outcome — weigh it, and name any path or harm the anchor lacked.
 4. **Counter-argument** (HIGH and above) — write the strongest one-line case that the finding barely matters at project scale. Lower the floats only when that case rests on evidence (`severity` § 3 evidence rule); an unevidenced case leaves the band as it is.
 5. **Record** — per changed finding: new floats, and `impact_description` opening with the headline plus a one-line rating reason; the coordinator applies them per `review-changes` consolidation § Decide step 3 (`finding_updates`, or a merged cluster's `updates`).
+   Apply the LOW evidence rule in `severity` § Levels. Keep the prior floats until `impact_description` supports a LOW rescore.
 
 The rating pass may raise a finding too: a component-local bug can be system-wide (shared library, every node runs the same code path).
 
