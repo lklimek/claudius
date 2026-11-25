@@ -4,7 +4,7 @@
 #
 # Identical command + identical tree in the same checkout => REPLAY the recorded
 # log + exit code (the agent gets its output at zero compile cost). Otherwise run
-# the real cargo, tee the full log, and append a JSONL record to the ledger.
+# the real cargo, save the full log, and append a JSONL record to the ledger.
 #
 # Cache infrastructure failures (missing jq, not a git repo, no flock) fail open
 # to plain cargo. Auto-isolation setup fails closed because a shared target dir
@@ -12,8 +12,13 @@
 #
 # Ledger location is portable — NEVER hardcoded. A user who wants it elsewhere
 # (e.g. a big disk) sets CLAUDIUS_CACHE_DIR; otherwise it follows the XDG cache.
-# CLAUDIUS_FORCE=1 skips replay; CLAUDIUS_MAX_PARALLEL_BUILDS (default 2) caps how
-# many REAL cargo runs execute at once across every wrapper sharing that ledger.
+# CLAUDIUS_FORCE=1 skips replay. CLAUDIUS_MAX_PARALLEL_BUILDS (default 4) caps
+# cache misses across wrappers sharing the per-user /tmp build lock directory.
+# Use the same absolute CLAUDIUS_BUILD_LOCK_DIR in every session to override it.
+# If callers request different limits, use the lowest limit among live builds
+# and the build seeking admission.
+# CLAUDIUS_BUILD_SLOT_WAIT_SECONDS (default 900, 0 for an immediate attempt)
+# bounds admission and slot wait. A timeout exits 75 without running Cargo.
 set -uo pipefail
 
 # A spawned agent's Bash tool can start with a PATH that omits ~/.cargo/bin
@@ -318,80 +323,192 @@ if [[ -f "$RECORDS" ]] && (( RANDOM % 20 == 0 )); then
   mv "$tmp_records" "$RECORDS" 2>/dev/null || rm -f "$tmp_records" 2>/dev/null
 fi
 
-# --- Machine-wide build-slot cap -------------------------------------------
-# Per-checkout target dirs (top of script) cost the machine an accidental safety
-# net: while every checkout shared ONE target dir, cargo's own lock on it let a
-# single real build run at a time host-wide, incidentally bounding memory. With a
-# dir per checkout, N concurrent agents each fan out a full parallel rustc/linker
-# build and peak memory scales with N until the host OOMs. So bound it on purpose
-# here: at most CLAUDIUS_MAX_PARALLEL_BUILDS real cargo runs at once across every
-# wrapper process sharing this ledger. Anyone re-tightening the isolation feature
-# later must keep this — the two together are what make concurrency survivable.
-# Deliberately placed AFTER both replay attempts (a cache hit costs nothing and
-# must never queue) and BEFORE the `start=` stopwatch below, so time spent queued
-# never inflates the duration the fake-green guard judges. Lock order is one-way
-# (per-key lock, then slot), so a slot
-# holder never waits on a per-key lock and the two namespaces cannot deadlock.
-# The wait is unbounded, unlike the dedup lock's `-w 100`: real builds hold a slot
-# for minutes, and a cap that expires under load is not a cap — it hands every
-# queued agent a build at once, which is the OOM this exists to prevent. A waiter
-# killed by its caller's tool timeout simply retries; it holds no slot meanwhile.
-#
-# Slot count. Same base-10 care as fake_green_min(): a leading zero (=08) would
-# otherwise be an arithmetic error, and 0/negative/garbage must degrade to the
-# default rather than silently uncapping the host. The regex rejects signs and
-# non-digits; the >0 test catches the zero the regex accepts.
+# --- Cross-checkout build cap ----------------------------------------------
 max_parallel_builds() {
-  local max="${CLAUDIUS_MAX_PARALLEL_BUILDS:-2}"
-  [[ "$max" =~ ^[0-9]+$ ]] || max=2
+  local max="${CLAUDIUS_MAX_PARALLEL_BUILDS:-4}"
+  [[ "$max" =~ ^[0-9]+$ ]] || max=4
   max=$(( 10#$max ))
-  (( max > 0 )) || max=2
+  (( max > 0 )) || max=4
   printf '%s' "$max"
 }
 
-# Take a slot and HOLD it for the rest of this process's life: the open fd IS the
-# lock, so the kernel releases it on exit and no path can leak one. `{fd}` lets
-# bash allocate the descriptor, which cannot collide with the dedup lock's fd 9.
-# A bare `exec {fd}>f 2>/dev/null` would mute stderr PERMANENTLY, hence the brace
-# group; a failed open returns 1 there (it does not abort the shell), so the sweep
-# can simply move on to the next slot.
+build_lock_error() {
+  printf 'claudius: ERROR: cannot coordinate Cargo builds at %s\n' "$1" >&2
+  printf 'claudius: use the same absolute, user-owned mode-700 CLAUDIUS_BUILD_LOCK_DIR in every session\n' >&2
+  exit 1
+}
+
+build_wait_clock() {
+  local uptime
+  # Linux exposes monotonic time at centisecond precision without a subprocess.
+  if { read -r uptime _ < /proc/uptime; } 2>/dev/null && [[ "$uptime" =~ ^[0-9]+\.[0-9]{2}$ ]]; then
+    printf -v "$1" '%d' "$(( 10#${uptime/./} ))"
+  else
+    printf -v "$1" '%d' "$(( SECONDS * 100 ))"
+  fi
+}
+
+build_wait_timeout() {
+  local location="$1" seconds="$2" holder
+  shift 2
+  printf 'claudius: timed out waiting for %s after %ss (CLAUDIUS_BUILD_SLOT_WAIT_SECONDS)\n' \
+    "$location" "$seconds" >&2
+  for holder; do
+    [[ -z "$holder" ]] || printf 'claudius: holder: %s\n' "$holder" >&2
+  done
+  exit 75
+}
+
+build_slot_fd=""
 acquire_build_slot() {
-  local max fd i opened notified=0
+  local lock_dir="${CLAUDIUS_BUILD_LOCK_DIR:-/tmp/claudius-build-locks-$EUID}"
+  local admission="$lock_dir/admission.lock" wait_seconds="${CLAUDIUS_BUILD_SLOT_WAIT_SECONDS:-900}"
+  local max deadline now remaining poll_delay admission_fd context holder holder_limit lock_rc slot free_slot fd mode
+  local active allowed slot_count notified=0
+  local holders=()
+
+  [[ "$lock_dir" == /* ]] || build_lock_error "$lock_dir (use an absolute path)"
+  (umask 077; mkdir -p -- "$lock_dir") 2>/dev/null || build_lock_error "$lock_dir"
+  [[ -d "$lock_dir" && ! -L "$lock_dir" && -O "$lock_dir" ]] || build_lock_error "$lock_dir"
+  mode=$(stat -c %a -- "$lock_dir" 2>/dev/null || stat -f %Lp "$lock_dir" 2>/dev/null)
+  [[ "$mode" == 700 ]] || build_lock_error "$lock_dir"
+  [[ ! -L "$admission" && ( ! -e "$admission" || -f "$admission" ) ]] || build_lock_error "$admission"
+  { exec {admission_fd}>>"$admission"; } 2>/dev/null || build_lock_error "$admission"
+
+  [[ "$wait_seconds" =~ ^[0-9]{1,9}$ ]] || wait_seconds=900
+  wait_seconds=$(( 10#$wait_seconds ))
+  printf -v context 'pid=%s checkout=%q cargo=%q' "$$" "$toplevel" "$cmd_norm"
+
+  # Only the first admitted waiter scans the slots. Later arrivals cannot take
+  # a newly freed slot while that waiter holds admission. flock itself is not FIFO.
+  build_wait_clock now
+  deadline=$(( now + wait_seconds * 100 ))
+  # The helper can outlive a wrapper-only TERM, so keep it off the caller's pipes.
+  if flock -w "$wait_seconds" -E 75 "$admission_fd" 9>&- >/dev/null 2>&1; then
+    printf '%s\n' "$context" > "$admission" || build_lock_error "$admission"
+  else
+    lock_rc=$?
+    (( lock_rc == 75 )) || build_lock_error "$admission"
+    IFS= read -r holder < "$admission" || holder=""
+    build_wait_timeout "build admission" "$wait_seconds" "$holder"
+  fi
+
   max=$(max_parallel_builds)
   while :; do
-    opened=0
-    for (( i = 0; i < max; i++ )); do
-      { exec {fd}>"$LEDGER_DIR/locks/build-slot-$i.lock"; } 2>/dev/null || continue
-      opened=1
-      flock -n "$fd" 2>/dev/null && return 0
+    build_wait_clock now
+    if (( wait_seconds && now >= deadline )); then
+      build_wait_timeout "a build slot" "$wait_seconds" "${holders[@]}"
+    fi
+    active=0; allowed=$max; slot_count=0; free_slot=""; holders=()
+    for slot in "$lock_dir"/build-slot-*.lock; do
+      [[ -e "$slot" || -L "$slot" ]] || continue
+      [[ -f "$slot" && ! -L "$slot" ]] || build_lock_error "$slot"
+      (( ++slot_count ))
+      { exec {fd}>>"$slot"; } 2>/dev/null || build_lock_error "$slot"
+      if flock -n -E 75 "$fd" 9>&-; then
+        if [[ -z "$free_slot" ]]; then
+          free_slot=$slot
+          build_slot_fd=$fd
+          continue
+        fi
+      else
+        lock_rc=$?
+        (( lock_rc == 75 )) || build_lock_error "$slot"
+        # A holder's limit only matters while its slot is locked.
+        if ! read -r holder_limit holder < "$slot" || [[ ! "$holder_limit" =~ ^[1-9][0-9]{0,18}$ ]]; then
+          holder_limit=1
+          holder="$slot (details unavailable)"
+        fi
+        (( ++active ))
+        (( holder_limit < allowed )) && allowed=$holder_limit
+        holders+=("$holder")
+      fi
       exec {fd}>&-
     done
-    # Not one slot file was even openable (e.g. another user owns them in a shared
-    # ledger): fail open like every other infrastructure failure here, rather than
-    # spinning forever on a slot this process can never take.
-    if (( ! opened )); then
-      echo "claudius: WARNING: no usable build slot in $LEDGER_DIR/locks; running uncapped" >&2
-      return 0
+    if (( active < allowed )); then
+      if [[ -z "$free_slot" ]]; then
+        free_slot="$lock_dir/build-slot-$slot_count.lock"
+        while [[ -e "$free_slot" ]]; do
+          (( ++slot_count ))
+          free_slot="$lock_dir/build-slot-$slot_count.lock"
+        done
+        { exec {build_slot_fd}>>"$free_slot"; } 2>/dev/null || build_lock_error "$free_slot"
+        flock -n "$build_slot_fd" 9>&- || build_lock_error "$free_slot"
+      fi
+      build_wait_clock now
+      if (( wait_seconds && now >= deadline )); then
+        build_wait_timeout "a build slot" "$wait_seconds" "${holders[@]}"
+      fi
+      printf '%s %s\n' "$max" "$context" > "$free_slot" || build_lock_error "$free_slot"
+      exec {admission_fd}>&-
+      return
     fi
-    if (( ! notified )); then   # once, not per retry: a tail should read as waiting, not looping
-      echo "=== all $max build slots busy; waiting for one (raise CLAUDIUS_MAX_PARALLEL_BUILDS to widen) ==="
+    if [[ -n "$free_slot" ]]; then
+      exec {build_slot_fd}>&-
+      build_slot_fd=""
+    fi
+    build_wait_clock now
+    remaining=$(( deadline - now ))
+    if (( remaining <= 0 )); then
+      build_wait_timeout "a build slot" "$wait_seconds" "${holders[@]}"
+    fi
+    if (( ! notified )); then
+      printf '=== build slots busy (%s active, limit %s); waiting up to %ss ===\n' "$active" "$allowed" "$wait_seconds" >&2
+      printf 'claudius: holder: %s\n' "${holders[@]}" >&2
       notified=1
     fi
-    sleep 2
+    (( remaining <= 20 )) || remaining=20
+    printf -v poll_delay '0.%02d' "$remaining"
+    sleep "$poll_delay" {admission_fd}>&- 9>&-
   done
 }
-# flock is Linux/util-linux; without it the cap is skipped (fail open, exactly as
-# the dedup lock above degrades).
+# Lock order: per-key, admission, then slot. Replays never enter admission,
+# and the fake-green stopwatch only measures Cargo.
 if command -v flock >/dev/null 2>&1; then acquire_build_slot; fi
+
+run_cargo() (
+  exec 9>&-
+  if [[ -n "$build_slot_fd" ]]; then exec {build_slot_fd}>&-; fi
+  if [[ -n "$log_fd" ]]; then exec >&"$log_fd" 2>&1 {log_fd}>&-; fi
+  exec cargo "$@"
+)
 
 # --- Miss: run for real, capture full log, record the outcome --------------
 # PID suffix avoids two concurrent identical runs in the same second colliding
 # on one log file (interleaved/corrupted output) when flock is unavailable.
 logf="$LEDGER_DIR/logs/$(date +%Y%m%dT%H%M%S)-$key-$$.log"
+live_log="$logf.live"
+# Descendants can keep stdout open after Cargo exits. Appending to a regular
+# file preserves live logs and lets the wrapper finish without waiting for EOF.
+log_fd=""
+if ! { exec {log_fd}>>"$live_log"; } 2>/dev/null; then
+  printf 'claudius: ledger log unavailable at %s; running Cargo without recording a verdict\n' "$live_log" >&2
+fi
 start=$(date +%s)
-cargo "$@" 2>&1 | tee "$logf" | tail -100
-rc=${PIPESTATUS[0]}
+# Bash defers a TERM trap while Cargo runs in the foreground. Group TERM
+# reaches Cargo too, while wrapper-only TERM keeps the slot until Cargo exits.
+trap 'exit 143' TERM
+run_cargo "$@"
+rc=$?
+log_bytes=""
+if [[ -n "$log_fd" ]]; then
+  log_bytes=$(stat -c %s -- "$live_log" 2>/dev/null || stat -f %z "$live_log" 2>/dev/null)
+fi
+trap - TERM
+if [[ -n "$build_slot_fd" ]]; then exec {build_slot_fd}>&-; fi
+[[ -n "$log_fd" ]] || exit "$rc"
+exec {log_fd}>&-
 dur=$(( $(date +%s) - start ))
+# Publish only the measured prefix. A surviving writer keeps its own inode.
+snapshot="$logf.tmp"
+if ! [[ "$log_bytes" =~ ^[0-9]+$ ]] || ! head -c "$log_bytes" -- "$live_log" > "$snapshot" 9>&- \
+   || [[ -d "$logf" ]] || ! mv -f -- "$snapshot" "$logf"; then
+  rm -f -- "$snapshot"
+  printf 'claudius: cannot publish Cargo log from %s; no verdict recorded\n' "$live_log" >&2
+  exit "$rc"
+fi
+rm -f -- "$live_log"
+tail -100 "$logf"
 
 # Keep target-dir provenance in the full ledger log, not only its JSON record.
 if [[ "$auto_isolated" == 1 ]]; then
