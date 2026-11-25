@@ -54,7 +54,16 @@
 #   K49 invalid cap (abc/0/-3)      -> falls back to 2, never uncapped
 #   K50 replay while slots saturated-> returns at once, never queues for a slot
 #   K51 flock absent                -> cap skipped, both builds run concurrently
-#   K52 unopenable slot files       -> warns once per process and runs uncapped
+#   K52 invalid build lock paths    -> refuse to run uncapped, explain why
+#   K53 detached sccache            -> child retains neither wrapper lock
+#   K54 detached nextest child      -> live output and exit status survive, replay works
+#   K55 workspace-local ledgers     -> different workspaces share the build cap
+#   K56 build slot contention       -> older waiter runs before a later arrival
+#   K57 wait timeout                -> exit 75, report holder, never run uncapped
+#   K58 mixed limits                -> cap 1 waits for all builds and runs alone
+#   K59 cancellation                -> process-group TERM releases the build slot
+#   K60 wrapper-only TERM           -> slot stays owned until Cargo exits
+#   K61 unavailable log file        -> Cargo still runs and no verdict is recorded
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -69,8 +78,10 @@ bad() { echo -e "  ${RED}\xe2\x9c\x97${NC} $1"; fail=$((fail + 1)); }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 export CLAUDIUS_CACHE_DIR="$WORK/cache"   # ledger lives here, outside the repo
+export CLAUDIUS_BUILD_LOCK_DIR="$WORK/build-locks"
 unset CLAUDIUS_TARGET_PREFIX
 unset CLAUDIUS_MAX_PARALLEL_BUILDS   # K48 asserts the built-in default cap
+unset CLAUDIUS_BUILD_SLOT_WAIT_SECONDS
 COUNTER="$WORK/counter"; echo 0 > "$COUNTER"; export COUNTER
 # Fixed "canonical" target dir the stub reports for `cargo metadata` — the wrapper
 # derives each checkout's isolated dir UNDER this (see K19-K24).
@@ -118,7 +129,20 @@ n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"
 echo "STUB CARGO INVOCATION $n: $*"
 echo "STUB_TGT=${CARGO_TARGET_DIR:-}"           # what the wrapper auto-derived/kept
 echo "STUB_SCC_BASEDIRS=${SCCACHE_BASEDIRS:-}"  # what the wrapper set for sccache
+if [ -n "${STUB_WRAPPER_PID_FILE:-}" ]; then printf '%s\n' "$PPID" > "$STUB_WRAPPER_PID_FILE"; fi
 mark START
+if [ -n "${STUB_GATE:-}" ]; then
+  for ((i = 0; i < 400; i++)); do
+    [ -e "$STUB_GATE" ] && break
+    sleep 0.05
+  done
+fi
+case "${STUB_ORPHAN:-}" in
+  sccache) sccache spawn ;;
+  nextest)
+    setsid bash -c 'echo "$$" > "$1"; exec sleep 20' _ "$STUB_ORPHAN_PID" </dev/null &
+    ;;
+esac
 [ "${STUB_SLEEP:-0}" != 0 ] && sleep "${STUB_SLEEP}"
 mark END
 exit "${STUB_RC:-0}"
@@ -130,6 +154,9 @@ SCCDIR="$WORK/sccbin"; mkdir -p "$SCCDIR"
 cat > "$SCCDIR/sccache" <<'EOF'
 #!/usr/bin/env bash
 [ "${1:-}" = --version ] && { echo "sccache ${SCC_VER:-0.14.0}"; exit 0; }
+if [ "${1:-}" = spawn ]; then
+  setsid bash -c 'echo "$$" > "$1"; exec sleep 20' _ "$STUB_ORPHAN_PID" </dev/null >/dev/null 2>&1 &
+fi
 exit 0
 EOF
 chmod +x "$SCCDIR/sccache"
@@ -988,23 +1015,244 @@ else
   bad "K51 (starts=$starts peak=$peak marker='$(tr '\n' ' ' < "$K51MARKER")')"
 fi
 
-echo "=== K52: unopenable slot files fail open instead of queueing forever ==="
-# A slot file owned by someone else in a shared ledger is unopenable (mode 000
-# denies its owner too). Waiting on a slot this process can never take would hang
-# every build on the host, so the cap must stand aside and say so.
-K52CACHE="$WORK/cache-k52"
-mkdir -p "$K52CACHE/ledger/locks"
-: > "$K52CACHE/ledger/locks/build-slot-0.lock"
-chmod 000 "$K52CACHE/ledger/locks/build-slot-0.lock"
-marker=$(slot_probe "$K52CACHE" 2 3 CLAUDIUS_MAX_PARALLEL_BUILDS=1)
-chmod 600 "$K52CACHE/ledger/locks/build-slot-0.lock"
+echo "=== K52: invalid lock paths stop the build with a diagnostic ==="
+mkdir -m 700 "$WORK/k52-locks"
+mkdir "$WORK/k52-locks/build-slot-0.lock"
+mkdir -m 755 "$WORK/k52-public"
+ln -s "$WORK/k52-locks" "$WORK/k52-symlink"
+for broken in "$WORK/k52-locks" "$WORK/k52-public" "$WORK/k52-symlink" k52-relative; do
+  OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_FORCE=1 CLAUDIUS_BUILD_LOCK_DIR="$broken" \
+         timeout -k 1 3 "$BASHBIN" "$WRAPPER" build --k52 2>&1 ); RC=$?
+  if [ "$RC" = 1 ] && grep -q 'cannot coordinate Cargo builds' <<<"$OUT" \
+     && ! grep -q 'STUB CARGO INVOCATION' <<<"$OUT"; then
+    ok "K52 refused lock path ${broken##*/}"
+  else
+    bad "K52 (path=$broken rc=$RC output='${OUT//$'\n'/ }')"
+  fi
+done
+
+wait_for_line() {
+  local file="$1" pattern="$2" i
+  for (( i = 0; i < 100; i++ )); do
+    grep -q -- "$pattern" "$file" 2>/dev/null && return 0
+    sleep 0.05
+  done
+  return 1
+}
+
+echo "=== K53: a detached sccache server keeps neither wrapper lock ==="
+K53CACHE="$WORK/cache-k53"
+K53PID="$WORK/k53.pid"
+OUT=$( cd "$REPO" && env PATH="$SCCDIR:$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K53CACHE" \
+       CLAUDIUS_MAX_PARALLEL_BUILDS=1 CLAUDIUS_FORCE=1 STUB_ORPHAN=sccache STUB_ORPHAN_PID="$K53PID" \
+       timeout -k 1 3 "$BASHBIN" "$WRAPPER" build --k53 2>&1 ); RC=$?
+if wait_for_line "$K53PID" '^[0-9][0-9]*$'; then
+  orphan_pid=$(cat "$K53PID")
+  orphan_fds=$(ls -l "/proc/$orphan_pid/fd" 2>/dev/null)
+  OUT2=$( cd "$REPO" && env PATH="$SCCDIR:$STUBDIR:$PATH" CLAUDIUS_CACHE_DIR="$K53CACHE" \
+          CLAUDIUS_MAX_PARALLEL_BUILDS=1 CLAUDIUS_FORCE=1 \
+          timeout -k 1 3 "$BASHBIN" "$WRAPPER" build --k53 2>&1 ); RC2=$?
+  if [ "$RC" = 0 ] && [ "$RC2" = 0 ] && kill -0 "$orphan_pid" 2>/dev/null \
+     && grep -q "STUB CARGO INVOCATION" <<<"$OUT2" && ! grep -q '\.lock$' <<<"$orphan_fds"; then
+    ok "K53 a forced identical build ran while the detached server stayed alive"
+  else
+    bad "K53 (first=$RC next=$RC2 fds='${orphan_fds//$'\n'/ }' next output='${OUT2//$'\n'/ }')"
+  fi
+  kill "$orphan_pid" 2>/dev/null || true
+else
+  bad "K53 no detached child (rc=$RC output='${OUT//$'\n'/ }')"
+fi
+
+echo "=== K54: nextest exits and records the verdict while a child holds stdout ==="
+for verdict in 0 7; do
+  ORPHAN_PID_FILE="$WORK/k54-$verdict.pid"
+  OUT=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_MAX_PARALLEL_BUILDS=1 CLAUDIUS_FORCE=0 \
+         STUB_ORPHAN=nextest STUB_ORPHAN_PID="$ORPHAN_PID_FILE" STUB_RC="$verdict" \
+         timeout -k 1 3 "$BASHBIN" "$WRAPPER" nextest run "--k54-$verdict" 2>&1 ); RC=$?
+  if wait_for_line "$ORPHAN_PID_FILE" '^[0-9][0-9]*$'; then
+    orphan_pid=$(cat "$ORPHAN_PID_FILE")
+    OUT2=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_MAX_PARALLEL_BUILDS=1 CLAUDIUS_FORCE=0 \
+            timeout -k 1 3 "$BASHBIN" "$WRAPPER" nextest run "--k54-$verdict" 2>&1 ); RC2=$?
+    OUT3=$( cd "$REPO" && env PATH="$STUBDIR:$PATH" CLAUDIUS_MAX_PARALLEL_BUILDS=1 CLAUDIUS_FORCE=1 \
+            STUB_RC="$verdict" timeout -k 1 3 "$BASHBIN" "$WRAPPER" nextest run "--k54-$verdict" 2>&1 ); RC3=$?
+    if [ "$RC" = "$verdict" ] && [ "$RC2" = "$verdict" ] && [ "$RC3" = "$verdict" ] \
+       && kill -0 "$orphan_pid" 2>/dev/null && grep -q "STUB CARGO INVOCATION" <<<"$OUT" \
+       && grep -q "CACHED verification" <<<"$OUT2" && grep -q "STUB CARGO INVOCATION" <<<"$OUT3"; then
+      ok "K54 nextest exit $verdict recorded, replayed and rebuilt before the orphan exited"
+    else
+      bad "K54 (expected=$verdict first=$RC replay=$RC2 forced=$RC3 first output='${OUT//$'\n'/ }')"
+    fi
+    kill "$orphan_pid" 2>/dev/null || true
+  else
+    bad "K54 expected=$verdict no detached child (rc=$RC output='${OUT//$'\n'/ }')"
+  fi
+done
+
+# Waitable stub runs with a hard backstop in case an assertion misses a release.
+spawn_build() {
+  local checkout="$1" marker="$2" label="$3" limit="$4"; shift 4
+  ( cd "$checkout" && exec env PATH="$STUBDIR:$PATH" CLAUDIUS_FORCE=1 \
+      STUB_MARKER="$marker" STUB_LABEL="$label" CLAUDIUS_MAX_PARALLEL_BUILDS="$limit" \
+      "$@" timeout -k 1 15 "$BASHBIN" "$WRAPPER" test "--$label" ) >"$marker.$label.out" 2>&1 &
+  slot_pid=$!
+}
+
+echo "=== K55: checkout-local ledger fallback shares the build cap ==="
+K55REPO="$WORK/k55-other-checkout"
+git clone -q "$REPO" "$K55REPO"
+K55CACHE="$WORK/k55-unwritable-cache"
+: > "$K55CACHE"
+marker="$WORK/k55.marker"; : > "$marker"
+spawn_build "$REPO" "$marker" k55a 1 CLAUDIUS_CACHE_DIR="$K55CACHE" STUB_SLEEP=2
+p55a=$slot_pid
+spawn_build "$K55REPO" "$marker" k55b 1 CLAUDIUS_CACHE_DIR="$K55CACHE" STUB_SLEEP=2
+p55b=$slot_pid
+wait "$p55a" "$p55b"
 starts=$(grep -c '^START' "$marker")
 peak=$(peak_concurrency "$marker")
-notices=$(cat "$K52CACHE.out-"* | grep -c "no usable build slot")
-if [ "$starts" = 2 ] && [ "$peak" = 2 ] && [ "$notices" = 2 ]; then
-  ok "K52 unusable slot files: both builds ran uncapped, each warning once"
+if [ "$starts" = 2 ] && [ "$peak" = 1 ] \
+   && grep -q "using workspace-local ledger" "$marker.k55a.out" \
+   && grep -q "using workspace-local ledger" "$marker.k55b.out"; then
+  ok "K55 both real builds used separate fallback ledgers with no overlap"
 else
-  bad "K52 (starts=$starts peak=$peak notices=$notices marker='$(tr '\n' ' ' < "$marker")')"
+  bad "K55 (starts=$starts peak=$peak marker='$(tr '\n' ' ' < "$marker")')"
+fi
+
+echo "=== K56: a late caller does not overtake the waiting build ==="
+marker="$WORK/k56.marker"; : > "$marker"
+k56_ready=0
+spawn_build "$REPO" "$marker" k56-holder 1 STUB_GATE="$WORK/k56-release"
+p56h=$slot_pid
+wait_for_line "$marker" '^START k56-holder ' || k56_ready=1
+spawn_build "$REPO" "$marker" k56-old 1
+p56o=$slot_pid
+wait_for_line "$marker.k56-old.out" 'build slots busy' || k56_ready=1
+: > "$WORK/k56-release"
+wait "$p56h"
+spawn_build "$REPO" "$marker" k56-new 1
+p56n=$slot_pid
+wait "$p56o" "$p56n"
+order=$(awk '$1 == "START" { print $2 }' "$marker")
+if [ "$k56_ready" = 0 ] && [ "$order" = $'k56-holder\nk56-old\nk56-new' ]; then
+  ok "K56 the earlier waiter took the next slot"
+else
+  bad "K56 (ready=$k56_ready start order='${order//$'\n'/ }')"
+fi
+
+echo "=== K57: slot and admission waits time out without running Cargo ==="
+marker="$WORK/k57.marker"; : > "$marker"
+k57_ready=0
+spawn_build "$REPO" "$marker" k57-holder 1 STUB_GATE="$WORK/k57-release"
+p57h=$slot_pid
+wait_for_line "$marker" '^START k57-holder ' || k57_ready=1
+spawn_build "$REPO" "$marker" k57-head 1 CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=7
+p57f=$slot_pid
+wait_for_line "$marker.k57-head.out" 'build slots busy' || k57_ready=1
+spawn_build "$REPO" "$marker" k57-tail 1 CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=1
+p57t=$slot_pid
+wait "$p57t"; RC1=$?
+wait "$p57f"; RC2=$?
+: > "$WORK/k57-release"
+wait "$p57h"
+if [ "$k57_ready" = 0 ] && [ "$RC1" = 75 ] && [ "$RC2" = 75 ] \
+   && [ "$(grep -c '^START' "$marker")" = 1 ] \
+   && grep -q 'timed out .*1s' "$marker.k57-tail.out" \
+   && grep -q 'timed out .*7s' "$marker.k57-head.out" \
+   && grep -Eq 'pid=[0-9]+.*checkout=.*cargo=.*--k57-holder' "$marker.k57-head.out"; then
+  ok "K57 both wait paths returned 75, reported the timeout and never ran Cargo"
+else
+  bad "K57 (ready=$k57_ready queued=$RC1 head=$RC2 marker='$(tr '\n' ' ' < "$marker")' head output='$(tr '\n' ' ' < "$marker.k57-head.out")')"
+fi
+
+echo "=== K58: cap 1 drains higher-limit builds and runs alone ==="
+marker="$WORK/k58.marker"; : > "$marker"
+k58_ready=0
+spawn_build "$REPO" "$marker" k58-first 2 STUB_GATE="$WORK/k58-release-first"
+p58f=$slot_pid
+wait_for_line "$marker" '^START k58-first ' || k58_ready=1
+spawn_build "$REPO" "$marker" k58-second 2 STUB_GATE="$WORK/k58-release-second"
+p58s=$slot_pid
+wait_for_line "$marker" '^START k58-second ' || k58_ready=1
+spawn_build "$REPO" "$marker" k58-serial 1 STUB_GATE="$WORK/k58-release-serial"
+p58o=$slot_pid
+wait_for_line "$marker.k58-serial.out" 'build slots busy' || k58_ready=1
+: > "$WORK/k58-release-first"
+wait "$p58f"
+sleep 2.2  # the old retry wakes and would take slot zero while slot one is busy
+: > "$WORK/k58-release-second"
+wait_for_line "$marker" '^START k58-serial ' || k58_ready=1
+spawn_build "$REPO" "$marker" k58-later 2
+p58l=$slot_pid
+sleep 1
+: > "$WORK/k58-release-serial"
+wait "$p58s" "$p58o" "$p58l"
+order=$(awk '{ print $1, $2 }' "$marker")
+if [ "$k58_ready" = 0 ] && [ "$order" = $'START k58-first\nSTART k58-second\nEND k58-first\nEND k58-second\nSTART k58-serial\nEND k58-serial\nSTART k58-later\nEND k58-later' ]; then
+  ok "K58 no cargo run overlapped a cap-1 build"
+else
+  bad "K58 (ready=$k58_ready order='${order//$'\n'/ }')"
+fi
+
+echo "=== K59: terminating a build process group releases its slot ==="
+marker="$WORK/k59.marker"; : > "$marker"
+k59_ready=0
+spawn_build "$REPO" "$marker" k59-holder 1 STUB_GATE="$WORK/k59-unused"
+p59h=$slot_pid
+wait_for_line "$marker" '^START k59-holder ' || k59_ready=1
+kill -TERM "$p59h"   # timeout forwards the signal to the group and returns 124
+wait "$p59h"; RC1=$?
+spawn_build "$REPO" "$marker" k59-retry 1 CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=2
+wait "$slot_pid"; RC2=$?
+if [ "$k59_ready" = 0 ] && [ "$RC1" = 124 ] && [ "$RC2" = 0 ] \
+   && ! grep -q '^END k59-holder ' "$marker" && grep -q '^END k59-retry ' "$marker"; then
+  ok "K59 a new build acquired the slot after group cancellation"
+else
+  bad "K59 (ready=$k59_ready terminated=$RC1 next=$RC2 marker='$(tr '\n' ' ' < "$marker")')"
+fi
+
+echo "=== K60: signaling only the wrapper keeps the slot until Cargo exits ==="
+marker="$WORK/k60.marker"; : > "$marker"
+k60_ready=0
+spawn_build "$REPO" "$marker" k60-holder 1 STUB_GATE="$WORK/k60-release" STUB_WRAPPER_PID_FILE="$WORK/k60-wrapper"
+p60h=$slot_pid
+if wait_for_line "$marker" '^START k60-holder '; then
+  kill -TERM "$(cat "$WORK/k60-wrapper")" || k60_ready=1
+else
+  k60_ready=1
+fi
+spawn_build "$REPO" "$marker" k60-waiter 1 CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=1
+wait "$slot_pid"; RC1=$?
+: > "$WORK/k60-release"
+wait "$p60h"; RC2=$?
+spawn_build "$REPO" "$marker" k60-retry 1 CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=1
+wait "$slot_pid"; RC3=$?
+if [ "$k60_ready" = 0 ] && [ "$RC1" = 75 ] && [ "$RC2" = 143 ] && [ "$RC3" = 0 ] \
+   && ! grep -q '^START k60-waiter ' "$marker" && grep -q '^END k60-holder ' "$marker"; then
+  ok "K60 Cargo retained its slot through wrapper-only TERM until it exited"
+else
+  bad "K60 (ready=$k60_ready waiter=$RC1 terminated=$RC2 retry=$RC3 marker='$(tr '\n' ' ' < "$marker")')"
+fi
+
+echo "=== K61: failure opening the log does not fabricate a Cargo result ==="
+K61BIN="$WORK/k61bin"; mkdir "$K61BIN"
+cat > "$K61BIN/date" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == +%Y%m%dT%H%M%S ]]; then
+  echo 'missing-directory/log'
+else
+  exec "$REAL_DATE" "$@"
+fi
+EOF
+chmod +x "$K61BIN/date"
+K61CACHE="$WORK/k61cache"
+OUT=$( cd "$REPO" && env PATH="$K61BIN:$STUBDIR:$PATH" REAL_DATE="$(command -v date)" \
+       CLAUDIUS_CACHE_DIR="$K61CACHE" CLAUDIUS_FORCE=1 STUB_RC=7 \
+       timeout -k 1 3 "$BASHBIN" "$WRAPPER" build --k61 2>&1 ); RC=$?
+if [ "$RC" = 7 ] && grep -q 'ledger log unavailable' <<<"$OUT" \
+   && grep -q 'STUB CARGO INVOCATION' <<<"$OUT" && [ ! -e "$K61CACHE/ledger/records.jsonl" ]; then
+  ok "K61 Cargo ran directly and its exit was never recorded"
+else
+  bad "K61 (rc=$RC output='${OUT//$'\n'/ }')"
 fi
 
 echo ""
