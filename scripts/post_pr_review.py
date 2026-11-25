@@ -29,11 +29,10 @@ line, not re-posted) only when an unresolved RIGHT-side thread overlaps a curren
 line of the same file and its first comment cites the finding's exact title as a
 whole, case-insensitive phrase.
 
-Event: APPROVE only with ``metadata.commit`` and a verified ``metadata.base_commit``,
-when nothing is posted, no unresolved thread remains and no non-disputed finding
-is blocking or MEDIUM+; otherwise COMMENT. ``--draft`` omits the event (pending
-review). A missing ``commit``/``base_commit`` or an unreadable merge-base forces
-COMMENT with a warning. Incomplete thread pagination fails without posting.
+Event: APPROVE requires a reviewed head, verified merge-base, complete review
+coverage, no posted findings or open threads, and no non-disputed blocking or
+MEDIUM+ findings. Otherwise the event is COMMENT. ``--draft`` omits the event
+(pending review). Incomplete thread pagination fails without posting.
 
 Limits: every comment and the body stay within GitHub's 65536 characters;
 body entries that do not fit are named in an "N more finding(s)" line and
@@ -986,6 +985,40 @@ def verify_diff_scope(
     return True
 
 
+def _has_complete_review_coverage(report: dict[str, Any]) -> bool:
+    """Check the required reviewer roster and distinct whole-PR providers."""
+    summary = report.get("executive_summary")
+    coverage = summary.get("review_coverage") if isinstance(summary, dict) else None
+    if not isinstance(coverage, dict) or coverage.get("complete") is not True:
+        return False
+    required = coverage.get("required_reviewers")
+    completed = coverage.get("completed_reviewers")
+    minimum = coverage.get("minimum_whole_pr_providers")
+    if (
+        not isinstance(required, list)
+        or not required
+        or not isinstance(completed, dict)
+        or type(minimum) is not int
+        or minimum not in (1, 2)
+    ):
+        return False
+
+    providers = set()
+    for reviewer in required:
+        if not isinstance(reviewer, str) or not reviewer.strip():
+            return False
+        evidence = completed.get(reviewer)
+        if not isinstance(evidence, dict):
+            return False
+        provider = evidence.get("provider")
+        whole_pr = evidence.get("whole_pr")
+        if provider not in ("claude", "codex", "agy") or not isinstance(whole_pr, bool):
+            return False
+        if whole_pr:
+            providers.add(provider)
+    return len(providers) >= minimum
+
+
 def post_review(
     gh: Any, report: dict[str, Any], options: ReviewOptions, *, dry_run: bool = False
 ) -> PostResult:
@@ -1023,11 +1056,18 @@ def post_review(
     event: Optional[str] = None
     if not options.draft:
         clean = not inline and not off_diff and not threads and not held
-        event = "APPROVE" if clean and reviewed and scope_verified else "COMMENT"
+        coverage_complete = _has_complete_review_coverage(report)
+        event = (
+            "APPROVE"
+            if clean and reviewed and scope_verified and coverage_complete
+            else "COMMENT"
+        )
         if not reviewed:
             log.warning("No metadata.commit: cannot APPROVE; using COMMENT")
         if not reviewed_base:
             log.warning("No metadata.base_commit: cannot APPROVE; using COMMENT")
+        if not coverage_complete:
+            log.warning("Missing or incomplete review coverage: using COMMENT")
 
     def result(url: Optional[str] = None) -> PostResult:
         payload, body = _payload(options, commit, event, inline, off_diff, covered)

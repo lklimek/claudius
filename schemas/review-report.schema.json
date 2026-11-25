@@ -79,7 +79,33 @@
         "overall_assessment": { "type": "string", "description": "1-2 sentence overall assessment (plain text)" },
         "summary_text": { "type": "string", "description": "Expanded summary paragraph. Markdown-formatted: may contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
         "verdict_text": { "type": "string", "description": "Final verdict. Markdown-formatted: may contain headings, bold, code spans, fenced code, and lists. Renderer: scripts/generate_review_report.py." },
-        "verdict_action": { "type": "string", "description": "Recommended action, e.g., 'Approve with conditions' (plain text)" }
+        "verdict_action": { "type": "string", "description": "Recommended action, e.g., 'Approve with conditions' (plain text)" },
+        "review_coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Coordinator-verified coverage of the reviewed base and head. Automatic approval requires complete coverage and evidence for every required reviewer.",
+          "properties": {
+            "complete": { "type": "boolean" },
+            "required_reviewers": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "minimum_whole_pr_providers": { "type": "integer", "enum": [1, 2] },
+            "completed_reviewers": {
+              "type": "object",
+              "propertyNames": { "minLength": 1 },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "provider": { "enum": ["claude", "codex", "agy"] },
+                  "whole_pr": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "summary_statistics": {

@@ -27,7 +27,18 @@ Record all of it in one Write of `<SCRATCH_DIR>/merge-decisions.json` — the on
 
 ```json
 {
-  "executive_summary": { "overall_assessment": "...", "summary_text": "...", "verdict_text": "...", "verdict_action": "..." },
+  "executive_summary": {
+    "overall_assessment": "...",
+    "summary_text": "...",
+    "verdict_text": "...",
+    "verdict_action": "...",
+    "review_coverage": {
+      "complete": false,
+      "required_reviewers": ["qa", "qa-agy"],
+      "minimum_whole_pr_providers": 2,
+      "completed_reviewers": {"qa": {"provider": "claude", "whole_pr": true}}
+    }
+  },
   "merges": [
     {
       "reason": "Both findings describe the same unchecked parser failure.",
@@ -43,6 +54,7 @@ Record all of it in one Write of `<SCRATCH_DIR>/merge-decisions.json` — the on
 }
 ```
 
+- `executive_summary.review_coverage`: use the assigned required reviewer IDs, including unavailable reviewers. Record each completed reviewer only after verifying their coverage at the report's base and head. Set `whole_pr` for an individual whole-PR pass. Use a provider ID of `claude`, `codex`, or `agy`. Require one distinct whole-PR provider for an ordinary PR and two for the two-provider gate. Set `complete: false` for an incomplete verdict or missing coverage. `finalize` carries this evidence into `report.json` and the publisher checks it before automatic approval.
 - `merges`: true duplicate clusters only (omit candidates kept separate); `updates` carries the complete merged value of every combined field (e.g. the union of `tags`/`code_snippets`).
 - `finding_updates`: keyed `<agent>:<original_id>`; only `merge_class`, `intent_basis`, `likelihood`, `impact`, `relevance`, `impact_description` (step 3's headline). Every surviving non-INFO finding needs a `merge_class` (from here or from its producer); target a merged cluster's base, never a merged-away member.
 - Optional `top_findings_override`/`remediation_override`: a JSON array replaces auto-generation.
