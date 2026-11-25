@@ -12,12 +12,12 @@
 #
 # Ledger location is portable — NEVER hardcoded. A user who wants it elsewhere
 # (e.g. a big disk) sets CLAUDIUS_CACHE_DIR; otherwise it follows the XDG cache.
-# CLAUDIUS_FORCE=1 skips replay. CLAUDIUS_MAX_PARALLEL_BUILDS (default 2) caps
+# CLAUDIUS_FORCE=1 skips replay. CLAUDIUS_MAX_PARALLEL_BUILDS (default 4) caps
 # cache misses across wrappers sharing the per-user /tmp build lock directory.
 # Use the same absolute CLAUDIUS_BUILD_LOCK_DIR in every session to override it.
 # If callers request different limits, use the lowest limit among live builds
 # and the build seeking admission.
-# CLAUDIUS_BUILD_SLOT_WAIT_SECONDS (default 300, 0 for an immediate attempt)
+# CLAUDIUS_BUILD_SLOT_WAIT_SECONDS (default 900, 0 for an immediate attempt)
 # bounds admission and slot wait. A timeout exits 75 without running Cargo.
 set -uo pipefail
 
@@ -325,10 +325,10 @@ fi
 
 # --- Cross-checkout build cap ----------------------------------------------
 max_parallel_builds() {
-  local max="${CLAUDIUS_MAX_PARALLEL_BUILDS:-2}"
-  [[ "$max" =~ ^[0-9]+$ ]] || max=2
+  local max="${CLAUDIUS_MAX_PARALLEL_BUILDS:-4}"
+  [[ "$max" =~ ^[0-9]+$ ]] || max=4
   max=$(( 10#$max ))
-  (( max > 0 )) || max=2
+  (( max > 0 )) || max=4
   printf '%s' "$max"
 }
 
@@ -362,7 +362,7 @@ build_wait_timeout() {
 build_slot_fd=""
 acquire_build_slot() {
   local lock_dir="${CLAUDIUS_BUILD_LOCK_DIR:-/tmp/claudius-build-locks-$EUID}"
-  local admission="$lock_dir/admission.lock" wait_seconds="${CLAUDIUS_BUILD_SLOT_WAIT_SECONDS:-300}"
+  local admission="$lock_dir/admission.lock" wait_seconds="${CLAUDIUS_BUILD_SLOT_WAIT_SECONDS:-900}"
   local max deadline now remaining poll_delay admission_fd context holder holder_limit lock_rc slot free_slot fd mode
   local active allowed slot_count notified=0
   local holders=()
@@ -375,7 +375,7 @@ acquire_build_slot() {
   [[ ! -L "$admission" && ( ! -e "$admission" || -f "$admission" ) ]] || build_lock_error "$admission"
   { exec {admission_fd}>>"$admission"; } 2>/dev/null || build_lock_error "$admission"
 
-  [[ "$wait_seconds" =~ ^[0-9]{1,9}$ ]] || wait_seconds=300
+  [[ "$wait_seconds" =~ ^[0-9]{1,9}$ ]] || wait_seconds=900
   wait_seconds=$(( 10#$wait_seconds ))
   printf -v context 'pid=%s checkout=%q cargo=%q' "$$" "$toplevel" "$cmd_norm"
 

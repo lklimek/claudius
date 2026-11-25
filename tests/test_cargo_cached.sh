@@ -50,8 +50,8 @@
 #   K45 no session env              -> ledger records "unknown", never empty
 #   K46 cap 1, 2 concurrent builds  -> intervals never overlap
 #   K47 cap 2, 3 concurrent builds  -> at most 2 inside cargo at once
-#   K48 cap unset, 3 concurrent     -> default cap of 2 applies
-#   K49 invalid cap (abc/0/-3)      -> falls back to 2, never uncapped
+#   K48 limits unset, 5 concurrent  -> cap of 4 and 900s wait apply
+#   K49 invalid cap and wait        -> fall back to cap of 4 and 900s wait
 #   K50 replay while slots saturated-> returns at once, never queues for a slot
 #   K51 flock absent                -> cap skipped, both builds run concurrently
 #   K52 invalid build lock paths    -> refuse to run uncapped, explain why
@@ -956,28 +956,33 @@ else
   bad "K47 (starts=$starts peak=$peak marker='$(tr '\n' ' ' < "$marker")')"
 fi
 
-echo "=== K48: with the cap unset the built-in default of 2 applies ==="
-marker=$(slot_probe "$WORK/cache-k48" 3 4)
+echo "=== K48: five builds with defaults admit four and wait up to 900s ==="
+marker=$(slot_probe "$WORK/cache-k48" 5 4)
 starts=$(grep -c '^START' "$marker")
 peak=$(peak_concurrency "$marker")
-if [ "$starts" = 3 ] && [ "$peak" = 2 ]; then
-  ok "K48 default cap: three concurrent builds ran two at a time"
+if [ "$starts" = 5 ] && [ "$peak" = 4 ] \
+   && grep -q 'build slots busy (4 active, limit 4); waiting up to 900s' "$WORK/cache-k48.out-"*; then
+  ok "K48 default cap of 4 and wait of 900s applied"
 else
   bad "K48 (starts=$starts peak=$peak marker='$(tr '\n' ' ' < "$marker")')"
 fi
 
-echo "=== K49: an invalid cap falls back to the default, it never uncaps the host ==="
+echo "=== K49: invalid cap and wait fall back to the defaults ==="
 # Non-numeric, zero and negative are all "the user meant nothing usable" — the
 # host must stay protected rather than accept 0/-3 as "unlimited" or abort.
 k49_detail=""
 for v in abc 0 -3; do
-  marker=$(slot_probe "$WORK/cache-k49-$v" 3 3 CLAUDIUS_MAX_PARALLEL_BUILDS="$v")
+  marker=$(slot_probe "$WORK/cache-k49-$v" 5 3 CLAUDIUS_MAX_PARALLEL_BUILDS="$v" \
+    CLAUDIUS_BUILD_SLOT_WAIT_SECONDS=invalid)
   starts=$(grep -c '^START' "$marker")
   peak=$(peak_concurrency "$marker")
-  [ "$starts" = 3 ] && [ "$peak" = 2 ] || k49_detail+=" [$v: starts=$starts peak=$peak]"
+  if [ "$starts" != 5 ] || [ "$peak" != 4 ] \
+    || ! grep -q 'build slots busy (4 active, limit 4); waiting up to 900s' "$WORK/cache-k49-$v.out-"*; then
+    k49_detail+=" [$v: starts=$starts peak=$peak]"
+  fi
 done
 if [ -z "$k49_detail" ]; then
-  ok "K49 caps 'abc', '0' and '-3' each behaved like the default of 2"
+  ok "K49 invalid values used the default cap of 4 and wait of 900s"
 else
   bad "K49 ($k49_detail)"
 fi
