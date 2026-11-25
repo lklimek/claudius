@@ -696,14 +696,15 @@ class TestCli:
             pytest.param(
                 {
                     "complete": True,
-                    "required_reviewers": ["qa"],
+                    "required_reviewers": ["qa", "security"],
                     "minimum_whole_pr_providers": 1,
                     "completed_reviewers": {
                         "qa": {"provider": "codex", "whole_pr": True},
+                        "security": {"provider": "codex", "whole_pr": False},
                     },
                 },
                 "APPROVE",
-                id="ordinary-pr",
+                id="ordinary-pr-with-required-specialist",
             ),
             pytest.param(_complete_coverage(), "APPROVE", id="complete"),
         ],
