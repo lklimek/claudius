@@ -48,9 +48,9 @@ collections; duplicated control flow within the diff; drive-by renames, reformat
 (`coding-best-practices` § Cross-Cutting Rules); tests asserting the same case twice. Duplication
 of existing code stays under Adams' DRY. File each concrete change as a `code_quality` finding
 tagged `simplification`, its title (under 150 characters, so the digest keeps it whole) ending
-`(-<N> lines)`. Rate it LOW (`likelihood` ≈ 0.3,
-`impact` 0.1–0.3 by how much code a later change must read), never INFO; a removable hunk that
-also carries a defect is rated as that defect.
+`(-<N> lines)`. Use the LOW evidence rule in `severity` § Levels before assigning
+`likelihood` ≈ 0.3 and `impact` 0.1–0.3 by how much code a later change must read.
+Rate a removable hunk that carries a defect as that defect.
 
 ## UX/DX lens
 

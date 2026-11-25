@@ -21,9 +21,9 @@ Done = only maintainer actions remain: required local and external reviews compl
 
 ## Internal review
 
-After every later push carrying production code (the push creating a PR, or a skeleton PR's first push carrying changes, gets its creation review, `git-and-github` § Creating a PR) — marking ready, taking over a PR, every fix push including fixes of internal findings and CI fixes — start one independent `review-changes` basic review of the **whole PR** (`<base>...<head>`, never the delta since the last push), in parallel with the push; the push never waits for it.
+After every later push carrying production code, including internal and CI fixes, start an independent `review-changes` basic review of the **whole PR** (`<base>...<head>`) for any reviewer model. Apply the same scope when marking ready or taking over a PR. Run the review in parallel with the push. For a new PR or a skeleton's first push carrying changes, use `git-and-github` § Creating a PR.
 
-- One PR per review. Reviewer per `review-changes` § 2 and `delegate`, never the PR's author.
+- One PR per review. Select reviewers independent of the author through `review-changes` and `delegate`. Apply the `review-changes` § Two-provider gate before declaring an affected PR merge-ready.
 - Pass the maintainer's earlier per-ID decisions on the PR as the review's prior decisions (`review-changes` § 1).
 - A coordinator audit never replaces this review. Tests-only, docs-only, empty, and tree-identical merge pushes, and a head the creation review already covered, skip it; the next review covers them.
 
@@ -41,7 +41,7 @@ Push to take in the base only when the PR conflicts with it or CI is red because
 
 ## Merge question
 
-After the third bot round on a PR, ask the maintainer once: merge now or one more round. List the open items with their merge class (`severity` § 5) and a recommendation — merge and decline the rest, or one more round because of a named blocker.
+After the third bot round and completion of required internal reviews, ask the maintainer once: merge now or one more round. List the open items with their merge class (`severity` § 5) and a recommendation — merge and decline the rest, or one more round because of a named blocker.
 
 ## Maintainer-only actions
 

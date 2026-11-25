@@ -10,7 +10,7 @@ Run in the coordinator context. Arguments: `<PR> [basic|full]`; default **basic*
 
 ## 1. Gather PR Context
 
-Load `/claudius:git-and-github`. Fetch PR metadata, changed files, and diff per [pr-review.md](../git-and-github/references/pr-review.md) § Get PR Context. In basic mode, let the one reviewer read bulk diff data; do not spawn extra extraction or promise-review workers. Local git supplies history and detailed diffs.
+Load `/claudius:git-and-github`. Fetch PR metadata, changed files, and diff per [pr-review.md](../git-and-github/references/pr-review.md) § Get PR Context. In basic mode, assign bulk diff reads to the basic reviewers and keep Pass C with them or the coordinator. Local git supplies history and detailed diffs.
 
 ### Context Digest
 
@@ -53,7 +53,7 @@ Audit whether the diff **functionally delivers** what the PR's self-description 
 
 ### Audit axes
 
-Run all three; at most one finding per axis-trigger (per promise on Axis 2). Verification is **functional**: locate the implementing code and confirm it delivers the claimed behavior — a matching hunk is necessary, not sufficient. In basic mode keep all axes with the coordinator or the single reviewer; only full mode permits additional per-axis workers.
+Run all three with at most one finding per axis trigger (per promise on Axis 2). Verify the behavior the code delivers against the claim. In basic mode the coordinator or an assigned reviewer covers all axes. Full mode permits additional per-axis workers.
 
 **Before scoring**, Read `${CLAUDE_PLUGIN_ROOT}/skills/severity/SKILL.md` and `${CLAUDE_PLUGIN_ROOT}/skills/severity/references/merge-classification.md` (skip what this session already loaded) — Pass C assigns floats and `merge_class` itself, and no agent preloads those rules for the coordinator.
 
@@ -129,7 +129,7 @@ Pass C conventions:
 
 ## 3. Conduct the Review
 
-Invoke [review-changes](../review-changes/SKILL.md) with the selected mode and PR scope. Basic uses one strong reviewer; full runs its multi-agent mode and retains all specialist passes regardless of diff size.
+Invoke [review-changes](../review-changes/SKILL.md) with the selected mode and PR scope. Apply its two-provider gate and retain the full-mode specialist passes regardless of diff size.
 
 Pass the changed files, base branch, and Context Digest (§1). Collect every assigned reviewer and its coverage artifact before ending the turn. Feed Pass C (§2) into the same `prepare` call as the selected mode's producer files; the coordinator assigns `merge_class`/`intent_basis` per `claudius:severity` § Merge Classification. Consolidate once, never renumber a second time.
 
