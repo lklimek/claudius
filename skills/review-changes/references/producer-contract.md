@@ -73,10 +73,8 @@ Read — Bash `ls`/`find` outside the working directory is sandbox-blocked.
 
 ## Process rules
 
-- **Always write your output file, even when you found nothing.** A bare `[]` is a valid,
-  successful result — a missing file fails the coordinator's `prepare` step outright (exit 2),
-  taking down the whole review with no report at all. Zero findings is never a reason to skip
-  the Write call.
+- **Always write your output file, even when you found nothing.** A bare `[]` records
+  a successful pass. A missing required output leaves the review incomplete.
 - Run only the `consolidate_reports.py gate` command from your spawn prompt — never
   `prepare`/`finalize`, and do NOT pre-assemble `report.json` shape; the coordinator does that.
 - When MemCan/WebSearch are unavailable (e.g., CI), do not use memcan tools or

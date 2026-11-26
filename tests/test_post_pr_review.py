@@ -52,11 +52,16 @@ def _complete_coverage() -> dict[str, Any]:
     }
 
 
+def _agent_stats(*agents: str) -> list[dict[str, Any]]:
+    return [{"agent": agent, "unique": 0, "redundant": 0} for agent in agents]
+
+
 def _report(*findings: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "4.0.0",
         "metadata": {"commit": HEAD, "base_commit": MERGE_BASE},
         "executive_summary": {"review_coverage": _complete_coverage()},
+        "agent_stats": _agent_stats("qa", "qa-agy"),
         "summary_statistics": {"total_findings": len(findings)},
         "findings": [
             {"title": "S", "category": "security", "findings": list(findings)}
@@ -87,6 +92,7 @@ def _valid_report(*findings: dict[str, Any]) -> dict[str, Any]:
     """Schema-valid, self-consistent report (the CLI validates) holding ``findings``."""
     report = json.loads(VALID_REPORT.read_text())
     report["executive_summary"]["review_coverage"] = _complete_coverage()
+    report["agent_stats"] = _agent_stats("qa", "qa-agy")
     report["findings"][0]["findings"] = [_rated(f) for f in findings]
     cr.regenerate_derived(report)
     return report
@@ -720,12 +726,32 @@ class TestCli:
             summary["verdict_text"] = "Incomplete. A required provider was unavailable."
         else:
             summary["review_coverage"] = coverage
+            report["agent_stats"] = _agent_stats(
+                *coverage.get("completed_reviewers", {})
+            )
         path = tmp_path / "report.json"
         path.write_text(json.dumps(report))
         gh = FakeGh()
         monkeypatch.setattr(ppr, "GhCli", lambda: gh)
         assert ppr.main(["o/r", "7", str(path)]) == 0
         assert [review["event"] for review in gh.posted] == [expected]
+
+    @pytest.mark.parametrize("prepared_agents", [None, [], ["qa"]])
+    def test_approval_requires_consolidated_reviewers(
+        self, prepared_agents, tmp_path, monkeypatch
+    ):
+        report = _valid_report()
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
+        report.pop("agent_stats", None)
+        if prepared_agents is not None:
+            report["agent_stats"] = _agent_stats(*prepared_agents)
+        path = tmp_path / "report.json"
+        path.write_text(json.dumps(report))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+
+        assert ppr.main(["o/r", "7", str(path)]) == 0
+        assert [review["event"] for review in gh.posted] == ["COMMENT"]
 
     def test_finalize_carries_incomplete_coverage_into_the_publisher(
         self, tmp_path, monkeypatch

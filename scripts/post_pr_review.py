@@ -30,9 +30,10 @@ line of the same file and its first comment cites the finding's exact title as a
 whole, case-insensitive phrase.
 
 Event: APPROVE requires a reviewed head, verified merge-base, complete review
-coverage, no posted findings or open threads, and no non-disputed blocking or
-MEDIUM+ findings. Otherwise the event is COMMENT. ``--draft`` omits the event
-(pending review). Incomplete thread pagination fails without posting.
+coverage backed by consolidated producer outputs, no posted findings or open
+threads, and no non-disputed blocking or MEDIUM+ findings. Otherwise the event
+is COMMENT. ``--draft`` omits the event (pending review). Incomplete thread
+pagination fails without posting.
 
 Limits: every comment and the body stay within GitHub's 65536 characters;
 body entries that do not fit are named in an "N more finding(s)" line and
@@ -986,7 +987,7 @@ def verify_diff_scope(
 
 
 def _has_complete_review_coverage(report: dict[str, Any]) -> bool:
-    """Check the required reviewer roster and distinct whole-PR providers."""
+    """Check that consolidated producers support the required coverage."""
     summary = report.get("executive_summary")
     coverage = summary.get("review_coverage") if isinstance(summary, dict) else None
     if not isinstance(coverage, dict) or coverage.get("complete") is not True:
@@ -994,18 +995,29 @@ def _has_complete_review_coverage(report: dict[str, Any]) -> bool:
     required = coverage.get("required_reviewers")
     completed = coverage.get("completed_reviewers")
     minimum = coverage.get("minimum_whole_pr_providers")
+    agent_stats = report.get("agent_stats")
     if (
         not isinstance(required, list)
         or not required
         or not isinstance(completed, dict)
         or type(minimum) is not int
         or minimum not in (1, 2)
+        or not isinstance(agent_stats, list)
     ):
         return False
 
+    consolidated = {
+        row["agent"]
+        for row in agent_stats
+        if isinstance(row, dict) and isinstance(row.get("agent"), str)
+    }
     providers = set()
     for reviewer in required:
-        if not isinstance(reviewer, str) or not reviewer.strip():
+        if (
+            not isinstance(reviewer, str)
+            or not reviewer.strip()
+            or reviewer not in consolidated
+        ):
             return False
         evidence = completed.get(reviewer)
         if not isinstance(evidence, dict):
