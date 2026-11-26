@@ -83,9 +83,11 @@ python3 <plugin-root>/scripts/post_pr_review.py <owner/repo> <pr> <report.json> 
 - Coverage requires an unresolved RIGHT-side thread on the same path with overlapping
   current lines and the exact title as a whole, case-insensitive phrase in its first comment.
   IDs alone never establish coverage. Incomplete thread pagination exits 1 without posting.
-- Without `--draft` it publishes COMMENT, or APPROVE only with `metadata.commit`, when nothing
-  is posted, no unresolved thread remains and no non-disputed finding is blocking or MEDIUM+
-  (`disputed` counts only with `ai_verdict` `false_positive`/`duplicate`).
+- Without `--draft` it publishes COMMENT unless all approval checks pass. APPROVE requires
+  verified head and merge-base, complete `executive_summary.review_coverage`, an
+  `agent_stats` entry for each required reviewer, and enough distinct whole-PR providers. It also
+  requires zero posted findings, unresolved threads, or blocking/MEDIUM+ findings.
+  Disputed findings remain actionable unless their `ai_verdict` is `false_positive` or `duplicate`.
   `--dry-run` prints the payload without posting. Input must be a schema-valid assembled
   `report.json`; otherwise exit 2.
 - Exits 2 before any GitHub call when `<owner/repo>` is not `GITHUB_REPOSITORY` (else the

@@ -40,10 +40,28 @@ def _finding(fid: str, sev: int, location: str, **extra: Any) -> dict[str, Any]:
     return finding
 
 
+def _complete_coverage() -> dict[str, Any]:
+    return {
+        "complete": True,
+        "required_reviewers": ["qa", "qa-agy"],
+        "minimum_whole_pr_providers": 2,
+        "completed_reviewers": {
+            "qa": {"provider": "claude", "whole_pr": True},
+            "qa-agy": {"provider": "agy", "whole_pr": True},
+        },
+    }
+
+
+def _agent_stats(*agents: str) -> list[dict[str, Any]]:
+    return [{"agent": agent, "unique": 0, "redundant": 0} for agent in agents]
+
+
 def _report(*findings: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "4.0.0",
         "metadata": {"commit": HEAD, "base_commit": MERGE_BASE},
+        "executive_summary": {"review_coverage": _complete_coverage()},
+        "agent_stats": _agent_stats("qa", "qa-agy"),
         "summary_statistics": {"total_findings": len(findings)},
         "findings": [
             {"title": "S", "category": "security", "findings": list(findings)}
@@ -73,6 +91,8 @@ def _rated(finding: dict[str, Any]) -> dict[str, Any]:
 def _valid_report(*findings: dict[str, Any]) -> dict[str, Any]:
     """Schema-valid, self-consistent report (the CLI validates) holding ``findings``."""
     report = json.loads(VALID_REPORT.read_text())
+    report["executive_summary"]["review_coverage"] = _complete_coverage()
+    report["agent_stats"] = _agent_stats("qa", "qa-agy")
     report["findings"][0]["findings"] = [_rated(f) for f in findings]
     cr.regenerate_derived(report)
     return report
@@ -630,6 +650,182 @@ class TestGhCli:
 # CLI
 # ---------------------------------------------------------------------------
 class TestCli:
+    @pytest.mark.parametrize(
+        ("coverage", "expected"),
+        [
+            pytest.param(None, "COMMENT", id="legacy-report"),
+            pytest.param({}, "COMMENT", id="missing-evidence"),
+            pytest.param(
+                _complete_coverage() | {"complete": False},
+                "COMMENT",
+                id="incomplete-verdict",
+            ),
+            pytest.param(
+                _complete_coverage()
+                | {"required_reviewers": ["qa", "qa-agy", "security"]},
+                "COMMENT",
+                id="required-specialist-missing",
+            ),
+            pytest.param(
+                _complete_coverage()
+                | {
+                    "completed_reviewers": {
+                        "qa": {"provider": "claude", "whole_pr": True},
+                        "qa-agy": {"provider": "claude", "whole_pr": True},
+                    },
+                },
+                "COMMENT",
+                id="same-provider-twice",
+            ),
+            pytest.param(
+                _complete_coverage()
+                | {
+                    "completed_reviewers": {
+                        "qa": {"provider": "claude", "whole_pr": True},
+                        "qa-agy": {"provider": "agy", "whole_pr": False},
+                    },
+                },
+                "COMMENT",
+                id="second-pass-is-partial",
+            ),
+            pytest.param(
+                _complete_coverage()
+                | {
+                    "completed_reviewers": {
+                        "qa": {"provider": "claude", "whole_pr": True},
+                        "qa-agy": {"provider": "agy"},
+                    },
+                },
+                "COMMENT",
+                id="missing-whole-pr-evidence",
+            ),
+            pytest.param(
+                {
+                    "complete": True,
+                    "required_reviewers": ["qa", "security"],
+                    "minimum_whole_pr_providers": 1,
+                    "completed_reviewers": {
+                        "qa": {"provider": "codex", "whole_pr": True},
+                        "security": {"provider": "codex", "whole_pr": False},
+                    },
+                },
+                "APPROVE",
+                id="ordinary-pr-with-required-specialist",
+            ),
+            pytest.param(_complete_coverage(), "APPROVE", id="complete"),
+        ],
+    )
+    def test_approval_requires_review_coverage(
+        self, coverage, expected, tmp_path, monkeypatch
+    ):
+        report = _valid_report()
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
+        summary = report["executive_summary"]
+        if coverage is None:
+            del summary["review_coverage"]
+            summary["verdict_text"] = "Incomplete. A required provider was unavailable."
+        else:
+            summary["review_coverage"] = coverage
+            report["agent_stats"] = _agent_stats(
+                *coverage.get("completed_reviewers", {})
+            )
+        path = tmp_path / "report.json"
+        path.write_text(json.dumps(report))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(path)]) == 0
+        assert [review["event"] for review in gh.posted] == [expected]
+
+    @pytest.mark.parametrize("prepared_agents", [None, [], ["qa"]])
+    def test_approval_requires_consolidated_reviewers(
+        self, prepared_agents, tmp_path, monkeypatch
+    ):
+        report = _valid_report()
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
+        report.pop("agent_stats", None)
+        if prepared_agents is not None:
+            report["agent_stats"] = _agent_stats(*prepared_agents)
+        path = tmp_path / "report.json"
+        path.write_text(json.dumps(report))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+
+        assert ppr.main(["o/r", "7", str(path)]) == 0
+        assert [review["event"] for review in gh.posted] == ["COMMENT"]
+
+    @pytest.mark.parametrize("caller_body", ["", "Maintainer summary."])
+    def test_unavailable_reviewer_is_visible_in_the_posted_body(
+        self, caller_body, tmp_path, monkeypatch
+    ):
+        report = _valid_report()
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
+        summary = report["executive_summary"]
+        summary["verdict_text"] = "The required @reviewer was unavailable."
+        coverage = summary["review_coverage"]
+        coverage["complete"] = False
+        del coverage["completed_reviewers"]["qa-agy"]
+        path = tmp_path / "report.json"
+        path.write_text(json.dumps(report))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+
+        assert ppr.main(["o/r", "7", str(path), "--body", caller_body]) == 0
+        [review] = gh.posted
+        assert review["event"] == "COMMENT"
+        assert "Review coverage is incomplete." in review["body"]
+        if caller_body:
+            assert review["body"].startswith(caller_body)
+            assert "was unavailable" not in review["body"]
+        else:
+            assert "The required @\u200breviewer was unavailable." in review["body"]
+
+    def test_finalize_carries_incomplete_coverage_into_the_publisher(
+        self, tmp_path, monkeypatch
+    ):
+        intermediate = tmp_path / "intermediate.json"
+        decisions = tmp_path / "merge-decisions.json"
+        report = tmp_path / "report.json"
+        metadata = _valid_report()["metadata"] | {
+            "commit": HEAD,
+            "base_commit": MERGE_BASE,
+        }
+        intermediate.write_text(json.dumps({"metadata": metadata, "raw_findings": []}))
+        coverage = _complete_coverage()
+        del coverage["completed_reviewers"]["qa-agy"]
+        coverage["complete"] = False
+        decisions.write_text(
+            json.dumps(
+                {
+                    "executive_summary": {
+                        "overall_assessment": "A required reviewer was unavailable.",
+                        "review_coverage": coverage,
+                    }
+                }
+            )
+        )
+        assert (
+            cr.main(
+                [
+                    "finalize",
+                    "--input",
+                    str(intermediate),
+                    "--decisions",
+                    str(decisions),
+                    "--output",
+                    str(report),
+                ]
+            )
+            == 0
+        )
+        assert (
+            json.loads(report.read_text())["executive_summary"]["review_coverage"]
+            == coverage
+        )
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+        assert ppr.main(["o/r", "7", str(report)]) == 0
+        assert [review["event"] for review in gh.posted] == ["COMMENT"]
+
     def test_dry_run_prints_payload(self, tmp_path, capsys, monkeypatch):
         report = tmp_path / "report.json"
         finding = _finding("CODE-001", 4, "src/a.py:12")

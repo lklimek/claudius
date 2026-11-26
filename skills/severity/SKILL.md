@@ -176,7 +176,8 @@ In finding JSON, `severity` is the integer, not the label.
 ### Rules
 
 - Anything that may require action is **LOW or higher**; **INFO** is exclusively praise and context — never a suggestion
-- In doubt between two levels: take the higher in Sovereign/Boundary zones or when the incident headline is unknown; otherwise take the lower — inflated bands bury the findings that matter
+- Before assigning or downgrading a finding to **LOW**, every reviewer model must state a concrete failure scenario and explain why its impact is low in `impact_description`. Keep an existing rating until that evidence supports a downgrade.
+- In doubt between two levels, take the higher in Sovereign/Boundary zones or when the incident headline is unknown. Otherwise take the lower when supported by the evidence required above.
 - Severity never reflects effort to fix — a one-line fix can be CRITICAL
 - UX impact is a real severity input: a scary error dialog on the happy path is `likelihood = 1.0, impact ≈ 0.4` → HIGH, and it trips G-UI-TEXT
 

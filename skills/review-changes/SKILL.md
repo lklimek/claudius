@@ -1,6 +1,6 @@
 ---
 name: review-changes
-description: "This skill should be used when the user asks for a \"code review\", \"review this code\", \"review my changes\", \"review this branch\", \"basic review\", \"full review\", or \"grumpy review\", to \"validate findings\" in a report.json, or when coding-best-practices or git-and-github requires review (changes of at least 50 code lines; every new PR). Basic (default) uses one strong independent reviewer; full adds independent security, global-optimum/reuse, and correctness passes into one severity-ranked report. For GitHub PRs use review-pr."
+description: "This skill should be used when the user asks for a \"code review\", \"review this code\", \"review my changes\", \"review this branch\", \"basic review\", \"full review\", or \"grumpy review\", to \"validate findings\" in a report.json, or when coding-best-practices or git-and-github requires review (changes of at least 50 code lines; every new PR). Basic uses one strong independent reviewer by default. The two-provider gate applies in both modes. Full adds independent security, global-optimum/reuse, and correctness passes. For GitHub PRs use review-pr."
 argument-hint: "[basic|full|validate] [scope|report.json]"
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git show *), Bash(gh issue view *), Bash(mkdir -p /data/tmp/review-*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate_review_report.py *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lint_ephemeral_ids.py *), Bash(gh issue list *), Agent, SendMessage
 ---
@@ -9,13 +9,17 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *),
 
 ## Modes
 
-- **Basic** (default, including an unspecified “review”): exactly one independent, high-capability reviewer. Verify requirements and all execution paths through the changed code, regardless of diff size.
+- **Basic** (default, including an unspecified “review”): one independent, high-capability reviewer, subject to the two-provider gate below. Verify requirements and all execution paths through the changed code, regardless of diff size.
 - **Full** (explicit “full review” or “grumpy review”): independent security, global-optimum/reuse, and adversarial passes on the same coverage baseline. Never downgrade a full review because the diff is small.
 - **Validate** (“validate findings”, `validate <report.json>`): skip §1–§4; run the opt-in AI validation pass of §5 on an existing consolidated report.
 
-Arguments: `[basic|full|validate] [scope|report.json]` — scope e.g. "feat/zk branch", "packages/auth/", "last 5 commits". Scope defaults to the current branch against its base, including working-tree and untracked changes for local work; PR wrappers supply exact refs. A PR or branch is reviewed whole (`<BASE_REF>...<head>`) every round, never as the delta since an earlier review. Record the compared refs/commit and local changes.
+Arguments: `[basic|full|validate] [scope|report.json]` — scope e.g. "feat/zk branch", "packages/auth/", "last 5 commits". Scope defaults to the whole PR or branch (`<BASE_REF>...<head>`), including working-tree and untracked changes for local work. PR wrappers supply exact refs. Use the whole PR at every push that requires internal review, for every reviewer model. Record the compared refs/commit and local changes.
 
-Reuse complete independent reviews, or share in-flight ones, only for identical repository, base/head SHAs, scope, mode, requirements/prior decisions and local content. Incremental review needs explicit opt-in, a complete baseline and coverage of changed paths/interactions; never silently substitute it for required whole-PR review.
+Reuse complete independent reviews, or share in-flight ones, only for identical repository, base/head SHAs, scope, mode, requirements/prior decisions and local content. Incremental review needs explicit opt-in, a complete baseline and coverage of changed paths/interactions. It may supplement a required whole-PR review.
+
+### Two-provider gate
+
+PRs touching concurrency, service lifecycle or shutdown, payments or credits, or state machines require two independent reviewers from different providers (Claude, Codex, or agy). Both cover the whole PR at the same current base and head SHAs. In either mode, count reviewers with complete whole-PR coverage and fill any gaps in the pair. Keep the review incomplete until both are done, even if one says MERGEABLE.
 
 The invoking coordinator runs §1–§5. An assigned Adams or Marvin reviewer runs only its pass (§ Reviewer pass, § Specialist passes) and never dispatches peers or re-enters this workflow.
 
@@ -71,9 +75,9 @@ It scans the diff, not findings: run it once before dispatch, batched with the s
 
 ## 2. Basic Review
 
-1. Load [delegate](../delegate/SKILL.md), then dispatch **one** worker with a strong available reasoning model at high effort where supported, setting the model explicitly (Claude: Opus, preferably the `claudius:qa-engineer-marvin` identity; Codex: a high-capability model available in the current session). Apply `delegate` § Independent Verification when selecting the reviewer; never substitute a lightweight model for a small diff. Give it the requirements, scope, § 1 Brief items, § Reviewer pass, and absolute paths to the references it names.
-2. If independent workers are unavailable, report that limitation; do not describe an author self-review as an independent basic review. A host-imposed budget does not permit sampling paths and calling the review complete.
-3. Collect the findings and coverage artifact, verify that every requirement and changed symbol is accounted for, and run §4 with the reviewer's file as `qa:<path>`, plus the lint file and caller-supplied files such as Pass C. Include the coverage status in the executive summary.
+1. Load [delegate](../delegate/SKILL.md) and dispatch the reviewer roster required by Modes and the two-provider gate. Set a strong model explicitly for each reviewer, at high effort where supported (Claude: Opus, preferably the `claudius:qa-engineer-marvin` identity). Apply `delegate` § Independent Verification. Give each reviewer the requirements, scope, § 1 Brief items, § Reviewer pass, and absolute paths to its references.
+2. If a required independent reviewer is unavailable, report incomplete coverage. Author self-review and sampled paths leave the independent coverage requirement open.
+3. Collect each reviewer's findings and coverage artifact. Verify coverage of every requirement and changed symbol. Run §4 with `qa:<path>` and, for a second provider, `qa-<provider>:<path>`, plus lint and caller-supplied files such as Pass C. Include coverage status in the executive summary.
 
 ## 3. Full Review
 
@@ -81,7 +85,7 @@ Follow [full-review.md](references/full-review.md): core passes and models, prod
 
 ## 4. Consolidate Findings
 
-Follow [consolidation.md](references/consolidation.md): prepare, LLM decisions, finalize, stop reviewers. It also serves basic mode with its single producer.
+Follow [consolidation.md](references/consolidation.md) in both modes for prepare, LLM decisions, finalize, and reviewer cleanup.
 
 ## 5. Reports and Validation
 
@@ -100,6 +104,7 @@ Load [coding-best-practices](../coding-best-practices/SKILL.md), [report-format]
 - **Tests as evidence**: a test counts only once you name the production line whose breakage fails it and confirm its assertions cover the values its name claims. Audit contract coverage and assertion depth: computed values, exact boundaries, specific errors, side effects, ordering, and state consistency. Tests must assert intended behavior rather than mirror implementation; reject `assert result is not None`, `status == 200` without the body, `len(items) > 0` without which items, and "runs without error" without asserting output. Never change expectations to make buggy behavior pass.
 - Construct concrete counterexamples for suspected defects. A passing test does not replace path tracing. Record commands, CI runs, results, and anything not executed.
 - For shared state, locks, tasks, or channels, enumerate access paths and reason through interleavings, lock order, cancellation, and retries; use race/stress tools where available.
+- If you find a trigger for the two-provider gate, record its location in coverage and tell the coordinator so it can complete the reviewer pair.
 - Run the producer contract's UI-text scan, always-flagged checks and, when it assigns you, slim-down; apply the UX/DX lens.
 - For security-relevant code, load the language pitfalls from [security-best-practices](../security-best-practices/SKILL.md); its full security-audit pass applies only when assigned.
 - Write a producer array per `report-format` to the assigned findings file, including `[]` when clean. Write the coverage artifact required by the shared contract even when there are no findings. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/consolidate_reports.py gate <findings-file>`.

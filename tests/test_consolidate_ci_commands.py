@@ -381,6 +381,18 @@ def _dup_reports() -> dict[str, Any]:
 
 
 class TestPrepare:
+    def test_all_reviewers_unavailable_can_prepare_without_producer_files(
+        self, tmp_path
+    ):
+        out = tmp_path / "intermediate.json"
+        assert (
+            cr.main(["prepare", "--repo-root", str(tmp_path), "--output", str(out)])
+            == 0
+        )
+        data = json.loads(out.read_text())
+        assert data["agents"] == []
+        assert data["raw_findings"] == []
+
     def test_records_plugin_version_in_metadata(self, tmp_path):
         out = _prepare(tmp_path, digest=False, reports={"qa": []})
         expected = json.loads(PLUGIN_JSON.read_text())["version"]

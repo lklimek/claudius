@@ -30,6 +30,8 @@ For complete reports (review-changes, check-pr-comments), wrap finding sections 
 
 `metadata.commit` is a full 40-character SHA when present (permalinks are built from it); `metadata.commit` and `metadata.repository` are optional — omit for non-git directories and permalinks are skipped. `executive_summary.summary_text` / `.verdict_text` are Markdown. `summary_statistics.merge_class_counts` (optional) carries the per-class tally. Complete envelope: `schemas/review-report.schema.json`.
 
+`executive_summary.review_coverage` carries the coordinator's completion and required-reviewer evidence from `review-changes` consolidation. Reports without that evidence remain readable and can publish COMMENT.
+
 ## Schema versions
 
 Ordinary reports declare `4.0.0`; reports using `comment_assessments` declare `4.2.0` per `report-format` (`4.1.0` stays readable). Versions 1.x and 2.x are rejected. `3.x` is accepted read-only for in-flight reports — legacy floats migrate to the v4 field names on load, `relevance` is defaulted and must be re-rated (`severity` skill; the validation pass (`review-changes` § Reports and Validation)).

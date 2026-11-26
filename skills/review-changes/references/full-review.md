@@ -12,9 +12,11 @@ Use the host's worker API or an available alternative tool: in Claude, the liste
 | Adams / `claudius:project-reviewer-adams` | `project` | `review-changes` — Adams specialist pass | Local-vs-global optimum: fix in the owning layer/repository across the organization; DRY of new code and tests; slim-down |
 | Marvin / `claudius:qa-engineer-marvin` | `qa` | `review-changes` — Reviewer pass and Marvin specialist pass | Requirements, all execution paths, adversarial correctness, cross-artifact consistency, structure and idioms, CI status |
 
-Always include all three, including for tiny diffs. Documentation-heavy changes add Trillian / `claudius:technical-writer-trillian` (`docs`, `technical-writing`: accuracy, completeness, API docs, changelog). For crypto-heavy code or significant dependency changes, expand the security prompt to crypto soundness and dependency audit — do NOT spawn a second instance. For 50+ files / 5000+ lines, spawn multiple agents of the same type with different file scopes, preserving coverage across boundaries.
+Always include all three, including for tiny diffs. Documentation-heavy changes add Trillian / `claudius:technical-writer-trillian` (`docs`, `technical-writing`: accuracy, completeness, API docs, changelog). For crypto-heavy code or significant dependency changes, expand the security prompt to crypto soundness and dependency audit — do NOT spawn a second instance. For 50+ files / 5000+ lines, use file-scoped specialists and preserve coverage across boundaries.
 
-Always add a Codex reviewer when Codex is available, using the Reviewer pass on the same scope. Use `qa-codex` for its producer files and consolidation label. Likewise add Aga, the Google Antigravity reviewer, when available per `delegate` § External Antigravity launcher; use `qa-agy`. Name skipped optional reviewers to the user; one whose run fails by its launcher reference or delivers no gate-passing findings file is an incomplete pass, stated in the executive summary. Keep all core passes above.
+Assign Marvin's `qa` Reviewer pass the whole PR in every full review, including when specialists have file scopes and optional reviewers are unavailable. When the `review-changes` § Two-provider gate applies, require a second individual whole-PR Reviewer pass from a different provider. An unavailable required reviewer leaves coverage incomplete.
+
+Add Codex and Aga (Google Antigravity) when available for whole-PR Reviewer passes. A pass assigned to the required pair also fills that role. Use `qa-codex` and `qa-agy` as their producer labels. Load `delegate` § External Antigravity launcher for Aga. Name skipped optional reviewers and incomplete passes in the executive summary. Keep all core passes above.
 
 ## Agent prompts
 

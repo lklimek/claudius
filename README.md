@@ -29,13 +29,13 @@ See the [Setup Guide](SETUP.md) for detailed configuration.
 
 | Skill | What I Do For You |
 |-------|-------------------|
-| `/review-changes` | Basic review: one strong independent reviewer checks requirements and every execution path |
+| `/review-changes` | Basic review with independent coverage of requirements and every execution path |
 | `/review-changes full` + `/triage-findings` | Deploy my army of specialist agents to tear your code apart, then let you triage the carnage in a browser UI |
 | `/dependabot-merge` | Audit and merge your embarrassing backlog of 40 dependabot PRs in one sitting |
 
 ### Two review modes
 
-Ordinary review and `/review-changes basic` use one strong reviewer, regardless of diff size. `/review-changes full` (or just ask for a grumpy review) runs the full specialist review. Both trace requirements and all execution paths through changed code, including affected callers, failures, and side effects beyond the diff. Missing coverage is reported as incomplete, never a clean result.
+Ordinary review and `/review-changes basic` use one strong reviewer by default. `/review-changes full` (or just ask for a grumpy review) runs the specialist review. Both apply the [two-provider gate](skills/review-changes/SKILL.md#two-provider-gate) and trace requirements and execution paths, including affected callers, failures, and side effects beyond the diff. Missing coverage makes a review incomplete.
 
 Every new PR is reviewed right after creation, whatever its size: full mode by default, basic when the change's effect on the project is contained. Other work needs independent review before completing changes of at least 50 code lines (added plus deleted across the task's net diff, including tests; excluding comments, blank lines, and documentation); below that, author self-review suffices unless review is requested or the invoked workflow requires it. `review-pr` defaults to basic and accepts `full`.
 

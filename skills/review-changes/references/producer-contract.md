@@ -48,9 +48,9 @@ collections; duplicated control flow within the diff; drive-by renames, reformat
 (`coding-best-practices` § Cross-Cutting Rules); tests asserting the same case twice. Duplication
 of existing code stays under Adams' DRY. File each concrete change as a `code_quality` finding
 tagged `simplification`, its title (under 150 characters, so the digest keeps it whole) ending
-`(-<N> lines)`. Rate it LOW (`likelihood` ≈ 0.3,
-`impact` 0.1–0.3 by how much code a later change must read), never INFO; a removable hunk that
-also carries a defect is rated as that defect.
+`(-<N> lines)`. Use the LOW evidence rule in `severity` § Levels before assigning
+`likelihood` ≈ 0.3 and `impact` 0.1–0.3 by how much code a later change must read.
+Rate a removable hunk that carries a defect as that defect.
 
 ## UX/DX lens
 
@@ -73,10 +73,8 @@ Read — Bash `ls`/`find` outside the working directory is sandbox-blocked.
 
 ## Process rules
 
-- **Always write your output file, even when you found nothing.** A bare `[]` is a valid,
-  successful result — a missing file fails the coordinator's `prepare` step outright (exit 2),
-  taking down the whole review with no report at all. Zero findings is never a reason to skip
-  the Write call.
+- **Always write your output file, even when you found nothing.** A bare `[]` records
+  a successful pass. A missing required output leaves the review incomplete.
 - Run only the `consolidate_reports.py gate` command from your spawn prompt — never
   `prepare`/`finalize`, and do NOT pre-assemble `report.json` shape; the coordinator does that.
 - When MemCan/WebSearch are unavailable (e.g., CI), do not use memcan tools or

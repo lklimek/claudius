@@ -13,7 +13,7 @@ Resolve relative links from the loaded skill file. If the host does not substitu
 
 Before sizing or dispatching workers, apply [git-and-github](../git-and-github/SKILL.md) § PR Scope and Size to the plan. Identify one problem and estimated code-line count per proposed PR; split oversized or unrelated work into smaller PRs before implementation. Worker batching or file-scope splitting does not replace PR decomposition.
 
-1. **Total scope size** — sum the estimated diff (excluding comments) across the whole batch, not per item. Under ~300 lines total (soft): do it in the coordinator, or reuse a worker already live in scope through native messaging. An explicitly required independent review is exempt: basic review still gets one strong independent reviewer.
+1. **Total scope size** — sum the estimated diff (excluding comments) across the whole batch, not per item. Under ~300 lines total (soft): do it in the coordinator, or reuse a worker already live in scope through native messaging. Required independent reviews are exempt from this size threshold.
 2. **Genuine parallelism** — a real wall-clock or file-independence need, or would sequential merely take "a bit longer"? No real need → one agent, sequential. Tightly coupled cross-file work → one agent, never a parallel split.
 3. **Reuse** — an agent already live in the same file/domain scope? → `SendMessage` it (`grand-admiral` § Agent Reuse).
 4. **Model tier and context** — set the model explicitly on every dispatch (§ Token Economy); identity frontmatter `model` is only a fallback. Prepare the context packet before strong-model dispatch (§ Context Preparation).
@@ -35,7 +35,8 @@ Before sizing or dispatching workers, apply [git-and-github](../git-and-github/S
 
 1. Identify who performed the work being checked (implementation, review, or any other artifact), including its model/provider when known.
 2. If an alternative tool/provider is available, use it to verify that work (Codex → Claude, Claude → Codex).
-3. PR-comment verification workers get the `check-pr-comments` [verify-only brief](../check-pr-comments/references/verify-worker.md).
+3. For PRs covered by `review-changes` § Two-provider gate, dispatch the required pair of reviewers independently of the author and of each other.
+4. PR-comment verification workers get the `check-pr-comments` [verify-only brief](../check-pr-comments/references/verify-worker.md).
 
 ## Context Preparation
 

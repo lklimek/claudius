@@ -232,10 +232,10 @@ Version 10 moves agent logic into skills. In Claude Code, the eight `agents/` id
 
 ### Review modes
 
-- **Basic**: `/review-changes` or `/review-changes basic` — one strong independent reviewer checks requirements and all execution paths.
+- **Basic**: `/review-changes` or `/review-changes basic` — one strong independent reviewer by default checks requirements and all execution paths.
 - **Full**: `/review-changes full` (or ask for a "grumpy review") — independent security, global-optimum/reuse, and correctness passes, including for tiny diffs.
 
-`review-pr <PR>` defaults to basic; add `full` for the specialist audit. Both modes report coverage and cannot claim completion with unresolved paths.
+`review-pr <PR>` defaults to basic. Add `full` for the specialist audit. Both modes apply the [two-provider gate](skills/review-changes/SKILL.md#two-provider-gate) and require complete coverage.
 
 ### Visual comparisons
 
@@ -345,7 +345,7 @@ Copy [`settings.example.json`](settings.example.json) into your project's `.clau
 | `product-design` | Requirements, domain analysis, user flows, accessibility, developer experience |
 | `release` | Bump version (SemVer), update changelog, commit, push, and create GitHub release |
 | `report-format` | Unified review report format for all finding-producing agents |
-| `review-changes` | Basic review with one strong worker, or full multi-agent review with consolidated severity-ranked report and opt-in finding validation |
+| `review-changes` | Independent basic or full specialist review, with consolidated findings and opt-in validation |
 | `review-dependency` | Security-focused dependency update review |
 | `review-pr` | Audit and review pull requests |
 | `security-best-practices` | Router to language-specific security pitfall references (Rust, Go, Python, TypeScript) beyond general OWASP knowledge; fixes the citation vocabulary for security findings |
