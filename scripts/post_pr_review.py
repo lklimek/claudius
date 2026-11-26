@@ -32,8 +32,9 @@ whole, case-insensitive phrase.
 Event: APPROVE requires a reviewed head, verified merge-base, complete review
 coverage backed by consolidated producer outputs, no posted findings or open
 threads, and no non-disputed blocking or MEDIUM+ findings. Otherwise the event
-is COMMENT. ``--draft`` omits the event (pending review). Incomplete thread
-pagination fails without posting.
+is COMMENT. Incomplete coverage is visible in the published body.
+``--draft`` omits the event (pending review). Incomplete thread pagination fails
+without posting.
 
 Limits: every comment and the body stay within GitHub's 65536 characters;
 body entries that do not fit are named in an "N more finding(s)" line and
@@ -835,11 +836,18 @@ class _Body:
 
 
 def _render_body(
-    body: str, inline: list[_Item], off_diff: list[_Item], covered: list[str]
+    body: str,
+    inline: list[_Item],
+    off_diff: list[_Item],
+    covered: list[str],
+    *,
+    coverage_incomplete: bool = False,
 ) -> _Body:
     """Render the review body, packing off-diff items up to GitHub's limit."""
     lead = _fit(body.strip(), _LEAD_LIMIT) or "Automated review."
     head = [lead, ""]
+    if coverage_incomplete:
+        head.extend(["**Review coverage is incomplete.**", ""])
     if covered:
         head.append(
             _fit(
@@ -934,14 +942,18 @@ def build_review(
 
 
 def _payload(
-    options: ReviewOptions,
+    lead: str,
     commit: str,
     event: Optional[str],
     inline: list[_Item],
     off_diff: list[_Item],
     covered: list[str],
+    *,
+    coverage_incomplete: bool,
 ) -> tuple[dict[str, Any], _Body]:
-    body = _render_body(options.body, inline, off_diff, covered)
+    body = _render_body(
+        lead, inline, off_diff, covered, coverage_incomplete=coverage_incomplete
+    )
     payload: dict[str, Any] = {
         "commit_id": commit,
         "body": body.text,
@@ -1066,23 +1078,42 @@ def post_review(
     inline, off_diff, covered, skipped = build_review(report, options, hunks, threads)
 
     event: Optional[str] = None
+    lead = options.body
+    coverage_incomplete = False
     if not options.draft:
         clean = not inline and not off_diff and not threads and not held
-        coverage_complete = _has_complete_review_coverage(report)
+        coverage_incomplete = not _has_complete_review_coverage(report)
         event = (
             "APPROVE"
-            if clean and reviewed and scope_verified and coverage_complete
+            if clean and reviewed and scope_verified and not coverage_incomplete
             else "COMMENT"
         )
         if not reviewed:
             log.warning("No metadata.commit: cannot APPROVE; using COMMENT")
         if not reviewed_base:
             log.warning("No metadata.base_commit: cannot APPROVE; using COMMENT")
-        if not coverage_complete:
+        if coverage_incomplete:
             log.warning("Missing or incomplete review coverage: using COMMENT")
+            if not lead.strip():
+                summary = report.get("executive_summary")
+                if isinstance(summary, dict):
+                    verdict = summary.get("verdict_text")
+                    if isinstance(verdict, str) and verdict.strip():
+                        lead = f"Review verdict: {_one_line(verdict)}"
+
+    def current_payload() -> tuple[dict[str, Any], _Body]:
+        return _payload(
+            lead,
+            commit,
+            event,
+            inline,
+            off_diff,
+            covered,
+            coverage_incomplete=coverage_incomplete,
+        )
 
     def result(url: Optional[str] = None) -> PostResult:
-        payload, body = _payload(options, commit, event, inline, off_diff, covered)
+        payload, body = current_payload()
         return PostResult(
             event=event,
             inline=[i.fid for i in inline],
@@ -1099,7 +1130,7 @@ def post_review(
 
     path = f"repos/{options.repo}/pulls/{options.pr}/reviews"
     for attempt in range(1, _MAX_POST_ATTEMPTS + 1):
-        payload, _body = _payload(options, commit, event, inline, off_diff, covered)
+        payload, _body = current_payload()
         try:
             response = gh.request("POST", path, payload)
             return result((response or {}).get("html_url"))

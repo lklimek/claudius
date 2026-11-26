@@ -753,6 +753,32 @@ class TestCli:
         assert ppr.main(["o/r", "7", str(path)]) == 0
         assert [review["event"] for review in gh.posted] == ["COMMENT"]
 
+    @pytest.mark.parametrize("caller_body", ["", "Maintainer summary."])
+    def test_unavailable_reviewer_is_visible_in_the_posted_body(
+        self, caller_body, tmp_path, monkeypatch
+    ):
+        report = _valid_report()
+        report["metadata"].update(commit=HEAD, base_commit=MERGE_BASE)
+        summary = report["executive_summary"]
+        summary["verdict_text"] = "The required @reviewer was unavailable."
+        coverage = summary["review_coverage"]
+        coverage["complete"] = False
+        del coverage["completed_reviewers"]["qa-agy"]
+        path = tmp_path / "report.json"
+        path.write_text(json.dumps(report))
+        gh = FakeGh()
+        monkeypatch.setattr(ppr, "GhCli", lambda: gh)
+
+        assert ppr.main(["o/r", "7", str(path), "--body", caller_body]) == 0
+        [review] = gh.posted
+        assert review["event"] == "COMMENT"
+        assert "Review coverage is incomplete." in review["body"]
+        if caller_body:
+            assert review["body"].startswith(caller_body)
+            assert "was unavailable" not in review["body"]
+        else:
+            assert "The required @\u200breviewer was unavailable." in review["body"]
+
     def test_finalize_carries_incomplete_coverage_into_the_publisher(
         self, tmp_path, monkeypatch
     ):
