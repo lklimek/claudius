@@ -1,6 +1,6 @@
 {
   "name": "claudius",
-  "version": "13.10.0",
+  "version": "13.11.0",
   "description": "Development workflow skills for Claude Code and Codex, with basic and full code review",
   "author": {
     "name": "lklimek",

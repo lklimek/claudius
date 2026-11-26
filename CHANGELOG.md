@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). This project use
 
 ## [Unreleased]
 
+### Added
+
+- `check-pr-comments` adds a maintainer-decision marker to inline replies that relay one maintainer decision, allowing diffpilot to offer it for confirmation.
+
 ## [9.0.0] - 2026-10-06
 
 Context-footprint audit of every skill and agent, driven by 7 weeks of session transcripts (957
