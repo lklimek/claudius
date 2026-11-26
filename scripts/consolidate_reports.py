@@ -2052,8 +2052,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p_prepare.add_argument(
         "agent_reports",
-        nargs="+",
-        help="Agent reports as agent-name:path/to/report.json",
+        nargs="*",
+        help="Available agent reports as agent-name:path/to/report.json "
+        "(omit if no producer output is available)",
     )
     p_prepare.add_argument(
         "--repo-root", required=True, help="Path to reviewed repo root"

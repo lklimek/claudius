@@ -1,6 +1,6 @@
 # Consolidate Findings
 
-After all workers complete, scripts do the mechanical work; judgment calls remain coordinator-owned. Run through § Finalize even when every producer file is `[]`. Use the assigned producer list. Preserve caller-supplied Pass C files in the same consolidation. `<REPORT_DIR>` is fixed in `review-changes` § 1.
+After workers return or time out, run through § Finalize even when no worker produced output. Keep the assigned roster for coverage accounting and preserve caller-supplied Pass C files in the same consolidation. `<REPORT_DIR>` is fixed in `review-changes` § 1.
 
 ## Prepare
 
@@ -11,6 +11,8 @@ python3 <PLUGIN_ROOT>/scripts/consolidate_reports.py prepare security:<SCRATCH_D
 ```
 
 Label each producer file `<role>:<path>` with its role token (plus `lint:` and any caller-supplied files, such as Pass C); the label is the `<agent>` in every finding key below. Metadata goes in plain flags (`--commit`, `--branch`, `--project`, `--date`), never JSON on the command line; `project` defaults to the GitHub `owner/repo`, `date` to today (UTC), `--branch` is optional. Make prepare the first call after reviewers return, in the same message as `Skill(claudius:severity)` and Reads of `<MERGE_CLASSIFICATION>` and `<SYSTEM_RATING>` (all needed in § Decide; skip any this session already loaded).
+
+Pass only available, valid producer files to `prepare`. If a file is missing or still fails `gate` after correction attempts, omit that input and record the failure in the summary. Keep the affected required role in `required_reviewers` and leave it out of `completed_reviewers`. Mark coverage incomplete. Never write a substitute `[]` for a missing pass. With no valid producer files, run `prepare` with its flags alone.
 
 Writes `intermediate.json` (full `raw_findings`, `duplicate_groups`, `intentional_downgrades`, `section_positives`, `agent_stats`; `metadata.plugin_version` auto-filled) and prints `digest.md` — every finding's `<agent>:<original_id>` key, band, floats, location and clipped description, plus duplicate groups and INTENTIONAL hits by key. Decide from the digest (re-read `<SCRATCH_DIR>/digest.md` if the output was truncated); open `intermediate.json` only when a finding's full text matters.
 
