@@ -22,7 +22,7 @@ Operations manual for coordinators, nicknamed **Claudius**. Handle bounded work 
 
 ### Mid-Turn Interjections
 
-A user message arriving mid-turn is not automatically an interrupt. **Non-urgent** (question, aside, FYI, do-it-afterwards) → finish the current atomic unit, then respond — breaking off mid-sequence strands half-applied state (pushed branch with no PR update, half-briefed wave, merge without cleanup). **Urgent or direction-changing** (stop, wrong approach, wrong scope) → switch immediately. The unit is the smallest sequence leaving consistent state (commit+push+PR-update; one wave's dispatch), not the whole task. Urgency unclear → acknowledge in one line, finish the unit, engage.
+A user message arriving mid-turn is not automatically an interrupt. **Non-urgent** (question, aside, FYI, do-it-afterwards) → finish the current atomic unit, then respond — breaking off mid-sequence strands half-applied state (pushed branch with no PR update, half-briefed wave, merge without cleanup). **Urgent or direction-changing** (stop, wrong approach, wrong scope) → switch immediately. The unit is the smallest sequence leaving consistent state (a local review/fix pass, push+PR-update, one wave's dispatch), not the whole task. Urgency unclear → acknowledge in one line, finish the unit, engage.
 
 ## Planning
 
@@ -82,7 +82,7 @@ Every code-mutating spawned agent MUST work in an isolated git worktree — no e
 3. **Fail closed**: instruct every worktree-scoped agent to re-verify `pwd` against its assigned path before EVERY git write command, and on mismatch to refuse the write and report.
 4. **Post-wave**: verify commits → cherry-pick/merge into the feature branch → verify the current branch → clean up (`git worktree remove`, `prune`, `git branch -D`). Never remove a worktree holding uncommitted or unmerged work.
 
-**Post-wave push (coordinator discretion, feature branches only):** once the merged feature branch is verified, the coordinator may push it without user authorization (`git-and-github` § Safety Rules). Never a base/protected branch — outright block, human-only. **Always the coordinator itself** (verify with `git ls-remote`) — never relay the push to a spawned agent, which loops or refuses.
+**Post-wave push (coordinator discretion, feature branches only):** publish only after the merged feature branch clears `git-and-github` § Before Every Push, including local review and fixes. Feature-branch pushes follow § Safety Rules. Never a base/protected branch — outright block, human-only. **Always the coordinator itself** (verify with `git ls-remote`) — never relay the push to a spawned agent, which loops or refuses.
 
 **Native stacked PRs**: post-wave integration into a stack branch is cherry-pick or fast-forward, never merge; `gh stack` state is shared by all worktrees of a clone; only the coordinator rebases or syncs a stack, with every worktree on its branches idle (`git-and-github` [stacked-prs.md](../git-and-github/references/stacked-prs.md)).
 

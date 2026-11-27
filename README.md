@@ -37,7 +37,7 @@ See the [Setup Guide](SETUP.md) for detailed configuration.
 
 Ordinary review and `/review-changes basic` use one strong reviewer by default. `/review-changes full` (or just ask for a grumpy review) runs the specialist review. Both apply the [two-provider gate](skills/review-changes/SKILL.md#two-provider-gate) and trace requirements and execution paths, including affected callers, failures, and side effects beyond the diff. Missing coverage makes a review incomplete.
 
-Every new PR is reviewed right after creation, whatever its size: full mode by default, basic when the change's effect on the project is contained. Other work needs independent review before completing changes of at least 50 code lines (added plus deleted across the task's net diff, including tests; excluding comments, blank lines, and documentation); below that, author self-review suffices unless review is requested or the invoked workflow requires it. `review-pr` defaults to basic and accepts `full`.
+Every new PR is reviewed locally before its first push, whatever its size: full mode by default, basic when the change's effect on the project is contained. Other changes of at least 50 code lines need independent review before completion or push (added plus deleted across the task's net diff, including tests; excluding comments, blank lines, and documentation); below that, author self-review suffices unless review is requested or the invoked workflow requires it. `review-pr` defaults to basic and accepts `full`.
 
 ### `/review-changes full` then `/triage-findings`
 
@@ -76,7 +76,7 @@ Skills cover security, architecture, testing, documentation, and more. Claudius 
 
 ## How We Work
 
-We commit early, commit often, and push like it's going out of style. 10-20 commits on a feature branch? That's a Tuesday. Branch history is a work log, not a monument -- PRs get squash-merged anyway. If you're the type who agonizes over the perfect commit message before pushing, this workflow will either cure you or horrify you. We're committed to commit.
+We commit early and often, then push once the change passes internal review and its fixes are in. 10-20 commits on a feature branch? That's a Tuesday. Branch history is a work log, not a monument -- PRs get squash-merged anyway. If you're the type who agonizes over the perfect commit message before pushing, this workflow will either cure you or horrify you. We're committed to commit.
 
 ## Reading List
 

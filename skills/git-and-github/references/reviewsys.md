@@ -49,8 +49,8 @@ rapid retries. The model applies gates.
 
 ## Work and requests
 
-- Publish coherent, tested fixes together during debounce or read-only review.
-  Each newly observed head starts normal debounce (source default 30 min).
+- Apply `git-and-github` § Before Every Push. Each newly observed head starts
+  normal debounce (source default 30 min).
   Superseding is cooperative: late `verify2`/`publish` work may continue, but
   live-head guards can retire it. Old reports can remain; cancelled/superseded is
   not itself failure and says nothing about the new head.

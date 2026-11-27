@@ -20,7 +20,7 @@ For complete reports (review-changes, check-pr-comments), wrap finding sections 
   "metadata": {
     "project": "claudius",
     "date": "YYYY-MM-DD",
-    "commit": "<full 40-char SHA from `git rev-parse @{u}` (fall back to `git rev-parse HEAD` when the branch has no upstream)>"
+    "commit": "<full 40-char SHA from the actual reviewed head (local `git rev-parse HEAD` or supplied PR head)>"
   },
   "executive_summary": { "overall_assessment": "..." },
   "summary_statistics": { "total_findings": 0, "severity_counts": {} },
