@@ -49,7 +49,7 @@ On a bare "push", "commit and push", "create a PR", "ship this", or similar — 
 2. **Version bump**: when the project's `CLAUDE.md` defines a versioning policy, the PR carries exactly one bump before merge — none again on a branch that has one, re-bumped only if the SemVer category grows (`coding-best-practices` § Unmerged code isn't released).
 3. **Commit** per § Committing and Safety Rule 3.
 4. **Review and fix locally** per § Before Every Push. For a new PR, prepare its title and body for the pre-push review below.
-5. **Push once** after all gates clear. Create the draft from that reviewed head. For an existing PR, sync its title and body with the final change and reconcile § Readiness.
+5. **Push once** after all gates clear. Create the draft from that reviewed head. For an existing PR, sync its title and body with the final change and reconcile § Readiness. For PRs assigned to Reviewsys, [request expedited review](references/reviewsys.md#work-and-requests).
 
 ## Pull Requests
 
