@@ -14,10 +14,10 @@ git ls-tree HEAD --name-only -r .github/ | grep -i pull_request_template
 
 If a template exists, fold its required content into the linked skeleton below. See the main skill's §Creating a PR for the rationale (plain language up top, technical detail in `Detailed discussion`).
 
-Fill in the PR-body skeleton (`git-and-github` § Creating a PR links it; fenced block only, not the page's title or prose), save the completed body to a file, then create the PR as a draft via `--body-file` (not `--body` — avoids shell-escaping the skeleton inline):
+Fill in the PR-body skeleton (`git-and-github` § Creating a PR links it; fenced block only, not the page's title or prose), and save it to a file for local review. Once the coordinator pushes the reviewed head, create the draft explicitly from that branch:
 
 ```bash
-gh pr create --draft --title "<type>: <description>" --body-file /path/to/filled-in-pr-body.md
+gh pr create --draft --base <base> --head <published-branch> --title "<type>: <description>" --body-file /path/to/filled-in-pr-body.md
 ```
 
 ## Reviewing a PR

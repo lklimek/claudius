@@ -5,7 +5,7 @@ Detail behind `grand-admiral` § Worktree Isolation. Read when a base cannot be 
 ## Base sync options
 
 - **Option A (default — local-SHA injection, no push):** capture `git rev-parse HEAD` (never a branch name or symbolic ref — they resolve differently in worktrees) and inject: `"Your worktree may be behind local HEAD. As your FIRST action, run: git merge --ff-only <sha>"`. Worktrees share the object store, so unpushed commits are reachable by SHA. Default because it avoids noisy partial pushes and keeps work local until a wave is verified.
-- **Option B (fallback — push first):** `git log @{upstream}..HEAD --oneline`; if unpushed commits exist or no upstream is configured, push, then fork from `origin/<branch>`. Only when origin is genuinely required (cross-machine work, PR-gated CI, cross-session sharing). Anti-pattern: committing locally without pushing, then launching Option B agents that need those commits.
+- **Option B (remote-only workers):** start from an already published SHA. If they need unpublished commits, share them privately (e.g. a Git bundle) or use local workers via Option A. Apply `git-and-github` § Before Every Push when publishing the finished branch.
 
 ## `isolation` flag — KNOWN BROKEN
 

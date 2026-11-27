@@ -13,7 +13,7 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git log *), Bash(git diff *),
 - **Full** (explicit “full review” or “grumpy review”): independent security, global-optimum/reuse, and adversarial passes on the same coverage baseline. Never downgrade a full review because the diff is small.
 - **Validate** (“validate findings”, `validate <report.json>`): skip §1–§4; run the opt-in AI validation pass of §5 on an existing consolidated report.
 
-Arguments: `[basic|full|validate] [scope|report.json]` — scope e.g. "feat/zk branch", "packages/auth/", "last 5 commits". Scope defaults to the whole PR or branch (`<BASE_REF>...<head>`), including working-tree and untracked changes for local work. PR wrappers supply exact refs. Use the whole PR at every push that requires internal review, for every reviewer model. Record the compared refs/commit and local changes.
+Arguments: `[basic|full|validate] [scope|report.json]` — scope e.g. "feat/zk branch", "packages/auth/", "last 5 commits". Scope defaults to the whole PR or branch (`<BASE_REF>...<head>`), including working-tree and untracked changes for local work. PR wrappers supply exact refs. In the commands below, use those refs in place of the default base and HEAD. For required pre-push review, use the whole local PR diff for every reviewer model. Record the compared refs/commit and local changes.
 
 Reuse complete independent reviews, or share in-flight ones, only for identical repository, base/head SHAs, scope, mode, requirements/prior decisions and local content. Incremental review needs explicit opt-in, a complete baseline and coverage of changed paths/interactions. It may supplement a required whole-PR review.
 

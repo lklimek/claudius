@@ -33,9 +33,11 @@ Create feature branches; NEVER commit to a base branch. [Conventional commits](h
 
 ## Before Every Push
 
-**Coordinate branch writers.** Wait for agents writing to the branch and reconcile their commits. Read-only review does not lock it: batch coherent, tested fixes and publish when ready. A new head may restart review/debounce; wait briefly only with current evidence of imminent completion and a recorded deadline. A pending request alone is not running work. `pr_watch.py` ([gh-cli.md](references/gh-cli.md) § PR waiter) observes, never authorizes pushes/completion. Use integrations only where configured; for Reviewsys read [reviewsys.md](references/reviewsys.md).
+**Wait for bots and branch writers.** Hold the push while a bot is reviewing the current head or an agent is writing to the branch. Reconcile their commits. A pending review request or debounce alone does not mean a review is running. Use configured repo evidence, such as `pr_watch.py` ([gh-cli.md](references/gh-cli.md) § PR waiter) or [Reviewsys](references/reviewsys.md). If work is still active after about 30 minutes, report the blocker and keep commits local.
 
 **Always merge the PR's base.** Fetch the remote and resolve the current PR base from GitHub metadata; before a PR exists, use the documented target branch or repository default. Verify that the freshly fetched remote base is an ancestor of `HEAD` (`git merge-base --is-ancestor <remote>/<base> HEAD`). A stale local base or an earlier session check is insufficient. If behind, invoke [merge-base](../merge-base/SKILL.md) with that resolved remote/base ref, then validate the result, apply `coding-best-practices` § Workflow Discipline, and recheck ancestry before pushing. If fetching, base resolution, integration, or the final ancestry check fails, stop the push and report the blocker. Apply this gate to every push, including follow-ups and retries.
+
+**Finish the change locally.** After integrating the base, commit and validate the complete change. Run the required independent review against the intended base and local head (§ Creating a PR, [pr-fleet](../pr-fleet/SKILL.md) § Internal review, and `coding-best-practices` § Workflow Discipline). Commit all required fixes and re-review as needed until coverage is complete and the final PR diff is cleared. Before pushing, recheck bot activity, the freshly fetched base, and that the head still matches the cleared diff. If the diff changes, validate and review it locally again. The coordinator pushes the finished head once per request or bot round.
 
 **Stacked PRs** (base is another PR's branch): read [stacked-prs.md](references/stacked-prs.md) before creating, updating, or merging one. The gate's base is the parent branch; a native stack rebases onto it instead of merging.
 
@@ -46,10 +48,8 @@ On a bare "push", "commit and push", "create a PR", "ship this", or similar — 
 1. **Feature branch**: on a base branch (`gitStatus` "Main branch", else `git remote show origin`), fetch and create one (`feat/`, `fix/`, `chore/` …) per § Committing.
 2. **Version bump**: when the project's `CLAUDE.md` defines a versioning policy, the PR carries exactly one bump before merge — none again on a branch that has one, re-bumped only if the SemVer category grows (`coding-best-practices` § Unmerged code isn't released).
 3. **Commit** per § Committing and Safety Rule 3.
-4. **Push** after § Before Every Push.
-5. **PR**: existing → update its title and description whenever they no longer match the net final state, and give a skeleton PR's first push carrying changes its creation review; none → create a draft per § Creating a PR. Either way, reconcile § Readiness.
-
-This workflow pushes once per request, plus the creation review's fix pushes (§ Creating a PR); rerun it only on a new request.
+4. **Review and fix locally** per § Before Every Push. For a new PR, prepare its title and body for the pre-push review below.
+5. **Push once** after all gates clear. Create the draft from that reviewed head, or sync an existing PR's title and body with the final change. Reconcile § Readiness.
 
 ## Pull Requests
 
@@ -65,9 +65,9 @@ The PR body **must lead with a plain-language summary before any implementation 
 
 `TL;DR` → `User story` → `Scenario` → `Detailed discussion`, in that order. Always create PRs as drafts; native stack layers per [stacked-prs.md](references/stacked-prs.md) § Creating PRs.
 
-**Review on creation**: review every new PR right after creating it with [review-pr](../review-pr/SKILL.md), whatever its size; a PR created empty (a follow-up skeleton) gets it at its first push carrying changes. Pick the mode by the change's effect on the project as a whole, never by diff size, and pass it explicitly: full by default (shared or often-used code, workflows, interfaces); basic only when that effect is contained (one isolated module, test or tooling-only change). Report the findings in chat; skip `review-pr` § 4's publish question unless the user asks. Address them per `coding-best-practices` § Workflow Discipline.
+**Review before creation**: run [review-pr](../review-pr/SKILL.md) in local mode on the committed diff and planned title/body before the first push, whatever the size. For an existing empty PR, do this before its first push carrying changes. Pass the mode explicitly: full by default (shared or often-used code, workflows, interfaces), basic for contained effects (isolated module, test, or tooling). Report findings in chat and finish the local fix/review loop before publishing.
 
-**Readiness**: a PR is ready when it targets the base branch, is not blocked by another PR, is not labelled `postponed`, and any known creation-review blockers are addressed; otherwise draft. A reviewable checkpoint may enter external review while local review runs; completion still requires that review and its fixes. A native stack layer counts as targeting the base and is not blocked by the layers below it: merging it lands them too, each gated by approval and passing checks ([stacked-prs.md](references/stacked-prs.md)). Reconcile on creation, on every update, and when its blockers, target, or label change — in both directions. Where CI skips drafts, dispatch the needed workflows on demand (`gh workflow run`).
+**Readiness**: a PR is ready when it targets the base branch, is not blocked by another PR, is not labelled `postponed`, and required internal review is complete with its blockers addressed; otherwise draft. A native stack layer counts as targeting the base and is not blocked by the layers below it: merging it lands them too, each gated by approval and passing checks ([stacked-prs.md](references/stacked-prs.md)). Reconcile on creation, on every update, and when its blockers, target, or label change — in both directions. Where CI skips drafts, dispatch the needed workflows on demand (`gh workflow run`).
 
 **PR descriptions describe net final state only** — no development history, changelog, or iteration/debugging narrative; that belongs in commit messages. `### Actual behavior` (the pre-existing problem being solved) and concise final `### Testing` results describe state, not history, and are expected.
 

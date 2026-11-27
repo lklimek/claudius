@@ -11,25 +11,25 @@ Coordinator rules for driving PRs until only maintainer actions remain. A delta 
 
 Per PR: one worktree and one owning implementer, reused for every round (`grand-admiral` § Agent Reuse); heads and decisions go to the tracking file (`delegate` § Tracking).
 
-1. **Push**: the implementer commits; the coordinator audits the commit and pushes per `git-and-github` § Before Every Push.
-2. **Internal review** of that push (§ Internal review).
-3. **Bot round and CI** on the pushed head (§ Round close).
-4. **Decisions**: `check-pr-comments` for every bot and human comment; the maintainer decides each ID. Record each decision with its ID and thread links — later rounds and review briefs reuse it.
-5. **Fix round**: implement the decided fixes, push once (§ Fix pushes), back to 2.
+1. **Commit locally**: finish the change or batch the round's approved fixes (§ Fix pushes).
+2. **Internal review**: review the local diff, fix findings and re-review as needed (§ Internal review).
+3. **Push once**: the coordinator publishes the finished head per `git-and-github` § Before Every Push.
+4. **Bot round and CI** on the pushed head (§ Round close).
+5. **Decisions**: use `check-pr-comments` for every bot and human comment. Record each maintainer decision with its ID and thread links, then return to 1 when fixes are due.
 
 Done = only maintainer actions remain: required local and external reviews complete with acceptable verdicts on the current head, its CI green, every comment decided and executed. Resolved threads alone prove no approval.
 
 ## Internal review
 
-After every later push carrying production code, including internal and CI fixes, start an independent `review-changes` basic review of the **whole PR** (`<base>...<head>`) for any reviewer model. Apply the same scope when marking ready or taking over a PR. Run the review in parallel with the push. For a new PR or a skeleton's first push carrying changes, use `git-and-github` § Creating a PR.
+Before every push carrying production code, including internal and CI fixes, run independent `review-changes` basic on the **whole PR** (`<base>...<local-head>`) for any reviewer model. Fix required findings and clear the resulting whole diff before pushing. Apply the same scope when marking ready or taking over a PR. For a new PR or an existing empty PR's first changes, use `git-and-github` § Creating a PR.
 
 - One PR per review. Select reviewers independent of the author through `review-changes` and `delegate`. Apply the `review-changes` § Two-provider gate before declaring an affected PR merge-ready.
 - Pass the maintainer's earlier per-ID decisions on the PR as the review's prior decisions (`review-changes` § 1).
-- A coordinator audit never replaces this review. Tests-only, docs-only, empty, and tree-identical merge pushes, and a head the creation review already covered, skip it; the next review covers them.
+- A coordinator audit never replaces this review. Tests-only, docs-only, empty and tree-identical merge pushes skip the fleet review unless another gate requires it. Reuse completed coverage only under `review-changes` § Modes.
 
 ## Fix pushes
 
-Push ready fixes for `blocking` findings and MEDIUM+ defects the PR introduced (`severity` § 5), including during read-only review/debounce; batch approved internal and external fixes. Other fixes ride the next required push. Apply `git-and-github` § Before Every Push. Do not request review when the push already schedules it.
+Fix `blocking` findings and introduced MEDIUM+ defects locally (`severity` § 5). Include approved external fixes and finish review before the round's single push. Other fixes ride the next required push. If the push schedules bot review, skip a separate request.
 
 ## Round close
 

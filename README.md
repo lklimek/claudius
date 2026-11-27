@@ -76,7 +76,7 @@ Skills cover security, architecture, testing, documentation, and more. Claudius 
 
 ## How We Work
 
-We commit early, commit often, and push like it's going out of style. 10-20 commits on a feature branch? That's a Tuesday. Branch history is a work log, not a monument -- PRs get squash-merged anyway. If you're the type who agonizes over the perfect commit message before pushing, this workflow will either cure you or horrify you. We're committed to commit.
+We commit early and often, then push once the change passes internal review and its fixes are in. 10-20 commits on a feature branch? That's a Tuesday. Branch history is a work log, not a monument -- PRs get squash-merged anyway. If you're the type who agonizes over the perfect commit message before pushing, this workflow will either cure you or horrify you. We're committed to commit.
 
 ## Reading List
 
