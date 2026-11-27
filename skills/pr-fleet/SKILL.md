@@ -14,7 +14,7 @@ Per PR: one worktree and one owning implementer, reused for every round (`grand-
 1. **Prepare locally**: finish and commit the change or the round's approved fixes (§ Fix pushes). Integrate the current base per `git-and-github` § Before Every Push and validate.
 2. **Internal review**: review the local diff, fix findings and re-review as needed (§ Internal review).
 3. **Push once**: the coordinator publishes the finished head per `git-and-github` § Before Every Push.
-4. **Bot round and CI** on the pushed head (§ Round close).
+4. **Bot round and CI**: after the final push and once the PR exists, request [expedited review](../git-and-github/references/reviewsys.md#work-and-requests) if Reviewsys is a reviewer. For other bots, skip a separate request if the push schedules their review. Observe the pushed head (§ Round close).
 5. **Decisions**: use `check-pr-comments` for every bot and human comment. Record each maintainer decision with its ID and thread links, then return to 1 when fixes are due.
 
 Done = only maintainer actions remain: required local and external reviews complete with acceptable verdicts on the current head, its CI green, every comment decided and executed. Resolved threads alone prove no approval.
@@ -29,7 +29,7 @@ Before every push carrying production code, including internal and CI fixes, run
 
 ## Fix pushes
 
-Fix `blocking` findings and introduced MEDIUM+ defects locally (`severity` § 5). Include approved external fixes and finish review before the round's single push. Other fixes ride the next required push. If the push schedules bot review, skip a separate request.
+Fix `blocking` findings and introduced MEDIUM+ defects locally (`severity` § 5). Include approved external fixes and finish review before the round's single push. Other fixes ride the next required push.
 
 ## Round close
 

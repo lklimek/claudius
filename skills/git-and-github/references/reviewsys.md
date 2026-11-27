@@ -4,6 +4,12 @@ Load only for PRs using this service; calling skills own workflow/authorization.
 Coverage, trust, debounce, checks, labels and outage behavior depend on deployment,
 not repository ownership or an absent feed entry.
 
+## Contents
+
+- [Sources and observation](#sources-and-observation)
+- [Work and requests](#work-and-requests)
+- [Findings and completion](#findings-and-completion)
+
 ## Sources and observation
 
 - [User guide](https://github.com/thepastaclaw/review-system/blob/main/docs/user-guide.md)
@@ -51,27 +57,32 @@ rapid retries. The model applies gates.
 
 - Apply `git-and-github` § Before Every Push. Each newly observed head starts
   normal debounce (source default 30 min).
-  Superseding is cooperative: late `verify2`/`publish` work may continue, but
-  live-head guards can retire it. Old reports can remain; cancelled/superseded is
-  not itself failure and says nothing about the new head.
+  Superseding is cooperative: live-head guards can retire late `verify2`/`publish`
+  work. Old reports can remain. Supersession says nothing about the new head.
 - Enabled, open, non-draft PRs normally queue on pushes. Unlisted repos can be
   on-request; explicitly disabled repos stay off. Skip labels (default
   `tag:skip-review`) suppress automatic work. Check coverage before requesting.
-- Use one intentional request surface once, then observe. An automatic push needs
-  no extra request. Priority guarantees neither immediate execution nor recovery
-  from a pause, and may spend quota faster.
+- **After the round's final push and once the PR exists**, request expedited review
+  for a PR assigned to Reviewsys. Honor skip labels unless the maintainer
+  explicitly requests Reviewsys for that PR. Run
+  `gh pr edit <number> --repo <owner/repo> --add-label pastaclaw:review-now`
+  with the `git-and-github` permission fallback. Report a missing label and leave
+  creation to the maintainer.
+- Use one surface per head, then observe. Priority can spend quota faster and
+  guarantees neither immediate execution nor recovery from a pause.
 
 | Surface | Effect / restrictions |
 |---|---|
+| `pastaclaw:review-now` label | The next poll (about 3 min on the current deployment) requests a normal review of the head, bypassing the 30-min debounce and draft/skip gates. Reviewsys removes the label after the review posts or fails. Leave removal to the bot. [Upstream #100](https://github.com/thepastaclaw/review-system/pull/100) |
 | Status checkbox: **Request normal review** | Bypasses debounce without priority. Requires permission to edit the comment; only where offered. |
 | Status checkbox: **Request priority review** | Bypasses debounce and prioritizes scheduling; does not interrupt running calls or bypass outage pause. |
 | Human-authored `@thepastaclaw review` or reviewer request | Priority; current router requires an open, non-draft PR. Same-head reruns require a qualifying fresh request and trust; source cap three per trigger type. Agent text does not inherit human trust. |
 | Existing finding-thread reply | Discuss that finding; avoid a full-review request just to clarify/disagree. Bot replies may supply context without triggering discussion. |
 
-An offered checkbox can request a draft's current head and survives draft polls;
-a later push needs another request or marking ready. Returning to draft stops
-automatic work, not that head's explicit checkbox request. Skip labels do not ban
-explicit requests; do not alter them or draft state merely to force review.
+The offered **Request normal review** checkbox is an alternative, even for a
+draft. Returning to draft stops automatic work and preserves that head's explicit
+checkbox request. A later push needs a new request or marking ready. Keep draft
+state and skip labels intact when requesting explicitly.
 
 ## Findings and completion
 
