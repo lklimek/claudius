@@ -11,7 +11,7 @@ Coordinator rules for driving PRs until only maintainer actions remain. A delta 
 
 Per PR: one worktree and one owning implementer, reused for every round (`grand-admiral` § Agent Reuse); heads and decisions go to the tracking file (`delegate` § Tracking).
 
-1. **Commit locally**: finish the change or batch the round's approved fixes (§ Fix pushes).
+1. **Prepare locally**: finish and commit the change or the round's approved fixes (§ Fix pushes). Integrate the current base per `git-and-github` § Before Every Push and validate.
 2. **Internal review**: review the local diff, fix findings and re-review as needed (§ Internal review).
 3. **Push once**: the coordinator publishes the finished head per `git-and-github` § Before Every Push.
 4. **Bot round and CI** on the pushed head (§ Round close).
